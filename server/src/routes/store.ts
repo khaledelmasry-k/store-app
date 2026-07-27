@@ -14,7 +14,7 @@ function parseJsonField<T>(val: unknown, fallback: T): T {
         return fallback;
       }
       if (Array.isArray(fallback)) {
-        if (Array.isArray(parsed)) return parsed;
+        if (Array.isArray(parsed)) return parsed as T;
         return fallback;
       }
       return parsed;
