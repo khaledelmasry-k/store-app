@@ -1,0 +1,48 @@
+* {
+  margin: 0;
+  padding: 0;
+  box-sizing: border-box;
+}
+
+body {
+  font-family: 'IBM Plex Sans Arabic', sans-serif;
+  background: #fbf8ff;
+  color: #1a1b22;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+}
+
+input, select, textarea, button {
+  font-family: inherit;
+}
+
+a {
+  color: inherit;
+  text-decoration: none;
+}
+
+::selection {
+  background: black;
+  color: white;
+}
+
+body.menu-open { overflow: hidden; }
+
+@media (max-width: 767px) {
+  .admin-content {
+    padding: 12px !important;
+    padding-top: 60px !important;
+  }
+  .admin-table-wrap {
+    overflow-x: auto;
+  }
+  .admin-table-wrap table {
+    min-width: 700px;
+  }
+  .cart-item-grid {
+    grid-template-columns: 1fr 1fr 70px !important;
+  }
+  .product-image-wrap {
+    height: 180px !important;
+  }
+}
