@@ -1,8 +1,8 @@
 import { Suspense, lazy } from "react";
 import { BrowserRouter, Routes, Route, Navigate } from "react-router-dom";
+import AdminLogin from "./pages/AdminLogin";
 
 const CustomerOrder = lazy(() => import("./pages/CustomerOrder"));
-const AdminLogin = lazy(() => import("./pages/AdminLogin"));
 const AdminDashboard = lazy(() => import("./pages/AdminDashboard"));
 const AdminOrders = lazy(() => import("./pages/AdminOrders"));
 const AdminProduct = lazy(() => import("./pages/AdminProduct"));
@@ -18,7 +18,7 @@ export default function App() {
     <BrowserRouter>
       <Suspense fallback={
         <div style={{
-          fontFamily: "'IBM Plex Sans Arabic', sans-serif",
+          fontFamily: "system-ui, -apple-system, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif",
           direction: "rtl",
           minHeight: "100vh",
           display: "flex",
