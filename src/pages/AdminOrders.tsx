@@ -1,4 +1,4 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect } from "preact/compat";
 import { api } from "../services/api";
 import type { Order, PaginatedResponse, OrderStatus } from "../types";
 import Sidebar from "../components/Sidebar";
@@ -50,19 +50,19 @@ export default function AdminOrders() {
   };
 
   return (
-    <div style={{ fontFamily: "'IBM Plex Sans Arabic', sans-serif", direction: "rtl", background: "#fbf8ff", minHeight: "100vh", display: "flex" }}>
+    <div style={{ fontFamily: "system-ui, -apple-system, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif", direction: "rtl", background: "#fbf8ff", minHeight: "100vh", display: "flex" }}>
       <Sidebar />
       <div className="admin-content" style={{ flex: 1, padding: "24px", overflow: "auto" }}>
         <h1 style={{ fontSize: "24px", fontWeight: 600, margin: "0 0 24px" }}>إدارة الطلبات</h1>
 
         <div style={{ display: "flex", gap: "12px", marginBottom: "16px", flexWrap: "wrap" }}>
           <form onSubmit={handleSearch} style={{ display: "flex", gap: "8px", flex: 1 }}>
-            <input value={search} onChange={(e) => setSearch(e.target.value)} placeholder="البحث باسم العميل" style={{ flex: 1, padding: "8px 12px", border: "1px solid #d4d4d8", borderRadius: "4px", fontSize: "14px" }} />
-            <input value={phone} onChange={(e) => setPhone(e.target.value)} placeholder="البحث برقم الهاتف" style={{ flex: 1, padding: "8px 12px", border: "1px solid #d4d4d8", borderRadius: "4px", fontSize: "14px" }} />
+            <input name="search_name" id="search_name" value={search} onChange={(e) => setSearch(e.target.value)} placeholder="البحث باسم العميل" style={{ flex: 1, padding: "8px 12px", border: "1px solid #d4d4d8", borderRadius: "4px", fontSize: "14px" }} />
+            <input name="search_phone" id="search_phone" value={phone} onChange={(e) => setPhone(e.target.value)} placeholder="البحث برقم الهاتف" style={{ flex: 1, padding: "8px 12px", border: "1px solid #d4d4d8", borderRadius: "4px", fontSize: "14px" }} />
             <button type="submit" style={{ background: "black", color: "white", border: "none", borderRadius: "4px", padding: "8px 16px", cursor: "pointer" }}>بحث</button>
           </form>
 
-          <select value={statusFilter} onChange={(e) => { setStatusFilter(e.target.value); setPage(1); }} style={{ padding: "8px", border: "1px solid #d4d4d8", borderRadius: "4px", fontSize: "14px", background: "white" }}>
+          <select name="status_filter" id="status_filter" value={statusFilter} onChange={(e) => { setStatusFilter(e.target.value); setPage(1); }} style={{ padding: "8px", border: "1px solid #d4d4d8", borderRadius: "4px", fontSize: "14px", background: "white" }}>
             <option value="">كل الحالات</option>
             {STATUSES.map((s) => <option key={s} value={s}>{STATUS_LABELS[s]}</option>)}
           </select>

@@ -1,4 +1,4 @@
-import { useState, useEffect, FormEvent, useRef } from "react";
+import { useState, useEffect, FormEvent, useRef } from "preact/compat";
 import { api } from "../services/api";
 import type { Product } from "../types";
 import Sidebar from "../components/Sidebar";
@@ -96,13 +96,13 @@ export default function AdminProduct() {
   };
 
   if (!product) return (
-    <div style={{ fontFamily: "'IBM Plex Sans Arabic', sans-serif", direction: "rtl", background: "#fbf8ff", minHeight: "100vh", display: "flex", alignItems: "center", justifyContent: "center" }}>
+    <div style={{ fontFamily: "system-ui, -apple-system, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif", direction: "rtl", background: "#fbf8ff", minHeight: "100vh", display: "flex", alignItems: "center", justifyContent: "center" }}>
       <p>جاري التحميل...</p>
     </div>
   );
 
   return (
-    <div style={{ fontFamily: "'IBM Plex Sans Arabic', sans-serif", direction: "rtl", background: "#fbf8ff", minHeight: "100vh", display: "flex" }}>
+    <div style={{ fontFamily: "system-ui, -apple-system, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif", direction: "rtl", background: "#fbf8ff", minHeight: "100vh", display: "flex" }}>
       <Sidebar />
       <div className="admin-content" style={{ flex: 1, padding: "24px", overflow: "auto", width: "100%" }}>
         <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "24px" }}>

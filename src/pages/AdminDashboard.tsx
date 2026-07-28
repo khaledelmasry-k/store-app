@@ -1,4 +1,4 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect } from "preact/compat";
 import { api } from "../services/api";
 import type { DashboardStats, PersonStats } from "../types";
 import Sidebar from "../components/Sidebar";
@@ -63,7 +63,7 @@ export default function AdminDashboard() {
   const colors = Object.keys(vs);
 
   return (
-    <div style={{ fontFamily: "'IBM Plex Sans Arabic', sans-serif", direction: "rtl", background: "#fbf8ff", minHeight: "100vh", display: "flex" }}>
+    <div style={{ fontFamily: "system-ui, -apple-system, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif", direction: "rtl", background: "#fbf8ff", minHeight: "100vh", display: "flex" }}>
       <Sidebar />
       <div className="admin-content" style={{ flex: 1, padding: "24px", display: "flex", flexDirection: "column", alignItems: "center" }}>
         <div style={{ width: "100%", maxWidth: "1000px" }}>

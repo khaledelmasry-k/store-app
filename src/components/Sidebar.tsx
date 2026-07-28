@@ -1,5 +1,5 @@
-import { useState } from "react";
-import { useLocation, useNavigate } from "react-router-dom";
+import { useState } from "preact/compat";
+import { useLocation } from "wouter";
 
 const NAV_ITEMS = [
   { path: "/admin", label: "لوحة التحكم", icon: "📊" },
@@ -8,12 +8,11 @@ const NAV_ITEMS = [
 ];
 
 export default function Sidebar() {
-  const location = useLocation();
-  const navigate = useNavigate();
+  const [loc, navigate] = useLocation();
   const [menuOpen, setMenuOpen] = useState(false);
   const origin = window.location.origin;
 
-  const isActive = (path: string) => location.pathname === path;
+  const isActive = (path: string) => loc === path;
 
   const toggleMenu = (open: boolean) => {
     setMenuOpen(open);

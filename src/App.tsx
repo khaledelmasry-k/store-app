@@ -1,5 +1,5 @@
-import { Suspense, lazy } from "react";
-import { BrowserRouter, Routes, Route, Navigate } from "react-router-dom";
+import { Suspense, lazy } from 'preact/compat'
+import { Router, Switch, Route, Redirect } from 'wouter'
 import AdminLogin from "./pages/AdminLogin";
 
 const CustomerOrder = lazy(() => import("./pages/CustomerOrder"));
@@ -7,15 +7,15 @@ const AdminDashboard = lazy(() => import("./pages/AdminDashboard"));
 const AdminOrders = lazy(() => import("./pages/AdminOrders"));
 const AdminProduct = lazy(() => import("./pages/AdminProduct"));
 
-function RequireAuth({ children }: { children: React.ReactNode }) {
+function RequireAuth({ children }: { children: any }) {
   const token = localStorage.getItem("token");
-  if (!token) return <Navigate to="/admin/login" replace />;
+  if (!token) return <Redirect to="/admin/login" />;
   return <>{children}</>;
 }
 
 export default function App() {
   return (
-    <BrowserRouter>
+    <Router>
       <Suspense fallback={
         <div style={{
           fontFamily: "system-ui, -apple-system, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif",
@@ -29,16 +29,16 @@ export default function App() {
           <p style={{ color: "#71717a", fontSize: "16px" }}>جاري التحميل...</p>
         </div>
       }>
-        <Routes>
-        <Route path="/" element={<Navigate to="/admin/login" replace />} />
-        <Route path="/store" element={<CustomerOrder />} />
-        <Route path="/admin/login" element={<AdminLogin />} />
-        <Route path="/admin" element={<RequireAuth><AdminDashboard /></RequireAuth>} />
-        <Route path="/admin/orders" element={<RequireAuth><AdminOrders /></RequireAuth>} />
-        <Route path="/admin/product" element={<RequireAuth><AdminProduct /></RequireAuth>} />
-        <Route path="*" element={<Navigate to="/admin/login" replace />} />
-      </Routes>
+        <Switch>
+          <Route path="/" component={() => <Redirect to="/admin/login" />} />
+          <Route path="/store" component={CustomerOrder} />
+          <Route path="/admin/login" component={AdminLogin} />
+          <Route path="/admin" component={() => <RequireAuth><AdminDashboard /></RequireAuth>} />
+          <Route path="/admin/orders" component={() => <RequireAuth><AdminOrders /></RequireAuth>} />
+          <Route path="/admin/product" component={() => <RequireAuth><AdminProduct /></RequireAuth>} />
+          <Route component={() => <Redirect to="/admin/login" />} />
+        </Switch>
       </Suspense>
-    </BrowserRouter>
+    </Router>
   );
 }

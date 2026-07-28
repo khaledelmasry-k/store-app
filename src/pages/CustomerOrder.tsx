@@ -1,4 +1,4 @@
-import { useState, useEffect, FormEvent } from "react";
+import { useState, useEffect, FormEvent } from "preact/compat";
 import { api } from "../services/api";
 import type { Product } from "../types";
 
@@ -136,7 +136,7 @@ export default function CustomerOrder() {
 
   if (submitted) {
     return (
-      <div style={{ fontFamily: "'IBM Plex Sans Arabic', sans-serif", direction: "rtl", background: "#fbf8ff", minHeight: "100vh", display: "flex", alignItems: "center", justifyContent: "center", padding: "16px" }}>
+      <div style={{ fontFamily: "system-ui, -apple-system, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif", direction: "rtl", background: "#fbf8ff", minHeight: "100vh", display: "flex", alignItems: "center", justifyContent: "center", padding: "16px" }}>
         <div style={{ textAlign: "center", background: "white", padding: "40px 24px", borderRadius: "8px", maxWidth: "400px", width: "100%", boxShadow: "0 10px 15px -3px rgba(0,0,0,0.05)" }}>
           <div style={{ color: "#006e2f", fontSize: "48px", marginBottom: "16px" }}>✓</div>
           <h2 style={{ margin: "0 0 12px", fontSize: "24px", fontWeight: 600 }}>تم استلام طلبك بنجاح!</h2>
@@ -156,14 +156,14 @@ export default function CustomerOrder() {
 
   if (!product) {
     return (
-      <div style={{ fontFamily: "'IBM Plex Sans Arabic', sans-serif", direction: "rtl", background: "#fbf8ff", minHeight: "100vh", display: "flex", alignItems: "center", justifyContent: "center" }}>
+      <div style={{ fontFamily: "system-ui, -apple-system, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif", direction: "rtl", background: "#fbf8ff", minHeight: "100vh", display: "flex", alignItems: "center", justifyContent: "center" }}>
         <p>جاري تحميل المنتج...</p>
       </div>
     );
   }
 
   return (
-    <div style={{ fontFamily: "'IBM Plex Sans Arabic', sans-serif", direction: "rtl", background: "#fbf8ff", minHeight: "100vh" }}>
+    <div style={{ fontFamily: "system-ui, -apple-system, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif", direction: "rtl", background: "#fbf8ff", minHeight: "100vh" }}>
       <header style={{ display: "flex", alignItems: "center", justifyContent: "space-between", padding: "16px", background: "white", borderBottom: "1px solid #e4e4e7" }}>
         <h1 style={{ fontSize: "18px", fontWeight: 600, margin: 0 }}>{product.name}</h1>
       </header>
@@ -289,32 +289,32 @@ export default function CustomerOrder() {
 
             {(["customerName", "phone", "address"] as const).map((field) => (
               <div key={field} style={{ marginBottom: "12px" }}>
-                <label style={{ display: "block", fontSize: "14px", fontWeight: 500, marginBottom: "6px" }}>
+                <label htmlFor={field} style={{ display: "block", fontSize: "14px", fontWeight: 500, marginBottom: "6px" }}>
                   {field === "customerName" ? "الاسم الكامل" : field === "phone" ? "رقم الجوال" : "العنوان الكامل"}
                 </label>
-                <input type={field === "phone" ? "tel" : "text"} value={form[field]} onChange={(e) => setForm({ ...form, [field]: e.target.value })} required style={{ width: "100%", padding: "10px 12px", border: "1px solid #d4d4d8", borderRadius: "4px", fontSize: "14px", boxSizing: "border-box" }} />
+                <input id={field} name={field} type={field === "phone" ? "tel" : "text"} value={form[field]} onChange={(e) => setForm({ ...form, [field]: e.target.value })} required style={{ width: "100%", padding: "10px 12px", border: "1px solid #d4d4d8", borderRadius: "4px", fontSize: "14px", boxSizing: "border-box" }} />
               </div>
             ))}
 
             <div style={{ marginBottom: "12px" }}>
-              <label style={{ display: "block", fontSize: "14px", fontWeight: 500, marginBottom: "6px" }}>المحافظة</label>
-              <select value={form.governorate} onChange={(e) => setForm({ ...form, governorate: e.target.value, city: "" })} required style={{ width: "100%", padding: "10px 12px", border: "1px solid #d4d4d8", borderRadius: "4px", fontSize: "14px", background: "white", boxSizing: "border-box" }}>
+              <label htmlFor="governorate" style={{ display: "block", fontSize: "14px", fontWeight: 500, marginBottom: "6px" }}>المحافظة</label>
+              <select id="governorate" name="governorate" value={form.governorate} onChange={(e) => setForm({ ...form, governorate: e.target.value, city: "" })} required style={{ width: "100%", padding: "10px 12px", border: "1px solid #d4d4d8", borderRadius: "4px", fontSize: "14px", background: "white", boxSizing: "border-box" }}>
                 <option value="">اختر المحافظة</option>
                 {GOVERNORATES.map((g) => <option key={g} value={g}>{g}</option>)}
               </select>
             </div>
 
             <div style={{ marginBottom: "12px" }}>
-              <label style={{ display: "block", fontSize: "14px", fontWeight: 500, marginBottom: "6px" }}>المدينة</label>
-              <select value={form.city} onChange={(e) => setForm({ ...form, city: e.target.value })} required disabled={!form.governorate} style={{ width: "100%", padding: "10px 12px", border: "1px solid #d4d4d8", borderRadius: "4px", fontSize: "14px", background: "white", boxSizing: "border-box", opacity: form.governorate ? 1 : 0.5 }}>
+              <label htmlFor="city" style={{ display: "block", fontSize: "14px", fontWeight: 500, marginBottom: "6px" }}>المدينة</label>
+              <select id="city" name="city" value={form.city} onChange={(e) => setForm({ ...form, city: e.target.value })} required disabled={!form.governorate} style={{ width: "100%", padding: "10px 12px", border: "1px solid #d4d4d8", borderRadius: "4px", fontSize: "14px", background: "white", boxSizing: "border-box", opacity: form.governorate ? 1 : 0.5 }}>
                 <option value="">اختر المدينة</option>
                 {(CITIES_BY_GOV[form.governorate] || []).map((c) => <option key={c} value={c}>{c}</option>)}
               </select>
             </div>
 
             <div>
-              <label style={{ display: "block", fontSize: "14px", fontWeight: 500, marginBottom: "6px" }}>ملاحظات إضافية (اختياري)</label>
-              <textarea value={form.notes} onChange={(e) => setForm({ ...form, notes: e.target.value })} rows={3} style={{ width: "100%", padding: "10px 12px", border: "1px solid #d4d4d8", borderRadius: "4px", fontSize: "14px", resize: "vertical", boxSizing: "border-box" }} />
+              <label htmlFor="notes" style={{ display: "block", fontSize: "14px", fontWeight: 500, marginBottom: "6px" }}>ملاحظات إضافية (اختياري)</label>
+              <textarea id="notes" name="notes" value={form.notes} onChange={(e) => setForm({ ...form, notes: e.target.value })} rows={3} style={{ width: "100%", padding: "10px 12px", border: "1px solid #d4d4d8", borderRadius: "4px", fontSize: "14px", resize: "vertical", boxSizing: "border-box" }} />
             </div>
           </div>
 

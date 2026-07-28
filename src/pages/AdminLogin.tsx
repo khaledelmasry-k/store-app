@@ -1,9 +1,9 @@
-import { useState, FormEvent } from "react";
-import { useNavigate } from "react-router-dom";
+import { useState, FormEvent } from "preact/compat";
+import { useLocation } from "wouter";
 import { api } from "../services/api";
 
 export default function AdminLogin() {
-  const navigate = useNavigate();
+  const [, navigate] = useLocation();
   const [username, setUsername] = useState("");
   const [password, setPassword] = useState("");
   const [error, setError] = useState("");
@@ -25,7 +25,7 @@ export default function AdminLogin() {
   };
 
   return (
-    <div style={{ fontFamily: "'IBM Plex Sans Arabic', sans-serif", direction: "rtl", background: "#fbf8ff", minHeight: "100vh", display: "flex", alignItems: "center", justifyContent: "center", padding: "16px" }}>
+    <div style={{ fontFamily: "system-ui, -apple-system, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif", direction: "rtl", background: "#fbf8ff", minHeight: "100vh", display: "flex", alignItems: "center", justifyContent: "center", padding: "16px" }}>
       <div style={{ background: "white", borderRadius: "8px", padding: "32px 24px", maxWidth: "360px", width: "100%", boxShadow: "0 10px 15px -3px rgba(0,0,0,0.05)" }}>
         <div style={{ textAlign: "center", marginBottom: "24px" }}>
           <div style={{ fontSize: "40px", marginBottom: "8px" }}>🏪</div>
@@ -35,13 +35,13 @@ export default function AdminLogin() {
 
         <form onSubmit={handleSubmit}>
           <div style={{ marginBottom: "16px" }}>
-            <label style={{ display: "block", fontSize: "14px", fontWeight: 500, marginBottom: "6px" }}>اسم المستخدم</label>
-            <input type="text" value={username} onChange={(e) => setUsername(e.target.value)} required style={{ width: "100%", padding: "10px 12px", border: "1px solid #d4d4d8", borderRadius: "4px", fontSize: "14px", boxSizing: "border-box" }} />
+            <label htmlFor="username" style={{ display: "block", fontSize: "14px", fontWeight: 500, marginBottom: "6px" }}>اسم المستخدم</label>
+            <input type="text" name="username" id="username" value={username} onChange={(e) => setUsername(e.target.value)} required style={{ width: "100%", padding: "10px 12px", border: "1px solid #d4d4d8", borderRadius: "4px", fontSize: "14px", boxSizing: "border-box" }} />
           </div>
 
           <div style={{ marginBottom: "24px" }}>
-            <label style={{ display: "block", fontSize: "14px", fontWeight: 500, marginBottom: "6px" }}>كلمة المرور</label>
-            <input type="password" value={password} onChange={(e) => setPassword(e.target.value)} required style={{ width: "100%", padding: "10px 12px", border: "1px solid #d4d4d8", borderRadius: "4px", fontSize: "14px", boxSizing: "border-box" }} />
+            <label htmlFor="password" style={{ display: "block", fontSize: "14px", fontWeight: 500, marginBottom: "6px" }}>كلمة المرور</label>
+            <input type="password" name="password" id="password" value={password} onChange={(e) => setPassword(e.target.value)} required style={{ width: "100%", padding: "10px 12px", border: "1px solid #d4d4d8", borderRadius: "4px", fontSize: "14px", boxSizing: "border-box" }} />
           </div>
 
           {error && <p style={{ color: "#ba1a1a", fontSize: "14px", textAlign: "center", margin: "0 0 16px" }}>{error}</p>}
