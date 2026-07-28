@@ -26,12 +26,16 @@ function PersonSection({ name, stats, bgColor, textColor }: { name: string; stat
           </div>
         ))}
       </div>
-      <div style={{ display: "flex", gap: "12px", fontSize: "14px" }}>
-        <div style={{ background: "white", borderRadius: "6px", padding: "10px 16px", flex: 1, textAlign: "center" }}>
-          <span style={{ color: "#71717a" }}>الإيرادات: </span>
-          <strong style={{ color: textColor }}>{stats.totalRevenue.toLocaleString()} ج.م</strong>
+      <div style={{ display: "flex", gap: "8px", fontSize: "13px", flexWrap: "wrap" }}>
+        <div style={{ background: "white", borderRadius: "6px", padding: "8px 12px", flex: "1 1 100px", textAlign: "center" }}>
+          <span style={{ color: "#71717a" }}>متوقع: </span>
+          <strong style={{ color: textColor }}>{stats.expectedRevenue.toLocaleString()} ج.م</strong>
         </div>
-        <div style={{ background: "white", borderRadius: "6px", padding: "10px 16px", flex: 1, textAlign: "center" }}>
+        <div style={{ background: "white", borderRadius: "6px", padding: "8px 12px", flex: "1 1 100px", textAlign: "center" }}>
+          <span style={{ color: "#71717a" }}>مؤكد: </span>
+          <strong style={{ color: textColor }}>{stats.confirmedRevenue.toLocaleString()} ج.م</strong>
+        </div>
+        <div style={{ background: "white", borderRadius: "6px", padding: "8px 12px", flex: "1 1 100px", textAlign: "center" }}>
           <span style={{ color: "#71717a" }}>بنطلونات: </span>
           <strong style={{ color: textColor }}>{stats.totalQuantity}</strong>
         </div>
@@ -50,7 +54,9 @@ export default function AdminDashboard() {
   const cards = stats
     ? [
       { label: "إجمالي الطلبات", value: stats.totalOrders, icon: "📋", color: "#1a1b22" },
-      { label: "طلبات جديدة", value: stats.newOrders, icon: "🆕", color: "#006e2f" },
+      { label: "إيرادات متوقعة", value: stats.expectedRevenue.toLocaleString() + " ج.م", icon: "💰", color: "#2563eb" },
+      { label: "إيرادات مؤكدة", value: stats.confirmedRevenue.toLocaleString() + " ج.م", icon: "✅", color: "#006e2f" },
+      { label: "جديد", value: stats.newOrders, icon: "🆕", color: "#006e2f" },
       { label: "تم التواصل", value: stats.contactedOrders, icon: "📞", color: "#2563eb" },
       { label: "قيد المعالجة", value: stats.processingOrders, icon: "🔄", color: "#d97706" },
       { label: "تم الشحن", value: stats.shippedOrders, icon: "🚚", color: "#7c3aed" },

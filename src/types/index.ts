@@ -59,7 +59,8 @@ export interface PersonStats {
   shippedOrders: number;
   deliveredOrders: number;
   cancelledOrders: number;
-  totalRevenue: number;
+  expectedRevenue: number;
+  confirmedRevenue: number;
   totalQuantity: number;
 }
 
@@ -71,6 +72,8 @@ export interface DashboardStats {
   shippedOrders: number;
   deliveredOrders: number;
   cancelledOrders: number;
+  expectedRevenue: number;
+  confirmedRevenue: number;
   khaledStats: PersonStats;
   mahmoudStats: PersonStats;
   totalStock: number;

@@ -75,11 +75,13 @@ async function personStats(createdBy: string) {
     include: { items: true },
   });
   const counts: Record<string, number> = {};
-  let totalRevenue = 0;
+  let expectedRevenue = 0;
+  let confirmedRevenue = 0;
   let totalQuantity = 0;
   for (const o of orders) {
     counts[o.status] = (counts[o.status] || 0) + 1;
-    totalRevenue += o.totalPrice;
+    if (o.status !== "CANCELLED") expectedRevenue += o.totalPrice;
+    if (o.status === "DELIVERED") confirmedRevenue += o.totalPrice;
     for (const item of o.items) totalQuantity += item.quantity;
   }
   const s = {} as Record<string, number>;
@@ -92,7 +94,8 @@ async function personStats(createdBy: string) {
     shippedOrders: s.SHIPPED,
     deliveredOrders: s.DELIVERED,
     cancelledOrders: s.CANCELLED,
-    totalRevenue,
+    expectedRevenue,
+    confirmedRevenue,
     totalQuantity,
   };
 }
@@ -112,6 +115,9 @@ router.get("/dashboard", async (_req: Request, res: Response) => {
   const product = await prisma.product.findFirst();
   const variantStock = parseJsonField<Record<string, Record<string, number>>>(product?.variantStock ?? "{}", {});
 
+  const expectedRevenue = khaledStats.expectedRevenue + mahmoudStats.expectedRevenue;
+  const confirmedRevenue = khaledStats.confirmedRevenue + mahmoudStats.confirmedRevenue;
+
   res.json({
     totalOrders,
     newOrders: counts[0],
@@ -120,6 +126,8 @@ router.get("/dashboard", async (_req: Request, res: Response) => {
     shippedOrders: counts[3],
     deliveredOrders: counts[4],
     cancelledOrders: counts[5],
+    expectedRevenue,
+    confirmedRevenue,
     khaledStats,
     mahmoudStats,
     totalStock: computeTotalStock(variantStock),
