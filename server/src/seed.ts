@@ -15,6 +15,21 @@ async function main() {
     console.log("Admin already exists");
   }
 
+  const stores = [
+    { ref: "1", name: "بنطلون الساحل", active: true },
+    { ref: "2", name: "مالك ستور", active: true },
+  ];
+
+  for (const s of stores) {
+    const existingStore = await prisma.store.findUnique({ where: { ref: s.ref } });
+    if (!existingStore) {
+      await prisma.store.create({ data: s });
+      console.log(`Store created: ${s.ref} - ${s.name}`);
+    } else {
+      console.log(`Store already exists: ${s.ref} - ${s.name}`);
+    }
+  }
+
   const product = await prisma.product.findFirst();
   if (!product) {
     await prisma.product.create({

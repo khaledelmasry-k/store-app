@@ -1,9 +1,7 @@
 import { useState, useEffect, FormEvent, useRef } from "preact/compat";
-import { api } from "../services/api";
+import { api, API_BASE, getImageUrl } from "../services/api";
 import type { Product } from "../types";
 import Sidebar from "../components/Sidebar";
-
-const API_BASE = import.meta.env.VITE_API_URL || "http://localhost:3001/api";
 
 export default function AdminProduct() {
   const [product, setProduct] = useState<Product | null>(null);
@@ -18,7 +16,8 @@ export default function AdminProduct() {
   const [newSize, setNewSize] = useState("");
   const [uploading, setUploading] = useState<string | null>(null);
   const [saving, setSaving] = useState(false);
-  const [message, setMessage] = useState("");
+  const [toastMsg, setToastMsg] = useState("");
+  const [toastShow, setToastShow] = useState(false);
   const fileRef = useRef<HTMLInputElement>(null);
   const [uploadTargetColor, setUploadTargetColor] = useState("");
 
@@ -35,6 +34,12 @@ export default function AdminProduct() {
     });
   }, []);
 
+  const showToast = (msg: string) => {
+    setToastMsg(msg);
+    setToastShow(true);
+    setTimeout(() => setToastShow(false), 3000);
+  };
+
   const totalStock = Object.values(form.variantStock).reduce(
     (sum, sizes) => sum + Object.values(sizes).reduce((a, b) => a + b, 0), 0,
   );
@@ -49,13 +54,12 @@ export default function AdminProduct() {
   const handleSubmit = async (e: FormEvent) => {
     e.preventDefault();
     setSaving(true);
-    setMessage("");
     try {
       const updated = await api.put<Product>("/admin/product", form);
       setProduct(updated);
-      setMessage("تم حفظ التغييرات بنجاح");
+      showToast("تم حفظ التغييرات بنجاح");
     } catch (err: any) {
-      setMessage(err.message || "حدث خطأ");
+      showToast(err.message || "حدث خطأ");
     } finally {
       setSaving(false);
     }
@@ -73,214 +77,258 @@ export default function AdminProduct() {
         body: fd,
       });
       const data = await res.json();
+      if (!res.ok) throw new Error(data.error || "فشل رفع الصورة");
       if (data.url) setForm({ ...form, images: { ...form.images, [color]: data.url } });
     } catch {
-      alert("فشل رفع الصورة");
+      showToast("فشل رفع الصورة");
     } finally {
       setUploading(null);
     }
   };
 
-  const addColor = () => {
-    if (newColor.trim() && !form.colors.includes(newColor.trim())) {
-      setForm({ ...form, colors: [...form.colors, newColor.trim()] });
-      setNewColor("");
-    }
-  };
-
-  const addSize = () => {
-    if (newSize.trim() && !form.sizes.includes(newSize.trim())) {
-      setForm({ ...form, sizes: [...form.sizes, newSize.trim()] });
-      setNewSize("");
-    }
-  };
-
   if (!product) return (
-    <div style={{ fontFamily: "system-ui, -apple-system, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif", direction: "rtl", background: "#fbf8ff", minHeight: "100vh", display: "flex", alignItems: "center", justifyContent: "center" }}>
-      <p>جاري التحميل...</p>
+    <div style={{ background: "#EAEDED", minHeight: "100vh", display: "flex", alignItems: "center", justifyContent: "center" }}>
+      <p style={{ color: "#565959" }}>جاري التحميل...</p>
     </div>
   );
 
   return (
-    <div style={{ fontFamily: "system-ui, -apple-system, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif", direction: "rtl", background: "#fbf8ff", minHeight: "100vh", display: "flex" }}>
+    <div style={{ background: "#EAEDED", minHeight: "100vh", display: "flex" }}>
       <Sidebar />
-      <div className="admin-content" style={{ flex: 1, padding: "24px", overflow: "auto", width: "100%" }}>
-        <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "24px" }}>
-          <div>
-            <h1 style={{ fontSize: "24px", fontWeight: 600, margin: 0 }}>إدارة المنتج</h1>
-            <p style={{ fontSize: "14px", color: "#71717a", margin: "4px 0 0" }}>المنتجات / {form.name}</p>
+      <div className="admin-content" style={{ flex: 1, padding: "24px", overflow: "auto" }}>
+        <div className="amazon-toast amazon-toast-success" style={{ transform: toastShow ? "translateX(-50%) translateY(0)" : "translateX(-50%) translateY(-100px)" }}>
+          <span class="material-symbols-outlined" style={{ fontSize: "18px" }}>check_circle</span>
+          <span>{toastMsg || "تم حفظ التغييرات بنجاح"}</span>
+        </div>
+
+        <header style={{ marginBottom: "24px" }}>
+          <nav style={{ display: "flex", alignItems: "center", gap: "8px", color: "#565959", fontSize: "12px", marginBottom: "8px" }}>
+            <a href="#" style={{ color: "#007185", textDecoration: "none" }}>المنتجات</a>
+            <span class="material-symbols-outlined" style={{ fontSize: "14px" }}>chevron_left</span>
+            <span style={{ color: "#0F1111" }}>{form.name}</span>
+          </nav>
+          <h2 style={{ fontFamily: "'Plus Jakarta Sans', sans-serif", fontSize: "24px", fontWeight: 700, color: "#0F1111", margin: 0 }}>إدارة المنتج</h2>
+        </header>
+
+        <div style={{ background: "#F0FAF8", borderRight: "4px solid #067D62", padding: "16px", borderRadius: "8px", display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "24px", boxShadow: "0 1px 3px rgba(0,0,0,0.08)" }}>
+          <div style={{ display: "flex", alignItems: "center", gap: "12px" }}>
+            <span style={{ fontSize: "14px" }}>🟢 المنتج {form.active ? "نشط الآن" : "غير نشط"}</span>
+            <span style={{ width: "1px", height: "16px", background: "#DBC2AD", opacity: 0.3 }}></span>
+            <span style={{ color: "#565959", fontSize: "14px" }}>آخر تحديث: {new Date(product.updatedAt).toLocaleString("ar-EG")}</span>
           </div>
         </div>
 
-        {product && (
-          <div style={{ background: "#f0fdf4", borderRadius: "8px", padding: "12px 16px", marginBottom: "16px", display: "flex", alignItems: "center", gap: "8px", fontSize: "14px" }}>
-            <span>🟢</span>
-            <span>المنتج {form.active ? "نشط الآن" : "غير نشط"}</span>
-            <span style={{ color: "#71717a", marginRight: "auto" }}>آخر تحديث: {new Date(product.updatedAt).toLocaleString("ar-SA")}</span>
-          </div>
-        )}
-
         <form onSubmit={handleSubmit}>
-          <div style={{ background: "white", borderRadius: "8px", padding: "16px", marginBottom: "16px" }}>
-            <h3 style={{ fontSize: "16px", fontWeight: 600, margin: "0 0 16px" }}>ℹ️ المعلومات الأساسية</h3>
-
-            <div style={{ marginBottom: "12px" }}>
-              <label style={{ display: "block", fontSize: "14px", fontWeight: 500, marginBottom: "6px" }}>اسم المنتج</label>
-              <input value={form.name} onChange={(e) => setForm({ ...form, name: e.target.value })} required style={{ width: "100%", padding: "10px 12px", border: "1px solid #d4d4d8", borderRadius: "4px", fontSize: "14px", boxSizing: "border-box" }} />
-            </div>
-
-            <div style={{ display: "flex", gap: "12px", marginBottom: "12px" }}>
-              <div style={{ flex: 1 }}>
-                <label style={{ display: "block", fontSize: "14px", fontWeight: 500, marginBottom: "6px" }}>السعر الحالي (ج.م)</label>
-                <input type="number" value={form.price} onChange={(e) => setForm({ ...form, price: parseFloat(e.target.value) || 0 })} required min="0" style={{ width: "100%", padding: "10px 12px", border: "1px solid #d4d4d8", borderRadius: "4px", fontSize: "14px", boxSizing: "border-box" }} />
-              </div>
-              <div style={{ flex: 1 }}>
-                <label style={{ display: "block", fontSize: "14px", fontWeight: 500, marginBottom: "6px" }}>السعر السابق (اختياري)</label>
-                <input type="number" value={form.oldPrice || ""} onChange={(e) => setForm({ ...form, oldPrice: parseFloat(e.target.value) || 0 })} min="0" style={{ width: "100%", padding: "10px 12px", border: "1px solid #d4d4d8", borderRadius: "4px", fontSize: "14px", boxSizing: "border-box" }} />
-              </div>
-            </div>
-
-            <div>
-              <label style={{ display: "block", fontSize: "14px", fontWeight: 500, marginBottom: "6px" }}>وصف المنتج</label>
-              <textarea value={form.description} onChange={(e) => setForm({ ...form, description: e.target.value })} rows={4} style={{ width: "100%", padding: "10px 12px", border: "1px solid #d4d4d8", borderRadius: "4px", fontSize: "14px", resize: "vertical", boxSizing: "border-box" }} />
-            </div>
-          </div>
-
-          <div style={{ background: "white", borderRadius: "8px", padding: "16px", marginBottom: "16px" }}>
-            <h3 style={{ fontSize: "16px", fontWeight: 600, margin: "0 0 16px" }}>💰 أسعار الكمية (شامل الشحن)</h3>
-            <div style={{ display: "grid", gridTemplateColumns: "repeat(2, 1fr)", gap: "12px" }}>
-              {[1, 2, 3, 4].map((qty) => (
-                <div key={qty}>
-                  <label style={{ display: "block", fontSize: "14px", fontWeight: 500, marginBottom: "6px" }}>{qty} قطعة (ج.م)</label>
-                  <input type="number" value={form.pricingTiers[qty] ?? ""} onChange={(e) => setForm({ ...form, pricingTiers: { ...form.pricingTiers, [qty]: parseFloat(e.target.value) || 0 } })} min="0" style={{ width: "100%", padding: "10px 12px", border: "1px solid #d4d4d8", borderRadius: "4px", fontSize: "14px", boxSizing: "border-box" }} />
-                </div>
-              ))}
-            </div>
-            <p style={{ fontSize: "12px", color: "#71717a", margin: "8px 0 0" }}>الأسعار تشمل الشحن. للكميات الأكبر من 4، يحسب سعر القطعة بـ 350 ج.م.</p>
-          </div>
-
-          <div style={{ background: "white", borderRadius: "8px", padding: "16px", marginBottom: "16px" }}>
-            <h3 style={{ fontSize: "16px", fontWeight: 600, margin: "0 0 16px" }}>📦 المخزون (حسب اللون × المقاس)</h3>
-            <div style={{ overflowX: "auto" }}>
-              <table style={{ width: "100%", borderCollapse: "collapse", fontSize: "14px" }}>
-                <thead>
-                  <tr>
-                    <th style={{ padding: "8px 12px", textAlign: "right", borderBottom: "2px solid #e4e4e7", color: "#71717a", fontWeight: 500 }}>اللون \ المقاس</th>
-                    {form.sizes.map((s) => (
-                      <th key={s} style={{ padding: "8px 12px", textAlign: "center", borderBottom: "2px solid #e4e4e7", color: "#71717a", fontWeight: 500 }}>{s}</th>
-                    ))}
-                    <th style={{ padding: "8px 12px", textAlign: "center", borderBottom: "2px solid #e4e4e7", color: "#71717a", fontWeight: 500 }}>المجموع</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {form.colors.map((c) => {
-                    const rowTotal = form.sizes.reduce((sum, s) => sum + ((form.variantStock[c]?.[s]) ?? 0), 0);
-                    return (
-                      <tr key={c}>
-                        <td style={{ padding: "8px 12px", fontWeight: 600, borderBottom: "1px solid #f4f4f5" }}>{c}</td>
-                        {form.sizes.map((s) => (
-                          <td key={s} style={{ padding: "4px 6px", textAlign: "center", borderBottom: "1px solid #f4f4f5" }}>
-                            <input type="number" value={form.variantStock[c]?.[s] ?? 0} onChange={(e) => setVariant(c, s, parseInt(e.target.value) || 0)} min="0" style={{ width: "60px", padding: "6px 8px", border: "1px solid #d4d4d8", borderRadius: "4px", fontSize: "13px", textAlign: "center" }} />
-                          </td>
-                        ))}
-                        <td style={{ padding: "8px 12px", textAlign: "center", fontWeight: 600, borderBottom: "1px solid #f4f4f5" }}>{rowTotal}</td>
-                      </tr>
-                    );
-                  })}
-                </tbody>
-              </table>
-            </div>
-            <p style={{ fontSize: "14px", fontWeight: 600, margin: "12px 0 0", textAlign: "left" }}>
-              إجمالي المخزون الكلي: <span style={{ color: "#006e2f" }}>{totalStock}</span> قطعة
-            </p>
-            <div style={{ marginTop: "12px" }}>
-              <label style={{ display: "flex", alignItems: "center", gap: "8px", fontSize: "14px", fontWeight: 500, cursor: "pointer" }}>
-                <input type="checkbox" checked={form.active} onChange={(e) => setForm({ ...form, active: e.target.checked })} />
-                يظهر المنتج للعملاء
-              </label>
-            </div>
-          </div>
-
-          <div style={{ background: "white", borderRadius: "8px", padding: "16px", marginBottom: "16px" }}>
-            <h3 style={{ fontSize: "16px", fontWeight: 600, margin: "0 0 16px" }}>🖼️ صور المنتج حسب اللون</h3>
-            <div style={{ display: "flex", flexDirection: "column", gap: "12px" }}>
-              {form.colors.map((c) => (
-                <div key={c} style={{ display: "flex", alignItems: "center", gap: "12px", padding: "8px", border: "1px solid #e4e4e7", borderRadius: "6px" }}>
-                  <div style={{ width: "80px", height: "80px", borderRadius: "6px", background: "#f4f4f5", display: "flex", alignItems: "center", justifyContent: "center", overflow: "hidden", flexShrink: 0 }}>
-                    {form.images[c] ? (
-                      <img src={form.images[c]} alt={c} style={{ width: "100%", height: "100%", objectFit: "cover" }} />
-                    ) : (
-                      <span style={{ color: "#71717a", fontSize: "12px" }}>لا توجد</span>
-                    )}
+          <div className="prod-grid">
+            <div style={{ gridColumn: "span 8" }}>
+              <div style={{ display: "flex", flexDirection: "column", gap: "24px" }}>
+                <section style={{ background: "#fff", border: "1px solid #DDDDDD", borderRadius: "8px", padding: "24px" }}>
+                  <h3 style={{ fontFamily: "'Plus Jakarta Sans', sans-serif", fontSize: "20px", fontWeight: 600, display: "flex", alignItems: "center", gap: "8px", margin: "0 0 24px" }}>
+                    <span>ℹ️</span> المعلومات الأساسية
+                  </h3>
+                  <div style={{ display: "flex", flexDirection: "column", gap: "16px" }}>
+                    <div>
+                      <label className="amazon-label">اسم المنتج</label>
+                      <input className="amazon-input" type="text" value={form.name} onChange={(e) => setForm({ ...form, name: (e.target as HTMLInputElement).value })} required />
+                    </div>
+                    <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "16px" }}>
+                      <div>
+                        <label className="amazon-label">السعر الحالي (EGP)</label>
+                        <input className="amazon-input" type="number" value={form.price} onChange={(e) => setForm({ ...form, price: parseFloat((e.target as HTMLInputElement).value) || 0 })} required min="0" />
+                      </div>
+                      <div>
+                        <label className="amazon-label">السعر الأصلي (EGP)</label>
+                        <input className="amazon-input" type="number" value={form.oldPrice || ""} onChange={(e) => setForm({ ...form, oldPrice: parseFloat((e.target as HTMLInputElement).value) || 0 })} min="0" style={{ color: "#565959" }} />
+                      </div>
+                    </div>
+                    <div>
+                      <label className="amazon-label">وصف المنتج</label>
+                      <textarea className="amazon-textarea" style={{ height: "128px" }} placeholder="أدخل وصفاً تفصيلياً للمنتج..." value={form.description} onChange={(e) => setForm({ ...form, description: (e.target as HTMLTextAreaElement).value })} />
+                    </div>
                   </div>
-                  <span style={{ fontWeight: 600, minWidth: "60px" }}>{c}</span>
-                  <button type="button" onClick={() => { setUploadTargetColor(c); fileRef.current?.click(); }} disabled={uploading === c} style={{ padding: "6px 12px", background: "black", color: "white", border: "none", borderRadius: "4px", cursor: "pointer", fontSize: "13px" }}>
-                    {uploading === c ? "جاري الرفع..." : "رفع صورة"}
+                </section>
+
+                <section style={{ background: "#fff", border: "1px solid #DDDDDD", borderRadius: "8px", padding: "24px" }}>
+                  <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "24px" }}>
+                    <h3 style={{ fontFamily: "'Plus Jakarta Sans', sans-serif", fontSize: "20px", fontWeight: 600, display: "flex", alignItems: "center", gap: "8px", margin: 0 }}>
+                      <span>📦</span> المخزون
+                    </h3>
+                    <div style={{ display: "flex", alignItems: "center", gap: "8px" }}>
+                      <span style={{ fontSize: "14px", color: "#565959" }}>إجمالي المخزون:</span>
+                      <span style={{ color: "#067D62", fontWeight: 700, fontSize: "20px" }}>{totalStock}</span>
+                    </div>
+                  </div>
+                  <div style={{ overflowX: "auto" }}>
+                    <table style={{ width: "100%", textAlign: "right", borderCollapse: "collapse", fontSize: "14px" }}>
+                      <thead>
+                        <tr style={{ background: "#F1F4F4", borderBottom: "1px solid #DDDDDD" }}>
+                          <th style={{ padding: "12px", fontWeight: 600 }}>اللون \ المقاس</th>
+                          {form.sizes.map((s) => (
+                            <th key={s} style={{ padding: "12px", textAlign: "center", fontWeight: 600 }}>{s}</th>
+                          ))}
+                          <th style={{ padding: "12px", textAlign: "center", fontWeight: 600 }}>المجموع</th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {form.colors.map((c) => {
+                          const rowTotal = form.sizes.reduce((sum, s) => sum + ((form.variantStock[c]?.[s]) ?? 0), 0);
+                          return (
+                            <tr key={c} style={{ borderBottom: "1px solid #DDDDDD" }}>
+                              <td style={{ padding: "12px", fontWeight: 600 }}>{c}</td>
+                              {form.sizes.map((s) => (
+                                <td key={s} style={{ padding: "4px 8px", textAlign: "center" }}>
+                                  <input type="number" value={form.variantStock[c]?.[s] ?? 0} onChange={(e) => setVariant(c, s, parseInt((e.target as HTMLInputElement).value) || 0)} min="0" style={{ width: "60px", padding: "6px 8px", border: "1px solid #888C8C", borderRadius: "4px", fontSize: "13px", textAlign: "center" }} />
+                                </td>
+                              ))}
+                              <td style={{ padding: "12px", textAlign: "center", fontWeight: 600 }}>{rowTotal}</td>
+                            </tr>
+                          );
+                        })}
+                      </tbody>
+                    </table>
+                  </div>
+                  <div style={{ marginTop: "16px", display: "flex", alignItems: "center", gap: "8px" }}>
+                    <input type="checkbox" id="activeToggle" checked={form.active} onChange={(e) => setForm({ ...form, active: (e.target as HTMLInputElement).checked })} style={{ borderRadius: "4px", borderColor: "#888C8C", accentColor: "#007185" }} />
+                    <label htmlFor="activeToggle" style={{ fontSize: "14px", userSelect: "none" }}>عرض الكمية المتبقية للعملاء (عندما تكون أقل من 10 قطع)</label>
+                  </div>
+                </section>
+
+                <section style={{ background: "#fff", border: "1px solid #DDDDDD", borderRadius: "8px", padding: "24px" }}>
+                  <h3 style={{ fontFamily: "'Plus Jakarta Sans', sans-serif", fontSize: "20px", fontWeight: 600, display: "flex", alignItems: "center", gap: "8px", margin: "0 0 24px" }}>
+                    <span>🎨</span> خيارات المنتج
+                  </h3>
+                  <div style={{ display: "flex", flexDirection: "column", gap: "24px" }}>
+                    <div>
+                      <label className="amazon-label" style={{ marginBottom: "8px" }}>الألوان المتاحة</label>
+                      <div style={{ display: "flex", flexWrap: "wrap", gap: "8px", marginBottom: "12px" }}>
+                        {form.colors.map((c) => (
+                          <span key={c} className="amazon-pill">
+                            {c}
+                            <span onClick={() => {
+                              const imgs = { ...form.images }; delete imgs[c];
+                              const vs = { ...form.variantStock }; delete vs[c];
+                              setForm({ ...form, colors: form.colors.filter((x) => x !== c), images: imgs, variantStock: vs });
+                            }} class="material-symbols-outlined" style={{ fontSize: "16px", cursor: "pointer", color: "#B12704" }}>close</span>
+                          </span>
+                        ))}
+                      </div>
+                      <div style={{ display: "flex", gap: "8px" }}>
+                        <input className="amazon-input" style={{ maxWidth: "200px" }} placeholder="إضافة لون جديد..." type="text" value={newColor} onChange={(e) => setNewColor((e.target as HTMLInputElement).value)} />
+                        <button type="button" onClick={() => { if (newColor.trim() && !form.colors.includes(newColor.trim())) { setForm({ ...form, colors: [...form.colors, newColor.trim()] }); setNewColor(""); } }}
+                          style={{ background: "#fff", border: "1px solid #888C8C", borderRadius: "8px", padding: "8px 16px", fontWeight: 500, cursor: "pointer", display: "flex", alignItems: "center", gap: "4px" }}>
+                          <span class="material-symbols-outlined" style={{ fontSize: "16px" }}>add</span> إضافة
+                        </button>
+                      </div>
+                    </div>
+                    <div>
+                      <label className="amazon-label" style={{ marginBottom: "8px" }}>المقاسات</label>
+                      <div style={{ display: "flex", flexWrap: "wrap", gap: "8px", marginBottom: "12px" }}>
+                        {form.sizes.map((s) => (
+                          <span key={s} className="amazon-pill">
+                            {s}
+                            <span onClick={() => {
+                              const vs = { ...form.variantStock };
+                              for (const c of Object.keys(vs)) { const sizes = { ...vs[c] }; delete sizes[s]; vs[c] = sizes; }
+                              setForm({ ...form, sizes: form.sizes.filter((x) => x !== s), variantStock: vs });
+                            }} class="material-symbols-outlined" style={{ fontSize: "16px", cursor: "pointer", color: "#B12704" }}>close</span>
+                          </span>
+                        ))}
+                      </div>
+                      <div style={{ display: "flex", gap: "8px" }}>
+                        <input className="amazon-input" style={{ maxWidth: "200px" }} placeholder="إضافة مقاس..." type="text" value={newSize} onChange={(e) => setNewSize((e.target as HTMLInputElement).value)} />
+                        <button type="button" onClick={() => { if (newSize.trim() && !form.sizes.includes(newSize.trim())) { setForm({ ...form, sizes: [...form.sizes, newSize.trim()] }); setNewSize(""); } }}
+                          style={{ background: "#fff", border: "1px solid #888C8C", borderRadius: "8px", padding: "8px 16px", fontWeight: 500, cursor: "pointer", display: "flex", alignItems: "center", gap: "4px" }}>
+                          <span class="material-symbols-outlined" style={{ fontSize: "16px" }}>add</span> إضافة
+                        </button>
+                      </div>
+                    </div>
+                  </div>
+                </section>
+              </div>
+            </div>
+
+            <div style={{ gridColumn: "span 4" }}>
+              <div style={{ display: "flex", flexDirection: "column", gap: "24px" }}>
+                <section style={{ background: "#fff", border: "1px solid #DDDDDD", borderRadius: "8px", padding: "24px" }}>
+                  <h3 style={{ fontFamily: "'Plus Jakarta Sans', sans-serif", fontSize: "20px", fontWeight: 600, display: "flex", alignItems: "center", gap: "8px", margin: "0 0 16px" }}>
+                    <span>💰</span> أسعار الكمية
+                  </h3>
+                  <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "16px" }}>
+                    {[1, 2, 3, 4].map((qty) => (
+                      <div key={qty}>
+                        <label style={{ fontSize: "12px", display: "block", marginBottom: "4px", color: "#565959" }}>{qty} {qty === 1 ? "قطعة" : "قطع"}</label>
+                        <input className="amazon-input" type="number" value={form.pricingTiers[qty] ?? ""} onChange={(e) => setForm({ ...form, pricingTiers: { ...form.pricingTiers, [qty]: parseFloat((e.target as HTMLInputElement).value) || 0 } })} min="0" />
+                      </div>
+                    ))}
+                  </div>
+                  <p style={{ color: "#565959", fontSize: "12px", marginTop: "16px", lineHeight: 1.3 }}>* سيتم تطبيق هذه الخصومات تلقائياً عند إضافة الكمية المحددة لسلة التسوق.</p>
+                </section>
+
+                <section style={{ background: "#fff", border: "1px solid #DDDDDD", borderRadius: "8px", padding: "24px" }}>
+                  <h3 style={{ fontFamily: "'Plus Jakarta Sans', sans-serif", fontSize: "20px", fontWeight: 600, display: "flex", alignItems: "center", gap: "8px", margin: "0 0 24px" }}>
+                    <span>🖼️</span> صور المنتج حسب اللون
+                  </h3>
+                  <div style={{ display: "flex", flexDirection: "column", gap: "24px" }}>
+                    {form.colors.map((c) => (
+                      <div key={c}>
+                        <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "8px" }}>
+                          <span style={{ fontSize: "14px", fontWeight: 700 }}>{c}</span>
+                          <span style={{ fontSize: "12px", color: "#565959" }}>{form.images[c] ? "1 صورة" : "لا توجد صور"}</span>
+                        </div>
+                        <div style={{ display: "grid", gridTemplateColumns: "repeat(3, 1fr)", gap: "8px" }}>
+                          {form.images[c] ? (
+                            <div style={{ aspectRatio: "1", borderRadius: "8px", border: "1px solid #DDDDDD", background: "#F0F2F2", overflow: "hidden", position: "relative" }}
+                              onMouseEnter={(e) => { (e.currentTarget.querySelector(".del-overlay") as HTMLElement).style.opacity = "1"; }}
+                              onMouseLeave={(e) => { (e.currentTarget.querySelector(".del-overlay") as HTMLElement).style.opacity = "0"; }}>
+                              <img src={getImageUrl(form.images[c])} alt={c} style={{ width: "100%", height: "100%", objectFit: "cover" }} />
+                              <div className="del-overlay" style={{ position: "absolute", inset: 0, background: "rgba(0,0,0,0.4)", opacity: 0, display: "flex", alignItems: "center", justifyContent: "center", transition: "opacity 0.2s" }}>
+                                <button type="button" onClick={() => { const imgs = { ...form.images }; delete imgs[c]; setForm({ ...form, images: imgs }); }} style={{ color: "#fff", background: "none", border: "none", cursor: "pointer", padding: "4px" }}>
+                                  <span class="material-symbols-outlined">delete</span>
+                                </button>
+                              </div>
+                            </div>
+                          ) : null}
+                          <button type="button" onClick={() => { setUploadTargetColor(c); fileRef.current?.click(); }} disabled={uploading === c}
+                            style={{ aspectRatio: "1", borderRadius: "8px", border: "2px dashed #888C8C", display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", background: "none", cursor: "pointer" }}>
+                            <span class="material-symbols-outlined" style={{ color: "#007185" }}>upload</span>
+                            <span style={{ fontSize: "10px", marginTop: "4px", fontWeight: 700 }}>{uploading === c ? "..." : "رفع"}</span>
+                          </button>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                  <input ref={fileRef} type="file" accept="image/*" style={{ display: "none" }} onChange={(e) => { const f = (e.target as HTMLInputElement).files?.[0]; if (f && uploadTargetColor) uploadImage(uploadTargetColor, f); (e.target as HTMLInputElement).value = ""; }} />
+                  <button type="button" style={{ width: "100%", background: "#fff", border: "1px solid #888C8C", borderRadius: "8px", padding: "8px 16px", marginTop: "24px", display: "flex", alignItems: "center", justifyContent: "center", gap: "8px", cursor: "pointer", fontWeight: 500 }}
+                    onClick={() => { if (form.colors.length > 0) { setUploadTargetColor(form.colors[0]); fileRef.current?.click(); } }}>
+                    <span class="material-symbols-outlined" style={{ fontSize: "16px" }}>add_photo_alternate</span> إضافة صورة
                   </button>
-                  {form.images[c] && (
-                    <button type="button" onClick={() => { const imgs = { ...form.images }; delete imgs[c]; setForm({ ...form, images: imgs }); }} style={{ padding: "6px 12px", background: "#ba1a1a", color: "white", border: "none", borderRadius: "4px", cursor: "pointer", fontSize: "13px" }}>
-                      حذف
-                    </button>
-                  )}
+                </section>
+
+                <div style={{ display: "flex", flexDirection: "column", gap: "12px" }}>
+                  <button type="submit" disabled={saving}
+                    style={{ width: "100%", background: "#FF9900", color: "#0F1111", fontWeight: 700, borderRadius: "8px", height: "48px", display: "flex", alignItems: "center", justifyContent: "center", border: "none", cursor: "pointer", fontSize: "16px", boxShadow: "0 2px 5px 0 rgba(213,217,217,0.5)", opacity: saving ? 0.7 : 1 }}>
+                    {saving ? "جاري الحفظ..." : "حفظ التغييرات"}
+                  </button>
+                  <button type="button" style={{ width: "100%", background: "#fff", border: "1px solid #888C8C", borderRadius: "8px", padding: "8px 16px", color: "#B12704", fontWeight: 500, cursor: "pointer" }}
+                    onMouseEnter={(e) => { (e.currentTarget as HTMLElement).style.background = "#FFDAD6"; }}
+                    onMouseLeave={(e) => { (e.currentTarget as HTMLElement).style.background = "#fff"; }}>
+                    حذف المنتج نهائياً
+                  </button>
                 </div>
-              ))}
-              {form.colors.length === 0 && <p style={{ color: "#71717a", fontSize: "14px" }}>أضف ألواناً أولاً</p>}
-            </div>
-            <input ref={fileRef} type="file" accept="image/*" style={{ display: "none" }} onChange={(e) => { const f = e.target.files?.[0]; if (f && uploadTargetColor) uploadImage(uploadTargetColor, f); e.target.value = ""; }} />
-          </div>
-
-          <div style={{ background: "white", borderRadius: "8px", padding: "16px", marginBottom: "16px" }}>
-            <h3 style={{ fontSize: "16px", fontWeight: 600, margin: "0 0 16px" }}>🎨 خيارات المنتج (المتغيرات)</h3>
-
-            <div style={{ marginBottom: "16px" }}>
-              <label style={{ display: "block", fontSize: "14px", fontWeight: 500, marginBottom: "6px" }}>الألوان المتاحة</label>
-              <div style={{ display: "flex", flexWrap: "wrap", gap: "8px", marginBottom: "8px" }}>
-                {form.colors.map((c) => (
-                  <span key={c} style={{ display: "flex", alignItems: "center", gap: "4px", background: "#f4f4f5", borderRadius: "20px", padding: "4px 12px", fontSize: "13px" }}>
-                    {c}
-                    <button type="button" onClick={() => {
-                      const imgs = { ...form.images }; delete imgs[c];
-                      const vs = { ...form.variantStock }; delete vs[c];
-                      setForm({ ...form, colors: form.colors.filter((x) => x !== c), images: imgs, variantStock: vs });
-                    }} style={{ background: "none", border: "none", cursor: "pointer", color: "#ba1a1a", fontSize: "14px" }}>×</button>
-                  </span>
-                ))}
-              </div>
-              <div style={{ display: "flex", gap: "8px" }}>
-                <input value={newColor} onChange={(e) => setNewColor(e.target.value)} placeholder="إضافة لون" style={{ flex: 1, padding: "8px 12px", border: "1px solid #d4d4d8", borderRadius: "4px", fontSize: "14px" }} />
-                <button type="button" onClick={addColor} style={{ background: "black", color: "white", border: "none", borderRadius: "4px", padding: "8px 16px", cursor: "pointer" }}>إضافة</button>
-              </div>
-            </div>
-
-            <div>
-              <label style={{ display: "block", fontSize: "14px", fontWeight: 500, marginBottom: "6px" }}>المقاسات المتاحة</label>
-              <div style={{ display: "flex", flexWrap: "wrap", gap: "8px", marginBottom: "8px" }}>
-                {form.sizes.map((s) => (
-                  <span key={s} style={{ display: "flex", alignItems: "center", gap: "4px", background: "#f4f4f5", borderRadius: "20px", padding: "4px 12px", fontSize: "13px" }}>
-                    {s}
-                    <button type="button" onClick={() => {
-                      const vs = { ...form.variantStock };
-                      for (const c of Object.keys(vs)) {
-                        const sizes = { ...vs[c] }; delete sizes[s]; vs[c] = sizes;
-                      }
-                      setForm({ ...form, sizes: form.sizes.filter((x) => x !== s), variantStock: vs });
-                    }} style={{ background: "none", border: "none", cursor: "pointer", color: "#ba1a1a", fontSize: "14px" }}>×</button>
-                  </span>
-                ))}
-              </div>
-              <div style={{ display: "flex", gap: "8px" }}>
-                <input value={newSize} onChange={(e) => setNewSize(e.target.value)} placeholder="إضافة مقاس" style={{ flex: 1, padding: "8px 12px", border: "1px solid #d4d4d8", borderRadius: "4px", fontSize: "14px" }} />
-                <button type="button" onClick={addSize} style={{ background: "black", color: "white", border: "none", borderRadius: "4px", padding: "8px 16px", cursor: "pointer" }}>إضافة</button>
               </div>
             </div>
           </div>
-
-          {message && <p style={{ textAlign: "center", color: message.includes("نجاح") ? "#006e2f" : "#ba1a1a", fontSize: "14px", margin: "0 0 16px" }}>{message}</p>}
-
-          <button type="submit" disabled={saving} style={{ width: "100%", padding: "12px", background: "black", color: "white", border: "none", borderRadius: "4px", fontSize: "16px", fontWeight: 600, cursor: saving ? "not-allowed" : "pointer", opacity: saving ? 0.7 : 1 }}>
-            {saving ? "جاري الحفظ..." : "💾 حفظ التغييرات"}
-          </button>
         </form>
+
+        <footer style={{ width: "100%", padding: "32px 0", marginTop: "48px", borderTop: "1px solid #DDDDDD", background: "#E0E3E3", display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", gap: "16px" }}>
+          <div style={{ fontFamily: "'Plus Jakarta Sans', sans-serif", fontSize: "20px", fontWeight: 700, color: "#0F1111" }}>M&K Store</div>
+          <div style={{ display: "flex", gap: "24px", fontSize: "12px" }}>
+            <a href="#" style={{ color: "#565959", textDecoration: "none" }}>سياسة الخصوصية</a>
+            <a href="#" style={{ color: "#565959", textDecoration: "none" }}>شروط الخدمة</a>
+            <a href="#" style={{ color: "#565959", textDecoration: "none" }}>اتصل بنا</a>
+          </div>
+          <p style={{ fontSize: "14px", color: "#565959", opacity: 0.8, margin: 0 }}>© 2024 M&K Store. جميع الحقوق محفوظة.</p>
+        </footer>
       </div>
     </div>
   );

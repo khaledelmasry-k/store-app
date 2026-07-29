@@ -44,12 +44,14 @@ router.get("/", async (req: Request, res: Response) => {
   const search = qs(req.query.search);
   const status = qs(req.query.status);
   const phone = qs(req.query.phone);
+  const ref = qs(req.query.ref);
 
   const where: any = {};
   if (search) where.customerName = { contains: search };
   if (phone) where.phone = { contains: phone };
-  const validStatuses = ["NEW", "CONTACTED", "PROCESSING", "SHIPPED", "DELIVERED", "CANCELLED"];
+  const validStatuses = ["NEW", "CONTACTED", "PROCESSING", "SHIPPED", "DELIVERED", "CANCELLED", "RETURNED"];
   if (status && validStatuses.includes(status)) where.status = status;
+  if (ref) where.createdBy = ref;
 
   const [orders, total] = await Promise.all([
     prisma.order.findMany({
@@ -69,7 +71,7 @@ router.get("/", async (req: Request, res: Response) => {
 });
 
 async function personStats(createdBy: string) {
-  const statuses = ["NEW", "CONTACTED", "PROCESSING", "SHIPPED", "DELIVERED", "CANCELLED"] as const;
+  const statuses = ["NEW", "CONTACTED", "PROCESSING", "SHIPPED", "DELIVERED", "CANCELLED", "RETURNED"] as const;
   const orders = await prisma.order.findMany({
     where: { createdBy },
     include: { items: true },
@@ -80,7 +82,7 @@ async function personStats(createdBy: string) {
   let totalQuantity = 0;
   for (const o of orders) {
     counts[o.status] = (counts[o.status] || 0) + 1;
-    if (o.status !== "CANCELLED") expectedRevenue += o.totalPrice;
+    if (o.status !== "CANCELLED" && o.status !== "RETURNED") expectedRevenue += o.totalPrice;
     if (o.status === "DELIVERED") confirmedRevenue += o.totalPrice;
     for (const item of o.items) totalQuantity += item.quantity;
   }
@@ -94,6 +96,7 @@ async function personStats(createdBy: string) {
     shippedOrders: s.SHIPPED,
     deliveredOrders: s.DELIVERED,
     cancelledOrders: s.CANCELLED,
+    returnedOrders: s.RETURNED,
     expectedRevenue,
     confirmedRevenue,
     totalQuantity,
@@ -101,7 +104,7 @@ async function personStats(createdBy: string) {
 }
 
 router.get("/dashboard", async (_req: Request, res: Response) => {
-  const statuses = ["NEW", "CONTACTED", "PROCESSING", "SHIPPED", "DELIVERED", "CANCELLED"] as const;
+  const statuses = ["NEW", "CONTACTED", "PROCESSING", "SHIPPED", "DELIVERED", "CANCELLED", "RETURNED"] as const;
   const counts = await Promise.all(
     statuses.map((s) => prisma.order.count({ where: { status: s } }))
   );
@@ -126,6 +129,7 @@ router.get("/dashboard", async (_req: Request, res: Response) => {
     shippedOrders: counts[3],
     deliveredOrders: counts[4],
     cancelledOrders: counts[5],
+    returnedOrders: counts[6],
     expectedRevenue,
     confirmedRevenue,
     khaledStats,
@@ -137,7 +141,7 @@ router.get("/dashboard", async (_req: Request, res: Response) => {
 
 router.get("/:id", async (req: Request<{ id: string }>, res: Response) => {
   const order = await prisma.order.findUnique({
-    where: { id: req.params.id },
+    where: { id: String(req.params.id) },
     include: { items: true },
   });
   if (!order) {
@@ -148,7 +152,7 @@ router.get("/:id", async (req: Request<{ id: string }>, res: Response) => {
 });
 
 const statusUpdateSchema = z.object({
-  status: z.enum(["NEW", "CONTACTED", "PROCESSING", "SHIPPED", "DELIVERED", "CANCELLED"]),
+  status: z.enum(["NEW", "CONTACTED", "PROCESSING", "SHIPPED", "DELIVERED", "CANCELLED", "RETURNED"]),
 });
 
 router.patch("/:id/status", async (req: Request<{ id: string }>, res: Response) => {
@@ -157,8 +161,32 @@ router.patch("/:id/status", async (req: Request<{ id: string }>, res: Response) 
     res.status(400).json({ error: "Invalid status" });
     return;
   }
+  const order = await prisma.order.findUnique({
+    where: { id: String(req.params.id) },
+    include: { items: true },
+  });
+  if (!order) {
+    res.status(404).json({ error: "Order not found" });
+    return;
+  }
+
+  if (parsed.data.status === "RETURNED" && order.status !== "RETURNED") {
+    const product = await prisma.product.findFirst();
+    if (product) {
+      const variantStock = parseJsonField<Record<string, Record<string, number>>>(product.variantStock, {});
+      for (const item of order.items) {
+        if (!variantStock[item.color]) variantStock[item.color] = {};
+        variantStock[item.color][item.size] = (variantStock[item.color][item.size] ?? 0) + item.quantity;
+      }
+      await prisma.product.update({
+        where: { id: product.id },
+        data: { variantStock: JSON.stringify(variantStock) },
+      });
+    }
+  }
+
   const updated = await prisma.order.update({
-    where: { id: req.params.id },
+    where: { id: String(req.params.id) },
     data: { status: parsed.data.status },
   });
   res.json(updated);
@@ -166,7 +194,7 @@ router.patch("/:id/status", async (req: Request<{ id: string }>, res: Response) 
 
 router.delete("/:id", async (req: Request<{ id: string }>, res: Response) => {
   const order = await prisma.order.findUnique({
-    where: { id: req.params.id },
+    where: { id: String(req.params.id) },
     include: { items: true },
   });
   if (!order) {
@@ -187,7 +215,7 @@ router.delete("/:id", async (req: Request<{ id: string }>, res: Response) => {
     });
   }
 
-  await prisma.order.delete({ where: { id: req.params.id } });
+  await prisma.order.delete({ where: { id: String(req.params.id) } });
   res.json({ success: true });
 });
 

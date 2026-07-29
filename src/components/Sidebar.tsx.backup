@@ -1,35 +1,25 @@
 import { useState, useEffect } from "preact/compat";
 import { useLocation } from "wouter";
+import { getImageUrl } from "../services/api";
+import type { Store as StoreType } from "../types";
 
 const NAV_ITEMS = [
   { path: "/admin", label: "لوحة التحكم", icon: "dashboard" },
-  { path: "/admin/orders", label: "الطلبات", icon: "receipt_long" },
   { path: "/admin/product", label: "المنتجات", icon: "inventory_2" },
-  { path: "/admin/customers", label: "العملاء", icon: "people" },
-  { path: "/admin/reports", label: "التقارير", icon: "bar_chart" },
-  { path: "/admin/store-links", label: "روابط المتاجر", icon: "link" },
+  { path: "/admin/orders", label: "الطلبات", icon: "receipt_long" },
   { path: "/admin/settings", label: "الإعدادات", icon: "settings" },
-  { path: "/admin/subscriptions", label: "الباقات", icon: "subscriptions" },
-  { path: "/admin/billing", label: "الفواتير", icon: "receipt" },
 ];
-
-interface StoreData {
-  id: string;
-  ref: string;
-  name: string;
-  active: boolean;
-}
 
 export default function Sidebar() {
   const [loc, navigate] = useLocation();
   const [menuOpen, setMenuOpen] = useState(false);
-  const [stores, setStores] = useState<StoreData[]>([]);
+  const [stores, setStores] = useState<(Omit<StoreType, 'createdAt'> & { id: string })[]>([]);
 
   useEffect(() => {
     fetch("/api/admin/settings/stores")
       .then(r => r.json())
       .then(data => {
-        const transformed: StoreData[] = data.map((s: { id: string; ref: string; name: string; active: boolean }) => ({
+        const transformed: (Omit<Store, 'createdAt'> & { id: string })[] = data.map((s: { id: string; ref: string; name: string; active: boolean; createdAt: string; }) => ({
           id: s.id,
           ref: s.ref,
           name: s.name,
@@ -61,6 +51,13 @@ export default function Sidebar() {
     setTimeout(() => { el.classList.remove("show"); setTimeout(() => el.remove(), 400); }, 2000);
   };
 
+  useEffect(() => {
+    fetch("/api/admin/settings/stores")
+      .then(r => r.json())
+      .then(setStores)
+      .catch(() => {});
+  }, []);
+
   return (
     <>
       <div className="sb-mobile" style={{ position: "fixed", top: 0, left: 0, right: 0, zIndex: 100, height: "56px", background: "#131921", borderBottom: "1px solid rgba(255,255,255,0.1)", padding: "12px 16px", alignItems: "center", justifyContent: "space-between" }}>
@@ -79,24 +76,23 @@ export default function Sidebar() {
       {menuOpen && (
         <div onClick={() => toggleMenu(false)} style={{ position: "fixed", inset: 0, background: "rgba(0,0,0,0.5)", zIndex: 200 }}>
           <div onClick={(e) => e.stopPropagation()} style={{ position: "fixed", top: 0, right: 0, width: "256px", height: "100dvh", background: "#131921", boxShadow: "-4px 0 12px rgba(0,0,0,0.3)", display: "flex", flexDirection: "column" }}>
-            <SidebarInner isActive={isActive} handleNav={handleNav} copyLink={copyLink} navigate={navigate} stores={stores} />
+            <SidebarInner isActive={isActive} handleNav={handleNav} copyLink={copyLink} navigate={navigate} />
           </div>
         </div>
       )}
 
       <aside className="sb-desktop" style={{ width: "256px", background: "#131921", borderLeft: "1px solid rgba(255,255,255,0.1)", minHeight: "100vh", flexShrink: 0, flexDirection: "column", position: "relative", zIndex: 40, boxShadow: "0 2px 8px rgba(0,0,0,0.15)" }}>
-        <SidebarInner isActive={isActive} handleNav={handleNav} copyLink={copyLink} navigate={navigate} stores={stores} />
+        <SidebarInner isActive={isActive} handleNav={handleNav} copyLink={copyLink} navigate={navigate} />
       </aside>
     </>
   );
 }
 
-function SidebarInner({ isActive, handleNav, copyLink, navigate, stores }: {
+function SidebarInner({ isActive, handleNav, copyLink, navigate }: {
   isActive: (p: string) => boolean;
   handleNav: (p: string) => void;
   copyLink: (r: string) => void;
   navigate: (p: string) => void;
-  stores: StoreData[];
 }) {
   return (
     <div style={{ padding: "20px", display: "flex", flexDirection: "column", height: "100%" }}>
@@ -125,20 +121,13 @@ function SidebarInner({ isActive, handleNav, copyLink, navigate, stores }: {
         ))}
       </nav>
       <div style={{ marginTop: "auto", paddingTop: "16px", borderTop: "1px solid rgba(255,255,255,0.1)", display: "flex", flexDirection: "column", gap: "8px" }}>
-        {stores.filter((s: StoreData) => s.active).map((s: StoreData) => (
+        {stores.filter((s: StoreType & { id: string }) => s.active).map((s: StoreType & { id: string }) => (
           <a key={s.ref} onClick={() => copyLink(s.ref)}
             style={{ display: "flex", alignItems: "center", gap: "12px", margin: "0 8px", padding: "12px 16px", borderRadius: "8px", cursor: "pointer", color: "#FF9900", fontSize: "14px", textDecoration: "none" }}>
             <span class="material-symbols-outlined" style={{ fontSize: "20px" }}>link</span>
             <span>نسخ رابط {s.name}</span>
           </a>
         ))}
-        <a onClick={() => handleNav("/admin/super-admin")}
-          style={{ display: "flex", alignItems: "center", gap: "12px", margin: "0 8px", padding: "12px 16px", borderRadius: "8px", cursor: "pointer", color: isActive("/admin/super-admin") ? "#FEBD69" : "#B0B8C1", fontSize: "14px", textDecoration: "none" }}
-          onMouseEnter={(e) => { (e.currentTarget as HTMLElement).style.background = "#232F3E"; (e.currentTarget as HTMLElement).style.color = "#fff"; }}
-          onMouseLeave={(e) => { if (!isActive("/admin/super-admin")) { (e.currentTarget as HTMLElement).style.background = "transparent"; (e.currentTarget as HTMLElement).style.color = "#B0B8C1"; } }}>
-          <span class="material-symbols-outlined" style={{ fontSize: "20px" }}>admin_panel_settings</span>
-          <span>المشرف العام</span>
-        </a>
         <a onClick={() => {}}
           style={{ display: "flex", alignItems: "center", gap: "12px", margin: "0 8px", padding: "12px 16px", borderRadius: "8px", cursor: "pointer", color: "#B0B8C1", fontSize: "14px", textDecoration: "none" }}
           onMouseEnter={(e) => { (e.currentTarget as HTMLElement).style.background = "#232F3E"; (e.currentTarget as HTMLElement).style.color = "#fff"; }}

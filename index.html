@@ -2,38 +2,37 @@
 <html lang="ar" dir="rtl">
   <head>
     <meta charset="UTF-8" />
-    <link rel="icon" type="image/svg+xml" href="/vite.svg" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title>المتجر الفاخر</title>
+    <title>M&amp;K Store</title>
+
     <style>
-      #root {
-        font-family: system-ui, -apple-system, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif;
-        direction: rtl;
-        background: #fbf8ff;
+      #root { min-height: 100vh; }
+      body { background: #EAEDED; margin: 0; font-family: 'Noto Sans Arabic', sans-serif; }
+      #root .splash {
         min-height: 100vh;
         display: flex;
+        flex-direction: column;
         align-items: center;
         justify-content: center;
-      }
-      #root .splash {
         text-align: center;
       }
       #root .splash h1 {
         font-size: 20px;
-        font-weight: 600;
+        font-weight: 800;
         margin: 0 0 8px;
-        color: #1a1b22;
+        color: #0F1111;
+        font-family: 'Plus Jakarta Sans', 'Noto Sans Arabic', sans-serif;
       }
       #root .splash p {
         font-size: 14px;
-        color: #71717a;
+        color: #565959;
         margin: 0;
       }
       #root .splash .spinner {
         width: 24px;
         height: 24px;
-        border: 3px solid #e4e4e7;
-        border-top-color: #1a1b22;
+        border: 3px solid #DDDDDD;
+        border-top-color: #FF9900;
         border-radius: 50%;
         animation: spin 0.8s linear infinite;
         margin: 16px auto 0;
@@ -45,7 +44,7 @@
     <div id="root">
       <div class="splash">
         <div style="font-size:40px;margin-bottom:8px">🏪</div>
-        <h1>المتجر الفاخر</h1>
+        <h1>M&amp;K Store</h1>
         <p>جاري التحميل...</p>
         <div class="spinner"></div>
       </div>

@@ -3,22 +3,119 @@ generator client {
 }
 
 datasource db {
-  provider = "sqlite"
+  provider = "postgresql"
   url      = env("DATABASE_URL")
 }
 
 model Admin {
-  id           String   @id @default(uuid())
-  username     String   @unique
-  email        String   @unique
-  passwordHash String
-  createdAt    DateTime @default(now())
+  id            String         @id @default(uuid())
+  username      String         @unique
+  email         String         @unique
+  passwordHash  String
+  createdAt     DateTime       @default(now())
+  subscriptions Subscription[] @relation("SubscriptionsOnAdmin")
+  tenantUsers   TenantUser[]   @relation("TenantUsersOnAdmin")
 
   @@map("admins")
 }
 
+model Tenant {
+  id            String         @id @default(uuid())
+  name          String
+  subdomain     String         @unique
+  domain        String?
+  email         String
+  phone         String?
+  address       String
+  status        String         @default("ACTIVE")
+  plan          String         @default("STARTER")
+  createdAt     DateTime       @default(now())
+  updatedAt     DateTime       @updatedAt
+  invitations   Invitation[]
+  orders        Order[]
+  products      Product[]
+  roles         Role[]
+  stores        Store[]
+  subscriptions Subscription[]
+  tenantUsers   TenantUser[]
+
+  @@map("tenants")
+}
+
+model TenantUser {
+  id        String   @id @default(uuid())
+  tenantId  String
+  adminId   String
+  role      String   @default("ADMIN")
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+  admin     Admin    @relation("TenantUsersOnAdmin", fields: [adminId], references: [id])
+  tenant    Tenant   @relation(fields: [tenantId], references: [id])
+
+  @@unique([tenantId, adminId])
+  @@map("tenant_users")
+}
+
+model Subscription {
+  id            String   @id @default(uuid())
+  tenantId      String
+  adminId       String
+  plan          String
+  price         Float
+  status        String   @default("ACTIVE")
+  currentPeriod DateTime
+  nextBilling   DateTime
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+  admin         Admin    @relation("SubscriptionsOnAdmin", fields: [adminId], references: [id])
+  tenant        Tenant   @relation(fields: [tenantId], references: [id])
+
+  @@map("subscriptions")
+}
+
+model Role {
+  id          String       @id @default(uuid())
+  tenantId    String
+  name        String
+  description String?
+  createdAt   DateTime     @default(now())
+  updatedAt   DateTime     @updatedAt
+  permissions Permission[]
+  tenant      Tenant       @relation(fields: [tenantId], references: [id])
+
+  @@unique([tenantId, name])
+  @@map("roles")
+}
+
+model Permission {
+  id        String   @id @default(uuid())
+  roleId    String
+  resource  String
+  action    String
+  createdAt DateTime @default(now())
+  role      Role     @relation(fields: [roleId], references: [id])
+
+  @@unique([roleId, resource, action])
+  @@map("permissions")
+}
+
+model Invitation {
+  id         String    @id @default(uuid())
+  tenantId   String
+  email      String
+  role       String    @default("EDITOR")
+  token      String    @unique
+  expiresAt  DateTime
+  createdAt  DateTime  @default(now())
+  acceptedAt DateTime?
+  tenant     Tenant    @relation(fields: [tenantId], references: [id])
+
+  @@map("invitations")
+}
+
 model Product {
   id           String   @id @default(uuid())
+  tenantId     String?
   name         String
   description  String
   price        Float
@@ -30,36 +127,75 @@ model Product {
   sizes        String   @default("[]")
   active       Boolean  @default(true)
   updatedAt    DateTime @updatedAt
+  tenant       Tenant?  @relation(fields: [tenantId], references: [id])
 
   @@map("products")
 }
 
 model Order {
-  id          String     @id @default(uuid())
-  orderNumber String     @unique
+  id           String      @id @default(uuid())
+  orderNumber  String      @unique
   customerName String
-  phone       String
-  governorate String
-  city        String
-  address     String
-  notes       String?
-  totalPrice  Float      @default(0)
-  status      String     @default("NEW")
-  createdBy   String     @default("")
-  createdAt   DateTime   @default(now())
-  updatedAt   DateTime   @updatedAt
-  items       OrderItem[]
+  phone        String
+  governorate  String
+  city         String
+  address      String
+  notes        String?
+  totalPrice   Float       @default(0)
+  status       String      @default("NEW")
+  createdBy    String?
+  tenantId     String?
+  createdAt    DateTime    @default(now())
+  updatedAt    DateTime    @updatedAt
+  items        OrderItem[]
+  tenant       Tenant?     @relation(fields: [tenantId], references: [id])
 
   @@map("orders")
 }
 
 model OrderItem {
-  id       String @id @default(uuid())
-  color    String
-  size     String
-  quantity Int
-  orderId  String
-  order    Order  @relation(fields: [orderId], references: [id], onDelete: Cascade)
+  id        String @id @default(uuid())
+  color     String
+  size      String
+  quantity  Int
+  unitPrice Float?
+  orderId   String
+  order     Order  @relation(fields: [orderId], references: [id], onDelete: Cascade)
 
   @@map("order_items")
+}
+
+model Store {
+  id           String      @id @default(uuid())
+  ref          String      @unique
+  name         String
+  tagLine      String?
+  primaryColor String?
+  logo         String?
+  tenantId     String?
+  active       Boolean     @default(true)
+  createdAt    DateTime    @default(now())
+  updatedAt    DateTime    @updatedAt
+  visitors     Int         @default(0)
+  conversions  Int         @default(0)
+  storeLinks   StoreLink[]
+  tenant       Tenant?     @relation(fields: [tenantId], references: [id])
+
+  @@unique([tenantId, name])
+  @@map("stores")
+}
+
+model StoreLink {
+  id          String   @id @default(uuid())
+  storeId     String
+  slug        String   @unique
+  customTitle String?
+  customLogo  String
+  customColor String
+  productIds  String
+  stats       Json
+  createdAt   DateTime @default(now())
+  store       Store    @relation(fields: [storeId], references: [id])
+
+  @@map("store_links")
 }

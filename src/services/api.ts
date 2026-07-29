@@ -1,7 +1,14 @@
-const API_BASE = import.meta.env.VITE_API_URL || "http://localhost:3001/api";
+export const API_BASE = import.meta.env.VITE_API_URL || "http://localhost:3001/api";
+const IMG_BASE = import.meta.env.VITE_IMG_URL || API_BASE.replace("/api", "");
 
 function getToken(): string | null {
   return localStorage.getItem("token");
+}
+
+export function getImageUrl(path: string): string {
+  if (!path) return "";
+  if (path.startsWith("http://") || path.startsWith("https://")) return path;
+  return `${IMG_BASE}${path}`;
 }
 
 async function request<T>(path: string, options: RequestInit = {}): Promise<T> {

@@ -1,11 +1,17 @@
-import { Suspense, lazy } from 'preact/compat'
 import { Router, Switch, Route, Redirect } from 'wouter'
 import AdminLogin from "./pages/AdminLogin";
-
-const CustomerOrder = lazy(() => import("./pages/CustomerOrder"));
-const AdminDashboard = lazy(() => import("./pages/AdminDashboard"));
-const AdminOrders = lazy(() => import("./pages/AdminOrders"));
-const AdminProduct = lazy(() => import("./pages/AdminProduct"));
+import CustomerOrder from "./pages/CustomerOrder";
+import AdminDashboard from "./pages/AdminDashboard";
+import AdminOrders from "./pages/AdminOrders";
+import AdminProduct from "./pages/AdminProduct";
+import AdminSettings from "./pages/AdminSettings";
+import AdminSuperAdmin from "./pages/AdminSuperAdmin";
+import AdminCustomers from "./pages/AdminCustomers";
+import AdminReports from "./pages/AdminReports";
+import AdminSubscriptions from "./pages/AdminSubscriptions";
+import AdminBilling from "./pages/AdminBilling";
+import AdminStoreLinks from "./pages/AdminStoreLinks";
+import Landing from "./pages/Landing";
 
 function RequireAuth({ children }: { children: any }) {
   const token = localStorage.getItem("token");
@@ -16,29 +22,22 @@ function RequireAuth({ children }: { children: any }) {
 export default function App() {
   return (
     <Router>
-      <Suspense fallback={
-        <div style={{
-          fontFamily: "system-ui, -apple-system, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif",
-          direction: "rtl",
-          minHeight: "100vh",
-          display: "flex",
-          alignItems: "center",
-          justifyContent: "center",
-          background: "#fbf8ff"
-        }}>
-          <p style={{ color: "#71717a", fontSize: "16px" }}>جاري التحميل...</p>
-        </div>
-      }>
-        <Switch>
-          <Route path="/" component={() => <Redirect to="/admin/login" />} />
-          <Route path="/store" component={CustomerOrder} />
-          <Route path="/admin/login" component={AdminLogin} />
-          <Route path="/admin" component={() => <RequireAuth><AdminDashboard /></RequireAuth>} />
-          <Route path="/admin/orders" component={() => <RequireAuth><AdminOrders /></RequireAuth>} />
-          <Route path="/admin/product" component={() => <RequireAuth><AdminProduct /></RequireAuth>} />
-          <Route component={() => <Redirect to="/admin/login" />} />
-        </Switch>
-      </Suspense>
+      <Switch>
+        <Route path="/" component={Landing} />
+        <Route path="/store" component={CustomerOrder} />
+        <Route path="/admin/login" component={AdminLogin} />
+        <Route path="/admin" component={() => <RequireAuth><AdminDashboard /></RequireAuth>} />
+        <Route path="/admin/orders" component={() => <RequireAuth><AdminOrders /></RequireAuth>} />
+        <Route path="/admin/product" component={() => <RequireAuth><AdminProduct /></RequireAuth>} />
+        <Route path="/admin/customers" component={() => <RequireAuth><AdminCustomers /></RequireAuth>} />
+        <Route path="/admin/reports" component={() => <RequireAuth><AdminReports /></RequireAuth>} />
+        <Route path="/admin/settings" component={() => <RequireAuth><AdminSettings /></RequireAuth>} />
+        <Route path="/admin/subscriptions" component={() => <RequireAuth><AdminSubscriptions /></RequireAuth>} />
+        <Route path="/admin/billing" component={() => <RequireAuth><AdminBilling /></RequireAuth>} />
+        <Route path="/admin/store-links" component={() => <RequireAuth><AdminStoreLinks /></RequireAuth>} />
+        <Route path="/admin/super-admin" component={() => <RequireAuth><AdminSuperAdmin /></RequireAuth>} />
+        <Route component={() => <Redirect to="/admin/login" />} />
+      </Switch>
     </Router>
   );
 }

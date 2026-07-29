@@ -1,5 +1,5 @@
-import { useState, useEffect, FormEvent } from "preact/compat";
-import { api } from "../services/api";
+import { useState, useEffect } from "preact/compat";
+import { api, getImageUrl } from "../services/api";
 import type { Product } from "../types";
 
 const GOVERNORATES = [
@@ -44,7 +44,7 @@ const CITIES_BY_GOV: Record<string, string[]> = {
 function getTotalPrice(qty: number, tiers: Record<string, number>): number {
   const DEFAULT_TIERS: Record<number, number> = { 1: 500, 2: 900, 3: 1200, 4: 1400 };
   const t: Record<number, number> = {};
-  Object.entries(tiers).forEach(([k, v]) => { t[Number(k)] = v; });
+  Object.entries(tiers || {}).forEach(([k, v]) => { t[Number(k)] = v; });
   const active = Object.keys(t).length ? t : DEFAULT_TIERS;
   if (qty >= 4 && active[4]) return active[4] + (qty - 4) * Math.round(active[4] / 4);
   return active[qty] || qty * (active[1] || DEFAULT_TIERS[1]);
@@ -56,7 +56,15 @@ interface CartItem {
   quantity: number;
 }
 
+const FEATURES = [
+  "كتان طبيعي 100% عالي الجودة",
+  "مقاوم للتجعد وسهل الكي",
+  "متوفر بمقاسات مختلفة وألوان جذابة",
+  "شحن سريع خلال 48 ساعة",
+];
+
 export default function CustomerOrder() {
+  const ref = new URLSearchParams(window.location.search).get("ref") || "";
   const [product, setProduct] = useState<Product | null>(null);
   const [cart, setCart] = useState<CartItem[]>([{ color: "", size: "", quantity: 1 }]);
   const [submitted, setSubmitted] = useState(false);
@@ -64,18 +72,9 @@ export default function CustomerOrder() {
   const [totalPrice, setTotalPrice] = useState(0);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
-
   const [form, setForm] = useState({
-    customerName: "",
-    phone: "",
-    governorate: "",
-    city: "",
-    address: "",
-    notes: "",
+    customerName: "", phone: "", governorate: "", city: "", address: "", notes: "",
   });
-
-  const ref = new URLSearchParams(window.location.search).get("ref") || "";
-  const refName = ref === "1" ? "بنطلون الساحل" : ref === "2" ? "مالك ستور" : ref ? `المتجر ${ref}` : "";
 
   useEffect(() => {
     api.get<Product>("/orders/product").then((p) => {
@@ -87,9 +86,11 @@ export default function CustomerOrder() {
   const colors = product?.colors || ["أسود", "بيج", "زيتي", "أبيض"];
   const sizes = product?.sizes || ["L", "XL", "XXL"];
   const vs = product?.variantStock || {};
+  const pricingTiers = product?.pricingTiers || {};
 
-  const totalQty = cart.reduce((sum, i) => sum + i.quantity, 0);
-  const total = getTotalPrice(totalQty, product?.pricingTiers || {});
+const totalQty = cart.reduce((sum, i) => sum + i.quantity, 0);
+const total = getTotalPrice(totalQty, pricingTiers);
+const canSubmit = form.customerName && form.phone && form.governorate && form.city && form.address;
 
   const getAvailable = (color: string, size: string) => vs[color]?.[size] ?? 0;
 
@@ -102,27 +103,16 @@ export default function CustomerOrder() {
     });
   };
 
-  const addItem = () => {
-    setCart((prev) => [...prev, { color: colors[0] || "", size: sizes[0] || "", quantity: 1 }]);
-  };
+  const addItem = () => setCart((prev) => [...prev, { color: colors[0] || "", size: sizes[0] || "", quantity: 1 }]);
 
-  const removeItem = (idx: number) => {
-    setCart((prev) => prev.filter((_, i) => i !== idx));
-  };
-
-  const handleSubmit = async (e: FormEvent) => {
-    e.preventDefault();
+  const handleSubmit = async () => {
+    if (!form.customerName || !form.phone) return;
     setError("");
     setLoading(true);
     try {
       const result = await api.post<{ orderNumber: string; totalPrice: number }>("/orders", {
-        ...form,
-        ref,
-        items: cart.map((item) => ({
-          color: item.color,
-          size: item.size,
-          quantity: item.quantity,
-        })),
+        ...form, ref,
+        items: cart.map((item) => ({ color: item.color, size: item.size, quantity: item.quantity })),
       });
       setOrderNumber(result.orderNumber);
       setTotalPrice(result.totalPrice);
@@ -134,19 +124,34 @@ export default function CustomerOrder() {
     }
   };
 
+  if (!product) {
+    return (
+      <div style={{ position: "fixed", inset: 0, background: "rgba(255,255,255,0.9)", zIndex: 200, display: "flex", alignItems: "center", justifyContent: "center", flexDirection: "column", gap: "16px" }}>
+        <div style={{ width: "48px", height: "48px", border: "4px solid #FF9900", borderTopColor: "transparent", borderRadius: "50%", animation: "spin 0.8s linear infinite" }}></div>
+        <p style={{ fontSize: "14px", color: "#595F68" }}>جاري تحميل المنتج...</p>
+      </div>
+    );
+  }
+
   if (submitted) {
     return (
-      <div style={{ fontFamily: "system-ui, -apple-system, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif", direction: "rtl", background: "#fbf8ff", minHeight: "100vh", display: "flex", alignItems: "center", justifyContent: "center", padding: "16px" }}>
-        <div style={{ textAlign: "center", background: "white", padding: "40px 24px", borderRadius: "8px", maxWidth: "400px", width: "100%", boxShadow: "0 10px 15px -3px rgba(0,0,0,0.05)" }}>
-          <div style={{ color: "#006e2f", fontSize: "48px", marginBottom: "16px" }}>✓</div>
-          <h2 style={{ margin: "0 0 12px", fontSize: "24px", fontWeight: 600 }}>تم استلام طلبك بنجاح!</h2>
-          <p style={{ color: "#4c4546", fontSize: "16px", lineHeight: 1.6, margin: "0 0 16px" }}>
-            شكرًا لثقتك بنا. سيتم التواصل معك من قبل فريق التوصيل خلال الساعات القادمة. عند استلام المنتج، لك حق معاينته؛ إذا أعجبك تستلمه مجاناً، وإن رفضت تدفع قيمة الشحن فقط.
-          </p>
-          <p style={{ fontSize: "18px", fontWeight: 600, margin: "0" }}>رقم الطلب: {orderNumber}</p>
-          <p style={{ fontSize: "16px", color: "#006e2f", fontWeight: 600, margin: "8px 0 24px" }}>الإجمالي: {totalPrice.toLocaleString()} ج.م</p>
-          {ref && <p style={{ fontSize: "13px", color: "#71717a", margin: "0 0 16px" }}>المتجر: {refName}</p>}
-          <button onClick={() => window.location.reload()} style={{ background: "black", color: "white", border: "none", borderRadius: "4px", padding: "12px 32px", fontSize: "16px", fontWeight: 600, cursor: "pointer" }}>
+      <div style={{ position: "fixed", inset: 0, background: "#EAEDED", zIndex: 100, display: "flex", alignItems: "center", justifyContent: "center", padding: "16px" }}>
+        <div style={{ background: "#fff", width: "100%", maxWidth: "400px", padding: "32px", borderRadius: "8px", boxShadow: "0 1px 3px rgba(0,0,0,0.1)", textAlign: "center", display: "flex", flexDirection: "column", alignItems: "center" }}>
+          <span class="material-symbols-outlined" style={{ fontSize: "64px", color: "#067D62", marginBottom: "16px", fontVariationSettings: "'FILL' 1" }}>check_circle</span>
+          <h2 style={{ fontFamily: "'Plus Jakarta Sans', sans-serif", fontSize: "24px", fontWeight: 600, margin: "0 0 8px" }}>تم تقديم طلبك بنجاح!</h2>
+          <p style={{ fontSize: "16px", color: "#595F68", margin: "0 0 24px" }}>شكراً لشرائك من M&K Store</p>
+          <div style={{ width: "100%", borderTop: "1px solid #DDDDDD", borderBottom: "1px solid #DDDDDD", padding: "16px 0", marginBottom: "24px" }}>
+            <div style={{ display: "flex", justifyContent: "space-between", fontSize: "14px", fontWeight: 600 }}>
+              <span>رقم الطلب:</span>
+              <span style={{ color: "#0F1111" }}>#{orderNumber}</span>
+            </div>
+            <div style={{ display: "flex", justifyContent: "space-between", fontSize: "14px", fontWeight: 600, marginTop: "8px" }}>
+              <span>الإجمالي:</span>
+              <span style={{ color: "#FF9900", fontWeight: 700 }}>{totalPrice.toLocaleString()} ج.م</span>
+            </div>
+          </div>
+          <button onClick={() => window.location.reload()}
+            style={{ width: "100%", background: "#FF9900", height: "48px", borderRadius: "8px", fontWeight: 700, color: "#0F1111", border: "none", cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center", gap: "8px", fontSize: "16px" }}>
             العودة للمتجر
           </button>
         </div>
@@ -154,186 +159,211 @@ export default function CustomerOrder() {
     );
   }
 
-  if (!product) {
-    return (
-      <div style={{ fontFamily: "system-ui, -apple-system, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif", direction: "rtl", background: "#fbf8ff", minHeight: "100vh", display: "flex", alignItems: "center", justifyContent: "center" }}>
-        <p>جاري تحميل المنتج...</p>
-      </div>
-    );
-  }
-
   return (
-    <div style={{ fontFamily: "system-ui, -apple-system, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif", direction: "rtl", background: "#fbf8ff", minHeight: "100vh" }}>
-      <header style={{ display: "flex", alignItems: "center", justifyContent: "space-between", padding: "16px", background: "white", borderBottom: "1px solid #e4e4e7" }}>
-        <h1 style={{ fontSize: "18px", fontWeight: 600, margin: 0 }}>{product.name}</h1>
+    <div style={{ background: "#EAEDED", color: "#0F1111", paddingBottom: "96px" }}>
+      <header style={{ background: "#fff", height: "64px", display: "flex", alignItems: "center", padding: "0 16px", borderBottom: "1px solid #DDDDDD", position: "sticky", top: 0, zIndex: 40 }}>
+        <h1 style={{ fontFamily: "'Plus Jakarta Sans', sans-serif", fontSize: "20px", fontWeight: 700, color: "#FF9900", margin: 0 }}>M&K Store</h1>
       </header>
 
-      <main style={{ maxWidth: "520px", margin: "0 auto", padding: "16px" }}>
-        <div style={{ background: "white", borderRadius: "8px", overflow: "hidden", marginBottom: "16px" }}>
-          <div className="product-image-wrap" style={{ background: "#f4f4f5", height: "240px", display: "flex", alignItems: "center", justifyContent: "center", overflow: "hidden" }}>
+      <main style={{ display: "flex", flexDirection: "column", gap: "16px", paddingTop: "16px" }}>
+        <section style={{ padding: "0 16px" }}>
+          <div style={{ background: "#F4F4F5", borderRadius: "8px", overflow: "hidden", display: "flex", alignItems: "center", justifyContent: "center", height: "180px", position: "relative" }}>
             {product.images?.[cart[0]?.color] ? (
-              <img src={product.images[cart[0].color]} alt={cart[0].color} style={{ width: "100%", height: "100%", objectFit: "cover" }} />
+              <img src={getImageUrl(product.images[cart[0].color])} alt={cart[0].color} style={{ width: "100%", height: "100%", objectFit: "cover" }} />
             ) : (
-              <span style={{ fontSize: "48px" }}>👖</span>
+              <div style={{ fontSize: "64px", color: "#999" }}>👖</div>
             )}
+            <div style={{ position: "absolute", bottom: "8px", right: "8px", background: "rgba(0,0,0,0.1)", padding: "4px 8px", borderRadius: "4px", fontSize: "12px" }}>👖</div>
           </div>
-          <div style={{ padding: "16px" }}>
-            <h2 style={{ fontSize: "22px", fontWeight: 600, margin: "0 0 8px" }}>{product.name}</h2>
-            <p style={{ color: "#4c4546", fontSize: "14px", lineHeight: 1.6, margin: 0 }}>{product.description}</p>
+          <div style={{ background: "#fff", padding: "16px", marginTop: "8px", borderRadius: "8px", boxShadow: "0 1px 3px rgba(0,0,0,0.1)" }}>
+            <h2 style={{ fontFamily: "'Plus Jakarta Sans', sans-serif", fontSize: "22px", lineHeight: 1.2, margin: "0 0 8px" }}>{product.name}</h2>
+            <p style={{ fontSize: "14px", color: "#595F68", margin: 0 }}>{product.description}</p>
           </div>
-        </div>
+        </section>
 
-        <div style={{ background: "white", borderRadius: "8px", padding: "16px", marginBottom: "16px" }}>
-          <h3 style={{ fontSize: "16px", fontWeight: 600, margin: "0 0 12px" }}>💰 الأسعار (شامل الشحن)</h3>
-          {[1, 2, 3, 4].map((qty) => (
-            <div key={qty} style={{
-              display: "flex", justifyContent: "space-between", alignItems: "center",
-              padding: "10px 12px", marginBottom: "8px", borderRadius: "6px",
-              border: "1px solid #e4e4e7",
-            }}>
-              <span style={{ fontSize: "14px" }}>{qty} {qty === 1 ? "قطعة" : "قطع"}</span>
-              <span style={{ fontWeight: 700, fontSize: "16px" }}>
-                {getTotalPrice(qty, product?.pricingTiers || {}).toLocaleString()} ج.م
-                <span style={{ fontWeight: 400, fontSize: "12px", color: "#71717a", marginRight: "8px" }}>
-                  ({Math.round(getTotalPrice(qty, product?.pricingTiers || {}) / qty)} ج.م/القطعة)
-                </span>
-              </span>
-            </div>
-          ))}
-        </div>
-
-        <div style={{ background: "white", borderRadius: "8px", padding: "16px", marginBottom: "16px" }}>
-          <div style={{ display: "flex", alignItems: "center", gap: "8px", padding: "8px 0", borderBottom: "1px solid #f4f4f5" }}>
-            <span style={{ color: "#006e2f" }}>✓</span>
-            <span style={{ fontSize: "14px" }}>اقمشة فرنساوي طبيعي 100%</span>
-          </div>
-          <div style={{ display: "flex", alignItems: "center", gap: "8px", padding: "8px 0", borderBottom: "1px solid #f4f4f5" }}>
-            <span style={{ color: "#006e2f" }}>✓</span>
-            <span style={{ fontSize: "14px" }}>خامة فاخرة تتحمل الاستخدام اليومي</span>
-          </div>
-          <div style={{ display: "flex", alignItems: "center", gap: "8px", padding: "8px 0", borderBottom: "1px solid #f4f4f5" }}>
-            <span style={{ color: "#006e2f" }}>✓</span>
-            <span style={{ fontSize: "14px" }}>قصة عصرية عالية الخصر مع كسرات أمامية أنيقة</span>
-          </div>
-          <div style={{ display: "flex", alignItems: "center", gap: "8px", padding: "8px 0" }}>
-            <span style={{ color: "#006e2f" }}>✓</span>
-            <span style={{ fontSize: "14px" }}>معاينة المنتج عند الاستلام - لك حق الإرجاع</span>
-          </div>
-        </div>
-
-        <form onSubmit={handleSubmit}>
-          <div style={{ background: "white", borderRadius: "8px", padding: "16px", marginBottom: "16px" }}>
-            <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "12px" }}>
-              <h3 style={{ fontSize: "16px", fontWeight: 600, margin: 0 }}>🛒 المنتجات المطلوبة</h3>
-              <button type="button" onClick={addItem} style={{ background: "black", color: "white", border: "none", borderRadius: "4px", padding: "6px 14px", fontSize: "13px", cursor: "pointer" }}>
-                + إضافة منتج
-              </button>
-            </div>
-
-            {cart.map((item, idx) => {
-              const avail = item.color && item.size ? getAvailable(item.color, item.size) : 0;
-              const outOfStock = avail === 0;
-              return (
-                <div key={idx} style={{
-                  padding: "12px", marginBottom: "10px", border: "1px solid #e4e4e7", borderRadius: "6px",
-                  opacity: outOfStock ? 0.6 : 1,
-                }}>
-                  <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: "8px" }}>
-                    <span style={{ fontSize: "13px", color: "#71717a" }}>المنتج {idx + 1}</span>
-                    {cart.length > 1 && (
-                      <button type="button" onClick={() => removeItem(idx)} style={{ background: "none", border: "none", cursor: "pointer", color: "#ba1a1a", fontSize: "18px" }}>×</button>
-                    )}
-                  </div>
-                  <div className="cart-item-grid" style={{ display: "grid", gridTemplateColumns: "1fr 1fr 80px", gap: "8px", alignItems: "center" }}>
-                    <select value={item.color} onChange={(e) => updateItem(idx, "color", e.target.value)} style={{ padding: "8px", border: "1px solid #d4d4d8", borderRadius: "4px", fontSize: "13px", background: "white" }}>
-                      <option value="">اختر اللون</option>
-                      {colors.map((c) => {
-                        const cStock = sizes.reduce((s, sz) => s + (getAvailable(c, sz)), 0);
-                        return (
-                          <option key={c} value={c} disabled={cStock === 0}>{c}{cStock === 0 ? " (نفد)" : ""}</option>
-                        );
-                      })}
-                    </select>
-                    <select value={item.size} onChange={(e) => updateItem(idx, "size", e.target.value)} style={{ padding: "8px", border: "1px solid #d4d4d8", borderRadius: "4px", fontSize: "13px", background: "white" }}>
-                      <option value="">اختر المقاس</option>
-                      {sizes.map((s) => {
-                        const sStock = getAvailable(item.color, s);
-                        return (
-                          <option key={s} value={s} disabled={sStock === 0}>{s}{sStock === 0 ? " (نفد)" : ""}</option>
-                        );
-                      })}
-                    </select>
-                    <input type="number" value={item.quantity} onChange={(e) => {
-                      const val = Math.max(1, parseInt(e.target.value) || 1);
-                      const max = getAvailable(item.color, item.size);
-                      updateItem(idx, "quantity", max > 0 ? Math.min(val, max) : 1);
-                    }} min={1} max={avail || 1} style={{ width: "100%", padding: "8px", border: "1px solid #d4d4d8", borderRadius: "4px", fontSize: "13px", textAlign: "center", boxSizing: "border-box" }} />
-                  </div>
-                  {item.color && item.size && (
-                    <div style={{ fontSize: "12px", color: outOfStock ? "#ba1a1a" : "#006e2f", marginTop: "6px" }}>
-                      {outOfStock ? "غير متوفر في المخزون" : `المتبقي: ${avail} قطعة`}
+        <section style={{ padding: "0 16px" }}>
+          <div style={{ background: "#fff", padding: "16px", borderRadius: "8px", boxShadow: "0 1px 3px rgba(0,0,0,0.1)" }}>
+            <h3 style={{ fontFamily: "'Plus Jakarta Sans', sans-serif", fontSize: "20px", fontWeight: 600, margin: "0 0 16px", display: "flex", alignItems: "center", gap: "8px" }}>
+              <span>💰</span> الأسعار
+            </h3>
+            <div style={{ display: "flex", flexDirection: "column", gap: "8px" }}>
+              {[1, 2, 3, 4].map((qty) => {
+                const price = getTotalPrice(qty, pricingTiers);
+                const isBest = qty === 4;
+                const savings = qty === 4 ? getTotalPrice(1, pricingTiers) * 4 - price : 0;
+                return (
+                  <div key={qty} style={{
+                    display: "flex", alignItems: "center", justifyContent: "space-between",
+                    padding: "12px", border: `1px solid ${isBest ? "#FF9900" : "#DDDDDD"}`,
+                    borderRadius: "8px", background: isBest ? "#FFF5E6" : "#fff",
+                  }}>
+                    <div style={{ display: "flex", flexDirection: "column" }}>
+                      <span style={{ fontSize: "14px", fontWeight: isBest ? 700 : 400, color: isBest ? "#653A00" : "#0F1111" }}>
+                        {qty} {qty === 1 ? "قطعة" : "قطع"}{isBest ? " (أفضل قيمة)" : ""}
+                      </span>
+                      {isBest && savings > 0 && <span style={{ fontSize: "10px", color: "#693C00" }}>وفر {savings.toLocaleString()} ج.م</span>}
                     </div>
-                  )}
-                </div>
-              );
-            })}
-
-            <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", padding: "12px 0", borderTop: "1px solid #e4e4e7" }}>
-              <span style={{ fontWeight: 600, fontSize: "14px" }}>إجمالي القطع: {totalQty}</span>
-              <span style={{ fontSize: "22px", fontWeight: 700, color: "#006e2f" }}>{total.toLocaleString()} ج.م</span>
+                    <div style={{ display: "flex", alignItems: "baseline", gap: "8px" }}>
+                      <span style={{ fontWeight: 700, fontSize: isBest ? "18px" : "16px", color: isBest ? "#FF9900" : "#0F1111" }}>
+                        {price.toLocaleString()} ج.م
+                      </span>
+                      <span style={{ fontSize: "11px", color: "#999" }}>
+                        ({(price / qty).toLocaleString()} ج.م/القطعة)
+                      </span>
+                    </div>
+                  </div>
+                );
+              })}
             </div>
           </div>
+        </section>
 
-          <div style={{ background: "white", borderRadius: "8px", padding: "16px", marginBottom: "16px" }}>
-            <h3 style={{ fontSize: "16px", fontWeight: 600, margin: "0 0 12px" }}>معلومات التوصيل</h3>
-
-            {(["customerName", "phone", "address"] as const).map((field) => (
-              <div key={field} style={{ marginBottom: "12px" }}>
-                <label htmlFor={field} style={{ display: "block", fontSize: "14px", fontWeight: 500, marginBottom: "6px" }}>
-                  {field === "customerName" ? "الاسم الكامل" : field === "phone" ? "رقم الجوال" : "العنوان الكامل"}
-                </label>
-                <input id={field} name={field} type={field === "phone" ? "tel" : "text"} value={form[field]} onChange={(e) => setForm({ ...form, [field]: e.target.value })} required style={{ width: "100%", padding: "10px 12px", border: "1px solid #d4d4d8", borderRadius: "4px", fontSize: "14px", boxSizing: "border-box" }} />
+        <section style={{ padding: "0 16px" }}>
+          <div style={{ background: "#fff", padding: "16px", borderRadius: "8px", boxShadow: "0 1px 3px rgba(0,0,0,0.1)" }}>
+            {FEATURES.map((f, i) => (
+              <div key={i} style={{ display: "flex", alignItems: "center", gap: "12px", padding: "8px 0", borderBottom: i < FEATURES.length - 1 ? "1px solid #DDDDDD" : "none" }}>
+                <span class="material-symbols-outlined" style={{ fontSize: "18px", color: "#067D62", fontVariationSettings: "'FILL' 1" }}>check_circle</span>
+                <span style={{ fontSize: "14px", fontWeight: 600 }}>{f}</span>
               </div>
             ))}
+          </div>
+        </section>
 
-            <div style={{ marginBottom: "12px" }}>
-              <label htmlFor="governorate" style={{ display: "block", fontSize: "14px", fontWeight: 500, marginBottom: "6px" }}>المحافظة</label>
-              <select id="governorate" name="governorate" value={form.governorate} onChange={(e) => setForm({ ...form, governorate: e.target.value, city: "" })} required style={{ width: "100%", padding: "10px 12px", border: "1px solid #d4d4d8", borderRadius: "4px", fontSize: "14px", background: "white", boxSizing: "border-box" }}>
-                <option value="">اختر المحافظة</option>
-                {GOVERNORATES.map((g) => <option key={g} value={g}>{g}</option>)}
-              </select>
+        <section style={{ padding: "0 16px" }}>
+          <div style={{ background: "#fff", padding: "16px", borderRadius: "8px", boxShadow: "0 1px 3px rgba(0,0,0,0.1)" }}>
+            <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "16px" }}>
+              <h3 style={{ fontFamily: "'Plus Jakarta Sans', sans-serif", fontSize: "20px", fontWeight: 600, margin: 0, display: "flex", alignItems: "center", gap: "8px" }}>
+                <span>🛒</span> المنتجات المطلوبة
+              </h3>
+              <button onClick={addItem} style={{ color: "#FF9900", fontSize: "14px", fontWeight: 600, border: "none", background: "none", cursor: "pointer", display: "flex", alignItems: "center", gap: "4px", padding: "4px" }}>
+                <span>➕</span> إضافة منتج
+              </button>
             </div>
-
-            <div style={{ marginBottom: "12px" }}>
-              <label htmlFor="city" style={{ display: "block", fontSize: "14px", fontWeight: 500, marginBottom: "6px" }}>المدينة</label>
-              <select id="city" name="city" value={form.city} onChange={(e) => setForm({ ...form, city: e.target.value })} required disabled={!form.governorate} style={{ width: "100%", padding: "10px 12px", border: "1px solid #d4d4d8", borderRadius: "4px", fontSize: "14px", background: "white", boxSizing: "border-box", opacity: form.governorate ? 1 : 0.5 }}>
-                <option value="">اختر المدينة</option>
-                {(CITIES_BY_GOV[form.governorate] || []).map((c) => <option key={c} value={c}>{c}</option>)}
-              </select>
+            <div style={{ display: "flex", flexDirection: "column", gap: "16px" }}>
+              {cart.map((item, idx) => {
+                const avail = item.color && item.size ? getAvailable(item.color, item.size) : 0;
+                const outOfStock = item.color && item.size && avail === 0;
+                return (
+                  <div key={idx} style={{ padding: "16px", border: `1px solid ${outOfStock ? "#B12704" : "#DDDDDD"}`, borderRadius: "8px", display: "flex", flexDirection: "column", gap: "16px" }}>
+                    <div className="cart-grid">
+                      <div>
+                        <label style={{ fontSize: "12px", color: "#595F68" }}>اللون</label>
+                        <select class="amazon-select" value={item.color} onChange={(e) => updateItem(idx, "color", (e.target as HTMLSelectElement).value)}>
+                          <option value="">اختر اللون</option>
+                          {colors.map((c) => (
+                            <option key={c} value={c} disabled={sizes.reduce((s, sz) => s + getAvailable(c, sz), 0) === 0}>{c}</option>
+                          ))}
+                        </select>
+                      </div>
+                      <div>
+                        <label style={{ fontSize: "12px", color: "#595F68" }}>المقاس</label>
+                        <select class="amazon-select" value={item.size} onChange={(e) => updateItem(idx, "size", (e.target as HTMLSelectElement).value)}>
+                          <option value="">اختر المقاس</option>
+                          {sizes.map((s) => {
+                            const sStock = getAvailable(item.color, s);
+                            return (
+                              <option key={s} value={s} disabled={sStock === 0}>{s}{sStock === 0 ? " (نفد)" : ""}</option>
+                            );
+                          })}
+                        </select>
+                      </div>
+                    </div>
+                    <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between" }}>
+                      <div style={{ display: "flex", alignItems: "center", gap: "16px" }}>
+                        <label style={{ fontSize: "12px", color: "#595F68" }}>الكمية</label>
+                        <div style={{ display: "flex", alignItems: "center", border: "1px solid #DDDDDD", borderRadius: "4px", overflow: "hidden" }}>
+                          <button type="button" onClick={() => updateItem(idx, "quantity", Math.max(1, item.quantity - 1))}
+                            style={{ padding: "4px 12px", background: "#F1F4F4", border: "none", cursor: "pointer", fontSize: "16px", minHeight: "32px" }}>-</button>
+                          <input type="number" value={item.quantity} readOnly style={{ width: "40px", textAlign: "center", border: "none", fontWeight: 700, fontSize: "14px", padding: "4px 0" }} />
+                          <button type="button" onClick={() => updateItem(idx, "quantity", Math.min(item.quantity + 1, avail || 99))}
+                            style={{ padding: "4px 12px", background: "#F1F4F4", border: "none", cursor: "pointer", fontSize: "16px", minHeight: "32px" }}>+</button>
+                        </div>
+                      </div>
+                      <span style={{ fontSize: "12px", color: outOfStock ? "#B12704" : "#067D62", fontWeight: 600 }}>
+                        {outOfStock ? "غير متوفر" : avail > 0 ? `المتبقي: ${avail}` : "متوفر في المخزون"}
+                      </span>
+                    </div>
+                  </div>
+                );
+              })}
             </div>
-
-            <div>
-              <label htmlFor="notes" style={{ display: "block", fontSize: "14px", fontWeight: 500, marginBottom: "6px" }}>ملاحظات إضافية (اختياري)</label>
-              <textarea id="notes" name="notes" value={form.notes} onChange={(e) => setForm({ ...form, notes: e.target.value })} rows={3} style={{ width: "100%", padding: "10px 12px", border: "1px solid #d4d4d8", borderRadius: "4px", fontSize: "14px", resize: "vertical", boxSizing: "border-box" }} />
+            <div style={{ marginTop: "24px", paddingTop: "16px", borderTop: "1px solid #DDDDDD" }}>
+              <div style={{ display: "flex", justifyContent: "space-between", color: "#595F68", fontSize: "14px", fontWeight: 600 }}>
+                <span>إجمالي القطع:</span>
+                <span>{totalQty} قطع</span>
+              </div>
+              <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginTop: "4px" }}>
+                <span style={{ fontFamily: "'Plus Jakarta Sans', sans-serif", fontSize: "20px", fontWeight: 600 }}>إجمالي السعر:</span>
+                <span style={{ fontFamily: "'Plus Jakarta Sans', sans-serif", fontSize: "22px", fontWeight: 700, color: "#FF9900" }}>{total.toLocaleString()} ج.م</span>
+              </div>
             </div>
           </div>
+        </section>
 
-          <div style={{ background: "#f0fdf4", borderRadius: "8px", padding: "12px 16px", marginBottom: "16px" }}>
-            <p style={{ margin: 0, fontSize: "13px", lineHeight: 1.6 }}>
-              <strong>سياسة الاستلام:</strong> عند وصول المنتج، لك الحق في معاينته. إذا أعجبك تستلمه مجاناً (الشحن علينا). إذا رفضت، تدفع قيمة الشحن فقط.
-            </p>
+        <section style={{ padding: "0 16px" }}>
+          <div style={{ background: "#fff", padding: "16px", borderRadius: "8px", boxShadow: "0 1px 3px rgba(0,0,0,0.1)" }}>
+            <h3 style={{ fontFamily: "'Plus Jakarta Sans', sans-serif", fontSize: "20px", fontWeight: 600, margin: "0 0 16px" }}>معلومات التوصيل</h3>
+            <div style={{ display: "flex", flexDirection: "column", gap: "16px" }}>
+              <div>
+                <label style={{ fontSize: "12px", color: "#595F68", display: "block", marginBottom: "4px" }}>الاسم بالكامل</label>
+                <input class="amazon-input" placeholder="مثال: محمد أحمد" type="text" value={form.customerName} onChange={(e) => setForm({ ...form, customerName: (e.target as HTMLInputElement).value })} />
+              </div>
+              <div>
+                <label style={{ fontSize: "12px", color: "#595F68", display: "block", marginBottom: "4px" }}>رقم الهاتف</label>
+                <input class="amazon-input" dir="ltr" placeholder="01xxxxxxxxx" type="tel" value={form.phone} onChange={(e) => setForm({ ...form, phone: (e.target as HTMLInputElement).value })} />
+              </div>
+              <div className="delivery-grid">
+                <div>
+                  <label style={{ fontSize: "12px", color: "#595F68", display: "block", marginBottom: "4px" }}>المحافظة</label>
+                  <select class="amazon-select" value={form.governorate} onChange={(e) => setForm({ ...form, governorate: (e.target as HTMLSelectElement).value, city: "" })}>
+                    <option value="">اختر المحافظة</option>
+                    {GOVERNORATES.map((g) => <option key={g} value={g}>{g}</option>)}
+                  </select>
+                </div>
+                <div>
+                  <label style={{ fontSize: "12px", color: "#595F68", display: "block", marginBottom: "4px" }}>المدينة</label>
+                  <select class="amazon-select" value={form.city} onChange={(e) => setForm({ ...form, city: (e.target as HTMLSelectElement).value })} disabled={!form.governorate}>
+                    <option value="">اختر المدينة</option>
+                    {(CITIES_BY_GOV[form.governorate] || []).map((c) => <option key={c} value={c}>{c}</option>)}
+                  </select>
+                </div>
+              </div>
+              <div>
+                <label style={{ fontSize: "12px", color: "#595F68", display: "block", marginBottom: "4px" }}>العنوان بالتفصيل</label>
+                <input class="amazon-input" placeholder="رقم الشقة، الدور، اسم الشارع" type="text" value={form.address} onChange={(e) => setForm({ ...form, address: (e.target as HTMLInputElement).value })} />
+              </div>
+              <div>
+                <label style={{ fontSize: "12px", color: "#595F68", display: "block", marginBottom: "4px" }}>ملاحظات إضافية</label>
+                <textarea class="amazon-textarea" style={{ height: "80px", resize: "none" }} placeholder="أي تعليمات خاصة للمندوب" value={form.notes} onChange={(e) => setForm({ ...form, notes: (e.target as HTMLTextAreaElement).value })}></textarea>
+              </div>
+            </div>
           </div>
+        </section>
 
-          {error && <p style={{ color: "#ba1a1a", textAlign: "center", fontSize: "14px" }}>{error}</p>}
+        <section style={{ padding: "0 16px" }}>
+          <div style={{ background: "#F0FAF8", padding: "16px", border: "1px solid #067D62", borderRadius: "8px", display: "flex", alignItems: "flex-start", gap: "12px" }}>
+            <span class="material-symbols-outlined" style={{ fontSize: "20px", color: "#067D62", marginTop: "2px", fontVariationSettings: "'FILL' 1" }}>policy</span>
+            <p style={{ fontSize: "14px", color: "#067D62", margin: 0 }}>سياسة الاسترجاع: يمكنك معاينة المنتج عند الاستلام، وفي حالة عدم المطابقة يمكنك رفض الاستلام مجاناً دون دفع أي تكاليف.</p>
+          </div>
+        </section>
 
-          <button type="submit" disabled={loading} style={{ width: "100%", padding: "14px", background: "#006e2f", color: "white", border: "none", borderRadius: "4px", fontSize: "16px", fontWeight: 600, cursor: loading ? "not-allowed" : "pointer", opacity: loading ? 0.7 : 1 }}>
-            {loading ? "جاري المعالجة..." : `تأكيد الطلب - ${total.toLocaleString()} ج.م`}
+        <section style={{ padding: "0 16px", paddingTop: "16px" }}>
+          <button onClick={handleSubmit} disabled={loading || !canSubmit}
+            style={{ width: "100%", background: "#FF9900", height: "48px", borderRadius: "8px", fontWeight: 700, color: "#0F1111", border: "none", cursor: "pointer", fontSize: "18px", boxShadow: "0 4px 6px rgba(0,0,0,0.15)", opacity: loading || !canSubmit ? 0.7 : 1 }}>
+            {loading ? "جاري المعالجة..." : `اطلب الآن - ${total.toLocaleString()} ج.م`}
           </button>
+          <div style={{ display: "flex", alignItems: "center", justifyContent: "center", gap: "4px", marginTop: "12px", color: "#595F68", fontSize: "14px", fontWeight: 600 }}>
+            <span class="material-symbols-outlined" style={{ fontSize: "14px" }}>verified_user</span>
+            <span>✓ دفع عند الاستلام</span>
+          </div>
+          <p style={{ textAlign: "center", fontSize: "13px", color: "#565959", marginTop: "8px" }}>يمكنك معاينة المنتج عند الاستلام - لك حق الإرجاع</p>
+          {error && <p style={{ color: "#B12704", textAlign: "center", fontSize: "14px", marginTop: "8px" }}>{error}</p>}
+        </section>
 
-          <p style={{ textAlign: "center", fontSize: "13px", color: "#71717a", marginTop: "8px" }}>
-            ✓ دفع عند الاستلام مع إمكانية المعاينة
-          </p>
-        </form>
+        <footer style={{ background: "#fff", padding: "32px 16px", marginTop: "32px", borderTop: "1px solid #DDDDDD", textAlign: "center" }}>
+          <h2 style={{ fontFamily: "'Plus Jakarta Sans', sans-serif", fontSize: "16px", fontWeight: 700, color: "#565959", margin: "0 0 8px" }}>M&K Store</h2>
+          <p style={{ fontSize: "12px", color: "#565959", margin: 0 }}>© 2024 جميع الحقوق محفوظة.</p>
+        </footer>
       </main>
     </div>
   );

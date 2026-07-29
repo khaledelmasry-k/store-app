@@ -11,6 +11,7 @@ import ordersRoutes from "./routes/orders.js";
 import productRoutes from "./routes/product.js";
 import uploadRoutes from "./routes/upload.js";
 import storeRoutes from "./routes/store.js";
+import settingsRoutes from "./routes/settings.js";
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const uploadsDir = path.join(__dirname, "..", "uploads");
@@ -24,6 +25,7 @@ app.use(express.json({ limit: "10mb" }));
 app.use("/uploads", express.static(uploadsDir));
 
 app.use("/api/admin", adminRoutes);
+app.use("/api/admin/settings", settingsRoutes);
 app.use("/api/admin/orders", ordersRoutes);
 app.use("/api/admin/product", productRoutes);
 app.use("/api/admin/upload", uploadRoutes);

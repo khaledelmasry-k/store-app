@@ -1,38 +1,51 @@
-import { useState, useEffect } from "preact/compat";
+import { useState, useEffect, FormEvent } from "preact/compat";
 import { api } from "../services/api";
 import type { Order, PaginatedResponse, OrderStatus } from "../types";
 import Sidebar from "../components/Sidebar";
 
-const STATUSES: OrderStatus[] = ["NEW", "CONTACTED", "PROCESSING", "SHIPPED", "DELIVERED", "CANCELLED"];
-const STATUS_LABELS: Record<OrderStatus, string> = {
-  NEW: "جديد", CONTACTED: "تم التواصل", PROCESSING: "قيد المعالجة",
-  SHIPPED: "تم الشحن", DELIVERED: "تم التوصيل", CANCELLED: "ملغي",
+const STATUSES: OrderStatus[] = ["NEW", "CONTACTED", "PROCESSING", "SHIPPED", "DELIVERED", "CANCELLED", "RETURNED"];
+const STATUS_LABELS: Record<string, string> = {
+  NEW: "جديد", CONTACTED: "تم الاتصال", PROCESSING: "قيد التنفيذ",
+  SHIPPED: "تم الشحن", DELIVERED: "تم التوصيل", CANCELLED: "ملغي", RETURNED: "مرتجع",
 };
-const STATUS_COLORS: Record<OrderStatus, string> = {
-  NEW: "#006e2f", CONTACTED: "#2563eb", PROCESSING: "#d97706",
-  SHIPPED: "#7c3aed", DELIVERED: "#006e2f", CANCELLED: "#ba1a1a",
+const STATUS_STYLES: Record<string, { bg: string; text: string; dot: string }> = {
+  NEW: { bg: "#ECFDF5", text: "#067D62", dot: "#067D62" },
+  CONTACTED: { bg: "#F0F9FF", text: "#007185", dot: "#007185" },
+  PROCESSING: { bg: "#FFF7ED", text: "#C45500", dot: "#C45500" },
+  SHIPPED: { bg: "#F5F3FF", text: "#7C3AED", dot: "#7C3AED" },
+  DELIVERED: { bg: "#ECFDF5", text: "#067D62", dot: "#067D62" },
+  CANCELLED: { bg: "#FEF2F2", text: "#B12704", dot: "#B12704" },
+  RETURNED: { bg: "#F5F3FF", text: "#A855F7", dot: "#A855F7" },
+};
+
+const getStoreBadge = (ref: string) => {
+  if (ref === "1") return { bg: "#FFF8E1", text: "#A855F7", border: "#FFECB3", label: "بنطلون الساحل" };
+  return { bg: "#F0FDF4", text: "#166534", border: "#DCFCE7", label: "مالك ستور" };
 };
 
 export default function AdminOrders() {
   const [data, setData] = useState<PaginatedResponse<Order> | null>(null);
   const [page, setPage] = useState(1);
-  const [search, setSearch] = useState("");
-  const [phone, setPhone] = useState("");
+  const [nameFilter, setNameFilter] = useState("");
+  const [phoneFilter, setPhoneFilter] = useState("");
   const [statusFilter, setStatusFilter] = useState("");
+  const [storeFilter, setStoreFilter] = useState("");
   const [selectedOrder, setSelectedOrder] = useState<Order | null>(null);
-  const limit = 10;
+  const [deleteId, setDeleteId] = useState<string | null>(null);
+  const limit = 20;
 
   const fetchOrders = () => {
     const params = new URLSearchParams({ page: String(page), limit: String(limit) });
-    if (search) params.set("search", search);
-    if (phone) params.set("phone", phone);
+    if (nameFilter) params.set("search", nameFilter);
+    if (phoneFilter) params.set("phone", phoneFilter);
     if (statusFilter) params.set("status", statusFilter);
+    if (storeFilter) params.set("ref", storeFilter);
     api.get<PaginatedResponse<Order>>(`/admin/orders?${params}`).then(setData);
   };
 
-  useEffect(() => { fetchOrders(); }, [page, statusFilter]);
+  useEffect(() => { fetchOrders(); }, [page, statusFilter, storeFilter]);
 
-  const handleSearch = (e: React.FormEvent) => {
+  const handleSearch = (e: FormEvent) => {
     e.preventDefault();
     setPage(1);
     fetchOrders();
@@ -43,115 +56,220 @@ export default function AdminOrders() {
     fetchOrders();
   };
 
-  const deleteOrder = async (id: string) => {
-    if (!confirm("هل أنت متأكد من حذف هذا الطلب؟")) return;
-    await api.delete(`/admin/orders/${id}`);
-    fetchOrders();
+  const deleteOrder = async () => {
+    if (!deleteId) return;
+    try { await api.delete(`/admin/orders/${deleteId}`); setDeleteId(null); fetchOrders(); } catch {}
   };
 
+  const totalPages = data?.pagination?.totalPages || 1;
+  const totalOrders = data?.pagination?.total || 0;
+
   return (
-    <div style={{ fontFamily: "system-ui, -apple-system, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif", direction: "rtl", background: "#fbf8ff", minHeight: "100vh", display: "flex" }}>
+    <div style={{ background: "#EAEDED", minHeight: "100vh", display: "flex" }}>
       <Sidebar />
-      <div className="admin-content" style={{ flex: 1, padding: "24px", overflow: "auto" }}>
-        <h1 style={{ fontSize: "24px", fontWeight: 600, margin: "0 0 24px" }}>إدارة الطلبات</h1>
-
-        <div style={{ display: "flex", gap: "12px", marginBottom: "16px", flexWrap: "wrap" }}>
-          <form onSubmit={handleSearch} style={{ display: "flex", gap: "8px", flex: 1 }}>
-            <input name="search_name" id="search_name" value={search} onChange={(e) => setSearch(e.target.value)} placeholder="البحث باسم العميل" style={{ flex: 1, padding: "8px 12px", border: "1px solid #d4d4d8", borderRadius: "4px", fontSize: "14px" }} />
-            <input name="search_phone" id="search_phone" value={phone} onChange={(e) => setPhone(e.target.value)} placeholder="البحث برقم الهاتف" style={{ flex: 1, padding: "8px 12px", border: "1px solid #d4d4d8", borderRadius: "4px", fontSize: "14px" }} />
-            <button type="submit" style={{ background: "black", color: "white", border: "none", borderRadius: "4px", padding: "8px 16px", cursor: "pointer" }}>بحث</button>
-          </form>
-
-          <select name="status_filter" id="status_filter" value={statusFilter} onChange={(e) => { setStatusFilter(e.target.value); setPage(1); }} style={{ padding: "8px", border: "1px solid #d4d4d8", borderRadius: "4px", fontSize: "14px", background: "white" }}>
-            <option value="">كل الحالات</option>
-            {STATUSES.map((s) => <option key={s} value={s}>{STATUS_LABELS[s]}</option>)}
-          </select>
-        </div>
-
-        <div className="admin-table-wrap" style={{ background: "white", borderRadius: "8px", overflow: "hidden", boxShadow: "0 1px 3px rgba(0,0,0,0.05)" }}>
-          <table style={{ width: "100%", borderCollapse: "collapse", fontSize: "14px" }}>
-            <thead>
-              <tr style={{ background: "#f4f4f5", borderBottom: "1px solid #e4e4e7" }}>
-                {["#", "اسم العميل", "رقم الهاتف", "المتجر", "المنتجات", "الإجمالي", "المحافظة", "الحالة", "التاريخ", "إجراءات"].map((h) => (
-                  <th key={h} style={{ padding: "10px 12px", textAlign: "right", fontWeight: 500, color: "#71717a" }}>{h}</th>
-                ))}
-              </tr>
-            </thead>
-            <tbody>
-              {data?.orders.map((order) => (
-                <tr key={order.id} style={{ borderBottom: "1px solid #f4f4f5" }}>
-                  <td style={{ padding: "10px 12px", fontWeight: 600 }}>{order.orderNumber}</td>
-                  <td style={{ padding: "10px 12px" }}>{order.customerName}</td>
-                  <td style={{ padding: "10px 12px", direction: "ltr", textAlign: "right" }}>{order.phone}</td>
-                  <td style={{ padding: "10px 12px", fontSize: "13px", color: order.createdBy === "1" ? "#c2410c" : "#006e2f", fontWeight: 600 }}>
-                    {order.createdBy === "1" ? "بنطلون الساحل" : order.createdBy === "2" ? "مالك ستور" : order.createdBy}
-                  </td>
-                  <td style={{ padding: "10px 12px" }}>
-                    {order.items.map((item, i) => (
-                      <div key={i} style={{ fontSize: "13px" }}>
-                        {item.color} / {item.size} × {item.quantity}
-                      </div>
-                    ))}
-                  </td>
-                  <td style={{ padding: "10px 12px", fontWeight: 600 }}>{order.totalPrice.toLocaleString()} ج.م</td>
-                  <td style={{ padding: "10px 12px" }}>{order.governorate}</td>
-                  <td style={{ padding: "10px 12px" }}>
-                    <select value={order.status} onChange={(e) => updateStatus(order.id, e.target.value as OrderStatus)} style={{ padding: "4px 8px", borderRadius: "4px", border: `1px solid ${STATUS_COLORS[order.status]}`, color: STATUS_COLORS[order.status], background: "white", fontSize: "12px", fontWeight: 500 }}>
-                      {STATUSES.map((s) => <option key={s} value={s}>{STATUS_LABELS[s]}</option>)}
-                    </select>
-                  </td>
-                  <td style={{ padding: "10px 12px", color: "#71717a", fontSize: "13px" }}>{new Date(order.createdAt).toLocaleDateString("ar-SA")}</td>
-                  <td style={{ padding: "10px 12px" }}>
-                    <div style={{ display: "flex", gap: "4px" }}>
-                      <button onClick={() => setSelectedOrder(order)} style={{ background: "none", border: "none", cursor: "pointer", fontSize: "18px" }}>👁️</button>
-                      <button onClick={() => deleteOrder(order.id)} style={{ background: "none", border: "none", cursor: "pointer", fontSize: "18px" }}>🗑️</button>
-                    </div>
-                  </td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
-        </div>
-
-        {data && (
-          <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginTop: "16px", fontSize: "14px", color: "#71717a" }}>
-            <span>عرض {(page - 1) * limit + 1} إلى {Math.min(page * limit, data.pagination.total)} من أصل {data.pagination.total} طلب</span>
-            <div style={{ display: "flex", gap: "4px" }}>
-              {Array.from({ length: data.pagination.totalPages }, (_, i) => i + 1).map((p) => (
-                <button key={p} onClick={() => setPage(p)} style={{ width: "32px", height: "32px", borderRadius: "4px", border: p === page ? "2px solid black" : "1px solid #d4d4d8", background: p === page ? "black" : "white", color: p === page ? "white" : "black", cursor: "pointer", fontSize: "14px" }}>{p}</button>
-              ))}
+      <div className="admin-content" style={{ flex: 1, padding: "24px", minHeight: "100vh", display: "flex", flexDirection: "column" }}>
+        <header style={{ marginBottom: "32px", display: "flex", alignItems: "center", justifyContent: "space-between", gap: "16px" }}>
+          <h2 style={{ fontFamily: "'Plus Jakarta Sans', sans-serif", fontSize: "24px", fontWeight: 600, color: "#0F1111", margin: 0 }}>إدارة الطلبات</h2>
+          <div style={{ display: "flex", alignItems: "center", gap: "12px" }}>
+            <span style={{ fontSize: "14px", color: "#565959" }}>إجمالي الطلبات: {totalOrders.toLocaleString()}</span>
+            <div style={{ width: "40px", height: "40px", borderRadius: "50%", background: "#E0E3E3", display: "flex", alignItems: "center", justifyContent: "center", color: "#232F3E" }}>
+              <span class="material-symbols-outlined" style={{ fontSize: "24px" }}>account_circle</span>
             </div>
           </div>
-        )}
+        </header>
+
+        <section style={{ background: "#fff", padding: "24px", borderRadius: "8px", border: "1px solid #DDDDDD", boxShadow: "0 1px 3px rgba(0,0,0,0.08)", marginBottom: "24px" }}>
+          <form onSubmit={handleSearch} className="filter-grid">
+            <div style={{ display: "flex", flexDirection: "column", gap: "4px" }}>
+              <label style={{ fontSize: "12px", color: "#565959" }}>البحث بالاسم</label>
+              <input type="text" placeholder="اسم العميل..." className="amazon-input" value={nameFilter} onChange={(e) => setNameFilter((e.target as HTMLInputElement).value)} />
+            </div>
+            <div style={{ display: "flex", flexDirection: "column", gap: "4px" }}>
+              <label style={{ fontSize: "12px", color: "#565959" }}>رقم الهاتف</label>
+              <input type="tel" placeholder="01xxxxxxxxx" className="amazon-input" value={phoneFilter} onChange={(e) => setPhoneFilter((e.target as HTMLInputElement).value)} />
+            </div>
+            <div style={{ display: "flex", flexDirection: "column", gap: "4px" }}>
+              <label style={{ fontSize: "12px", color: "#565959" }}>حالة الطلب</label>
+              <select className="amazon-select" value={statusFilter} onChange={(e) => { setStatusFilter((e.target as HTMLSelectElement).value); setPage(1); }}>
+                <option value="">الكل</option>
+                {STATUSES.map((s) => <option key={s} value={s}>{STATUS_LABELS[s]}</option>)}
+              </select>
+            </div>
+            <div style={{ display: "flex", flexDirection: "column", gap: "4px" }}>
+              <label style={{ fontSize: "12px", color: "#565959" }}>المتجر</label>
+              <select className="amazon-select" value={storeFilter} onChange={(e) => { setStoreFilter((e.target as HTMLSelectElement).value); setPage(1); }}>
+                <option value="">كل المتاجر</option>
+                <option value="1">بنطلون الساحل</option>
+                <option value="2">مالك ستور</option>
+              </select>
+            </div>
+            <div style={{ display: "flex", alignItems: "flex-end" }}>
+              <button type="submit" style={{ width: "100%", background: "#FF9900", color: "#0F1111", fontWeight: 700, padding: "10px 16px", borderRadius: "8px", border: "none", cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center", gap: "8px", fontSize: "14px", minHeight: "40px" }}>
+                <span class="material-symbols-outlined" style={{ fontSize: "20px" }}>search</span>
+                <span>بحث</span>
+              </button>
+            </div>
+          </form>
+        </section>
+
+        <section style={{ background: "#fff", borderRadius: "8px", border: "1px solid #DDDDDD", boxShadow: "0 1px 3px rgba(0,0,0,0.08)", overflow: "hidden", flex: 1 }}>
+          <div style={{ overflowX: "auto" }}>
+            <table className="order-table" style={{ width: "100%", borderCollapse: "collapse", fontSize: "14px" }}>
+              <thead>
+                <tr style={{ background: "#f4f4f5", color: "#555", fontWeight: 600 }}>
+                  <th style={{ padding: "12px 16px", textAlign: "right", width: "48px" }}>#</th>
+                  <th style={{ padding: "12px 16px", textAlign: "right" }}>الاسم</th>
+                  <th style={{ padding: "12px 16px", textAlign: "right" }}>الهاتف</th>
+                  <th style={{ padding: "12px 16px", textAlign: "right" }}>المتجر</th>
+                  <th style={{ padding: "12px 16px", textAlign: "right" }}>المنتجات</th>
+                  <th style={{ padding: "12px 16px", textAlign: "right" }}>الإجمالي</th>
+                  <th style={{ padding: "12px 16px", textAlign: "right" }}>المحافظة</th>
+                  <th style={{ padding: "12px 16px", textAlign: "right" }}>الحالة</th>
+                  <th style={{ padding: "12px 16px", textAlign: "right" }}>التاريخ</th>
+                  <th style={{ padding: "12px 16px", textAlign: "center" }}>الإجراءات</th>
+                </tr>
+              </thead>
+              <tbody>
+                {data?.orders.map((order) => {
+                  const badge = getStoreBadge(order.createdBy);
+                  const sp = STATUS_STYLES[order.status] || STATUS_STYLES.NEW;
+                  return (
+                    <tr key={order.id} style={{ borderBottom: "1px solid #DDDDDD" }}>
+                      <td style={{ padding: "16px", fontWeight: 700, color: "#565959" }}>{order.orderNumber}</td>
+                      <td style={{ padding: "16px" }}>{order.customerName}</td>
+                      <td style={{ padding: "16px", direction: "ltr", textAlign: "right" }}>{order.phone}</td>
+                      <td style={{ padding: "16px" }}>
+                        <span style={{ background: badge.bg, color: badge.text, padding: "4px 12px", borderRadius: "4px", fontSize: "12px", fontWeight: 700, border: `1px solid ${badge.border}`, display: "inline-block" }}>{badge.label}</span>
+                      </td>
+                      <td style={{ padding: "16px" }}>
+                        {order.items.map((item, i) => (
+                          <div key={i} style={{ fontSize: "13px" }}>{item.color} / {item.size} × {item.quantity}{i < order.items.length - 1 ? ", " : ""}</div>
+                        ))}
+                      </td>
+                      <td style={{ padding: "16px", fontWeight: 700 }}>{order.totalPrice.toLocaleString()} ج.م</td>
+                      <td style={{ padding: "16px" }}>{order.governorate}</td>
+                      <td style={{ padding: "16px" }}>
+                        <select value={order.status} onChange={(e) => updateStatus(order.id, (e.target as HTMLSelectElement).value as OrderStatus)}
+                          className="status-pill" style={{ background: sp.bg, color: sp.text, border: `1px solid ${sp.text}`, cursor: "pointer" }}>
+                          {STATUSES.map((s) => (
+                            <option key={s} value={s} style={{ background: "#fff", color: "#0F1111" }}>{STATUS_LABELS[s]}</option>
+                          ))}
+                        </select>
+                      </td>
+                      <td style={{ padding: "16px", color: "#565959", fontSize: "13px" }}>{new Date(order.createdAt).toLocaleDateString("en-CA")}</td>
+                      <td style={{ padding: "16px", textAlign: "center" }}>
+                        <div style={{ display: "flex", justifyContent: "center", gap: "8px" }}>
+                          <button onClick={() => setSelectedOrder(order)} style={{ padding: "8px", background: "none", border: "none", cursor: "pointer", borderRadius: "50%", color: "#007185" }}
+                            onMouseEnter={(e) => { (e.currentTarget as HTMLElement).style.background = "#F1F4F4"; }}
+                            onMouseLeave={(e) => { (e.currentTarget as HTMLElement).style.background = "transparent"; }}>
+                            <span class="material-symbols-outlined" style={{ fontSize: "20px" }}>visibility</span>
+                          </button>
+                          <button onClick={() => setDeleteId(order.id)} style={{ padding: "8px", background: "none", border: "none", cursor: "pointer", borderRadius: "50%", color: "#B12704" }}
+                            onMouseEnter={(e) => { (e.currentTarget as HTMLElement).style.background = "#FFDAD6"; }}
+                            onMouseLeave={(e) => { (e.currentTarget as HTMLElement).style.background = "transparent"; }}>
+                            <span class="material-symbols-outlined" style={{ fontSize: "20px" }}>delete</span>
+                          </button>
+                        </div>
+                      </td>
+                    </tr>
+                  );
+                })}
+              </tbody>
+            </table>
+          </div>
+
+          <div style={{ display: "flex", flexDirection: "row", alignItems: "center", justifyContent: "space-between", padding: "16px", borderTop: "1px solid #DDDDDD", gap: "16px" }}>
+            <p style={{ fontSize: "12px", color: "#565959", margin: 0 }}>
+              {totalOrders > 0 ? `عرض ${(page - 1) * limit + 1} إلى ${Math.min(page * limit, totalOrders)} من إجمالي ${totalOrders.toLocaleString()} طلب` : "لا توجد طلبات"}
+            </p>
+            <div style={{ display: "flex", alignItems: "center", gap: "4px" }}>
+              <button onClick={() => setPage(Math.max(1, page - 1))} disabled={page <= 1}
+                style={{ width: "32px", height: "32px", display: "flex", alignItems: "center", justifyContent: "center", borderRadius: "4px", border: "1px solid #DDDDDD", background: "#fff", cursor: page <= 1 ? "not-allowed" : "pointer", color: page <= 1 ? "#ccc" : "#0F1111" }}>
+                <span class="material-symbols-outlined" style={{ fontSize: "14px" }}>chevron_right</span>
+              </button>
+              {Array.from({ length: Math.min(totalPages, 5) }, (_, i) => {
+                const p = i + 1;
+                return (
+                  <button key={p} onClick={() => setPage(p)}
+                    style={{ width: "32px", height: "32px", display: "flex", alignItems: "center", justifyContent: "center", borderRadius: "4px", border: p === page ? "none" : "1px solid #DDDDDD", background: p === page ? "#FF9900" : "#fff", color: p === page ? "#0F1111" : "#0F1111", fontWeight: p === page ? 700 : 400, cursor: "pointer" }}>
+                    {p}
+                  </button>
+                );
+              })}
+              {totalPages > 5 && <span style={{ padding: "0 8px", color: "#565959" }}>...</span>}
+              {totalPages > 5 && (
+                <button onClick={() => setPage(totalPages)}
+                  style={{ width: "32px", height: "32px", display: "flex", alignItems: "center", justifyContent: "center", borderRadius: "4px", border: "1px solid #DDDDDD", background: "#fff", cursor: "pointer" }}>
+                  {totalPages}
+                </button>
+              )}
+              <button onClick={() => setPage(Math.min(totalPages, page + 1))} disabled={page >= totalPages}
+                style={{ width: "32px", height: "32px", display: "flex", alignItems: "center", justifyContent: "center", borderRadius: "4px", border: "1px solid #DDDDDD", background: "#fff", cursor: page >= totalPages ? "not-allowed" : "pointer", color: page >= totalPages ? "#ccc" : "#0F1111" }}>
+                <span class="material-symbols-outlined" style={{ fontSize: "14px" }}>chevron_left</span>
+              </button>
+            </div>
+          </div>
+        </section>
 
         {selectedOrder && (
-          <div style={{ position: "fixed", inset: 0, background: "rgba(0,0,0,0.5)", display: "flex", alignItems: "center", justifyContent: "center", zIndex: 1000 }} onClick={() => setSelectedOrder(null)}>
-            <div style={{ background: "white", borderRadius: "8px", padding: "24px", maxWidth: "500px", width: "90%", maxHeight: "80vh", overflow: "auto" }} onClick={(e) => e.stopPropagation()}>
-              <h2 style={{ margin: "0 0 16px", fontSize: "18px" }}>تفاصيل الطلب {selectedOrder.orderNumber}</h2>
-              <div style={{ display: "grid", gap: "8px", fontSize: "14px" }}>
-                {[
-                  ["اسم العميل", selectedOrder.customerName],
-                  ["رقم الهاتف", selectedOrder.phone],
-                  ["المحافظة", selectedOrder.governorate],
-                  ["المدينة", selectedOrder.city],
-                  ["العنوان", selectedOrder.address],
-                  ["المتجر", selectedOrder.createdBy === "1" ? "بنطلون الساحل" : selectedOrder.createdBy === "2" ? "مالك ستور" : selectedOrder.createdBy],
-                  ["المنتجات", selectedOrder.items.map((i) => `${i.color} / ${i.size} × ${i.quantity}`).join("، ")],
-                  ["الإجمالي", `${selectedOrder.totalPrice.toLocaleString()} ج.م`],
-                  ["ملاحظات", selectedOrder.notes || "بدون"],
-                  ["الحالة", STATUS_LABELS[selectedOrder.status]],
-                  ["تاريخ الطلب", new Date(selectedOrder.createdAt).toLocaleString("ar-SA")],
-                ].map(([k, v]) => (
-                  <div key={k} style={{ display: "flex", justifyContent: "space-between", padding: "6px 0", borderBottom: "1px solid #f4f4f5" }}>
-                    <span style={{ color: "#71717a" }}>{k}</span>
-                    <span style={{ fontWeight: 500 }}>{v}</span>
-                  </div>
-                ))}
+          <div className="amazon-modal-overlay" onClick={() => setSelectedOrder(null)}>
+            <div onClick={(e) => e.stopPropagation()} style={{ background: "#fff", width: "100%", maxWidth: "500px", borderRadius: "8px", boxShadow: "0 25px 50px rgba(0,0,0,0.25)", position: "relative", zIndex: 10, overflow: "hidden", animation: "scaleIn 0.2s" }}>
+              <div style={{ padding: "24px", borderBottom: "1px solid #DDDDDD", display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+                <h3 style={{ fontFamily: "'Plus Jakarta Sans', sans-serif", fontSize: "20px", fontWeight: 600, color: "#0F1111", margin: 0 }}>تفاصيل الطلب <span style={{ color: "#565959" }}>#{selectedOrder.orderNumber}</span></h3>
+                <button onClick={() => setSelectedOrder(null)} style={{ background: "none", border: "none", cursor: "pointer", color: "#565959", padding: "4px" }}>
+                  <span class="material-symbols-outlined" style={{ fontSize: "24px" }}>close</span>
+                </button>
               </div>
-              <button onClick={() => setSelectedOrder(null)} style={{ width: "100%", marginTop: "16px", padding: "10px", background: "black", color: "white", border: "none", borderRadius: "4px", cursor: "pointer" }}>إغلاق</button>
+              <div style={{ padding: "24px", overflowY: "auto", maxHeight: "70vh" }}>
+                <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "16px 24px" }}>
+                  <div><p style={{ fontSize: "12px", color: "#565959", margin: "0 0 4px" }}>اسم العميل</p><p style={{ fontWeight: 700, margin: 0 }}>{selectedOrder.customerName}</p></div>
+                  <div><p style={{ fontSize: "12px", color: "#565959", margin: "0 0 4px" }}>رقم الهاتف</p><p style={{ margin: 0, direction: "ltr" }}>{selectedOrder.phone}</p></div>
+                  <div style={{ gridColumn: "span 2" }}><p style={{ fontSize: "12px", color: "#565959", margin: "0 0 4px" }}>العنوان بالتفصيل</p><p style={{ margin: 0 }}>{selectedOrder.address}</p></div>
+                  <div><p style={{ fontSize: "12px", color: "#565959", margin: "0 0 4px" }}>المحافظة</p><p style={{ margin: 0 }}>{selectedOrder.governorate}</p></div>
+                  <div><p style={{ fontSize: "12px", color: "#565959", margin: "0 0 4px" }}>المتجر</p><p style={{ margin: 0, fontWeight: 700, color: "#C45500" }}>{getStoreBadge(selectedOrder.createdBy).label}</p></div>
+                  <div style={{ gridColumn: "span 2", padding: "16px", background: "#EBEEEE", borderRadius: "8px" }}>
+                    <p style={{ fontSize: "12px", color: "#565959", marginBottom: "8px", borderBottom: "1px solid #DDDDDD", paddingBottom: "4px" }}>المنتجات المطلوبة</p>
+                    {selectedOrder.items.map((item, i) => (
+                      <div key={i} style={{ display: "flex", justifyContent: "space-between", alignItems: "center", fontSize: "14px", marginBottom: "4px" }}>
+                        <span>{item.quantity}x {item.color}{item.size ? ` - ${item.size}` : ""}</span>
+                      </div>
+                    ))}
+                  </div>
+                  {selectedOrder.notes && (
+                    <div style={{ gridColumn: "span 2" }}><p style={{ fontSize: "12px", color: "#565959", margin: "0 0 4px" }}>ملاحظات العميل</p><p style={{ margin: 0, fontStyle: "italic", color: "#565959" }}>{selectedOrder.notes}</p></div>
+                  )}
+                </div>
+              </div>
+              <div style={{ padding: "24px", background: "#F1F4F4", borderTop: "1px solid #DDDDDD", display: "flex", justifyContent: "flex-end", gap: "12px" }}>
+                <button onClick={() => setSelectedOrder(null)} style={{ padding: "8px 24px", border: "1px solid #888C8C", background: "#fff", borderRadius: "4px", fontWeight: 700, cursor: "pointer" }}>إغلاق</button>
+              </div>
             </div>
           </div>
         )}
+
+        {deleteId && (
+          <div className="amazon-modal-overlay" onClick={() => setDeleteId(null)}>
+            <div onClick={(e) => e.stopPropagation()} style={{ background: "#fff", width: "100%", maxWidth: "360px", borderRadius: "8px", boxShadow: "0 25px 50px rgba(0,0,0,0.25)", padding: "24px", textAlign: "center" }}>
+              <div style={{ fontSize: "48px", marginBottom: "12px" }}>🗑️</div>
+              <h3 style={{ fontFamily: "'Plus Jakarta Sans', sans-serif", fontSize: "18px", fontWeight: 700, margin: "0 0 8px" }}>تأكيد الحذف</h3>
+              <p style={{ fontSize: "14px", color: "#565959", margin: "0 0 24px" }}>هل أنت متأكد من حذف هذا الطلب؟ لا يمكن التراجع عن هذا الإجراء.</p>
+              <div style={{ display: "flex", gap: "12px", justifyContent: "center" }}>
+                <button onClick={() => setDeleteId(null)} style={{ padding: "10px 24px", border: "1px solid #888C8C", background: "#fff", borderRadius: "8px", fontWeight: 700, cursor: "pointer" }}>تراجع</button>
+                <button onClick={deleteOrder} style={{ padding: "10px 24px", background: "#B12704", color: "#fff", borderRadius: "8px", fontWeight: 700, border: "none", cursor: "pointer" }}>حذف</button>
+              </div>
+            </div>
+          </div>
+        )}
+
+        <footer style={{ width: "100%", padding: "32px 0", marginTop: "48px", borderTop: "1px solid #DDDDDD", background: "#E0E3E3", display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", gap: "16px" }}>
+          <div style={{ fontFamily: "'Plus Jakarta Sans', sans-serif", fontSize: "20px", fontWeight: 700, color: "#0F1111" }}>M&K Store</div>
+          <div style={{ display: "flex", gap: "24px", fontSize: "12px" }}>
+            <a href="#" style={{ color: "#565959", textDecoration: "none" }}>سياسة الخصوصية</a>
+            <a href="#" style={{ color: "#565959", textDecoration: "none" }}>شروط الخدمة</a>
+            <a href="#" style={{ color: "#565959", textDecoration: "none" }}>اتصل بنا</a>
+          </div>
+          <p style={{ fontSize: "14px", color: "#565959", opacity: 0.8, margin: 0 }}>© 2024 M&K Store. جميع الحقوق محفوظة.</p>
+        </footer>
       </div>
     </div>
   );

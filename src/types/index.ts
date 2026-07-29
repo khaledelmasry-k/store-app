@@ -32,7 +32,8 @@ export type OrderStatus =
   | "PROCESSING"
   | "SHIPPED"
   | "DELIVERED"
-  | "CANCELLED";
+  | "CANCELLED"
+  | "RETURNED";
 
 export interface Order {
   id: string;
@@ -59,6 +60,7 @@ export interface PersonStats {
   shippedOrders: number;
   deliveredOrders: number;
   cancelledOrders: number;
+  returnedOrders: number;
   expectedRevenue: number;
   confirmedRevenue: number;
   totalQuantity: number;
@@ -72,12 +74,26 @@ export interface DashboardStats {
   shippedOrders: number;
   deliveredOrders: number;
   cancelledOrders: number;
+  returnedOrders: number;
   expectedRevenue: number;
   confirmedRevenue: number;
+  confirmedOrders?: number;
   khaledStats: PersonStats;
   mahmoudStats: PersonStats;
+  stores: {
+    khaled: { id: string; ref: string; name: string; stats: PersonStats };
+    mahmoud: { id: string; ref: string; name: string; stats: PersonStats };
+  };
   totalStock: number;
   variantStock: Record<string, Record<string, number>>;
+}
+
+export interface Store {
+  id: string;
+  ref: string;
+  name: string;
+  active: boolean;
+  createdAt: string;
 }
 
 export interface PaginatedResponse<T> {

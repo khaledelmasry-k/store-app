@@ -215,5 +215,54 @@ exports.api = onRequest({ cors: true, minInstances: 0 }, async (req, res) => {
     return json(res, { orderNumber: doc.data().orderNumber, totalPrice, items: doc.data().items, message: "تم استلام طلبك بنجاح" });
   }
 
+  // ─── Settings: stores ───
+  if (path === "/api/admin/settings/stores" && method === "GET") {
+    const snap = await db.collection("stores").orderBy("createdAt", "asc").get();
+    const stores = snap.docs.map((d) => ({ id: d.id, ...d.data() }));
+    return json(res, stores);
+  }
+  if (path === "/api/admin/settings/stores" && method === "POST") {
+    const { ref, name, active } = req.body || {};
+    if (!ref || !name) return json(res, { error: "ref and name required" }, 400);
+    const existing = await db.collection("stores").doc(ref).get();
+    if (existing.exists) return json(res, { error: "رقم المرجع موجود بالفعل" }, 409);
+    const data = { ref, name, active: active ?? true, createdAt: admin.firestore.FieldValue.serverTimestamp() };
+    await db.collection("stores").doc(ref).set(data);
+    return json(res, { id: ref, ...data }, 201);
+  }
+  const storeMatch = path.match(/^\/api\/admin\/settings\/stores\/([^/]+)$/);
+  if (storeMatch && method === "PATCH") {
+    const { name, active } = req.body || {};
+    const upd = {};
+    if (name !== undefined) upd.name = name;
+    if (active !== undefined) upd.active = active;
+    await db.collection("stores").doc(storeMatch[1]).update(upd);
+    const doc = await db.collection("stores").doc(storeMatch[1]).get();
+    if (!doc.exists) return json(res, { error: "Not found" }, 404);
+    return json(res, { id: storeMatch[1], ...doc.data() });
+  }
+  if (storeMatch && method === "DELETE") {
+    await db.collection("stores").doc(storeMatch[1]).delete();
+    return json(res, { success: true });
+  }
+
+  // ─── Settings: admins ───
+  if (path === "/api/admin/settings/admins" && method === "GET") {
+    const snap = await db.collection("admins").get();
+    const admins = snap.docs.map((d) => {
+      const { password, ...rest } = d.data();
+      return { id: d.id, ...rest };
+    });
+    return json(res, admins);
+  }
+
+  // ─── Admin /me ───
+  if (path === "/api/admin/me" && method === "GET") {
+    const doc = await db.collection("admins").doc(user.username).get();
+    if (!doc.exists) return json(res, { error: "Not found" }, 404);
+    const { password, ...data } = doc.data();
+    return json(res, { id: user.username, ...data });
+  }
+
   return json(res, { error: "Not found" }, 404);
 });

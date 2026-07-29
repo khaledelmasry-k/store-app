@@ -106,6 +106,7 @@ router.post("/", async (req: Request, res: Response) => {
 
   const tiers = parseJsonField<Record<string, number>>(product.pricingTiers, {});
   const totalPrice = getTotalPrice(totalQty, tiers);
+  const unitPrice = totalQty > 0 ? totalPrice / totalQty : 0;
   const orderNumber = await generateOrderNumber();
 
   const order = await prisma.order.create({
@@ -116,7 +117,7 @@ router.post("/", async (req: Request, res: Response) => {
       createdBy: ref || "",
       status: "NEW",
       items: {
-        create: items,
+        create: items.map((item) => ({ ...item, unitPrice })),
       },
     },
     include: { items: true },
@@ -136,7 +137,7 @@ router.post("/", async (req: Request, res: Response) => {
   res.status(201).json({
     orderNumber: order.orderNumber,
     totalPrice,
-    items: order.items.map((i) => ({ color: i.color, size: i.size, quantity: i.quantity })),
+    items: order.items.map((i: { color: string; size: string; quantity: number }) => ({ color: i.color, size: i.size, quantity: i.quantity })),
     message: "تم استلام طلبك بنجاح",
   });
 });

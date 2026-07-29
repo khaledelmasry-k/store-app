@@ -1,0 +1,1 @@
+cd server && npx prisma db push && npx tsx src/seed.ts
