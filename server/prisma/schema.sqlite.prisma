@@ -1,0 +1,305 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "sqlite"
+  url      = env("DATABASE_URL")
+}
+
+model Admin {
+  id            String         @id @default(uuid())
+  username      String         @unique
+  email         String         @unique
+  passwordHash  String
+  role          String         @default("seller")
+  createdAt     DateTime       @default(now())
+  stores        Store[]
+  subscriptions Subscription[] @relation("SubscriptionsOnAdmin")
+  tenantUsers   TenantUser[]   @relation("TenantUsersOnAdmin")
+  subscriptionRequests SubscriptionRequest[]
+
+  @@map("admins")
+}
+
+model Tenant {
+  id            String         @id @default(uuid())
+  name          String
+  subdomain     String         @unique
+  domain        String?
+  email         String
+  phone         String?
+  address       String
+  status        String         @default("ACTIVE")
+  plan          String         @default("STARTER")
+  createdAt     DateTime       @default(now())
+  updatedAt     DateTime       @updatedAt
+  invitations   Invitation[]
+  orders        Order[]
+  roles         Role[]
+  stores        Store[]
+  subscriptions Subscription[]
+  tenantUsers   TenantUser[]
+
+  @@map("tenants")
+}
+
+model TenantUser {
+  id        String   @id @default(uuid())
+  tenantId  String
+  adminId   String
+  role      String   @default("ADMIN")
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+  admin     Admin    @relation("TenantUsersOnAdmin", fields: [adminId], references: [id])
+  tenant    Tenant   @relation(fields: [tenantId], references: [id])
+
+  @@unique([tenantId, adminId])
+  @@map("tenant_users")
+}
+
+model Subscription {
+  id            String   @id @default(uuid())
+  tenantId      String
+  adminId       String
+  plan          String
+  price         Float
+  status        String   @default("ACTIVE")
+  currentPeriod DateTime
+  nextBilling   DateTime
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+  admin         Admin    @relation("SubscriptionsOnAdmin", fields: [adminId], references: [id])
+  tenant        Tenant   @relation(fields: [tenantId], references: [id])
+
+  @@map("subscriptions")
+}
+
+model Role {
+  id          String       @id @default(uuid())
+  tenantId    String
+  name        String
+  description String?
+  createdAt   DateTime     @default(now())
+  updatedAt   DateTime     @updatedAt
+  permissions Permission[]
+  tenant      Tenant       @relation(fields: [tenantId], references: [id])
+
+  @@unique([tenantId, name])
+  @@map("roles")
+}
+
+model Permission {
+  id        String   @id @default(uuid())
+  roleId    String
+  resource  String
+  action    String
+  createdAt DateTime @default(now())
+  role      Role     @relation(fields: [roleId], references: [id])
+
+  @@unique([roleId, resource, action])
+  @@map("permissions")
+}
+
+model Invitation {
+  id         String    @id @default(uuid())
+  tenantId   String
+  email      String
+  role       String    @default("EDITOR")
+  token      String    @unique
+  expiresAt  DateTime
+  createdAt  DateTime  @default(now())
+  acceptedAt DateTime?
+  tenant     Tenant    @relation(fields: [tenantId], references: [id])
+
+  @@map("invitations")
+}
+
+model Category {
+  id        String    @id @default(uuid())
+  storeId   String?
+  name      String
+  createdAt DateTime  @default(now())
+  products  Product[]
+  store     Store?    @relation(fields: [storeId], references: [id])
+
+  @@unique([storeId, name])
+  @@map("categories")
+}
+
+model Product {
+  id           String    @id @default(uuid())
+  storeId      String?
+  categoryId   String?
+  name         String
+  description  String
+  price        Float
+  oldPrice     Float?
+  sku          String?
+  pricingTiers String    @default("{}")
+  variantStock String    @default("{}")
+  images       String    @default("{}")
+  colors       String    @default("[]")
+  sizes        String    @default("[]")
+  active       Boolean   @default(true)
+  updatedAt    DateTime  @updatedAt
+  store        Store?    @relation(fields: [storeId], references: [id])
+  category     Category? @relation(fields: [categoryId], references: [id])
+
+  @@unique([storeId, sku])
+  @@map("products")
+}
+
+model Order {
+  id              String      @id @default(uuid())
+  orderNumber     String      @unique
+  customerName    String
+  phone           String
+  governorate     String
+  city            String
+  address         String
+  notes           String?
+  totalPrice      Float       @default(0)
+  status          String      @default("NEW")
+  createdBy       String?
+  sellerId        String?
+  storeId         String?
+  tenantId        String?
+  landingPageId   String?
+  landingPageSlug String?
+  marketingLinkId String?
+  utmSource       String?
+  utmMedium       String?
+  utmCampaign     String?
+  createdAt       DateTime    @default(now())
+  updatedAt       DateTime    @updatedAt
+  items           OrderItem[]
+  tenant          Tenant?     @relation(fields: [tenantId], references: [id])
+
+  @@map("orders")
+}
+
+model OrderItem {
+  id        String  @id @default(uuid())
+  color     String
+  size      String
+  quantity  Int
+  unitPrice Float?
+  productId String?
+  name      String?
+  orderId   String
+  order     Order   @relation(fields: [orderId], references: [id], onDelete: Cascade)
+
+  @@map("order_items")
+}
+
+model Seller {
+  id          String   @id @default(uuid())
+  storeId     String
+  name        String
+  phone       String?
+  email       String?
+  commission  Float    @default(0)
+  active      Boolean  @default(true)
+  permissions String   @default("{}")
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+  store       Store      @relation(fields: [storeId], references: [id])
+  storeLinks  StoreLink[]
+
+  @@map("sellers")
+}
+
+model Store {
+  id           String      @id @default(uuid())
+  ref          String      @unique
+  name         String
+  tagLine      String?
+  primaryColor String?
+  logo         String?
+  adminId      String?
+  tenantId     String?
+  active       Boolean     @default(true)
+  settings     String      @default("{}")
+  createdAt    DateTime    @default(now())
+  updatedAt    DateTime    @updatedAt
+  visitors     Int         @default(0)
+  conversions  Int         @default(0)
+  storeLinks   StoreLink[]
+  sellers      Seller[]
+  admin        Admin?      @relation(fields: [adminId], references: [id])
+  tenant       Tenant?     @relation(fields: [tenantId], references: [id])
+  products     Product[]
+  landingPages LandingPage[]
+  categories   Category[]
+
+  @@unique([tenantId, name])
+  @@map("stores")
+}
+
+model StoreLink {
+  id            String       @id @default(uuid())
+  storeId       String
+  sellerId      String?
+  landingPageId String?
+  slug          String       @unique
+  customTitle   String?
+  customLogo    String
+  customColor   String
+  productIds    String
+  utmSource     String?
+  utmMedium     String?
+  utmCampaign   String?
+  clicks        Int          @default(0)
+  stats         Json
+  createdAt     DateTime     @default(now())
+  store         Store        @relation(fields: [storeId], references: [id])
+  seller        Seller?      @relation(fields: [sellerId], references: [id])
+  landingPage   LandingPage? @relation(fields: [landingPageId], references: [id])
+
+  @@map("store_links")
+}
+
+model LandingPage {
+  id         String      @id @default(uuid())
+  storeId    String
+  name       String
+  slug       String      @unique
+  sections   String      @default("[]")
+  published  Boolean     @default(false)
+  createdAt  DateTime    @default(now())
+  updatedAt  DateTime    @updatedAt
+  store      Store       @relation(fields: [storeId], references: [id])
+  storeLinks StoreLink[]
+
+  @@map("landing_pages")
+}
+
+model Notification {
+  id        String   @id @default(uuid())
+  tenantId  String
+  type      String
+  title     String
+  message   String
+  link      String?
+  read      Boolean  @default(false)
+  createdAt DateTime @default(now())
+
+  @@map("notifications")
+}
+
+model SubscriptionRequest {
+  id          String   @id @default(uuid())
+  email       String
+  name        String
+  phone       String?
+  plan        String
+  price       Float
+  status      String   @default("PENDING")
+  adminId     String?
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+  admin       Admin?   @relation(fields: [adminId], references: [id])
+
+  @@map("subscription_requests")
+}

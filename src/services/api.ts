@@ -1,4 +1,4 @@
-export const API_BASE = import.meta.env.VITE_API_URL || "http://localhost:3001/api";
+export const API_BASE = import.meta.env.VITE_API_URL || "/api";
 const IMG_BASE = import.meta.env.VITE_IMG_URL || API_BASE.replace("/api", "");
 
 function getToken(): string | null {

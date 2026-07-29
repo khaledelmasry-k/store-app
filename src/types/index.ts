@@ -10,9 +10,11 @@ export interface Product {
   description: string;
   price: number;
   oldPrice: number | null;
+  sku: string | null;
   pricingTiers: Record<string, number>;
   variantStock: Record<string, Record<string, number>>;
   images: Record<string, string>;
+  stock: number;
   colors: string[];
   sizes: string[];
   active: boolean;
@@ -52,7 +54,9 @@ export interface Order {
   updatedAt: string;
 }
 
-export interface PersonStats {
+export interface StoreStat {
+  ref: string;
+  name: string;
   totalOrders: number;
   newOrders: number;
   contactedOrders: number;
@@ -64,6 +68,16 @@ export interface PersonStats {
   expectedRevenue: number;
   confirmedRevenue: number;
   totalQuantity: number;
+}
+
+export interface RecentOrder {
+  id: string;
+  orderNumber: string;
+  customerName: string;
+  phone: string;
+  totalPrice: number;
+  status: string;
+  createdAt: string;
 }
 
 export interface DashboardStats {
@@ -78,14 +92,13 @@ export interface DashboardStats {
   expectedRevenue: number;
   confirmedRevenue: number;
   confirmedOrders?: number;
-  khaledStats: PersonStats;
-  mahmoudStats: PersonStats;
-  stores: {
-    khaled: { id: string; ref: string; name: string; stats: PersonStats };
-    mahmoud: { id: string; ref: string; name: string; stats: PersonStats };
-  };
+  storesStats?: StoreStat[];
+  totalQuantity?: number;
+  storeName?: string;
+  isSuperAdmin: boolean;
   totalStock: number;
   variantStock: Record<string, Record<string, number>>;
+  recentOrders?: RecentOrder[];
 }
 
 export interface Store {
@@ -94,6 +107,24 @@ export interface Store {
   name: string;
   active: boolean;
   createdAt: string;
+}
+
+export interface SellerStats {
+  id: string;
+  name: string;
+  active: boolean;
+  commission: number;
+  totalOrders: number;
+  totalRevenue: number;
+  confirmedRevenue: number;
+  totalQuantity: number;
+  newOrders: number;
+  contactedOrders: number;
+  processingOrders: number;
+  shippedOrders: number;
+  deliveredOrders: number;
+  cancelledOrders: number;
+  returnedOrders: number;
 }
 
 export interface PaginatedResponse<T> {

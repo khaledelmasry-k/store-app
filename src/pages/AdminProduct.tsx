@@ -311,7 +311,12 @@ export default function AdminProduct() {
                   </button>
                   <button type="button" style={{ width: "100%", background: "#fff", border: "1px solid #888C8C", borderRadius: "8px", padding: "8px 16px", color: "#B12704", fontWeight: 500, cursor: "pointer" }}
                     onMouseEnter={(e) => { (e.currentTarget as HTMLElement).style.background = "#FFDAD6"; }}
-                    onMouseLeave={(e) => { (e.currentTarget as HTMLElement).style.background = "#fff"; }}>
+                    onMouseLeave={(e) => { (e.currentTarget as HTMLElement).style.background = "#fff"; }}
+                    onClick={async () => {
+                      if (!window.confirm("هل أنت متأكد من حذف هذا المنتج؟")) return;
+                      await api.delete("/admin/product");
+                      window.location.href = "/admin";
+                    }}>
                     حذف المنتج نهائياً
                   </button>
                 </div>
@@ -327,7 +332,7 @@ export default function AdminProduct() {
             <a href="#" style={{ color: "#565959", textDecoration: "none" }}>شروط الخدمة</a>
             <a href="#" style={{ color: "#565959", textDecoration: "none" }}>اتصل بنا</a>
           </div>
-          <p style={{ fontSize: "14px", color: "#565959", opacity: 0.8, margin: 0 }}>© 2024 M&K Store. جميع الحقوق محفوظة.</p>
+          <p style={{ fontSize: "14px", color: "#565959", opacity: 0.8, margin: 0 }}>© 2025 M&K Store. جميع الحقوق محفوظة.</p>
         </footer>
       </div>
     </div>

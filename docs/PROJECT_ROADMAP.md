@@ -1,7 +1,7 @@
 # Project Roadmap - M&K Store SaaS Transformation
 
 ## Current Phase
-**Phase 3: Core SaaS Infrastructure**
+**Phase E Complete — Merchant Experience**
 
 ## Project Overview
 Transforming the existing single-merchant e-commerce application into a production-ready Multi-Tenant SaaS platform while preserving all Version 1 functionality. The existing project remains Version 1; everything new prepares Version 2.
@@ -10,82 +10,105 @@ Transforming the existing single-merchant e-commerce application into a producti
 
 ## Completed Work
 
-### Phase 1: Analysis
-- [x] Complete system analysis of existing application
-- [x] Documented all existing pages, routes, components, and business logic
-- [x] Identified multi-tenant architecture requirements
-- [x] Created Phase 1 Analysis document (`docs/phase-1-analysis.md`)
+### Foundational Phases (A-D)
+- [x] Phase A — Cleanup & Foundation (Firebase removed, helpers extracted, tenant isolation)
+- [x] Phase B — Tenant & Merchant Management (tenant CRUD, subscriptions, billing)
+- [x] Phase C — Onboarding & Multi-Product (registration wizard, multi-product, categories)
+- [x] Phase D — Seller System & Marketing Links (seller model, CRUD, UTM tracking, click tracking)
 
-### Phase 2: Foundation & Design
-- [x] Self-hosted fonts via `@fontsource` and `material-symbols` npm packages
-- [x] Rewrote `index.css` with design tokens and utility classes
-- [x] Redesigned Sidebar with dynamic store links from backend
-- [x] Fixed upload error handling in `AdminProduct.tsx`
-- [x] Fixed image URLs with `getImageUrl()` helper for production
-- [x] Created Google Stitch prompts for core UI sections
+### Phase E — Merchant Experience
 
-### Phase 3: Database & Backend (Completed)
-- [x] Updated Prisma schema with multi-tenant models (Tenant, TenantUser, Subscription, Role, Permission, Invitation, StoreLink)
-- [x] Fixed Prisma schema relation back-reference errors (named relations for Admin-TenantUser-Subscription)
-- [x] Made tenantId optional on Product, Order, Store for backward compatibility
-- [x] Added `ref` field to Store model
-- [x] Added `createdBy` field to Order model
-- [x] Created settings API routes (`server/src/routes/settings.ts`)
-- [x] Updated seed script with store seeding (ref:1=بنطلون الساحل, ref:2=مالك ستور)
-- [x] Reset database with new multi-tenant schema
-- [x] Reseeded database with updated seed script
-- [x] Fixed backend TypeScript compilation errors (req.params.id type casting)
+#### E1 — Dashboard Completion
+- [x] Removed hardcoded `khaledStats`/`mahmoudStats` from server
+- [x] Added dynamic per-store stats for super admin dashboard
+- [x] Added Recent Orders table (last 10) to dashboard
+- [x] Wired up "إضافة منتج جديد" button
+- [x] Refactored AdminReports to use dynamic storesStats
+- [x] Updated TypeScript types (StoreStat, RecentOrder)
+- [x] Stitch prompt: `11-merchant-dashboard-complete.md`
 
-### Phase 4: Frontend (Completed)
-- [x] Updated TypeScript interfaces in `src/types/index.ts` (added `Store` interface)
-- [x] Updated `DashboardStats` type with `khaledStats`, `mahmoudStats`, and `stores` properties
-- [x] Added `/admin/settings` route to `App.tsx`
-- [x] Created `AdminSettings.tsx` page with stores/admins CRUD
-- [x] Fixed TypeScript errors in `Sidebar.tsx` (removed duplicate useEffect, fixed stores state typing)
-- [x] Fixed TypeScript errors in types (added `khaledStats`, `mahmoudStats` to DashboardStats)
-- [x] Verified frontend TypeScript compilation passes
+#### E2 — Merchant Settings (Completed)
+- [x] Created `/api/merchant/settings` route (GET store+tenant, PUT store info)
+- [x] Created `MerchantSettings.tsx` with Store Info / Shipping / Integrations tabs
+- [x] Logo upload via raw fetch to `/admin/upload`
+- [x] Exposed DB-only fields (tagLine, primaryColor, logo) through API + UI
+- [x] Stitch prompt: `12-merchant-settings.md`
+
+#### E3 — Landing Page Builder (Completed)
+- [x] Added `LandingPage` model to schema
+- [x] Created `/api/merchant/landing-pages` CRUD + publish API
+- [x] Created `MerchantLandingPages.tsx` (list + create + publish toggle)
+- [x] Created `MerchantLandingEditor.tsx` (section builder: hero, features, products, CTA, footer)
+- [x] Sections are reorderable, editable, deletable
+
+#### E4 — Customer-Facing Landing Pages (Completed)
+- [x] Created `PublicLanding.tsx` at `/p/:slug`
+- [x] Public endpoint `GET /api/merchant/landing-pages/public/:slug`
+- [x] Renders sections with store branding (logo, name, tagLine, primaryColor)
+
+#### E5 — Store Theme Customization (Completed)
+- [x] Store branding (logo, primaryColor, tagLine, name) returned in `/api/orders/product` response
+- [x] CustomerOrder page header uses store's brand instead of hardcoded "M&K Store"
+- [x] Store settings (E2) allow merchants to set all theme fields
+
+#### E6 — Products Improvements (Completed)
+- [x] Enhanced MerchantProducts form with colors, sizes, variantStock matrix, pricingTiers, image upload per color, active toggle
+- [x] Wired up delete button in AdminProduct (DELETE /admin/product)
+- [x] Duplicate product functionality
+- [x] Server-side pagination + search for merchant products
+- [x] Stitch prompt: `16-products-improvements.md`
+
+#### E7 — Customers Management (Completed)
+- [x] Created `/api/merchant/customers` route with server-side grouping by phone
+- [x] Pagination, search (name/phone), sort (name, phone, orders, total, lastOrder)
+- [x] Created `MerchantCustomers.tsx` with summary cards, sortable table, pagination
+- [x] Replaced client-side aggregation with server-side API
+- [x] Stitch prompt: `17-customers-api.md`
+
+#### E8 — Reports & Analytics (Completed)
+- [x] Created `/api/merchant/analytics/overview` (summary stats + top products)
+- [x] Created `/api/merchant/analytics/daily` (daily order/revenue trends)
+- [x] Created `MerchantAnalytics.tsx` with SVG bar charts, line charts, KPIs
+- [x] Added analytics nav item to sidebar
+- [x] Stitch prompt: `18-analytics.md`
 
 ---
 
 ## Remaining Work
 
-### Phase 3: Core SaaS Infrastructure (Priority: High)
-1. **Backend API Completion**
-   - Implement tenant management endpoints
-   - Implement subscription management endpoints
-   - Implement store link management endpoints
-   - Implement customer management endpoints
+### Phase E — Merchant Experience (Complete)
+1. ✅ E1 — Dashboard Completion
+2. ✅ E2 — Merchant Settings
+3. ✅ E3 — Landing Page Builder
+4. ✅ E4 — Customer-Facing Landing Pages
+5. ✅ E5 — Store Theme Customization
+6. ✅ E6 — Products Improvements
+7. ✅ E7 — Customers Management
+8. ✅ E8 — Reports & Analytics
 
-### Phase 4: Feature Development (Priority: Medium)
-2. **Google Stitch Prompts** - All 10 prompts created:
-   - `01-landing-page.md` - Landing page
-   - `02-super-admin.md` - Super Admin dashboard
-   - `03-merchant-dashboard.md` - Merchant dashboard
-   - `04-products.md` - Multi-product management
-   - `05-orders.md` - Order management
-   - `06-customers.md` - Customer management
-   - `07-reports.md` - Reports & analytics
-   - `08-settings.md` - Advanced settings
-   - `09-billing.md` - Billing & finance
-   - `10-subscriptions.md` - Subscription management
+### Phase F — Team & Access
+9. ⬜ F1 — Team Members
+10. ⬜ F2 — Roles & Permissions
+11. ⬜ F3 — Seller Permissions
+12. ⬜ F4 — Invitation System
+13. ⬜ F5 — Merchant Notifications
 
-3. **Frontend Pages** - Create missing UI:
-   - Landing page (new route)
-   - Super Admin dashboard (new route)
-   - Customer management page
-   - Reports page
-   - Store links management page
+### Phase G — Monetization
+14. ⬜ G1 — Subscription Management
+15. ⬜ G2 — Billing
+16. ⬜ G3 — Plans
+17. ⬜ G4 — Coupons
 
-### Phase 5: Integration & Testing (Priority: High)
-6. **Integration Testing**
-   - Verify backward compatibility with existing flows
-   - Test multi-tenant data isolation
-   - Test store links with ref parameter
+### Phase H — Super Admin
+18. ⬜ H1 — Super Admin Analytics
+19. ⬜ H2 — Platform Monitoring
+20. ⬜ H3 — Merchant Management Improvements
 
-7. **Production Deployment**
-   - Firebase Hosting deployment
-   - Backend deployment on Railway
-   - Environment variable configuration
+### Phase I — Production
+21. ⬜ I1 — CSV Export
+22. ⬜ I2 — Activity Logs
+23. ⬜ I3 — Audit Logs
+24. ⬜ I4 — Production Optimizations
 
 ---
 
@@ -93,62 +116,28 @@ Transforming the existing single-merchant e-commerce application into a producti
 
 | Milestone | Target | Status |
 |-----------|--------|--------|
-| Phase 1: Analysis Complete | Done | ✅ |
-| Phase 2: Foundation & Design | Done | ✅ |
-| Phase 3: Database Schema Fixed | Done | ✅ |
-| Phase 3: TypeScript Compilation Fixed | Done | ✅ |
-| Phase 3: Database Reset & Seeded | Done | ✅ |
-| Phase 4: All Stitch Prompts Created | Done | ✅ |
-| Phase 4: All Missing UI Pages Created | Pending | ⬜ |
-| Phase 5: Integration Testing Complete | Pending | ⬜ |
-| Phase 5: Production Deployment | Pending | ⬜ |
+| Phases A-D Complete | Done | ✅ |
+| Phase E — Merchant Experience | Complete | ✅ |
+| Phase F — Team & Access | Next | ⬜ |
+| Phase G — Monetization | Next | ⬜ |
+| Phase H — Super Admin | Next | ⬜ |
+| Phase I — Production Readiness | Final | ⬜ |
 | V2 Launch Ready | Pending | ⬜ |
 
 ---
 
 ## Priorities
 
-### High Priority (Must Complete Before V2)
-1. Create missing frontend pages (landing, super admin, customers, reports, store links)
-2. Implement remaining backend API endpoints
-3. Integration testing
-4. Documentation completion
-
-### Medium Priority (Should Complete Before V2)
-1. Create missing frontend pages
-2. Implement remaining backend API endpoints
-3. Documentation completion
-
-### Low Priority (Nice to Have)
-1. Dark mode support
-2. English language support
-3. Offline mode preparation
-
----
-
-## Risks
-
-| Risk | Impact | Mitigation |
-|------|--------|------------|
-| Prisma schema errors prevent database migration | High | Fix relation back-references, remove incompatible types |
-| TypeScript errors block build | High | Fix type definitions in Sidebar.tsx and types/index.ts |
-| Breaking changes to existing functionality | High | Maintain backward compatibility, test existing flows |
-| Multi-tenant data isolation issues | High | Implement proper tenantId filtering in all queries |
-| Font loading issues in Egypt | Medium | Use self-hosted fonts via @fontsource |
-| Database reset loses existing data | Medium | Backup before reset, reseed with seed script |
-
----
-
-## Next Steps
-
-1. Create missing frontend pages (landing, super admin, customers, reports, store links)
-2. Implement remaining backend API endpoints (tenants, subscriptions, store links, customers)
-3. Integration testing
-4. Production deployment
+### Current Priority
+1. ✅ Phase E — Merchant Experience
+2. Next: Phase F — Team & Access (F1-F5)
+3. Then Phase G — Monetization (G1-G4)
+4. Then Phase H — Super Admin (H1-H3)
+5. Then Phase I — Production (I1-I4)
 
 ---
 
 *Document created: PROJECT_ROADMAP.md*
-*Version: 1.1*
+*Version: 2.1*
 *Last Updated: 2025-07-29*
-*Status: Phase 3 Complete - Phase 4 Feature Development*
+*Status: Phase E Complete — Phase F Next*

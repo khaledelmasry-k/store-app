@@ -1,15 +1,27 @@
 import { useState, useEffect } from "preact/compat";
 import { api } from "../services/api";
-import type { DashboardStats } from "../types";
+import { useLocation } from "wouter";
+import type { DashboardStats, SellerStats } from "../types";
 import Sidebar from "../components/Sidebar";
 
+const STATUS_BADGES: Record<string, { bg: string; color: string; label: string }> = {
+  NEW: { bg: "#FEF3C7", color: "#92400E", label: "جديد" },
+  CONTACTED: { bg: "#DBEAFE", color: "#1E40AF", label: "تم التواصل" },
+  PROCESSING: { bg: "#FED7AA", color: "#9A3412", label: "قيد التجهيز" },
+  SHIPPED: { bg: "#EDE9FE", color: "#5B21B6", label: "تم الشحن" },
+  DELIVERED: { bg: "#D1FAE5", color: "#065F46", label: "تم التوصيل" },
+  CANCELLED: { bg: "#FEE2E2", color: "#991B1B", label: "ملغي" },
+  RETURNED: { bg: "#FCE7F3", color: "#9D174D", label: "مسترجع" },
+};
+
 export default function AdminDashboard() {
+  const [, navigate] = useLocation();
   const [stats, setStats] = useState<DashboardStats | null>(null);
-  const [stores, setStores] = useState<{ ref: string; name: string }[]>([]);
+  const [sellerStats, setSellerStats] = useState<SellerStats[]>([]);
 
   useEffect(() => {
     api.get<DashboardStats>("/admin/orders/dashboard").then(setStats).catch(() => {});
-    api.get<{ ref: string; name: string }[]>("/admin/settings/stores").then(setStores).catch(() => {});
+    api.get<SellerStats[]>("/admin/orders/seller-stats").then(setSellerStats).catch(() => {});
   }, []);
 
   const cards = [
@@ -25,11 +37,14 @@ export default function AdminDashboard() {
     { icon: "🔄", label: "طلبات مسترجعة", value: stats?.returnedOrders?.toLocaleString() || "...", color: "#A855F7" },
   ];
 
-  const storeMap = new Map(stores.map((s) => [s.ref, s.name]));
-  const personSections = stats ? [
-    { ref: "1", icon: "👖", border: "#FF9900", badgeBg: "rgba(255,153,0,0.1)", badgeText: "#693c00", data: stats.khaledStats },
-    { ref: "2", icon: "👔", border: "#067D62", badgeBg: "rgba(6,125,98,0.1)", badgeText: "#067D62", data: stats.mahmoudStats },
-  ].map((s) => ({ ...s, name: storeMap.get(s.ref) || `المتجر ${s.ref}` })) : [];
+  const isSuperAdmin = stats?.isSuperAdmin ?? false;
+  const storeSections = (stats?.storesStats || []).map((s, i) => ({
+    ...s,
+    icon: i % 2 === 0 ? "🏪" : "👔",
+    border: i % 2 === 0 ? "#FF9900" : "#067D62",
+    badgeBg: i % 2 === 0 ? "rgba(255,153,0,0.1)" : "rgba(6,125,98,0.1)",
+    badgeText: i % 2 === 0 ? "#693c00" : "#067D62",
+  }));
 
   return (
     <div style={{ background: "#EAEDED", minHeight: "100vh", display: "flex" }}>
@@ -41,7 +56,8 @@ export default function AdminDashboard() {
               <h2 style={{ fontFamily: "'Plus Jakarta Sans', sans-serif", fontSize: "24px", fontWeight: 600, color: "#0F1111", margin: 0 }}>لوحة التحكم</h2>
               <p style={{ fontSize: "14px", color: "#595f68", margin: "4px 0 0" }}>نظرة عامة على أداء المتجر والطلبات اليومية</p>
             </div>
-            <button style={{ background: "#FF9900", color: "#131921", padding: "8px 24px", borderRadius: "8px", fontWeight: 700, border: "none", cursor: "pointer", boxShadow: "0 1px 3px rgba(0,0,0,0.08)", fontSize: "14px", display: "flex", alignItems: "center", gap: "4px", minHeight: "40px" }}>
+            <button onClick={() => navigate("/merchant/products/new")}
+              style={{ background: "#FF9900", color: "#131921", padding: "8px 24px", borderRadius: "8px", fontWeight: 700, border: "none", cursor: "pointer", boxShadow: "0 1px 3px rgba(0,0,0,0.08)", fontSize: "14px", display: "flex", alignItems: "center", gap: "4px", minHeight: "40px" }}>
               + إضافة منتج جديد
             </button>
           </div>
@@ -59,56 +75,141 @@ export default function AdminDashboard() {
           ))}
         </div>
 
-        {stats && (
-          <div className="person-grid">
-            {personSections.map((section) => {
-              const d = section.data;
-              if (!d) return null;
-              const miniCards = [
-                { label: "جديد", value: d.newOrders },
-                { label: "تواصل", value: d.contactedOrders },
-                { label: "تجهيز", value: d.processingOrders },
-                { label: "شحن", value: d.shippedOrders },
-                { label: "وصل", value: d.deliveredOrders },
-                { label: "لغى", value: d.cancelledOrders },
-                { label: "رجع", value: d.returnedOrders },
-                { label: "إجمالي", value: d.totalOrders },
-              ];
-              return (
-                <div key={section.name} style={{ background: "#fff", borderRadius: "8px", borderRight: `4px solid ${section.border}`, boxShadow: "0 2px 4px rgba(0,0,0,0.08)", padding: "24px", overflow: "hidden", position: "relative" }}>
-                  <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "24px" }}>
-                    <h3 style={{ fontFamily: "'Plus Jakarta Sans', sans-serif", fontSize: "20px", fontWeight: 600, display: "flex", alignItems: "center", gap: "8px", margin: 0 }}>
-                      <span>{section.icon}</span>
-                      {section.name}
-                    </h3>
-                    <span style={{ background: section.badgeBg, color: section.badgeText, padding: "4px 12px", borderRadius: "9999px", fontSize: "12px", fontWeight: 700 }}>نشط</span>
+        {stats && !isSuperAdmin && stats.storeName && (
+          <div style={{ background: "#fff", borderRadius: "8px", borderRight: "4px solid #FF9900", boxShadow: "0 2px 4px rgba(0,0,0,0.08)", padding: "16px 24px", margin: "24px 0" }}>
+            <div style={{ display: "flex", alignItems: "center", gap: "8px" }}>
+              <span style={{ fontSize: "24px" }}>🏪</span>
+              <div>
+                <h3 style={{ fontFamily: "'Plus Jakarta Sans', sans-serif", fontSize: "20px", fontWeight: 600, margin: 0 }}>{stats.storeName}</h3>
+                <p style={{ fontSize: "13px", color: "#565959", margin: "4px 0 0" }}>إجمالي القطع المباعة: {stats.totalQuantity || 0}</p>
+              </div>
+            </div>
+          </div>
+        )}
+
+        {stats && isSuperAdmin && storeSections.length > 0 && (
+          <div className="person-grid" style={{ marginTop: "24px" }}>
+            {storeSections.map((section) => (
+              <div key={section.ref} style={{ background: "#fff", borderRadius: "8px", borderRight: `4px solid ${section.border}`, boxShadow: "0 2px 4px rgba(0,0,0,0.08)", padding: "24px", overflow: "hidden", position: "relative" }}>
+                <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "24px" }}>
+                  <h3 style={{ fontFamily: "'Plus Jakarta Sans', sans-serif", fontSize: "20px", fontWeight: 600, display: "flex", alignItems: "center", gap: "8px", margin: 0 }}>
+                    <span>{section.icon}</span>
+                    {section.name}
+                  </h3>
+                  <span style={{ background: section.badgeBg, color: section.badgeText, padding: "4px 12px", borderRadius: "9999px", fontSize: "12px", fontWeight: 700 }}>نشط</span>
+                </div>
+                <div style={{ display: "grid", gridTemplateColumns: "repeat(4, 1fr)", gap: "12px", marginBottom: "24px" }}>
+                  {[
+                    { label: "جديد", value: section.newOrders },
+                    { label: "تواصل", value: section.contactedOrders },
+                    { label: "تجهيز", value: section.processingOrders },
+                    { label: "شحن", value: section.shippedOrders },
+                    { label: "وصل", value: section.deliveredOrders },
+                    { label: "لغى", value: section.cancelledOrders },
+                    { label: "رجع", value: section.returnedOrders },
+                    { label: "إجمالي", value: section.totalOrders },
+                  ].map((mc) => (
+                    <div key={mc.label} style={{ background: "#ebeeee", padding: "8px", borderRadius: "4px", display: "flex", flexDirection: "column", alignItems: "center" }}>
+                      <span style={{ fontSize: "12px", opacity: 0.6 }}>{mc.label}</span>
+                      <span style={{ fontWeight: 700 }}>{mc.value}</span>
+                    </div>
+                  ))}
+                </div>
+                <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", paddingTop: "16px", borderTop: "1px solid #DDDDDD", fontSize: "14px" }}>
+                  <div style={{ display: "flex", flexDirection: "column" }}>
+                    <span style={{ fontSize: "12px", color: "#565959" }}>المتوقع</span>
+                    <span style={{ fontWeight: 700, color: "#007185" }}>{Number(section.expectedRevenue || 0).toLocaleString()} ج.م</span>
                   </div>
-                  <div style={{ display: "grid", gridTemplateColumns: "repeat(4, 1fr)", gap: "12px", marginBottom: "24px" }}>
-                    {miniCards.map((mc) => (
-                      <div key={mc.label} style={{ background: "#ebeeee", padding: "8px", borderRadius: "4px", display: "flex", flexDirection: "column", alignItems: "center" }}>
-                        <span style={{ fontSize: "12px", opacity: 0.6 }}>{mc.label}</span>
-                        <span style={{ fontWeight: 700 }}>{mc.value}</span>
+                  <div style={{ display: "flex", flexDirection: "column" }}>
+                    <span style={{ fontSize: "12px", color: "#565959" }}>المؤكد</span>
+                    <span style={{ fontWeight: 700, color: "#067D62" }}>{Number(section.confirmedRevenue || 0).toLocaleString()} ج.م</span>
+                  </div>
+                  <div style={{ display: "flex", flexDirection: "column" }}>
+                    <span style={{ fontSize: "12px", color: "#565959" }}>القطع</span>
+                    <span style={{ fontWeight: 700 }}>{section.totalQuantity || 0} قطعة</span>
+                  </div>
+                </div>
+              </div>
+            ))}
+          </div>
+        )}
+
+        {!isSuperAdmin && sellerStats.length > 0 && (
+          <div style={{ margin: "24px 0" }}>
+            <h3 style={{ fontFamily: "'Plus Jakarta Sans', sans-serif", fontSize: "18px", fontWeight: 600, margin: "0 0 16px" }}>إحصائيات البائعين</h3>
+            <div className="person-grid">
+              {sellerStats.map((s) => (
+                <div key={s.id} style={{ background: "#fff", borderRadius: "8px", borderRight: "4px solid #FF9900", boxShadow: "0 2px 4px rgba(0,0,0,0.08)", padding: "20px" }}>
+                  <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "16px" }}>
+                    <h4 style={{ margin: 0, fontSize: "16px", fontWeight: 700 }}>{s.name}</h4>
+                    <span style={{ fontSize: "13px", color: "#565959" }}>عمولة: {s.commission}%</span>
+                  </div>
+                  <div style={{ display: "grid", gridTemplateColumns: "repeat(4, 1fr)", gap: "8px", marginBottom: "12px" }}>
+                    {[
+                      { label: "جديد", value: s.newOrders },
+                      { label: "تواصل", value: s.contactedOrders },
+                      { label: "تجهيز", value: s.processingOrders },
+                      { label: "شحن", value: s.shippedOrders },
+                      { label: "وصل", value: s.deliveredOrders },
+                      { label: "لغى", value: s.cancelledOrders },
+                      { label: "رجع", value: s.returnedOrders },
+                      { label: "الإجمالي", value: s.totalOrders },
+                    ].map((mc) => (
+                      <div key={mc.label} style={{ background: "#ebeeee", padding: "6px", borderRadius: "4px", textAlign: "center" }}>
+                        <span style={{ fontSize: "11px", opacity: 0.6, display: "block" }}>{mc.label}</span>
+                        <span style={{ fontWeight: 700, fontSize: "15px" }}>{mc.value}</span>
                       </div>
                     ))}
                   </div>
-                  <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", paddingTop: "16px", borderTop: "1px solid #DDDDDD", fontSize: "14px" }}>
-                    <div style={{ display: "flex", flexDirection: "column" }}>
-                      <span style={{ fontSize: "12px", color: "#565959" }}>المتوقع</span>
-                      <span style={{ fontWeight: 700, color: "#007185" }}>{Number(d.expectedRevenue || 0).toLocaleString()} ج.م</span>
-                    </div>
-                    <div style={{ display: "flex", flexDirection: "column" }}>
-                      <span style={{ fontSize: "12px", color: "#565959" }}>المؤكد</span>
-                      <span style={{ fontWeight: 700, color: "#067D62" }}>{Number(d.confirmedRevenue || 0).toLocaleString()} ج.م</span>
-                    </div>
-                    <div style={{ display: "flex", flexDirection: "column" }}>
-                      <span style={{ fontSize: "12px", color: "#565959" }}>البناطيل</span>
-                      <span style={{ fontWeight: 700 }}>{d.totalQuantity || 0} قطعة</span>
-                    </div>
+                  <div style={{ display: "flex", justifyContent: "space-between", paddingTop: "12px", borderTop: "1px solid #DDDDDD", fontSize: "13px" }}>
+                    <span>المتوقع: <strong>{s.totalRevenue.toLocaleString()} ج.م</strong></span>
+                    <span>المؤكد: <strong style={{ color: "#067D62" }}>{s.confirmedRevenue.toLocaleString()} ج.م</strong></span>
+                    <span>القطع: <strong>{s.totalQuantity}</strong></span>
                   </div>
                 </div>
-              );
-            })}
+              ))}
+            </div>
           </div>
+        )}
+
+        {stats?.recentOrders && stats.recentOrders.length > 0 && (
+          <section style={{ background: "#fff", borderRadius: "8px", boxShadow: "0 2px 4px rgba(0,0,0,0.08)", border: "1px solid #DDDDDD", marginBottom: "24px" }}>
+            <div style={{ padding: "24px", borderBottom: "1px solid #DDDDDD", display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+              <h3 style={{ fontFamily: "'Plus Jakarta Sans', sans-serif", fontSize: "18px", fontWeight: 600, margin: 0 }}>🕐 آخر الطلبات</h3>
+              <a onClick={() => navigate(isSuperAdmin ? "/super-admin/orders" : "/merchant/orders")} style={{ color: "#007185", fontSize: "13px", fontWeight: 600, cursor: "pointer", textDecoration: "none" }}>عرض الكل →</a>
+            </div>
+            <div style={{ overflowX: "auto" }}>
+              <table style={{ width: "100%", borderCollapse: "collapse", fontSize: "14px" }}>
+                <thead>
+                  <tr style={{ background: "#f4f4f5", color: "#555", fontWeight: 600 }}>
+                    <th style={{ padding: "12px 16px", textAlign: "right" }}>رقم الطلب</th>
+                    <th style={{ padding: "12px 16px", textAlign: "right" }}>العميل</th>
+                    <th style={{ padding: "12px 16px", textAlign: "right" }}>رقم الهاتف</th>
+                    <th style={{ padding: "12px 16px", textAlign: "right" }}>المبلغ</th>
+                    <th style={{ padding: "12px 16px", textAlign: "center" }}>الحالة</th>
+                    <th style={{ padding: "12px 16px", textAlign: "left", direction: "ltr" }}>التاريخ</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {stats.recentOrders.map((o) => {
+                    const badge = STATUS_BADGES[o.status] || { bg: "#F3F4F6", color: "#374151", label: o.status };
+                    return (
+                      <tr key={o.id} style={{ borderBottom: "1px solid #EAEDED" }}>
+                        <td style={{ padding: "12px 16px", direction: "ltr", textAlign: "right", fontWeight: 600 }}>#{o.orderNumber}</td>
+                        <td style={{ padding: "12px 16px" }}>{o.customerName}</td>
+                        <td style={{ padding: "12px 16px", direction: "ltr", textAlign: "right" }}>{o.phone}</td>
+                        <td style={{ padding: "12px 16px", fontWeight: 600 }}>{o.totalPrice.toLocaleString()} ج.م</td>
+                        <td style={{ padding: "12px 16px", textAlign: "center" }}>
+                          <span style={{ padding: "2px 8px", borderRadius: "4px", fontSize: "12px", fontWeight: 700, background: badge.bg, color: badge.color }}>{badge.label}</span>
+                        </td>
+                        <td style={{ padding: "12px 16px", fontSize: "12px", color: "#565959", textAlign: "left", direction: "ltr" }}>{new Date(o.createdAt).toLocaleDateString("ar-EG")}</td>
+                      </tr>
+                    );
+                  })}
+                </tbody>
+              </table>
+            </div>
+          </section>
         )}
 
         <section style={{ background: "#fff", borderRadius: "8px", boxShadow: "0 2px 4px rgba(0,0,0,0.08)", border: "1px solid #DDDDDD", marginBottom: "48px" }}>
@@ -123,7 +224,7 @@ export default function AdminDashboard() {
               <thead>
                 <tr style={{ background: "#EBEEEE", color: "#565959", fontWeight: 600 }}>
                   <th style={{ padding: "16px", borderBottom: "1px solid #DDDDDD" }}>اللون</th>
-                  {stats?.variantStock && Object.keys(stats.variantStock).length > 0 && Object.keys(Object.values(stats.variantStock)[0] || {}).map((size) => (
+                  {stats?.variantStock && Object.keys(stats.variantStock).length > 0 && Object.keys(Object.values(stats.variantStock)[0] || {}).map((size: string) => (
                     <th key={size} style={{ padding: "16px", borderBottom: "1px solid #DDDDDD" }}>{size}</th>
                   ))}
                   <th style={{ padding: "16px", borderBottom: "1px solid #DDDDDD" }}>الإجمالي</th>
@@ -138,7 +239,7 @@ export default function AdminDashboard() {
                         <div style={{ width: "16px", height: "16px", borderRadius: "50%", background: color.includes("أسود") ? "#000" : color.includes("رماد") ? "#36454F" : color.includes("بيج") ? "#C2B280" : color.includes("كح") ? "#000080" : "#888" }}></div>
                         {color}
                       </td>
-                      {Object.entries(sizes).map(([size, qty]) => (
+                      {Object.entries(sizes as Record<string, number>).map(([size, qty]) => (
                         <td key={size} style={{ padding: "16px", borderBottom: "1px solid #DDDDDD", color: qty < 5 ? "#B12704" : "#0F1111", fontWeight: qty < 5 ? 700 : 400 }}>
                           {qty}
                         </td>
@@ -162,7 +263,7 @@ export default function AdminDashboard() {
             <a href="#" style={{ color: "#565959", textDecoration: "none" }}>شروط الخدمة</a>
             <a href="#" style={{ color: "#565959", textDecoration: "none" }}>اتصل بنا</a>
           </div>
-          <p style={{ fontSize: "14px", color: "#565959", opacity: 0.8, margin: 0 }}>© 2024 M&K Store. جميع الحقوق محفوظة.</p>
+          <p style={{ fontSize: "14px", color: "#565959", opacity: 0.8, margin: 0 }}>© 2025 M&K Store. جميع الحقوق محفوظة.</p>
         </footer>
       </div>
     </div>

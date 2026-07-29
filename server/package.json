@@ -5,11 +5,12 @@
   "type": "module",
   "scripts": {
     "dev": "tsx watch src/index.ts",
-    "build": "tsc",
+    "build": "tsc && (mkdir -p ./dist/public && cp -r ../dist/* ./dist/public/ 2>/dev/null || true)",
     "start": "node dist/index.js",
     "db:generate": "prisma generate",
-    "db:push": "prisma db push",
-    "db:seed": "tsx src/seed.ts"
+    "db:push": "prisma db push --accept-data-loss",
+    "db:seed": "tsx src/seed.ts",
+    "postinstall": "prisma generate"
   },
   "dependencies": {
     "@prisma/client": "^6.19.3",
@@ -17,6 +18,7 @@
     "cors": "^2.8.5",
     "dotenv": "^16.4.7",
     "express": "^5.1.0",
+    "express-rate-limit": "^8.6.1",
     "helmet": "^8.1.0",
     "jsonwebtoken": "^9.0.2",
     "multer": "^2.1.1",

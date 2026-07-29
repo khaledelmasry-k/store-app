@@ -211,7 +211,7 @@ export default function Landing() {
           </div>
         </div>
         <div style={{ maxWidth: "1200px", margin: "32px auto 0", padding: "24px 0 0", borderTop: "1px solid rgba(255,255,255,0.1)", textAlign: "center" }}>
-          <p style={{ fontSize: "13px", color: "#565959", margin: 0 }}>© 2024 M&K Store. جميع الحقوق محفوظة.</p>
+          <p style={{ fontSize: "13px", color: "#565959", margin: 0 }}>© 2025 M&K Store. جميع الحقوق محفوظة.</p>
         </div>
       </footer>
     </div>

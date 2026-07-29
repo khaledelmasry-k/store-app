@@ -2,53 +2,20 @@ import { Router, Request, Response } from "express";
 import { z } from "zod";
 import { prisma } from "../utils/prisma.js";
 import { authMiddleware } from "../middleware/auth.js";
+import { getAdminStoreId } from "../utils/storeHelper.js";
+import { parseJsonField } from "../utils/parseJson.js";
+import { computeTotalStock } from "../utils/stock.js";
 
 const router = Router();
 router.use(authMiddleware);
 
-function parseJsonField<T>(val: unknown, fallback: T): T {
-  if (typeof val === "string") {
-    try {
-      const parsed = JSON.parse(val);
-      if (typeof fallback === "object" && !Array.isArray(fallback) && fallback !== null) {
-        if (typeof parsed === "object" && !Array.isArray(parsed) && parsed !== null) return parsed;
-        return fallback;
-      }
-      if (Array.isArray(fallback)) {
-        if (Array.isArray(parsed)) return parsed as T;
-        return fallback;
-      }
-      return parsed;
-    } catch { return fallback; }
-  }
-  return val as T;
-}
-
-function computeTotalStock(vs: Record<string, Record<string, number>>): number {
-  let total = 0;
-  for (const sizes of Object.values(vs)) {
-    for (const qty of Object.values(sizes)) {
-      total += qty;
-    }
-  }
-  return total;
-}
-
-router.get("/", async (_req: Request, res: Response) => {
-  let product = await prisma.product.findFirst();
+router.get("/", async (req: Request, res: Response) => {
+  const storeId = await getAdminStoreId(req.admin!);
+  const where = storeId ? { storeId } : {};
+  let product = await prisma.product.findFirst({ where, orderBy: { updatedAt: "desc" } });
   if (!product) {
-    product = await prisma.product.create({
-      data: {
-        name: "المنتج",
-        description: "",
-        price: 0,
-        images: "{}",
-        colors: "[]",
-        sizes: "[]",
-        pricingTiers: "{}",
-        variantStock: "{}",
-      },
-    });
+    res.json(null);
+    return;
   }
   const variantStock = parseJsonField<Record<string, Record<string, number>>>(product.variantStock, {});
   res.json({
@@ -81,7 +48,9 @@ router.put("/", async (req: Request, res: Response) => {
     res.status(400).json({ error: "Invalid input", details: parsed.error.flatten() });
     return;
   }
-  let product = await prisma.product.findFirst();
+  const storeId = await getAdminStoreId(req.admin!);
+  const where = storeId ? { storeId } : {};
+  let product = await prisma.product.findFirst({ where, orderBy: { updatedAt: "desc" } });
   const data: any = { ...parsed.data };
   if (data.pricingTiers) data.pricingTiers = JSON.stringify(data.pricingTiers);
   if (data.variantStock) data.variantStock = JSON.stringify(data.variantStock);
@@ -92,6 +61,7 @@ router.put("/", async (req: Request, res: Response) => {
   if (!product) {
     product = await prisma.product.create({
       data: {
+        storeId: storeId || undefined,
         name: data.name || "المنتج",
         description: data.description || "",
         price: data.price || 0,

@@ -1,5 +1,3 @@
-let counter = 0;
-
 export async function generateOrderNumber(): Promise<string> {
   const { prisma } = await import("./prisma.js");
   const latest = await prisma.order.findFirst({

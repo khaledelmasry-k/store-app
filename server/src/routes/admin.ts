@@ -30,21 +30,22 @@ router.post("/login", async (req: Request, res: Response) => {
     res.status(401).json({ error: "Invalid credentials" });
     return;
   }
+  const tenantUser = await prisma.tenantUser.findFirst({ where: { adminId: admin.id } });
   const token = jwt.sign(
-    { adminId: admin.id, username: admin.username },
+    { adminId: admin.id, username: admin.username, role: admin.role, tenantId: tenantUser?.tenantId },
     config.jwtSecret,
     { expiresIn: "24h" }
   );
   res.json({
     token,
-    admin: { id: admin.id, username: admin.username, email: admin.email },
+    admin: { id: admin.id, username: admin.username, email: admin.email, role: admin.role, tenantId: tenantUser?.tenantId },
   });
 });
 
 router.get("/me", authMiddleware, async (req: Request, res: Response) => {
   const admin = await prisma.admin.findUnique({
     where: { id: req.admin!.adminId },
-    select: { id: true, username: true, email: true, createdAt: true },
+    select: { id: true, username: true, email: true, role: true, createdAt: true },
   });
   res.json(admin);
 });

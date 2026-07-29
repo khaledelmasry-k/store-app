@@ -6,11 +6,11 @@ import Sidebar from "../components/Sidebar";
 export default function AdminSettings() {
   const [tab, setTab] = useState<"stores" | "admins">("stores");
   const [stores, setStores] = useState<Store[]>([]);
-  const [admins, setAdmins] = useState<{ id: string; username: string; email: string; createdAt: string }[]>([]);
+  const [admins, setAdmins] = useState<{ id: string; username: string; email: string; role: string; createdAt: string }[]>([]);
   const [showStoreForm, setShowStoreForm] = useState(false);
   const [showAdminForm, setShowAdminForm] = useState(false);
   const [storeForm, setStoreForm] = useState({ ref: "", name: "" });
-  const [adminForm, setAdminForm] = useState({ username: "", email: "", password: "" });
+  const [adminForm, setAdminForm] = useState({ username: "", email: "", password: "", role: "admin" });
   const [toastMsg, setToastMsg] = useState("");
   const [toastShow, setToastShow] = useState(false);
   const [loading, setLoading] = useState(true);
@@ -23,7 +23,7 @@ export default function AdminSettings() {
 
   const loadStores = () => api.get<Store[]>("/admin/settings/stores").then(setStores);
   const loadAdmins = () =>
-    api.get<{ id: string; username: string; email: string; createdAt: string }[]>("/admin/settings/admins").then(setAdmins);
+    api.get<{ id: string; username: string; email: string; role: string; createdAt: string }[]>("/admin/settings/admins").then(setAdmins);
 
   useEffect(() => {
     Promise.all([loadStores(), loadAdmins()]).finally(() => setLoading(false));
@@ -61,7 +61,7 @@ export default function AdminSettings() {
   const addAdmin = async () => {
     try {
       await api.post("/admin/settings/admins", adminForm);
-      setAdminForm({ username: "", email: "", password: "" });
+      setAdminForm({ username: "", email: "", password: "", role: "admin" });
       setShowAdminForm(false);
       await loadAdmins();
       showToast("تم إضافة المشرف");
@@ -189,6 +189,10 @@ export default function AdminSettings() {
                     <input className="amazon-input" placeholder="اسم المستخدم" value={adminForm.username} onChange={(e) => setAdminForm({ ...adminForm, username: (e.target as HTMLInputElement).value })} />
                     <input className="amazon-input" type="email" placeholder="البريد الإلكتروني" value={adminForm.email} onChange={(e) => setAdminForm({ ...adminForm, email: (e.target as HTMLInputElement).value })} />
                     <input className="amazon-input" type="password" placeholder="كلمة المرور" value={adminForm.password} onChange={(e) => setAdminForm({ ...adminForm, password: (e.target as HTMLInputElement).value })} />
+                    <select className="amazon-input" value={adminForm.role} onChange={(e) => setAdminForm({ ...adminForm, role: (e.target as HTMLSelectElement).value })} style={{ padding: "8px 12px", borderRadius: "8px", border: "1px solid #DDDDDD", fontSize: "14px" }}>
+                      <option value="admin">مشرف عادي</option>
+                      <option value="super_admin">مشرف عام</option>
+                    </select>
                     <div style={{ display: "flex", gap: "8px", justifyContent: "flex-end", marginTop: "8px" }}>
                       <button onClick={() => setShowAdminForm(false)} style={{ background: "#fff", border: "1px solid #888C8C", borderRadius: "8px", padding: "8px 16px", cursor: "pointer" }}>إلغاء</button>
                       <button onClick={addAdmin} disabled={!adminForm.username || !adminForm.email || !adminForm.password} style={{ background: "#FF9900", color: "#0F1111", border: "none", borderRadius: "8px", padding: "8px 16px", fontWeight: 600, cursor: "pointer", opacity: !adminForm.username || !adminForm.email || !adminForm.password ? 0.6 : 1 }}>إضافة</button>
@@ -204,18 +208,20 @@ export default function AdminSettings() {
                   <tr>
                     <th>اسم المستخدم</th>
                     <th>البريد الإلكتروني</th>
+                    <th>الصلاحية</th>
                     <th>تاريخ الإنشاء</th>
                     <th>إجراءات</th>
                   </tr>
                 </thead>
                 <tbody>
-                  {admins.length === 0 && (
-                    <tr><td colSpan={4} style={{ textAlign: "center", color: "#565959", padding: "32px" }}>لا يوجد مشرفين</td></tr>
-                  )}
-                  {admins.map((a) => (
+                    {admins.length === 0 && (
+                    <tr><td colSpan={5} style={{ textAlign: "center", color: "#565959", padding: "32px" }}>لا يوجد مشرفين</td></tr>
+                    )}
+                    {admins.map((a) => (
                     <tr key={a.id}>
                       <td style={{ fontWeight: 600 }}>{a.username}</td>
                       <td>{a.email}</td>
+                      <td>{a.role === "super_admin" ? "مشرف عام" : "مشرف"}</td>
                       <td style={{ color: "#565959" }}>{new Date(a.createdAt).toLocaleDateString("ar-EG")}</td>
                       <td>
                         <button onClick={() => deleteAdmin(a.id)} style={{ background: "none", border: "none", color: "#B12704", cursor: "pointer", fontSize: "12px", display: "flex", alignItems: "center", gap: "4px" }}>
@@ -223,7 +229,7 @@ export default function AdminSettings() {
                         </button>
                       </td>
                     </tr>
-                  ))}
+                    ))}
                 </tbody>
               </table>
             </div>
@@ -237,7 +243,7 @@ export default function AdminSettings() {
             <a href="#" style={{ color: "#565959", textDecoration: "none" }}>شروط الخدمة</a>
             <a href="#" style={{ color: "#565959", textDecoration: "none" }}>اتصل بنا</a>
           </div>
-          <p style={{ fontSize: "14px", color: "#565959", opacity: 0.8, margin: 0 }}>© 2024 M&K Store. جميع الحقوق محفوظة.</p>
+          <p style={{ fontSize: "14px", color: "#565959", opacity: 0.8, margin: 0 }}>© 2025 M&K Store. جميع الحقوق محفوظة.</p>
         </footer>
       </div>
     </div>

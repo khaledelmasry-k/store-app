@@ -77,7 +77,8 @@ export default function CustomerOrder() {
   });
 
   useEffect(() => {
-    api.get<Product>("/orders/product").then((p) => {
+    const ref = new URLSearchParams(window.location.search).get("ref") || "";
+    api.get<Product>(`/orders/product${ref ? `?ref=${ref}` : ""}`).then((p) => {
       setProduct(p);
       setCart([{ color: p.colors[0] || "", size: p.sizes[0] || "", quantity: 1 }]);
     }).catch(() => {});
@@ -162,7 +163,11 @@ const canSubmit = form.customerName && form.phone && form.governorate && form.ci
   return (
     <div style={{ background: "#EAEDED", color: "#0F1111", paddingBottom: "96px" }}>
       <header style={{ background: "#fff", height: "64px", display: "flex", alignItems: "center", padding: "0 16px", borderBottom: "1px solid #DDDDDD", position: "sticky", top: 0, zIndex: 40 }}>
-        <h1 style={{ fontFamily: "'Plus Jakarta Sans', sans-serif", fontSize: "20px", fontWeight: 700, color: "#FF9900", margin: 0 }}>M&K Store</h1>
+        {(product as any)?.store?.logo && <img src={getImageUrl((product as any).store.logo)} alt="logo" style={{ height: "28px", marginLeft: "12px", borderRadius: "4px" }} />}
+        <div>
+          <h1 style={{ fontFamily: "'Plus Jakarta Sans', sans-serif", fontSize: "20px", fontWeight: 700, color: (product as any)?.store?.primaryColor || "#FF9900", margin: 0 }}>{(product as any)?.store?.name || "M&K Store"}</h1>
+          {(product as any)?.store?.tagLine && <span style={{ fontSize: "11px", color: "#565959", display: "block" }}>{(product as any).store.tagLine}</span>}
+        </div>
       </header>
 
       <main style={{ display: "flex", flexDirection: "column", gap: "16px", paddingTop: "16px" }}>
@@ -362,7 +367,7 @@ const canSubmit = form.customerName && form.phone && form.governorate && form.ci
 
         <footer style={{ background: "#fff", padding: "32px 16px", marginTop: "32px", borderTop: "1px solid #DDDDDD", textAlign: "center" }}>
           <h2 style={{ fontFamily: "'Plus Jakarta Sans', sans-serif", fontSize: "16px", fontWeight: 700, color: "#565959", margin: "0 0 8px" }}>M&K Store</h2>
-          <p style={{ fontSize: "12px", color: "#565959", margin: 0 }}>© 2024 جميع الحقوق محفوظة.</p>
+          <p style={{ fontSize: "12px", color: "#565959", margin: 0 }}>© 2025 جميع الحقوق محفوظة.</p>
         </footer>
       </main>
     </div>

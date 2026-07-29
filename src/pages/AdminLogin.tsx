@@ -16,6 +16,7 @@ export default function AdminLogin() {
     try {
       const result = await api.post<{ token: string; admin: any }>("/admin/login", { username, password });
       localStorage.setItem("token", result.token);
+      localStorage.setItem("admin", JSON.stringify(result.admin));
       navigate("/admin");
     } catch (err: any) {
       setError(err.message || "خطأ في اسم المستخدم أو كلمة المرور");

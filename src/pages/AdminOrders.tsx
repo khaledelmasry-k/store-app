@@ -1,6 +1,6 @@
-import { useState, useEffect, FormEvent } from "preact/compat";
+import { useState, useEffect, useCallback, FormEvent } from "preact/compat";
 import { api } from "../services/api";
-import type { Order, PaginatedResponse, OrderStatus } from "../types";
+import type { Order, PaginatedResponse, OrderStatus, Store } from "../types";
 import Sidebar from "../components/Sidebar";
 
 const STATUSES: OrderStatus[] = ["NEW", "CONTACTED", "PROCESSING", "SHIPPED", "DELIVERED", "CANCELLED", "RETURNED"];
@@ -18,10 +18,14 @@ const STATUS_STYLES: Record<string, { bg: string; text: string; dot: string }> =
   RETURNED: { bg: "#F5F3FF", text: "#A855F7", dot: "#A855F7" },
 };
 
-const getStoreBadge = (ref: string) => {
-  if (ref === "1") return { bg: "#FFF8E1", text: "#A855F7", border: "#FFECB3", label: "بنطلون الساحل" };
-  return { bg: "#F0FDF4", text: "#166534", border: "#DCFCE7", label: "مالك ستور" };
-};
+const STORE_COLORS = [
+  { bg: "#FFF8E1", text: "#A855F7", border: "#FFECB3" },
+  { bg: "#F0FDF4", text: "#166534", border: "#DCFCE7" },
+  { bg: "#EFF6FF", text: "#1D4ED8", border: "#DBEAFE" },
+  { bg: "#FEF2F2", text: "#B91C1C", border: "#FEE2E2" },
+  { bg: "#F5F3FF", text: "#7C3AED", border: "#EDE9FE" },
+  { bg: "#FFF7ED", text: "#C2410C", border: "#FFEDD5" },
+];
 
 export default function AdminOrders() {
   const [data, setData] = useState<PaginatedResponse<Order> | null>(null);
@@ -32,18 +36,27 @@ export default function AdminOrders() {
   const [storeFilter, setStoreFilter] = useState("");
   const [selectedOrder, setSelectedOrder] = useState<Order | null>(null);
   const [deleteId, setDeleteId] = useState<string | null>(null);
+  const [storeNames, setStoreNames] = useState<Record<string, string>>({});
   const limit = 20;
 
-  const fetchOrders = () => {
+  useEffect(() => {
+    api.get<Store[]>("/admin/settings/stores").then(stores => {
+      const map: Record<string, string> = {};
+      stores.forEach(s => { map[s.ref] = s.name; });
+      setStoreNames(map);
+    }).catch(() => {});
+  }, []);
+
+  const fetchOrders = useCallback(() => {
     const params = new URLSearchParams({ page: String(page), limit: String(limit) });
     if (nameFilter) params.set("search", nameFilter);
     if (phoneFilter) params.set("phone", phoneFilter);
     if (statusFilter) params.set("status", statusFilter);
     if (storeFilter) params.set("ref", storeFilter);
     api.get<PaginatedResponse<Order>>(`/admin/orders?${params}`).then(setData);
-  };
+  }, [page, nameFilter, phoneFilter, statusFilter, storeFilter]);
 
-  useEffect(() => { fetchOrders(); }, [page, statusFilter, storeFilter]);
+  useEffect(() => { fetchOrders(); }, [fetchOrders]);
 
   const handleSearch = (e: FormEvent) => {
     e.preventDefault();
@@ -59,6 +72,13 @@ export default function AdminOrders() {
   const deleteOrder = async () => {
     if (!deleteId) return;
     try { await api.delete(`/admin/orders/${deleteId}`); setDeleteId(null); fetchOrders(); } catch {}
+  };
+
+  const storeBadge = (ref: string) => {
+    const names = Object.values(storeNames);
+    const idx = Math.max(0, names.indexOf(storeNames[ref] || ""));
+    const c = STORE_COLORS[idx % STORE_COLORS.length];
+    return { ...c, label: storeNames[ref] || ref };
   };
 
   const totalPages = data?.pagination?.totalPages || 1;
@@ -99,8 +119,9 @@ export default function AdminOrders() {
               <label style={{ fontSize: "12px", color: "#565959" }}>المتجر</label>
               <select className="amazon-select" value={storeFilter} onChange={(e) => { setStoreFilter((e.target as HTMLSelectElement).value); setPage(1); }}>
                 <option value="">كل المتاجر</option>
-                <option value="1">بنطلون الساحل</option>
-                <option value="2">مالك ستور</option>
+                {Object.entries(storeNames).map(([ref, name]) => (
+                  <option key={ref} value={ref}>{name}</option>
+                ))}
               </select>
             </div>
             <div style={{ display: "flex", alignItems: "flex-end" }}>
@@ -131,7 +152,7 @@ export default function AdminOrders() {
               </thead>
               <tbody>
                 {data?.orders.map((order) => {
-                  const badge = getStoreBadge(order.createdBy);
+                  const badge = storeBadge(order.createdBy);
                   const sp = STATUS_STYLES[order.status] || STATUS_STYLES.NEW;
                   return (
                     <tr key={order.id} style={{ borderBottom: "1px solid #DDDDDD" }}>
@@ -226,7 +247,7 @@ export default function AdminOrders() {
                   <div><p style={{ fontSize: "12px", color: "#565959", margin: "0 0 4px" }}>رقم الهاتف</p><p style={{ margin: 0, direction: "ltr" }}>{selectedOrder.phone}</p></div>
                   <div style={{ gridColumn: "span 2" }}><p style={{ fontSize: "12px", color: "#565959", margin: "0 0 4px" }}>العنوان بالتفصيل</p><p style={{ margin: 0 }}>{selectedOrder.address}</p></div>
                   <div><p style={{ fontSize: "12px", color: "#565959", margin: "0 0 4px" }}>المحافظة</p><p style={{ margin: 0 }}>{selectedOrder.governorate}</p></div>
-                  <div><p style={{ fontSize: "12px", color: "#565959", margin: "0 0 4px" }}>المتجر</p><p style={{ margin: 0, fontWeight: 700, color: "#C45500" }}>{getStoreBadge(selectedOrder.createdBy).label}</p></div>
+                  <div><p style={{ fontSize: "12px", color: "#565959", margin: "0 0 4px" }}>المتجر</p><p style={{ margin: 0, fontWeight: 700, color: "#C45500" }}>{storeBadge(selectedOrder.createdBy).label}</p></div>
                   <div style={{ gridColumn: "span 2", padding: "16px", background: "#EBEEEE", borderRadius: "8px" }}>
                     <p style={{ fontSize: "12px", color: "#565959", marginBottom: "8px", borderBottom: "1px solid #DDDDDD", paddingBottom: "4px" }}>المنتجات المطلوبة</p>
                     {selectedOrder.items.map((item, i) => (
@@ -268,7 +289,7 @@ export default function AdminOrders() {
             <a href="#" style={{ color: "#565959", textDecoration: "none" }}>شروط الخدمة</a>
             <a href="#" style={{ color: "#565959", textDecoration: "none" }}>اتصل بنا</a>
           </div>
-          <p style={{ fontSize: "14px", color: "#565959", opacity: 0.8, margin: 0 }}>© 2024 M&K Store. جميع الحقوق محفوظة.</p>
+          <p style={{ fontSize: "14px", color: "#565959", opacity: 0.8, margin: 0 }}>© 2025 M&K Store. جميع الحقوق محفوظة.</p>
         </footer>
       </div>
     </div>

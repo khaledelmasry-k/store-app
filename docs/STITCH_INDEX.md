@@ -17,6 +17,14 @@ This document indexes all Google Stitch prompts for the M&K Store SaaS platform 
 | 8 | `08-settings.md` | Advanced Settings | 03-merchant-dashboard.md | ✅ Created |
 | 9 | `09-billing.md` | Billing & Finance | 02-super-admin.md | ✅ Created |
 | 10 | `10-subscriptions.md` | Subscriptions Management | 02-super-admin.md | ✅ Created |
+| 11 | `11-merchant-dashboard-complete.md` | Dashboard Completion | 03-merchant-dashboard.md | ✅ Created |
+| 12 | `12-merchant-settings.md` | Merchant Settings | 03-merchant-dashboard.md | ✅ Created |
+| 13 | `13-landing-page-builder.md` | Landing Page Builder | 03-merchant-dashboard.md | ✅ Created |
+| 14 | `14-public-landing-pages.md` | Customer-Facing Landing Pages | 13-landing-page-builder.md | ✅ Created |
+| 15 | `15-store-theme-customization.md` | Store Theme Customization | 12-merchant-settings.md | ✅ Created |
+| 16 | `16-products-improvements.md` | Products Improvements | 04-products.md | ✅ Created |
+| 17 | `17-customers-api.md` | Customers Management (V2) | 03-merchant-dashboard.md | ✅ Created |
+| 18 | `18-analytics.md` | Analytics & Reports | 03-merchant-dashboard.md | ✅ Created |
 
 ---
 
@@ -185,6 +193,102 @@ This document indexes all Google Stitch prompts for the M&K Store SaaS platform 
 **Dependencies**: 02-super-admin.md
 **Future-Ready Considerations**: Scalability, extensibility, PCI DSS compliance
 
+### 11-merchant-dashboard-complete.md
+**Title**: Merchant Dashboard Completion - Google Stitch Prompt
+**Status**: ✅ Created
+**Source**: `docs/stitch-prompts/11-merchant-dashboard-complete.md`
+**Description**: Upgrades merchant dashboard from hardcoded per-person stats to fully dynamic with per-store stats and recent orders table. Removes khaledStats/mahmoudStats and replaces with storesStats array.
+**Sections**:
+- Dynamic dashboard stats by store
+- Recent orders table (last 10)
+- Removed hardcoded ref=1/ref=2 logic
+**Dependencies**: 03-merchant-dashboard.md
+
+### 12-merchant-settings.md
+**Title**: Merchant Settings - Google Stitch Prompt
+**Status**: ✅ Created
+**Source**: `docs/stitch-prompts/12-merchant-settings.md`
+**Description**: Creates merchant settings hub with Store Info tab (name, tagLine, logo upload, primaryColor), Shipping placeholder, and Integrations placeholder.
+**Sections**:
+- Store Info form
+- Logo upload
+- Color picker
+- Save with toast notifications
+**Dependencies**: 03-merchant-dashboard.md
+
+### 13-landing-page-builder.md
+**Title**: Landing Page Builder - Google Stitch Prompt
+**Status**: ✅ Created
+**Source**: `docs/stitch-prompts/13-landing-page-builder.md`
+**Description**: Landing page builder for merchants to create, edit, and publish marketing pages with hero, features, products, CTA, and footer sections.
+**Sections**:
+- Landing page list with create + publish toggle
+- Section editor (reorder, edit, delete)
+- Public render endpoint
+**Dependencies**: 03-merchant-dashboard.md
+
+### 14-public-landing-pages.md
+**Title**: Customer-Facing Landing Pages - Google Stitch Prompt
+**Status**: ✅ Created
+**Source**: `docs/stitch-prompts/14-public-landing-pages.md`
+**Description**: Public-facing route at `/p/:slug` that renders a published landing page with merchant's store branding (logo, name, tagLine, primaryColor).
+**Sections**:
+- Public render component (PublicLanding.tsx)
+- 404 handling for unpublished/missing pages
+- Store branding integration
+**Dependencies**: 13-landing-page-builder.md
+
+### 15-store-theme-customization.md
+**Title**: Store Theme Customization - Google Stitch Prompt
+**Status**: ✅ Created
+**Source**: `docs/stitch-prompts/15-store-theme-customization.md`
+**Description**: Returns store branding (name, tagLine, logo, primaryColor) in product API response and renders it in CustomerOrder header.
+**Sections**:
+- API response enhancement (/api/orders/product)
+- Dynamic header in CustomerOrder.tsx
+- Graceful fallback when branding is absent
+**Dependencies**: 12-merchant-settings.md
+
+### 16-products-improvements.md
+**Title**: Products Improvements - Google Stitch Prompt
+**Status**: ✅ Created
+**Source**: `docs/stitch-prompts/16-products-improvements.md`
+**Description**: Enhances merchant products form with colors (chip input), sizes (chip input), variant stock matrix, pricing tiers, image upload per color, and active toggle.
+**Sections**:
+- Full product form (name, description, price, oldPrice, active)
+- Colors chip input
+- Sizes chip input
+- Variant stock color × size matrix
+- Pricing tiers (quantity discounts)
+- Image upload per color
+- Delete with confirmation
+- Duplicate product
+**Dependencies**: 04-products.md
+
+### 17-customers-api.md
+**Title**: Customers Management V2 - Google Stitch Prompt
+**Status**: ✅ Created
+**Source**: `docs/stitch-prompts/17-customers-api.md`
+**Description**: Server-side customer aggregation endpoint with pagination, search, and sorting replaces client-side grouping of all orders.
+**Sections**:
+- Server API: GET /api/merchant/customers
+- Paginated, searchable, sortable customer table
+- Summary cards (total customers, orders, revenue)
+- Sort by name, phone, orders, total, lastOrder
+**Dependencies**: 03-merchant-dashboard.md
+
+### 18-analytics.md
+**Title**: Analytics & Reports - Google Stitch Prompt
+**Status**: ✅ Created
+**Source**: `docs/stitch-prompts/18-analytics.md`
+**Description**: Merchant analytics page with summary KPIs, daily bar charts, trend line charts, and top products table.
+**Sections**:
+- 4 summary cards (total orders, confirmed orders, revenue, avg order value)
+- Daily bar charts with day range selector
+- SVG line charts for trends
+- Top products table
+**Dependencies**: 03-merchant-dashboard.md
+
 ---
 
 ## Dependencies Graph
@@ -196,10 +300,18 @@ This document indexes all Google Stitch prompts for the M&K Store SaaS platform 
 │   └── 10-subscriptions.md
 └── 03-merchant-dashboard.md
     ├── 04-products.md
+    │   └── 16-products-improvements.md
     ├── 05-orders.md
     ├── 06-customers.md
     ├── 07-reports.md
-    └── 08-settings.md
+    ├── 08-settings.md
+    ├── 11-merchant-dashboard-complete.md
+    ├── 12-merchant-settings.md
+    │   └── 15-store-theme-customization.md
+    ├── 13-landing-page-builder.md
+    │   └── 14-public-landing-pages.md
+    ├── 17-customers-api.md
+    └── 18-analytics.md
 ```
 
 ---
@@ -263,6 +375,14 @@ All stitch prompts are stored in `docs/stitch-prompts/` with numbered prefixes:
 | `08-settings.md` | Advanced platform settings |
 | `09-billing.md` | Billing and financial operations |
 | `10-subscriptions.md` | Subscription management |
+| `11-merchant-dashboard-complete.md` | Dynamic dashboard + recent orders |
+| `12-merchant-settings.md` | Merchant settings UI |
+| `13-landing-page-builder.md` | Landing page CRUD + editor |
+| `14-public-landing-pages.md` | Public render at `/p/:slug` |
+| `15-store-theme-customization.md` | Store branding in customer order |
+| `16-products-improvements.md` | Full product form enhancements |
+| `17-customers-api.md` | Server-side customer aggregation |
+| `18-analytics.md` | Analytics API + chart page |
 
 ---
 
@@ -289,6 +409,6 @@ All stitch prompts are stored in `docs/stitch-prompts/` with numbered prefixes:
 ---
 
 *Document created: STITCH_INDEX.md*
-*Version: 1.1*
+*Version: 1.2*
 *Last Updated: 2025-07-29*
-*Status: Phase 4 - Feature Development*
+*Status: Phase E Complete — 18/18 Stitch Prompts*

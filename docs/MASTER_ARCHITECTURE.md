@@ -370,10 +370,39 @@ Order (1) ────< OrderItem >──── (1) Order
 |-------|--------|-------------|------|
 | `/` | POST | Upload image | Yes |
 
+#### Merchant Settings Routes (`/api/merchant/settings`)
+| Route | Method | Description | Auth |
+|-------|--------|-------------|------|
+| `/` | GET | Get store + tenant settings | Yes |
+| `/store` | PUT | Update store info (name, tagLine, logo, primaryColor) | Yes |
+
+#### Landing Pages Routes (`/api/merchant/landing-pages`)
+| Route | Method | Description | Auth |
+|-------|--------|-------------|------|
+| `/` | GET | List landing pages | Yes |
+| `/` | POST | Create landing page | Yes |
+| `/public/:slug` | GET | Public landing page by slug | No |
+| `/:id` | GET | Get landing page | Yes |
+| `/:id` | PUT | Update landing page | Yes |
+| `/:id` | DELETE | Delete landing page | Yes |
+| `/:id/publish` | PATCH | Toggle publish status | Yes |
+
+#### Customers Routes (`/api/merchant/customers`)
+| Route | Method | Description | Auth |
+|-------|--------|-------------|------|
+| `/` | GET | List customers (paginated, grouped by phone) | Yes |
+
+#### Analytics Routes (`/api/merchant/analytics`)
+| Route | Method | Description | Auth |
+|-------|--------|-------------|------|
+| `/overview` | GET | Summary stats + top products | Yes |
+| `/daily` | GET | Daily order/revenue trends | Yes |
+| `/top-products` | GET | All products ranked by sales | Yes |
+
 #### Store Routes (`/api/orders`)
 | Route | Method | Description | Auth |
 |-------|--------|-------------|------|
-| `/product` | GET | Get product for customer view | No |
+| `/product` | GET | Get product for customer view (includes store branding) | No |
 | `/` | POST | Submit order | No |
 
 #### Settings Routes (`/api/admin/settings`)
@@ -416,12 +445,13 @@ interface DashboardStats {
   expectedRevenue: number;
   confirmedRevenue: number;
   confirmedOrders?: number;
-  stores: {
-    khaled: { id: string; ref: string; name: string; stats: PersonStats };
-    mahmoud: { id: string; ref: string; name: string; stats: PersonStats };
-  };
+  storesStats?: StoreStat[];
+  totalQuantity?: number;
+  storeName?: string;
+  isSuperAdmin: boolean;
   totalStock: number;
   variantStock: Record<string, Record<string, number>>;
+  recentOrders?: RecentOrder[];
 }
 ```
 
@@ -535,7 +565,15 @@ Platform (Super Admin)
 │   │   ├── 07-reports.md
 │   │   ├── 08-settings.md
 │   │   ├── 09-billing.md
-│   │   └── 10-subscriptions.md
+│   │   ├── 10-subscriptions.md
+│   │   ├── 11-merchant-dashboard-complete.md
+│   │   ├── 12-merchant-settings.md
+│   │   ├── 13-landing-page-builder.md
+│   │   ├── 14-public-landing-pages.md
+│   │   ├── 15-store-theme-customization.md
+│   │   ├── 16-products-improvements.md
+│   │   ├── 17-customers-api.md
+│   │   └── 18-analytics.md
 │   ├── landing-page-stitch.md      # Legacy (to be moved)
 │   ├── super-admin-stitch.md       # Legacy (to be moved)
 │   ├── merchant-dashboard-stitch.md # Legacy (to be moved)
@@ -553,7 +591,18 @@ Platform (Super Admin)
 │   │   │   ├── product.ts
 │   │   │   ├── store.ts
 │   │   │   ├── upload.ts
-│   │   │   └── settings.ts
+│   │   │   ├── settings.ts
+│   │   │   ├── auth.ts
+│   │   │   ├── categories.ts
+│   │   │   ├── customers.ts
+│   │   │   ├── analytics.ts
+│   │   │   ├── tenants.ts
+│   │   │   ├── subscriptions.ts
+│   │   │   ├── sellers.ts
+│   │   │   ├── merchantProducts.ts
+│   │   │   ├── merchantSettings.ts
+│   │   │   ├── landingPages.ts
+│   │   │   └── seller/
 │   │   ├── middleware/
 │   │   │   ├── auth.ts
 │   │   │   └── errorHandler.ts
@@ -571,7 +620,29 @@ Platform (Super Admin)
 │   │   ├── AdminOrders.tsx
 │   │   ├── AdminProduct.tsx
 │   │   ├── AdminSettings.tsx
-│   │   └── CustomerOrder.tsx
+│   │   ├── AdminCustomers.tsx
+│   │   ├── AdminReports.tsx
+│   │   ├── AdminStoreLinks.tsx
+│   │   ├── AdminSubscriptions.tsx
+│   │   ├── AdminBilling.tsx
+│   │   ├── AdminSuperAdmin.tsx
+│   │   ├── SuperAdminTenants.tsx
+│   │   ├── CustomerOrder.tsx
+│   │   ├── SellerLogin.tsx
+│   │   ├── SellerDashboard.tsx
+│   │   ├── Landing.tsx
+│   │   ├── PublicPricing.tsx
+│   │   ├── Onboarding.tsx
+│   │   ├── MerchantProducts.tsx
+│   │   ├── MerchantSellers.tsx
+│   │   ├── MerchantStoreLinks.tsx
+│   │   ├── MerchantLandingPages.tsx
+│   │   ├── MerchantLandingEditor.tsx
+│   │   ├── MerchantSettings.tsx
+│   │   ├── MerchantCustomers.tsx
+│   │   ├── MerchantAnalytics.tsx
+│   │   ├── PublicLanding.tsx
+│   │   └── StoreLinkRedirect.tsx
 │   ├── components/
 │   │   └── Sidebar.tsx
 │   ├── services/
@@ -601,14 +672,22 @@ Platform (Super Admin)
 |---------------|------------|--------|
 | `01-landing-page.md` | `/` (landing page) | ✅ Created |
 | `02-super-admin.md` | `/super-admin/*` | ✅ Created |
-| `03-merchant-dashboard.md` | `/admin` (dashboard) | ✅ Created |
-| `04-products.md` | `/admin/product` (multi-product) | ⬜ To create |
-| `05-orders.md` | `/admin/orders` | ✅ Created |
-| `06-customers.md` | `/admin/customers` | ⬜ To create |
-| `07-reports.md` | `/admin/reports` | ⬜ To create |
-| `08-settings.md` | `/admin/settings` | ✅ Created |
+| `03-merchant-dashboard.md` | `/merchant` (dashboard) | ✅ Created |
+| `04-products.md` | `/merchant/products` (multi-product) | ✅ Created |
+| `05-orders.md` | `/merchant/orders` | ✅ Created |
+| `06-customers.md` | `/merchant/customers` | ✅ Created |
+| `07-reports.md` | `/merchant/reports` | ✅ Created |
+| `08-settings.md` | `/merchant/settings` | ✅ Created |
 | `09-billing.md` | `/admin/billing` | ✅ Created |
 | `10-subscriptions.md` | `/admin/subscriptions` | ✅ Created |
+| `11-merchant-dashboard-complete.md` | Dashboard dynamic + recent orders | ✅ Created |
+| `12-merchant-settings.md` | `/merchant/settings` (store info, logo, colors) | ✅ Created |
+| `13-landing-page-builder.md` | `/merchant/landing-pages` + editor | ✅ Created |
+| `14-public-landing-pages.md` | `/p/:slug` (public render) | ✅ Created |
+| `15-store-theme-customization.md` | `CustomerOrder.tsx` branding | ✅ Created |
+| `16-products-improvements.md` | `/merchant/products` form enhancements | ✅ Created |
+| `17-customers-api.md` | `/merchant/customers` server API + page | ✅ Created |
+| `18-analytics.md` | `/merchant/analytics` charts + API | ✅ Created |
 
 ---
 
@@ -685,6 +764,6 @@ Platform (Super Admin)
 ---
 
 *Document created: MASTER_ARCHITECTURE.md*
-*Version: 1.1*
+*Version: 1.2*
 *Last Updated: 2025-07-29*
-*Status: Phase 4 - Feature Development*
+*Status: Phase E Complete — All Merchant Features Live*
