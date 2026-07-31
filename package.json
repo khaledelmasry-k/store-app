@@ -6,9 +6,8 @@
   "scripts": {
     "dev": "vite",
     "build": "tsc -b && vite build",
-    "build:frontend": "npm install && npm run build",
-    "build:server": "cd server && npm install && npx prisma generate && npm run build",
-    "build:all": "npm run build:frontend && npm run build:server",
+    "build:all": "npm run build && mkdir -p server/dist/public && cp -r dist/* server/dist/public/ && cd server && npx tsc",
+    "start": "node server/dist/index.js",
     "lint": "oxlint",
     "preview": "vite preview"
   },

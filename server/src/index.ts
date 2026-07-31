@@ -100,8 +100,12 @@ app.get("/api/health", (_req, res) => {
 
 // SPA fallback: serve index.html for non-API routes (production only)
 if (hasFrontend) {
-  app.get("*", (_req, res) => {
-    res.sendFile(path.join(frontendDist, "index.html"));
+  app.use((req, res, next) => {
+    if (req.method === "GET" && !req.path.startsWith("/api/")) {
+      res.sendFile(path.join(frontendDist, "index.html"));
+    } else {
+      next();
+    }
   });
 }
 
