@@ -3,20 +3,12 @@ import { z } from "zod";
 import crypto from "crypto";
 import { prisma } from "../utils/prisma.js";
 import { authMiddleware } from "../middleware/auth.js";
-import { getAdminStoreId } from "../utils/storeHelper.js";
+import { requireStore, requirePermission, getReqTenantId } from "../middleware/permission.js";
 
 const router = Router();
 
-async function getTenantId(req: Request): Promise<string | null> {
-  if (req.admin?.role === "super_admin") return null;
-  const storeId = await getAdminStoreId(req.admin!);
-  if (!storeId) return null;
-  const store = await prisma.store.findUnique({ where: { id: storeId }, select: { tenantId: true } });
-  return store?.tenantId || null;
-}
-
-router.get("/", authMiddleware, async (req: Request, res: Response) => {
-  const tenantId = await getTenantId(req);
+router.get("/", authMiddleware, requireStore, async (req: Request, res: Response) => {
+  const tenantId = await getReqTenantId(req);
   if (!tenantId) { res.status(403).json({ error: "No tenant" }); return; }
 
   const invitations = await prisma.invitation.findMany({
@@ -39,8 +31,8 @@ const createSchema = z.object({
   role: z.string().default("EDITOR"),
 });
 
-router.post("/", authMiddleware, async (req: Request, res: Response) => {
-  const tenantId = await getTenantId(req);
+router.post("/", authMiddleware, requireStore, requirePermission("team", "create"), async (req: Request, res: Response) => {
+  const tenantId = await getReqTenantId(req);
   if (!tenantId) { res.status(403).json({ error: "No tenant" }); return; }
 
   const parsed = createSchema.safeParse(req.body);
@@ -65,8 +57,8 @@ router.post("/", authMiddleware, async (req: Request, res: Response) => {
   });
 });
 
-router.delete("/:id", authMiddleware, async (req: Request, res: Response) => {
-  const tenantId = await getTenantId(req);
+router.delete("/:id", authMiddleware, requireStore, requirePermission("team", "delete"), async (req: Request, res: Response) => {
+  const tenantId = await getReqTenantId(req);
   if (!tenantId) { res.status(403).json({ error: "No tenant" }); return; }
 
   const invitation = await prisma.invitation.findFirst({ where: { id: String(req.params.id), tenantId } });

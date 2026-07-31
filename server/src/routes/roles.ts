@@ -2,24 +2,16 @@ import { Router, Request, Response } from "express";
 import { z } from "zod";
 import { prisma } from "../utils/prisma.js";
 import { authMiddleware } from "../middleware/auth.js";
-import { getAdminStoreId } from "../utils/storeHelper.js";
+import { requireStore, requirePermission, getReqTenantId } from "../middleware/permission.js";
 
 const router = Router();
-router.use(authMiddleware);
+router.use(authMiddleware, requireStore);
 
 const RESOURCES = ["products", "orders", "customers", "reports", "settings", "team", "sellers", "landing-pages", "store-links"] as const;
 const ACTIONS = ["view", "create", "edit", "delete"] as const;
 
-async function getTenantId(req: Request): Promise<string | null> {
-  if (req.admin?.role === "super_admin") return null;
-  const storeId = await getAdminStoreId(req.admin!);
-  if (!storeId) return null;
-  const store = await prisma.store.findUnique({ where: { id: storeId }, select: { tenantId: true } });
-  return store?.tenantId || null;
-}
-
 router.get("/", async (req: Request, res: Response) => {
-  const tenantId = await getTenantId(req);
+  const tenantId = await getReqTenantId(req);
   if (!tenantId) { res.status(403).json({ error: "No tenant" }); return; }
 
   const roles = await prisma.role.findMany({
@@ -41,8 +33,8 @@ const createSchema = z.object({
   permissions: z.array(z.object({ resource: z.enum(RESOURCES), action: z.enum(ACTIONS) })).optional(),
 });
 
-router.post("/", async (req: Request, res: Response) => {
-  const tenantId = await getTenantId(req);
+router.post("/", requirePermission("team", "create"), async (req: Request, res: Response) => {
+  const tenantId = await getReqTenantId(req);
   if (!tenantId) { res.status(403).json({ error: "No tenant" }); return; }
 
   const parsed = createSchema.safeParse(req.body);
@@ -65,8 +57,8 @@ router.post("/", async (req: Request, res: Response) => {
   res.status(201).json(role);
 });
 
-router.put("/:id", async (req: Request, res: Response) => {
-  const tenantId = await getTenantId(req);
+router.put("/:id", requirePermission("team", "edit"), async (req: Request, res: Response) => {
+  const tenantId = await getReqTenantId(req);
   if (!tenantId) { res.status(403).json({ error: "No tenant" }); return; }
 
   const role = await prisma.role.findFirst({ where: { id: String(req.params.id), tenantId } });
@@ -95,8 +87,8 @@ router.put("/:id", async (req: Request, res: Response) => {
   res.json(updated);
 });
 
-router.delete("/:id", async (req: Request, res: Response) => {
-  const tenantId = await getTenantId(req);
+router.delete("/:id", requirePermission("team", "delete"), async (req: Request, res: Response) => {
+  const tenantId = await getReqTenantId(req);
   if (!tenantId) { res.status(403).json({ error: "No tenant" }); return; }
 
   const role = await prisma.role.findFirst({ where: { id: String(req.params.id), tenantId } });

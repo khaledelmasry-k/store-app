@@ -21,25 +21,32 @@ function getTotalPrice(qty: number, tiers: Record<string, number>): number {
 
 async function resolveStore(ref: string) {
   const store = await prisma.store.findUnique({ where: { ref } });
-  if (!store) return { storeId: null, storeInfo: null };
+  if (!store) return { storeId: null, storeInfo: null, active: false };
   return {
     storeId: store.id,
     storeInfo: { name: store.name, tagLine: store.tagLine, logo: store.logo, primaryColor: store.primaryColor },
+    active: store.active,
   };
 }
 
 // ---- GET /products — list all products for a store ----
 router.get("/products", async (req: Request, res: Response) => {
   const ref = qs(req.query.ref);
-  let storeId: string | undefined;
-  let storeInfo: any = null;
-  if (ref) {
-    const resolved = await resolveStore(ref);
-    storeId = resolved.storeId || undefined;
-    storeInfo = resolved.storeInfo;
+  if (!ref) {
+    res.status(400).json({ error: "معرف المتجر (ref) مطلوب" });
+    return;
   }
-  const where: any = { active: true };
-  if (storeId) where.storeId = storeId;
+  const resolved = await resolveStore(ref);
+  if (!resolved.storeId) {
+    res.status(404).json({ error: "المتجر غير موجود" });
+    return;
+  }
+  if (!resolved.active) {
+    res.status(404).json({ error: "المتجر غير متاح حالياً" });
+    return;
+  }
+  const where: any = { active: true, storeId: resolved.storeId };
+  const storeInfo = resolved.storeInfo;
   const products = await prisma.product.findMany({ where, orderBy: { updatedAt: "desc" } });
   const result = products.map((p) => ({
     ...p,
@@ -56,15 +63,21 @@ router.get("/products", async (req: Request, res: Response) => {
 // ---- GET /product — legacy single product endpoint ----
 router.get("/product", async (req: Request, res: Response) => {
   const ref = qs(req.query.ref);
-  let storeId: string | undefined;
-  let storeInfo: any = null;
-  if (ref) {
-    const resolved = await resolveStore(ref);
-    storeId = resolved.storeId || undefined;
-    storeInfo = resolved.storeInfo;
+  if (!ref) {
+    res.status(400).json({ error: "معرف المتجر (ref) مطلوب" });
+    return;
   }
-  const where: any = {};
-  if (storeId) where.storeId = storeId;
+  const resolved = await resolveStore(ref);
+  if (!resolved.storeId) {
+    res.status(404).json({ error: "المتجر غير موجود" });
+    return;
+  }
+  if (!resolved.active) {
+    res.status(404).json({ error: "المتجر غير متاح حالياً" });
+    return;
+  }
+  const where: any = { storeId: resolved.storeId };
+  const storeInfo = resolved.storeInfo;
   const product = await prisma.product.findFirst({ where, orderBy: { updatedAt: "desc" } });
   if (!product) { res.status(404).json({ error: "المنتج غير موجود" }); return; }
   const variantStock = parseJsonField<Record<string, Record<string, number>>>(product.variantStock, {});
@@ -116,8 +129,13 @@ router.post("/", async (req: Request, res: Response) => {
   let storeId: string | undefined;
   let tenantId: string | undefined;
   if (ref) {
-    const store = await prisma.store.findUnique({ where: { ref }, select: { id: true, tenantId: true } });
-    if (store) { storeId = store.id; tenantId = store.tenantId || undefined; }
+    const store = await prisma.store.findUnique({ where: { ref }, select: { id: true, tenantId: true, active: true } });
+    if (!store || !store.active) {
+      res.status(400).json({ error: "المتجر غير موجود" });
+      return;
+    }
+    storeId = store.id;
+    tenantId = store.tenantId || undefined;
   }
   if (!storeId) { res.status(400).json({ error: "المتجر غير موجود" }); return; }
 
@@ -243,12 +261,13 @@ router.get("/links/resolve/:slug", async (req: Request<{ slug: string }>, res: R
   const link = await prisma.storeLink.findUnique({
     where: { slug: String(req.params.slug) },
     include: {
-      store: { select: { ref: true, tenantId: true } },
+      store: { select: { ref: true, tenantId: true, active: true } },
       seller: { select: { id: true, name: true } },
       landingPage: { select: { id: true, slug: true } },
     },
   });
   if (!link) { res.status(404).json({ error: "Link not found" }); return; }
+  if (!link.store?.active) { res.status(404).json({ error: "المتجر غير متاح حالياً" }); return; }
   await prisma.storeLink.update({ where: { id: link.id }, data: { clicks: { increment: 1 } } });
   res.json({
     id: link.id,

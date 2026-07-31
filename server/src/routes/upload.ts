@@ -17,25 +17,60 @@ const storage = multer.diskStorage({
   },
 });
 
+const ALLOWED_EXT = new Set([".jpg", ".jpeg", ".png", ".webp", ".gif", ".avif"]);
+
 const upload = multer({
   storage,
   limits: { fileSize: 5 * 1024 * 1024 },
   fileFilter: (_req, file, cb) => {
-    if (file.mimetype.startsWith("image/")) cb(null, true);
-    else cb(new Error("Only images allowed"));
+    const ext = path.extname(file.originalname).toLowerCase();
+    if (!ALLOWED_EXT.has(ext)) {
+      cb(new Error("Only image files are allowed"));
+      return;
+    }
+    cb(null, true);
   },
 });
+
+const SVG_SIGNATURES: string[] = [
+  "<svg",
+  "<?xml",
+  "<!DOCTYPE svg",
+  "<?xml-stylesheet",
+];
+
+function looksLikeSvg(buf: Buffer): boolean {
+  const head = buf.subarray(0, 512).toString("utf8").toLowerCase().trimStart();
+  if (head.startsWith("\x89PNG") || head.startsWith("GIF8") || head.startsWith("RIFF") || head.startsWith("BM")) return false;
+  for (const sig of SVG_SIGNATURES) {
+    if (head.startsWith(sig)) return true;
+  }
+  if (head.includes("<svg")) return true;
+  return false;
+}
 
 const router = Router();
 router.use(authMiddleware);
 
-router.post("/", upload.single("image"), (req: Request, res: Response) => {
-  if (!req.file) {
-    res.status(400).json({ error: "No file uploaded" });
-    return;
-  }
-  const url = `/uploads/${req.file.filename}`;
-  res.json({ url });
+router.post("/", (req: Request, res: Response) => {
+  upload.single("image")(req, res, (err: any) => {
+    if (err) {
+      res.status(400).json({ error: err.message || "Upload failed" });
+      return;
+    }
+    if (!req.file) {
+      res.status(400).json({ error: "No file uploaded" });
+      return;
+    }
+    const buf = fs.readFileSync(req.file.path);
+    if (looksLikeSvg(buf)) {
+      fs.unlink(req.file.path, () => {});
+      res.status(400).json({ error: "SVG files are not allowed" });
+      return;
+    }
+    const url = `/uploads/${req.file.filename}`;
+    res.json({ url });
+  });
 });
 
 export default router;

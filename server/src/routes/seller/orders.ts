@@ -2,14 +2,18 @@ import { Router, Request, Response } from "express";
 import { z } from "zod";
 import { prisma } from "../../utils/prisma.js";
 import { authMiddleware } from "../../middleware/auth.js";
-import { getAdminStoreId } from "../../utils/storeHelper.js";
+import { requireStore, requirePermission } from "../../middleware/permission.js";
 
 function qs(val: unknown): string {
   return typeof val === "string" ? val : "";
 }
 
 const router = Router();
-router.use(authMiddleware);
+router.use(authMiddleware, requireStore);
+
+function storeWhere(req: Request): { storeId: string } | {} {
+  return req.storeId ? { storeId: req.storeId } : {};
+}
 
 router.get("/", async (req: Request, res: Response) => {
   const page = Math.max(1, parseInt(qs(req.query.page)) || 1);
@@ -18,8 +22,7 @@ router.get("/", async (req: Request, res: Response) => {
   const status = qs(req.query.status);
   const phone = qs(req.query.phone);
 
-  const storeId = await getAdminStoreId(req.admin!);
-  const where: any = storeId ? { storeId } : {};
+  const where: any = storeWhere(req);
   if (search) where.customerName = { contains: search };
   if (phone) where.phone = { contains: phone };
   const validStatuses = ["NEW", "CONTACTED", "PROCESSING", "SHIPPED", "DELIVERED", "CANCELLED", "RETURNED"];
@@ -43,9 +46,7 @@ router.get("/", async (req: Request, res: Response) => {
 });
 
 router.get("/:id", async (req: Request<{ id: string }>, res: Response) => {
-  const storeId = await getAdminStoreId(req.admin!);
-  const where: any = { id: String(req.params.id) };
-  if (storeId) where.storeId = storeId;
+  const where: any = { id: String(req.params.id), ...storeWhere(req) };
   const order = await prisma.order.findFirst({
     where,
     include: { items: true },
@@ -57,7 +58,7 @@ router.get("/:id", async (req: Request<{ id: string }>, res: Response) => {
   res.json(order);
 });
 
-router.patch("/:id/status", async (req: Request<{ id: string }>, res: Response) => {
+router.patch("/:id/status", requirePermission("orders", "edit"), async (req: Request<{ id: string }>, res: Response) => {
   const statusUpdateSchema = z.object({
     status: z.enum(["NEW", "CONTACTED", "PROCESSING", "SHIPPED", "DELIVERED", "CANCELLED", "RETURNED"]),
   });
@@ -68,9 +69,7 @@ router.patch("/:id/status", async (req: Request<{ id: string }>, res: Response) 
     return;
   }
 
-  const storeId = await getAdminStoreId(req.admin!);
-  const where: any = { id: String(req.params.id) };
-  if (storeId) where.storeId = storeId;
+  const where: any = { id: String(req.params.id), ...storeWhere(req) };
   const order = await prisma.order.findFirst({
     where,
     include: { items: true },
@@ -87,10 +86,8 @@ router.patch("/:id/status", async (req: Request<{ id: string }>, res: Response) 
   res.json(updated);
 });
 
-router.delete("/:id", async (req: Request<{ id: string }>, res: Response) => {
-  const storeId = await getAdminStoreId(req.admin!);
-  const where: any = { id: String(req.params.id) };
-  if (storeId) where.storeId = storeId;
+router.delete("/:id", requirePermission("orders", "delete"), async (req: Request<{ id: string }>, res: Response) => {
+  const where: any = { id: String(req.params.id), ...storeWhere(req) };
   const order = await prisma.order.findFirst({
     where,
     include: { items: true },

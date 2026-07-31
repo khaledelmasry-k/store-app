@@ -1,19 +1,19 @@
 import { Router, Request, Response } from "express";
 import { prisma } from "../utils/prisma.js";
 import { authMiddleware } from "../middleware/auth.js";
-import { getAdminStoreId } from "../utils/storeHelper.js";
+import { requireStore } from "../middleware/permission.js";
 import { parseJsonField } from "../utils/parseJson.js";
 
 const router = Router();
-router.use(authMiddleware);
+router.use(authMiddleware, requireStore);
 
 function qs(val: unknown): string { return typeof val === "string" ? val : ""; }
-function num(val: unknown): number | undefined { const n = parseInt(qs(val)); return isNaN(n) ? undefined : n; }
 
-function buildWhere(req: Request, adminRole: string, storeId: string | null) {
+function buildWhere(req: Request) {
   const where: any = {};
-  if (adminRole !== "super_admin" && storeId) {
-    where.storeId = storeId;
+  // Non-super-admins are ALWAYS scoped to their store (requireStore guarantees a storeId).
+  if (req.admin!.role !== "super_admin") {
+    where.storeId = req.storeId || "__none__";
   } else {
     if (qs(req.query.tenantId)) where.tenantId = qs(req.query.tenantId);
     if (qs(req.query.storeId)) where.storeId = qs(req.query.storeId);
@@ -35,13 +35,12 @@ function buildWhere(req: Request, adminRole: string, storeId: string | null) {
 }
 
 router.get("/overview", async (req: Request, res: Response) => {
-  const storeId = await getAdminStoreId(req.admin!);
-  const where = buildWhere(req, req.admin!.role, storeId);
+  const where = buildWhere(req);
 
   const [orders, products] = await Promise.all([
     prisma.order.findMany({ where, select: { totalPrice: true, status: true, createdAt: true, items: true, sellerId: true } }),
     prisma.product.findMany({
-      where: storeId ? { storeId } : {},
+      where: req.admin!.role !== "super_admin" ? { storeId: req.storeId || "__none__" } : {},
       select: { id: true, name: true, price: true },
     }),
   ]);
@@ -89,9 +88,8 @@ router.get("/overview", async (req: Request, res: Response) => {
 });
 
 router.get("/daily", async (req: Request, res: Response) => {
-  const storeId = await getAdminStoreId(req.admin!);
   const days = Math.min(90, Math.max(1, parseInt(qs(req.query.days)) || 30));
-  const where = buildWhere(req, req.admin!.role, storeId);
+  const where = buildWhere(req);
 
   const now = new Date();
   const dateFrom = qs(req.query.dateFrom);
@@ -141,8 +139,7 @@ router.get("/daily", async (req: Request, res: Response) => {
 });
 
 router.get("/top-products", async (req: Request, res: Response) => {
-  const storeId = await getAdminStoreId(req.admin!);
-  const where = buildWhere(req, req.admin!.role, storeId);
+  const where = buildWhere(req);
   const orders = await prisma.order.findMany({ where, select: { items: true } });
   const countMap: Record<string, { name: string; quantity: number; revenue: number }> = {};
   for (const o of orders) {
@@ -158,8 +155,7 @@ router.get("/top-products", async (req: Request, res: Response) => {
 });
 
 router.get("/seller-performance", async (req: Request, res: Response) => {
-  const storeId = await getAdminStoreId(req.admin!);
-  const where = buildWhere(req, req.admin!.role, storeId);
+  const where = buildWhere(req);
   const orders = await prisma.order.findMany({ where, select: { sellerId: true, totalPrice: true, status: true, createdAt: true } });
   const confirmedStatuses = ["DELIVERED", "SHIPPED", "PROCESSING", "CONTACTED"];
   const perf: Record<string, { orders: number; revenue: number; confirmed: number }> = {};
@@ -181,8 +177,7 @@ router.get("/seller-performance", async (req: Request, res: Response) => {
 });
 
 router.get("/campaigns", async (req: Request, res: Response) => {
-  const storeId = await getAdminStoreId(req.admin!);
-  const where = buildWhere(req, req.admin!.role, storeId);
+  const where = buildWhere(req);
   const orders = await prisma.order.findMany({ where, select: { utmCampaign: true, totalPrice: true, status: true } });
   const confirmedStatuses = ["DELIVERED", "SHIPPED", "PROCESSING", "CONTACTED"];
   const campaigns: Record<string, { orders: number; revenue: number }> = {};
@@ -196,8 +191,7 @@ router.get("/campaigns", async (req: Request, res: Response) => {
 });
 
 router.get("/traffic-sources", async (req: Request, res: Response) => {
-  const storeId = await getAdminStoreId(req.admin!);
-  const where = buildWhere(req, req.admin!.role, storeId);
+  const where = buildWhere(req);
   const orders = await prisma.order.findMany({ where, select: { utmSource: true } });
   const sources: Record<string, number> = {};
   for (const o of orders) {

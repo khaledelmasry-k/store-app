@@ -2,9 +2,10 @@ import { Router, Request, Response } from "express";
 import { z } from "zod";
 import { prisma } from "../../utils/prisma.js";
 import { authMiddleware } from "../../middleware/auth.js";
+import { requireStore, requirePermission } from "../../middleware/permission.js";
 
 const router = Router();
-router.use(authMiddleware);
+router.use(authMiddleware, requireStore);
 
 const storeLinkSchema = z.object({
   slug: z.string().min(1),
@@ -20,13 +21,7 @@ const storeLinkSchema = z.object({
 });
 
 router.get("/", async (req: Request, res: Response) => {
-  const storeId = await (async (admin: any): Promise<string | null> => {
-    if (admin.role === "super_admin") return null;
-    const store = await prisma.store.findFirst({ where: { adminId: admin.adminId } });
-    return store?.id ?? null;
-  })(req.admin!);
-
-  const where = storeId ? { storeId } : {};
+  const where = req.storeId ? { storeId: req.storeId } : {};
   const storeLinks = await prisma.storeLink.findMany({
     where,
     orderBy: { createdAt: "desc" },
@@ -35,20 +30,14 @@ router.get("/", async (req: Request, res: Response) => {
   res.json(storeLinks);
 });
 
-router.post("/", async (req: Request, res: Response) => {
+router.post("/", requirePermission("store-links", "create"), async (req: Request, res: Response) => {
   const parsed = storeLinkSchema.safeParse(req.body);
   if (!parsed.success) {
     res.status(400).json({ error: "Invalid input", details: parsed.error.flatten() });
     return;
   }
 
-  const storeId = await (async (admin: any): Promise<string | null> => {
-    if (admin.role === "super_admin") return null;
-    const store = await prisma.store.findFirst({ where: { adminId: admin.adminId } });
-    return store?.id ?? null;
-  })(req.admin!);
-
-  if (!storeId) {
+  if (!req.storeId) {
     res.status(403).json({ error: "Store not found or not authorized" });
     return;
   }
@@ -71,27 +60,21 @@ router.post("/", async (req: Request, res: Response) => {
       utmMedium: parsed.data.utmMedium ?? null,
       utmCampaign: parsed.data.utmCampaign ?? null,
       stats: parsed.data.stats ?? {},
-      storeId,
+      storeId: req.storeId,
     },
   });
   res.status(201).json(storeLink);
 });
 
-router.patch("/:id", async (req: Request<{ id: string }>, res: Response) => {
+router.patch("/:id", requirePermission("store-links", "edit"), async (req: Request<{ id: string }>, res: Response) => {
   const parsed = storeLinkSchema.partial().safeParse(req.body);
   if (!parsed.success) {
     res.status(400).json({ error: "Invalid input", details: parsed.error.flatten() });
     return;
   }
 
-  const storeId = await (async (admin: any): Promise<string | null> => {
-    if (admin.role === "super_admin") return null;
-    const store = await prisma.store.findFirst({ where: { adminId: admin.adminId } });
-    return store?.id ?? null;
-  })(req.admin!);
-
   const where: any = { id: String(req.params.id) };
-  if (storeId) where.storeId = storeId;
+  if (req.storeId) where.storeId = req.storeId;
 
   const existingStoreLink = await prisma.storeLink.findFirst({ where });
   if (!existingStoreLink) {
@@ -106,15 +89,9 @@ router.patch("/:id", async (req: Request<{ id: string }>, res: Response) => {
   res.json(updatedStoreLink);
 });
 
-router.delete("/:id", async (req: Request<{ id: string }>, res: Response) => {
-  const storeId = await (async (admin: any): Promise<string | null> => {
-    if (admin.role === "super_admin") return null;
-    const store = await prisma.store.findFirst({ where: { adminId: admin.adminId } });
-    return store?.id ?? null;
-  })(req.admin!);
-
+router.delete("/:id", requirePermission("store-links", "delete"), async (req: Request<{ id: string }>, res: Response) => {
   const where: any = { id: String(req.params.id) };
-  if (storeId) where.storeId = storeId;
+  if (req.storeId) where.storeId = req.storeId;
 
   const existingStoreLink = await prisma.storeLink.findFirst({ where });
   if (!existingStoreLink) {

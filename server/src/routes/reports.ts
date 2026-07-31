@@ -1,16 +1,15 @@
 import { Router, Request, Response } from "express";
 import { prisma } from "../utils/prisma.js";
 import { authMiddleware } from "../middleware/auth.js";
-import { getAdminStoreId } from "../utils/storeHelper.js";
-import { parseJsonField } from "../utils/parseJson.js";
+import { requireStore } from "../middleware/permission.js";
 
 const router = Router();
-router.use(authMiddleware);
+router.use(authMiddleware, requireStore);
 
 function qs(val: unknown): string { return typeof val === "string" ? val : ""; }
 
-function buildWhere(req: Request, storeId: string | null) {
-  const where: any = storeId ? { storeId } : {};
+function buildWhere(req: Request) {
+  const where: any = req.admin!.role !== "super_admin" ? { storeId: req.storeId || "__none__" } : {};
   const dateFrom = qs(req.query.dateFrom);
   const dateTo = qs(req.query.dateTo);
   if (dateFrom || dateTo) {
@@ -27,8 +26,7 @@ function buildWhere(req: Request, storeId: string | null) {
 }
 
 router.get("/summary", async (req: Request, res: Response) => {
-  const storeId = await getAdminStoreId(req.admin!);
-  const where = buildWhere(req, storeId);
+  const where = buildWhere(req);
 
   const orders = await prisma.order.findMany({ where, select: { totalPrice: true, status: true, createdAt: true } });
   const confirmedStatuses = ["DELIVERED", "SHIPPED", "PROCESSING", "CONTACTED"];
@@ -45,9 +43,8 @@ router.get("/summary", async (req: Request, res: Response) => {
 });
 
 router.get("/period", async (req: Request, res: Response) => {
-  const storeId = await getAdminStoreId(req.admin!);
   const period = qs(req.query.period) || "daily"; // daily | weekly | monthly
-  const where = buildWhere(req, storeId);
+  const where = buildWhere(req);
 
   const orders = await prisma.order.findMany({
     where,
@@ -80,8 +77,7 @@ router.get("/period", async (req: Request, res: Response) => {
 });
 
 router.get("/export-csv", async (req: Request, res: Response) => {
-  const storeId = await getAdminStoreId(req.admin!);
-  const where = storeId ? { storeId } : {};
+  const where = req.admin!.role !== "super_admin" ? { storeId: req.storeId || "__none__" } : {};
 
   const orders = await prisma.order.findMany({
     where,

@@ -1,18 +1,16 @@
 import { Router, Request, Response } from "express";
 import { prisma } from "../../utils/prisma.js";
 import { authMiddleware } from "../../middleware/auth.js";
-import { getAdminStoreId } from "../../utils/storeHelper.js";
+import { requireStore } from "../../middleware/permission.js";
 import { parseJsonField } from "../../utils/parseJson.js";
 import { computeTotalStock } from "../../utils/stock.js";
 
 const router = Router();
-router.use(authMiddleware);
+router.use(authMiddleware, requireStore);
 
 router.get("/", async (req: Request, res: Response) => {
-  const storeId = await getAdminStoreId(req.admin!);
   const statuses = ["NEW", "CONTACTED", "PROCESSING", "SHIPPED", "DELIVERED", "CANCELLED", "RETURNED"] as const;
-
-  const where = storeId ? { storeId } : { createdBy: req.admin!.username };
+  const where = req.storeId ? { storeId: req.storeId } : {};
 
   const counts = await Promise.all(
     statuses.map((s) => prisma.order.count({ where: { ...where, status: s } }))
@@ -35,14 +33,24 @@ router.get("/", async (req: Request, res: Response) => {
     for (const item of o.items) totalQuantity += item.quantity;
   }
 
-  const storeName = storeId ? (await prisma.store.findUnique({ where: { id: storeId } }))?.name : "";
+  const storeName = req.storeId ? (await prisma.store.findUnique({ where: { id: req.storeId } }))?.name : "";
 
-  const product = await prisma.product.findFirst({
-    where: storeId ? { storeId } : {},
-    orderBy: { updatedAt: "desc" },
+  const products = await prisma.product.findMany({
+    where: req.storeId ? { storeId: req.storeId } : {},
+    select: { variantStock: true },
   });
-
-  const variantStock = parseJsonField<Record<string, Record<string, number>>>(product?.variantStock ?? "{}", {});
+  let totalStock = 0;
+  const variantStock: Record<string, Record<string, number>> = {};
+  for (const p of products) {
+    const vs = parseJsonField<Record<string, Record<string, number>>>(p.variantStock, {});
+    for (const [color, sizes] of Object.entries(vs)) {
+      if (!variantStock[color]) variantStock[color] = {};
+      for (const [size, qty] of Object.entries(sizes)) {
+        variantStock[color][size] = (variantStock[color][size] || 0) + qty;
+      }
+    }
+    totalStock += computeTotalStock(vs);
+  }
 
   res.json({
     totalOrders,
@@ -56,7 +64,7 @@ router.get("/", async (req: Request, res: Response) => {
     expectedRevenue,
     confirmedRevenue,
     totalQuantity,
-    totalStock: computeTotalStock(variantStock),
+    totalStock,
     variantStock,
     storeName,
     isSuperAdmin: req.admin!.role === "super_admin",

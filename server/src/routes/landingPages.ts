@@ -2,10 +2,10 @@ import { Router, Request, Response } from "express";
 import { z } from "zod";
 import { prisma } from "../utils/prisma.js";
 import { authMiddleware } from "../middleware/auth.js";
-import { getAdminStoreId } from "../utils/storeHelper.js";
+import { requireStore, requirePermission } from "../middleware/permission.js";
 
 const router = Router();
-router.use(authMiddleware);
+router.use(authMiddleware, requireStore);
 
 const pageSchema = z.object({
   name: z.string().min(1),
@@ -15,13 +15,12 @@ const pageSchema = z.object({
 });
 
 router.get("/", async (req: Request, res: Response) => {
-  const storeId = await getAdminStoreId(req.admin!);
-  if (!storeId) {
+  if (!req.storeId) {
     res.status(403).json({ error: "Store not found" });
     return;
   }
   const pages = await prisma.landingPage.findMany({
-    where: { storeId },
+    where: { storeId: req.storeId },
     orderBy: { createdAt: "desc" },
     select: { id: true, name: true, slug: true, published: true, createdAt: true, updatedAt: true },
   });
@@ -29,10 +28,9 @@ router.get("/", async (req: Request, res: Response) => {
 });
 
 router.get("/:id", async (req: Request, res: Response) => {
-  const storeId = await getAdminStoreId(req.admin!);
-  const page = await prisma.landingPage.findFirst({
-    where: { id: String(req.params.id), ...(storeId ? { storeId } : {}) },
-  });
+  const where: any = { id: String(req.params.id) };
+  if (req.storeId) where.storeId = req.storeId;
+  const page = await prisma.landingPage.findFirst({ where });
   if (!page) {
     res.status(404).json({ error: "Page not found" });
     return;
@@ -41,14 +39,13 @@ router.get("/:id", async (req: Request, res: Response) => {
   res.json({ ...page, sections });
 });
 
-router.post("/", async (req: Request, res: Response) => {
+router.post("/", requirePermission("landing-pages", "create"), async (req: Request, res: Response) => {
   const parsed = pageSchema.safeParse(req.body);
   if (!parsed.success) {
     res.status(400).json({ error: "Invalid input", details: parsed.error.flatten() });
     return;
   }
-  const storeId = await getAdminStoreId(req.admin!);
-  if (!storeId) {
+  if (!req.storeId) {
     res.status(403).json({ error: "Store not found" });
     return;
   }
@@ -58,21 +55,20 @@ router.post("/", async (req: Request, res: Response) => {
     return;
   }
   const page = await prisma.landingPage.create({
-    data: { storeId, name: parsed.data.name, slug: parsed.data.slug, sections: parsed.data.sections || "[]" },
+    data: { storeId: req.storeId, name: parsed.data.name, slug: parsed.data.slug, sections: parsed.data.sections || "[]" },
   });
   res.status(201).json(page);
 });
 
-router.put("/:id", async (req: Request, res: Response) => {
+router.put("/:id", requirePermission("landing-pages", "edit"), async (req: Request, res: Response) => {
   const parsed = pageSchema.partial().safeParse(req.body);
   if (!parsed.success) {
     res.status(400).json({ error: "Invalid input", details: parsed.error.flatten() });
     return;
   }
-  const storeId = await getAdminStoreId(req.admin!);
-  const page = await prisma.landingPage.findFirst({
-    where: { id: String(req.params.id), ...(storeId ? { storeId } : {}) },
-  });
+  const where: any = { id: String(req.params.id) };
+  if (req.storeId) where.storeId = req.storeId;
+  const page = await prisma.landingPage.findFirst({ where });
   if (!page) {
     res.status(404).json({ error: "Page not found" });
     return;
@@ -91,11 +87,10 @@ router.put("/:id", async (req: Request, res: Response) => {
   res.json({ ...updated, sections });
 });
 
-router.delete("/:id", async (req: Request, res: Response) => {
-  const storeId = await getAdminStoreId(req.admin!);
-  const page = await prisma.landingPage.findFirst({
-    where: { id: String(req.params.id), ...(storeId ? { storeId } : {}) },
-  });
+router.delete("/:id", requirePermission("landing-pages", "delete"), async (req: Request, res: Response) => {
+  const where: any = { id: String(req.params.id) };
+  if (req.storeId) where.storeId = req.storeId;
+  const page = await prisma.landingPage.findFirst({ where });
   if (!page) {
     res.status(404).json({ error: "Page not found" });
     return;
@@ -104,11 +99,10 @@ router.delete("/:id", async (req: Request, res: Response) => {
   res.json({ success: true });
 });
 
-router.post("/:id/publish", async (req: Request, res: Response) => {
-  const storeId = await getAdminStoreId(req.admin!);
-  const page = await prisma.landingPage.findFirst({
-    where: { id: String(req.params.id), ...(storeId ? { storeId } : {}) },
-  });
+router.post("/:id/publish", requirePermission("landing-pages", "edit"), async (req: Request, res: Response) => {
+  const where: any = { id: String(req.params.id) };
+  if (req.storeId) where.storeId = req.storeId;
+  const page = await prisma.landingPage.findFirst({ where });
   if (!page) {
     res.status(404).json({ error: "Page not found" });
     return;
@@ -123,9 +117,9 @@ router.post("/:id/publish", async (req: Request, res: Response) => {
 router.get("/public/:slug", async (req: Request<{ slug: string }>, res: Response) => {
   const page = await prisma.landingPage.findUnique({
     where: { slug: String(req.params.slug), published: true },
-    include: { store: { select: { name: true, tagLine: true, logo: true, primaryColor: true } } },
+    include: { store: { select: { name: true, tagLine: true, logo: true, primaryColor: true, active: true } } },
   });
-  if (!page) {
+  if (!page || !page.store.active) {
     res.status(404).json({ error: "Page not found or not published" });
     return;
   }

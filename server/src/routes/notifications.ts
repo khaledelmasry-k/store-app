@@ -1,21 +1,13 @@
 import { Router, Request, Response } from "express";
 import { prisma } from "../utils/prisma.js";
 import { authMiddleware } from "../middleware/auth.js";
-import { getAdminStoreId } from "../utils/storeHelper.js";
+import { requireStore, getReqTenantId } from "../middleware/permission.js";
 
 const router = Router();
-router.use(authMiddleware);
-
-async function getTenantId(req: Request): Promise<string | null> {
-  if (req.admin?.role === "super_admin") return null;
-  const storeId = await getAdminStoreId(req.admin!);
-  if (!storeId) return null;
-  const store = await prisma.store.findUnique({ where: { id: storeId }, select: { tenantId: true } });
-  return store?.tenantId || null;
-}
+router.use(authMiddleware, requireStore);
 
 router.get("/", async (req: Request, res: Response) => {
-  const tenantId = await getTenantId(req);
+  const tenantId = await getReqTenantId(req);
   if (!tenantId) { res.json({ notifications: [], unread: 0 }); return; }
 
   const limit = Math.min(50, parseInt(String(req.query.limit)) || 20);
@@ -33,7 +25,7 @@ router.get("/", async (req: Request, res: Response) => {
 });
 
 router.patch("/:id/read", async (req: Request, res: Response) => {
-  const tenantId = await getTenantId(req);
+  const tenantId = await getReqTenantId(req);
   if (!tenantId) { res.status(403).json({ error: "No tenant" }); return; }
 
   await prisma.notification.updateMany({
@@ -44,7 +36,7 @@ router.patch("/:id/read", async (req: Request, res: Response) => {
 });
 
 router.patch("/read-all", async (req: Request, res: Response) => {
-  const tenantId = await getTenantId(req);
+  const tenantId = await getReqTenantId(req);
   if (!tenantId) { res.status(403).json({ error: "No tenant" }); return; }
 
   await prisma.notification.updateMany({

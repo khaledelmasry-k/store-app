@@ -2,20 +2,19 @@ import { Router, Request, Response } from "express";
 import { z } from "zod";
 import { prisma } from "../utils/prisma.js";
 import { authMiddleware } from "../middleware/auth.js";
-import { getAdminStoreId } from "../utils/storeHelper.js";
+import { requireStore, requirePermission } from "../middleware/permission.js";
 import { parseJsonField } from "../utils/parseJson.js";
 
 const router = Router();
-router.use(authMiddleware);
+router.use(authMiddleware, requireStore);
 
-async function getStore(req: Request, res: Response) {
-  const storeId = await getAdminStoreId(req.admin!);
-  if (!storeId) { res.status(403).json({ error: "Store not found" }); return null; }
-  return storeId;
+function storeOr403(req: Request, res: Response): string | null {
+  if (!req.storeId) { res.status(403).json({ error: "Store not found" }); return null; }
+  return req.storeId;
 }
 
 router.get("/", async (req: Request, res: Response) => {
-  const storeId = await getStore(req, res);
+  const storeId = storeOr403(req, res);
   if (!storeId) return;
   const store = await prisma.store.findUnique({ where: { id: storeId } });
   if (!store) { res.status(404).json({ error: "Store not found" }); return; }
@@ -33,10 +32,10 @@ const storeUpdateSchema = z.object({
   primaryColor: z.string().optional().nullable(),
 });
 
-router.put("/store", async (req: Request, res: Response) => {
+router.put("/store", requirePermission("settings", "edit"), async (req: Request, res: Response) => {
   const parsed = storeUpdateSchema.safeParse(req.body);
   if (!parsed.success) { res.status(400).json({ error: "Invalid input", details: parsed.error.flatten() }); return; }
-  const storeId = await getStore(req, res);
+  const storeId = storeOr403(req, res);
   if (!storeId) return;
   const updated = await prisma.store.update({ where: { id: storeId }, data: parsed.data });
   res.json(updated);
@@ -59,10 +58,10 @@ const settingsUpdateSchema = z.object({
   domain: z.object({ customDomain: z.string().optional(), sslEnabled: z.boolean().optional() }).optional(),
 });
 
-router.put("/settings", async (req: Request, res: Response) => {
+router.put("/settings", requirePermission("settings", "edit"), async (req: Request, res: Response) => {
   const parsed = settingsUpdateSchema.safeParse(req.body);
   if (!parsed.success) { res.status(400).json({ error: "Invalid input", details: parsed.error.flatten() }); return; }
-  const storeId = await getStore(req, res);
+  const storeId = storeOr403(req, res);
   if (!storeId) return;
   const store = await prisma.store.findUnique({ where: { id: storeId }, select: { settings: true } });
   if (!store) { res.status(404).json({ error: "Store not found" }); return; }

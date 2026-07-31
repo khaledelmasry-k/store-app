@@ -9,6 +9,7 @@ export interface AuthPayload {
   email: string;
   role: string;
   tenantId?: string;
+  storeId?: string;
 }
 
 declare global {
@@ -16,6 +17,7 @@ declare global {
     interface Request {
       admin?: AuthPayload;
       tenantId?: string | null;
+      storeId?: string | null;
     }
   }
 }

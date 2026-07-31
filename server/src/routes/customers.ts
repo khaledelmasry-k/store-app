@@ -1,13 +1,16 @@
 import { Router, Request, Response } from "express";
 import { prisma } from "../utils/prisma.js";
 import { authMiddleware } from "../middleware/auth.js";
-import { getAdminStoreId } from "../utils/storeHelper.js";
+import { requireStore, requirePermission } from "../middleware/permission.js";
 
 const router = Router();
-router.use(authMiddleware);
+router.use(authMiddleware, requireStore);
 
 router.get("/", async (req: Request, res: Response) => {
-  const storeId = await getAdminStoreId(req.admin!);
+  if (!req.storeId) {
+    res.status(403).json({ error: "Store not found" });
+    return;
+  }
   const page = Math.max(1, parseInt(String(req.query.page)) || 1);
   const limit = Math.min(100, Math.max(1, parseInt(String(req.query.limit)) || 20));
   const search = String(req.query.search || "");
@@ -15,7 +18,7 @@ router.get("/", async (req: Request, res: Response) => {
   const sortDir = String(req.query.sortDir || "desc");
   const segment = String(req.query.segment || "");
 
-  const where: any = storeId ? { storeId } : {};
+  const where: any = { storeId: req.storeId };
   if (search) {
     where.OR = [
       { customerName: { contains: search } },
@@ -83,9 +86,12 @@ router.get("/", async (req: Request, res: Response) => {
 });
 
 router.get("/:phone", async (req: Request<{ phone: string }>, res: Response) => {
-  const storeId = await getAdminStoreId(req.admin!);
+  if (!req.storeId) {
+    res.status(403).json({ error: "Store not found" });
+    return;
+  }
   const phone = String(req.params.phone);
-  const where: any = storeId ? { storeId, phone } : { phone };
+  const where: any = { storeId: req.storeId, phone };
   const orders = await prisma.order.findMany({
     where, include: { items: true },
     orderBy: { createdAt: "desc" },
@@ -108,18 +114,17 @@ router.get("/:phone", async (req: Request<{ phone: string }>, res: Response) => 
   });
 });
 
-router.post("/:phone/notes", async (req: Request<{ phone: string }>, res: Response) => {
+router.post("/:phone/notes", requirePermission("customers", "edit"), async (req: Request<{ phone: string }>, res: Response) => {
   const { note } = req.body;
   if (!note) { res.status(400).json({ error: "Note is required" }); return; }
+  if (!req.storeId) { res.status(403).json({ error: "Store not found" }); return; }
   const phone = String(req.params.phone);
-  const storeId = await getAdminStoreId(req.admin!);
-  const where: any = storeId ? { storeId, phone } : { phone };
-  const lastOrder = await prisma.order.findFirst({ where, orderBy: { createdAt: "desc" }, select: { id: true } });
+  const lastOrder = await prisma.order.findFirst({ where: { storeId: req.storeId, phone }, orderBy: { createdAt: "desc" }, select: { id: true } });
   if (!lastOrder) { res.status(404).json({ error: "Customer not found" }); return; }
   res.json({ success: true, note });
 });
 
-router.put("/:phone/segment", async (req: Request<{ phone: string }>, res: Response) => {
+router.put("/:phone/segment", requirePermission("customers", "edit"), async (req: Request<{ phone: string }>, res: Response) => {
   const { segment } = req.body;
   if (!segment) { res.status(400).json({ error: "Segment is required" }); return; }
   res.json({ success: true, phone: req.params.phone, segment });

@@ -13,7 +13,7 @@ const storeSchema = z.object({
   active: z.boolean().optional(),
 });
 
-router.get("/stores", async (_req: Request, res: Response) => {
+router.get("/stores", requireSuperAdmin, async (_req: Request, res: Response) => {
   const stores = await prisma.store.findMany({ orderBy: { createdAt: "asc" } });
   res.json(stores);
 });

@@ -2,7 +2,7 @@ import { Router, Request, Response } from "express";
 import { z } from "zod";
 import { prisma } from "../utils/prisma.js";
 import { authMiddleware } from "../middleware/auth.js";
-import { getAdminStoreId } from "../utils/storeHelper.js";
+import { requireStore, requirePermission } from "../middleware/permission.js";
 import { parseJsonField } from "../utils/parseJson.js";
 import { computeTotalStock } from "../utils/stock.js";
 
@@ -11,7 +11,13 @@ function qs(val: unknown): string {
 }
 
 const router = Router();
-router.use(authMiddleware);
+router.use(authMiddleware, requireStore);
+
+function storeWhere(req: Request): { storeId: string } | {} {
+  return req.storeId ? { storeId: req.storeId } : {};
+}
+
+const VALID_STATUSES = ["NEW", "CONTACTED", "PROCESSING", "SHIPPED", "DELIVERED", "CANCELLED", "RETURNED"] as const;
 
 router.get("/", async (req: Request, res: Response) => {
   const page = Math.max(1, parseInt(qs(req.query.page)) || 1);
@@ -21,12 +27,10 @@ router.get("/", async (req: Request, res: Response) => {
   const phone = qs(req.query.phone);
   const ref = qs(req.query.ref);
 
-  const storeId = await getAdminStoreId(req.admin!);
-  const where: any = storeId ? { storeId } : {};
+  const where: any = storeWhere(req);
   if (search) where.customerName = { contains: search };
   if (phone) where.phone = { contains: phone };
-  const validStatuses = ["NEW", "CONTACTED", "PROCESSING", "SHIPPED", "DELIVERED", "CANCELLED", "RETURNED"];
-  if (status && validStatuses.includes(status)) where.status = status;
+  if (status && VALID_STATUSES.includes(status as any)) where.status = status;
   if (ref) where.createdBy = ref;
 
   const [orders, total] = await Promise.all([
@@ -47,7 +51,6 @@ router.get("/", async (req: Request, res: Response) => {
 });
 
 async function storeStats(storeId: string) {
-  const statuses = ["NEW", "CONTACTED", "PROCESSING", "SHIPPED", "DELIVERED", "CANCELLED", "RETURNED"] as const;
   const orders = await prisma.order.findMany({ where: { storeId }, include: { items: true } });
   const counts: Record<string, number> = {};
   let expectedRevenue = 0;
@@ -60,7 +63,7 @@ async function storeStats(storeId: string) {
     for (const item of o.items) totalQuantity += item.quantity;
   }
   const s = {} as Record<string, number>;
-  for (const st of statuses) s[st] = counts[st] || 0;
+  for (const st of VALID_STATUSES) s[st] = counts[st] || 0;
   return {
     totalOrders: orders.length,
     newOrders: s.NEW,
@@ -87,17 +90,35 @@ async function getRecentOrders(storeId: string | null) {
   });
 }
 
-router.get("/dashboard", async (req: Request, res: Response) => {
-  const storeId = await getAdminStoreId(req.admin!);
+// Aggregate total stock across ALL products of a store (not just the most recent one).
+async function getStoreStock(storeId: string | null) {
+  const products = await prisma.product.findMany({
+    where: storeId ? { storeId } : {},
+    select: { variantStock: true },
+  });
+  let totalStock = 0;
+  const variantStock: Record<string, Record<string, number>> = {};
+  for (const p of products) {
+    const vs = parseJsonField<Record<string, Record<string, number>>>(p.variantStock, {});
+    for (const [color, sizes] of Object.entries(vs)) {
+      if (!variantStock[color]) variantStock[color] = {};
+      for (const [size, qty] of Object.entries(sizes)) {
+        variantStock[color][size] = (variantStock[color][size] || 0) + qty;
+      }
+    }
+    totalStock += computeTotalStock(vs);
+  }
+  return { totalStock, variantStock };
+}
 
+router.get("/dashboard", async (req: Request, res: Response) => {
   if (req.admin!.role === "super_admin") {
-    const statuses = ["NEW", "CONTACTED", "PROCESSING", "SHIPPED", "DELIVERED", "CANCELLED", "RETURNED"] as const;
     const counts = await Promise.all(
-      statuses.map((s) => prisma.order.count({ where: { status: s } }))
+      VALID_STATUSES.map((s) => prisma.order.count({ where: { status: s } }))
     );
     const totalOrders = counts.reduce((a, b) => a + b, 0);
 
-    const stores = await prisma.store.findMany({ orderBy: { createdAt: "asc" }, select: { id: true, ref: true, name: true } });
+    const stores = await prisma.store.findMany({ orderBy: { createdAt: "asc" }, select: { id: true, ref: true, name: true, active: true } });
     const storeStatsData = await Promise.all(
       stores.map(async (st) => {
         const sts = await storeStats(st.id);
@@ -105,9 +126,7 @@ router.get("/dashboard", async (req: Request, res: Response) => {
       })
     );
 
-    const product = await prisma.product.findFirst({ orderBy: { updatedAt: "desc" } });
-    const variantStock = parseJsonField<Record<string, Record<string, number>>>(product?.variantStock ?? "{}", {});
-
+    const { totalStock, variantStock } = await getStoreStock(null);
     const expectedRevenue = storeStatsData.reduce((a, b) => a + b.expectedRevenue, 0);
     const confirmedRevenue = storeStatsData.reduce((a, b) => a + b.confirmedRevenue, 0);
     const recentOrders = await getRecentOrders(null);
@@ -125,7 +144,7 @@ router.get("/dashboard", async (req: Request, res: Response) => {
       confirmedRevenue,
       confirmedOrders: counts[4],
       storesStats: storeStatsData,
-      totalStock: computeTotalStock(variantStock),
+      totalStock,
       variantStock,
       recentOrders,
       isSuperAdmin: true,
@@ -133,10 +152,14 @@ router.get("/dashboard", async (req: Request, res: Response) => {
     return;
   }
 
-  const where = storeId ? { storeId } : { createdBy: req.admin!.username };
-  const statuses = ["NEW", "CONTACTED", "PROCESSING", "SHIPPED", "DELIVERED", "CANCELLED", "RETURNED"] as const;
+  const where: any = storeWhere(req);
+  if (!req.storeId) {
+    res.status(403).json({ error: "Store not found for this account" });
+    return;
+  }
+
   const counts = await Promise.all(
-    statuses.map((s) => prisma.order.count({ where: { ...where, status: s } }))
+    VALID_STATUSES.map((s) => prisma.order.count({ where: { ...where, status: s } }))
   );
   const totalOrders = counts.reduce((a, b) => a + b, 0);
 
@@ -150,12 +173,10 @@ router.get("/dashboard", async (req: Request, res: Response) => {
     for (const item of o.items) totalQuantity += item.quantity;
   }
 
-  const storeName = storeId ? (await prisma.store.findUnique({ where: { id: storeId } }))?.name : "";
+  const storeName = (await prisma.store.findUnique({ where: { id: req.storeId } }))?.name || "";
 
-  const product = await prisma.product.findFirst({ where: storeId ? { storeId } : {}, orderBy: { updatedAt: "desc" } });
-  const variantStock = parseJsonField<Record<string, Record<string, number>>>(product?.variantStock ?? "{}", {});
-
-  const recentOrders = await getRecentOrders(storeId);
+  const { totalStock, variantStock } = await getStoreStock(req.storeId);
+  const recentOrders = await getRecentOrders(req.storeId);
 
   res.json({
     totalOrders,
@@ -170,7 +191,7 @@ router.get("/dashboard", async (req: Request, res: Response) => {
     confirmedRevenue,
     confirmedOrders: counts[4],
     totalQuantity,
-    totalStock: computeTotalStock(variantStock),
+    totalStock,
     variantStock,
     storeName,
     recentOrders,
@@ -179,12 +200,11 @@ router.get("/dashboard", async (req: Request, res: Response) => {
 });
 
 router.get("/seller-stats", async (req: Request, res: Response) => {
-  const storeId = await getAdminStoreId(req.admin!);
-  if (!storeId) {
+  if (!req.storeId) {
     res.status(403).json({ error: "Store not found" });
     return;
   }
-  const sellers = await prisma.seller.findMany({ where: { storeId } });
+  const sellers = await prisma.seller.findMany({ where: { storeId: req.storeId } });
   const stats = await Promise.all(
     sellers.map(async (seller) => {
       const orders = await prisma.order.findMany({
@@ -224,9 +244,7 @@ router.get("/seller-stats", async (req: Request, res: Response) => {
 });
 
 router.get("/:id", async (req: Request<{ id: string }>, res: Response) => {
-  const storeId = await getAdminStoreId(req.admin!);
-  const where: any = { id: String(req.params.id) };
-  if (storeId) where.storeId = storeId;
+  const where: any = { id: String(req.params.id), ...storeWhere(req) };
   const order = await prisma.order.findFirst({
     where,
     include: { items: true },
@@ -239,18 +257,16 @@ router.get("/:id", async (req: Request<{ id: string }>, res: Response) => {
 });
 
 const statusUpdateSchema = z.object({
-  status: z.enum(["NEW", "CONTACTED", "PROCESSING", "SHIPPED", "DELIVERED", "CANCELLED", "RETURNED"]),
+  status: z.enum(VALID_STATUSES),
 });
 
-router.patch("/:id/status", async (req: Request<{ id: string }>, res: Response) => {
+router.patch("/:id/status", requirePermission("orders", "edit"), async (req: Request<{ id: string }>, res: Response) => {
   const parsed = statusUpdateSchema.safeParse(req.body);
   if (!parsed.success) {
     res.status(400).json({ error: "Invalid status" });
     return;
   }
-  const storeId = await getAdminStoreId(req.admin!);
-  const where: any = { id: String(req.params.id) };
-  if (storeId) where.storeId = storeId;
+  const where: any = { id: String(req.params.id), ...storeWhere(req) };
   const order = await prisma.order.findFirst({
     where,
     include: { items: true },
@@ -260,21 +276,9 @@ router.patch("/:id/status", async (req: Request<{ id: string }>, res: Response) 
     return;
   }
 
+  // Restore stock for the actual products in the order (per item.productId).
   if (parsed.data.status === "RETURNED" && order.status !== "RETURNED") {
-    const productWhere: any = {};
-    if (storeId) productWhere.storeId = storeId;
-    const product = await prisma.product.findFirst({ where: productWhere, orderBy: { updatedAt: "desc" } });
-    if (product) {
-      const variantStock = parseJsonField<Record<string, Record<string, number>>>(product.variantStock, {});
-      for (const item of order.items) {
-        if (!variantStock[item.color]) variantStock[item.color] = {};
-        variantStock[item.color][item.size] = (variantStock[item.color][item.size] ?? 0) + item.quantity;
-      }
-      await prisma.product.update({
-        where: { id: product.id },
-        data: { variantStock: JSON.stringify(variantStock) },
-      });
-    }
+    await restoreOrderStock(order.items);
   }
 
   const updated = await prisma.order.update({
@@ -284,10 +288,8 @@ router.patch("/:id/status", async (req: Request<{ id: string }>, res: Response) 
   res.json(updated);
 });
 
-router.delete("/:id", async (req: Request<{ id: string }>, res: Response) => {
-  const storeId = await getAdminStoreId(req.admin!);
-  const where: any = { id: String(req.params.id) };
-  if (storeId) where.storeId = storeId;
+router.delete("/:id", requirePermission("orders", "delete"), async (req: Request<{ id: string }>, res: Response) => {
+  const where: any = { id: String(req.params.id), ...storeWhere(req) };
   const order = await prisma.order.findFirst({
     where,
     include: { items: true },
@@ -297,23 +299,30 @@ router.delete("/:id", async (req: Request<{ id: string }>, res: Response) => {
     return;
   }
 
-  const productWhere: any = {};
-  if (storeId) productWhere.storeId = storeId;
-  const product = await prisma.product.findFirst({ where: productWhere, orderBy: { updatedAt: "desc" } });
-  if (product) {
-    const variantStock = parseJsonField<Record<string, Record<string, number>>>(product.variantStock, {});
-    for (const item of order.items) {
-      if (!variantStock[item.color]) variantStock[item.color] = {};
-      variantStock[item.color][item.size] = (variantStock[item.color][item.size] ?? 0) + item.quantity;
-    }
-    await prisma.product.update({
-      where: { id: product.id },
-      data: { variantStock: JSON.stringify(variantStock) },
-    });
-  }
-
+  await restoreOrderStock(order.items);
   await prisma.order.delete({ where: { id: String(req.params.id) } });
   res.json({ success: true });
 });
+
+// Restore stock to each product referenced by the order items (per productId).
+async function restoreOrderStock(items: Array<{ productId: string | null; color: string; size: string; quantity: number }>) {
+  const ids = [...new Set(items.filter((i) => i.productId).map((i) => i.productId!))];
+  if (ids.length === 0) return;
+  const products = await prisma.product.findMany({ where: { id: { in: ids } } });
+  for (const product of products) {
+    const vs = parseJsonField<Record<string, Record<string, number>>>(product.variantStock, {});
+    const itemGroup = items.filter((i) => i.productId === product.id);
+    if (itemGroup.length === 0) continue;
+    const newVs = JSON.parse(JSON.stringify(vs));
+    for (const item of itemGroup) {
+      if (!newVs[item.color]) newVs[item.color] = {};
+      newVs[item.color][item.size] = (newVs[item.color][item.size] ?? 0) + item.quantity;
+    }
+    await prisma.product.update({
+      where: { id: product.id },
+      data: { variantStock: JSON.stringify(newVs) },
+    });
+  }
+}
 
 export default router;

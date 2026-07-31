@@ -2,19 +2,18 @@ import { Router, Request, Response } from "express";
 import { z } from "zod";
 import { prisma } from "../utils/prisma.js";
 import { authMiddleware } from "../middleware/auth.js";
-import { getAdminStoreId } from "../utils/storeHelper.js";
+import { requireStore, requirePermission } from "../middleware/permission.js";
 
 const router = Router();
-router.use(authMiddleware);
+router.use(authMiddleware, requireStore);
 
 router.get("/", async (req: Request, res: Response) => {
-  const storeId = await getAdminStoreId(req.admin!);
-  if (!storeId) {
+  if (!req.storeId) {
     res.status(403).json({ error: "Store not found" });
     return;
   }
   const sellers = await prisma.seller.findMany({
-    where: { storeId },
+    where: { storeId: req.storeId },
     orderBy: { createdAt: "desc" },
   });
   const result = await Promise.all(
@@ -42,30 +41,28 @@ const sellerSchema = z.object({
   active: z.boolean().optional().default(true),
 });
 
-router.post("/", async (req: Request, res: Response) => {
+router.post("/", requirePermission("sellers", "create"), async (req: Request, res: Response) => {
   const parsed = sellerSchema.safeParse(req.body);
   if (!parsed.success) {
     res.status(400).json({ error: "Invalid input", details: parsed.error.flatten() });
     return;
   }
-  const storeId = await getAdminStoreId(req.admin!);
-  if (!storeId) {
+  if (!req.storeId) {
     res.status(403).json({ error: "Store not found" });
     return;
   }
-  const seller = await prisma.seller.create({ data: { ...parsed.data, storeId } });
+  const seller = await prisma.seller.create({ data: { ...parsed.data, storeId: req.storeId } });
   res.status(201).json(seller);
 });
 
-router.patch("/:id", async (req: Request<{ id: string }>, res: Response) => {
-  const storeId = await getAdminStoreId(req.admin!);
+router.patch("/:id", requirePermission("sellers", "edit"), async (req: Request<{ id: string }>, res: Response) => {
   const parsed = sellerSchema.partial().safeParse(req.body);
   if (!parsed.success) {
     res.status(400).json({ error: "Invalid input", details: parsed.error.flatten() });
     return;
   }
   const where: any = { id: String(req.params.id) };
-  if (storeId) where.storeId = storeId;
+  if (req.storeId) where.storeId = req.storeId;
   const seller = await prisma.seller.findFirst({ where });
   if (!seller) {
     res.status(404).json({ error: "Seller not found" });
@@ -75,10 +72,9 @@ router.patch("/:id", async (req: Request<{ id: string }>, res: Response) => {
   res.json(updated);
 });
 
-router.patch("/:id/permissions", async (req: Request<{ id: string }>, res: Response) => {
-  const storeId = await getAdminStoreId(req.admin!);
+router.patch("/:id/permissions", requirePermission("sellers", "edit"), async (req: Request<{ id: string }>, res: Response) => {
   const where: any = { id: String(req.params.id) };
-  if (storeId) where.storeId = storeId;
+  if (req.storeId) where.storeId = req.storeId;
   const seller = await prisma.seller.findFirst({ where });
   if (!seller) { res.status(404).json({ error: "Seller not found" }); return; }
   const { permissions } = req.body;
@@ -89,10 +85,9 @@ router.patch("/:id/permissions", async (req: Request<{ id: string }>, res: Respo
   res.json(updated);
 });
 
-router.delete("/:id", async (req: Request<{ id: string }>, res: Response) => {
-  const storeId = await getAdminStoreId(req.admin!);
+router.delete("/:id", requirePermission("sellers", "delete"), async (req: Request<{ id: string }>, res: Response) => {
   const where: any = { id: String(req.params.id) };
-  if (storeId) where.storeId = storeId;
+  if (req.storeId) where.storeId = req.storeId;
   const seller = await prisma.seller.findFirst({ where });
   if (!seller) {
     res.status(404).json({ error: "Seller not found" });

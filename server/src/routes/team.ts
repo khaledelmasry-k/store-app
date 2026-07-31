@@ -1,22 +1,13 @@
 import { Router, Request, Response } from "express";
-import { z } from "zod";
 import { prisma } from "../utils/prisma.js";
 import { authMiddleware } from "../middleware/auth.js";
-import { getAdminStoreId } from "../utils/storeHelper.js";
+import { requireStore, requirePermission, getReqTenantId } from "../middleware/permission.js";
 
 const router = Router();
-router.use(authMiddleware);
-
-async function getTenantId(req: Request): Promise<string | null> {
-  if (req.admin?.role === "super_admin") return null;
-  const storeId = await getAdminStoreId(req.admin!);
-  if (!storeId) return null;
-  const store = await prisma.store.findUnique({ where: { id: storeId }, select: { tenantId: true } });
-  return store?.tenantId || null;
-}
+router.use(authMiddleware, requireStore);
 
 router.get("/", async (req: Request, res: Response) => {
-  const tenantId = await getTenantId(req);
+  const tenantId = await getReqTenantId(req);
   if (!tenantId) { res.status(403).json({ error: "No tenant" }); return; }
 
   const members = await prisma.tenantUser.findMany({
@@ -38,8 +29,8 @@ router.get("/", async (req: Request, res: Response) => {
   });
 });
 
-router.delete("/:id", async (req: Request, res: Response) => {
-  const tenantId = await getTenantId(req);
+router.delete("/:id", requirePermission("team", "delete"), async (req: Request, res: Response) => {
+  const tenantId = await getReqTenantId(req);
   if (!tenantId) { res.status(403).json({ error: "No tenant" }); return; }
 
   const member = await prisma.tenantUser.findFirst({

@@ -6,6 +6,15 @@ import { authMiddleware } from "../../middleware/auth.js";
 const router = Router();
 router.use(authMiddleware);
 
+// Super-admin only: this is the platform-level store CRUD.
+router.use((req: Request, res: Response, next: any) => {
+  if (req.admin!.role !== "super_admin") {
+    res.status(403).json({ error: "Super admin access required" });
+    return;
+  }
+  next();
+});
+
 const storeSchema = z.object({
   ref: z.string().min(1),
   name: z.string().min(1),
