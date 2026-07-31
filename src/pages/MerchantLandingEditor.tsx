@@ -163,7 +163,7 @@ export default function MerchantLandingEditor() {
                     <>
                       <input type="text" className="amazon-input" placeholder="عنوان قسم المميزات" value={sec.content.title || ""}
                         onChange={(e) => updateContent(idx, "title", (e.target as HTMLInputElement).value)} />
-                      <textarea className="amazon-input" rows={4} placeholder="المميزات (واحد في كل سطر)" value={(sec.content.items || "").replace(/[\[\]"]/g, "").split(",").join("\n")}
+                      <textarea className="amazon-input" rows={4} placeholder="المميزات (واحد في كل سطر)" value={(sec.content.items || "").replace(/["[\]]/g, "").split(",").join("\n")}
                         onChange={(e) => updateContent(idx, "items", JSON.stringify((e.target as HTMLTextAreaElement).value.split("\n").filter(Boolean)))} />
                     </>
                   )}

@@ -25,7 +25,7 @@ router.post("/register", async (req: Request, res: Response) => {
     return;
   }
 
-  const { email, password, name, companyName, storeName, subdomain, plan } = parsed.data;
+  const { email, password, name: _name, companyName, storeName, subdomain, plan } = parsed.data;
 
   const existingEmail = await prisma.admin.findUnique({ where: { email } });
   if (existingEmail) {

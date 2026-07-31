@@ -1,5 +1,5 @@
 import { useState, useEffect } from "preact/compat";
-import { api, API_BASE, getImageUrl } from "../services/api";
+import { api, getImageUrl } from "../services/api";
 
 interface StoreInfo { name: string; tagLine: string | null; logo: string | null; primaryColor: string | null; }
 

@@ -150,7 +150,6 @@ export default function MerchantProducts() {
       .then((r) => setLowStockProducts(r.products)).catch(() => {});
   }, [data]);
 
-  const isLowStock = (stock: number, p: any) => stock > 0 && stock <= 5;
   const totalPages = data?.pagination?.totalPages || 1;
 
   return (

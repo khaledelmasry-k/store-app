@@ -20,8 +20,6 @@ interface StoreLink {
   seller?: Seller | null;
 }
 
-interface Product { id: string; name: string; }
-
 const defaultForm = {
   slug: "", customTitle: "", productIds: "", customLogo: "", customColor: "#000000",
   sellerId: "", utmSource: "", utmMedium: "", utmCampaign: "",
@@ -30,7 +28,6 @@ const defaultForm = {
 export default function MerchantStoreLinks() {
   const [links, setLinks] = useState<StoreLink[]>([]);
   const [sellers, setSellers] = useState<Seller[]>([]);
-  const [products, setProducts] = useState<Product[]>([]);
   const [showForm, setShowForm] = useState(false);
   const [editId, setEditId] = useState<string | null>(null);
   const [form, setForm] = useState(defaultForm);
@@ -39,7 +36,6 @@ export default function MerchantStoreLinks() {
   const fetchAll = () => {
     api.get<StoreLink[]>("/seller/store-links").then(setLinks).catch(() => {});
     api.get<Seller[]>("/merchant/sellers").then(setSellers).catch(() => {});
-    api.get<Product[]>("/merchant/products").then(setProducts).catch(() => {});
   };
 
   useEffect(() => { fetchAll(); }, []);

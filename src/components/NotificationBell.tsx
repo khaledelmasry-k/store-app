@@ -1,6 +1,5 @@
 import { useState, useEffect, useRef } from "preact/compat";
 import { api } from "../services/api";
-import { useLocation } from "wouter";
 
 interface Notification {
   id: string;
