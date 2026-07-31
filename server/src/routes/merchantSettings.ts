@@ -3,6 +3,7 @@ import { z } from "zod";
 import { prisma } from "../utils/prisma.js";
 import { authMiddleware } from "../middleware/auth.js";
 import { requireStore, requirePermission } from "../middleware/permission.js";
+import { getAdminStoreIds } from "../utils/storeHelper.js";
 import { parseJsonField } from "../utils/parseJson.js";
 
 const router = Router();
@@ -12,6 +13,20 @@ function storeOr403(req: Request, res: Response): string | null {
   if (!req.storeId) { res.status(403).json({ error: "Store not found" }); return null; }
   return req.storeId;
 }
+
+// List stores accessible to the current admin (for the store switcher).
+router.get("/stores", async (req: Request, res: Response) => {
+  const admin = req.admin;
+  if (!admin) { res.status(401).json({ error: "Unauthorized" }); return; }
+  const ids = await getAdminStoreIds(admin);
+  if (ids.length === 0) { res.json([]); return; }
+  const stores = await prisma.store.findMany({
+    where: { id: { in: ids } },
+    orderBy: { createdAt: "asc" },
+    select: { id: true, ref: true, name: true, active: true },
+  });
+  res.json(stores);
+});
 
 router.get("/", async (req: Request, res: Response) => {
   const storeId = storeOr403(req, res);

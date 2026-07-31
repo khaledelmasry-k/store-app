@@ -1,6 +1,6 @@
 import { useState, useEffect } from "preact/compat";
 import { useLocation } from "wouter";
-import { api } from "../services/api";
+import { api, getCurrentStoreId, setCurrentStoreId } from "../services/api";
 import NotificationBell from "./NotificationBell";
 
 const MERCHANT_NAV = [
@@ -43,6 +43,8 @@ export default function Sidebar() {
   const [loc, navigate] = useLocation();
   const [menuOpen, setMenuOpen] = useState(false);
   const [stores, setStores] = useState<StoreData[]>([]);
+  const [currentStore, setCurrentStore] = useState<string | null>(null);
+  const [switcherOpen, setSwitcherOpen] = useState(false);
 
   const isSuperAdmin = () => {
     const adminStr = localStorage.getItem("admin");
@@ -50,9 +52,29 @@ export default function Sidebar() {
     return JSON.parse(adminStr).role === "super_admin";
   };
 
-  useEffect(() => {
-    api.get<StoreData[]>("/admin/settings/stores").then(setStores).catch(() => {});
-  }, []);
+  const loadStores = () => {
+    const endpoint = isSuperAdmin() ? "/admin/settings/stores" : "/merchant/settings/stores";
+    api.get<StoreData[]>(endpoint).then((list) => {
+      setStores(list);
+      const saved = getCurrentStoreId();
+      const valid = list.some((s) => s.id === saved);
+      if (valid) setCurrentStore(saved);
+      else {
+        const first = list.find((s) => s.active) || list[0];
+        setCurrentStore(first?.id ?? null);
+        setCurrentStoreId(first?.id ?? null);
+      }
+    }).catch(() => {});
+  };
+
+  useEffect(() => { loadStores(); }, []);
+
+  const switchStore = (id: string) => {
+    setCurrentStore(id);
+    setCurrentStoreId(id);
+    setSwitcherOpen(false);
+    navigate("/merchant");
+  };
 
   const isActive = (path: string) => loc === path;
 
@@ -95,19 +117,19 @@ export default function Sidebar() {
       {menuOpen && (
         <div onClick={() => toggleMenu(false)} style={{ position: "fixed", inset: 0, background: "rgba(0,0,0,0.5)", zIndex: 200 }}>
           <div onClick={(e) => e.stopPropagation()} style={{ position: "fixed", top: 0, right: 0, width: "256px", height: "100dvh", background: "#131921", boxShadow: "-4px 0 12px rgba(0,0,0,0.3)", display: "flex", flexDirection: "column" }}>
-            <SidebarInner nav={nav} isActive={isActive} handleNav={handleNav} copyLink={copyLink} navigate={navigate} stores={stores} isSuperAdmin={isSuperAdmin()} />
+            <SidebarInner nav={nav} isActive={isActive} handleNav={handleNav} copyLink={copyLink} navigate={navigate} stores={stores} isSuperAdmin={isSuperAdmin()} currentStore={currentStore} switcherOpen={switcherOpen} setSwitcherOpen={setSwitcherOpen} switchStore={switchStore} />
           </div>
         </div>
       )}
 
       <aside className="sb-desktop" style={{ width: "256px", background: "#131921", borderLeft: "1px solid rgba(255,255,255,0.1)", minHeight: "100vh", flexShrink: 0, flexDirection: "column", position: "relative", zIndex: 40, boxShadow: "0 2px 8px rgba(0,0,0,0.15)" }}>
-        <SidebarInner nav={nav} isActive={isActive} handleNav={handleNav} copyLink={copyLink} navigate={navigate} stores={stores} isSuperAdmin={isSuperAdmin()} />
+        <SidebarInner nav={nav} isActive={isActive} handleNav={handleNav} copyLink={copyLink} navigate={navigate} stores={stores} isSuperAdmin={isSuperAdmin()} currentStore={currentStore} switcherOpen={switcherOpen} setSwitcherOpen={setSwitcherOpen} switchStore={switchStore} />
       </aside>
     </>
   );
 }
 
-function SidebarInner({ nav, isActive, handleNav, copyLink, navigate, stores, isSuperAdmin }: {
+function SidebarInner({ nav, isActive, handleNav, copyLink, navigate, stores, isSuperAdmin, currentStore, switcherOpen, setSwitcherOpen, switchStore }: {
   nav: { path: string; label: string; icon: string }[];
   isActive: (p: string) => boolean;
   handleNav: (p: string) => void;
@@ -115,7 +137,13 @@ function SidebarInner({ nav, isActive, handleNav, copyLink, navigate, stores, is
   navigate: (p: string) => void;
   stores: StoreData[];
   isSuperAdmin: boolean;
+  currentStore: string | null;
+  switcherOpen: boolean;
+  setSwitcherOpen: (v: boolean) => void;
+  switchStore: (id: string) => void;
 }) {
+  const current = stores.find((s) => s.id === currentStore);
+  const showSwitcher = !isSuperAdmin && stores.length > 0;
   return (
     <div style={{ padding: "20px", display: "flex", flexDirection: "column", height: "100%" }}>
       <div style={{ marginBottom: "32px" }}>
@@ -124,6 +152,26 @@ function SidebarInner({ nav, isActive, handleNav, copyLink, navigate, stores, is
         </h1>
         <p style={{ padding: "0 16px", fontSize: "12px", fontWeight: 500, color: "#693c00", margin: 0, opacity: 0.7 }}>إدارة المتجر الذكي</p>
       </div>
+      {showSwitcher && (
+        <div style={{ position: "relative", padding: "0 16px", marginBottom: "16px" }}>
+          <button onClick={() => setSwitcherOpen(!switcherOpen)}
+            style={{ width: "100%", display: "flex", alignItems: "center", justifyContent: "space-between", gap: "8px", background: "#232F3E", border: "1px solid rgba(255,255,255,0.15)", borderRadius: "8px", padding: "10px 12px", color: "#fff", cursor: "pointer", fontSize: "13px", fontWeight: 600, textAlign: "right" }}>
+            <span style={{ overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{current?.name || "اختر المتجر"}</span>
+            <span class="material-symbols-outlined" style={{ fontSize: "18px", color: "#FEBD69", flexShrink: 0 }}>storefront</span>
+          </button>
+          {switcherOpen && (
+            <div style={{ position: "absolute", top: "calc(100% + 4px)", left: 16, right: 16, background: "#232F3E", border: "1px solid rgba(255,255,255,0.15)", borderRadius: "8px", boxShadow: "0 4px 16px rgba(0,0,0,0.4)", zIndex: 60, padding: "4px", maxHeight: "240px", overflowY: "auto" }}>
+              {stores.map((s) => (
+                <button key={s.id} onClick={() => switchStore(s.id)}
+                  style={{ width: "100%", display: "flex", alignItems: "center", justifyContent: "space-between", gap: "8px", background: s.id === currentStore ? "rgba(255,153,0,0.15)" : "transparent", border: "none", borderRadius: "6px", padding: "10px 12px", color: s.id === currentStore ? "#FEBD69" : "#B0B8C1", cursor: "pointer", fontSize: "13px", textAlign: "right" }}>
+                  <span style={{ overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{s.name}</span>
+                  <span style={{ fontSize: "11px", color: "#693c00", flexShrink: 0 }}>{s.active ? "نشط" : "موقف"}</span>
+                </button>
+              ))}
+            </div>
+          )}
+        </div>
+      )}
       <nav style={{ flex: 1, display: "flex", flexDirection: "column", gap: "8px" }}>
         {nav.map((item) => (
           <a key={item.path} onClick={() => handleNav(item.path)}

@@ -11,6 +11,17 @@ export function getImageUrl(path: string): string {
   return `${IMG_BASE}${path}`;
 }
 
+const STORE_KEY = "currentStoreId";
+
+export function getCurrentStoreId(): string | null {
+  return localStorage.getItem(STORE_KEY);
+}
+
+export function setCurrentStoreId(storeId: string | null): void {
+  if (storeId) localStorage.setItem(STORE_KEY, storeId);
+  else localStorage.removeItem(STORE_KEY);
+}
+
 async function request<T>(path: string, options: RequestInit = {}): Promise<T> {
   const token = getToken();
   const headers: Record<string, string> = {
@@ -18,6 +29,9 @@ async function request<T>(path: string, options: RequestInit = {}): Promise<T> {
     ...((options.headers as Record<string, string>) || {}),
   };
   if (token) headers["Authorization"] = `Bearer ${token}`;
+
+  const storeId = getCurrentStoreId();
+  if (storeId) headers["X-Store-Id"] = storeId;
 
   const res = await fetch(`${API_BASE}${path}`, { ...options, headers });
   if (!res.ok) {
