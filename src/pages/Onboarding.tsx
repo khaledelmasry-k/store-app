@@ -36,7 +36,7 @@ export default function Onboarding() {
       const data = await res.json();
       localStorage.setItem("token", data.token);
       localStorage.setItem("admin", JSON.stringify(data.admin));
-      setStep(5);
+      setStep(4);
     } catch {
       setError("تعذر الاتصال بالخادم");
       setLoading(false);
@@ -131,7 +131,7 @@ export default function Onboarding() {
         </div>
       );
 
-      case 5: return (
+      case 4: return (
         <div style={{ textAlign: "center", padding: "48px 0" }}>
           <div style={{ fontSize: "64px", marginBottom: "16px" }}>🎉</div>
           <h3 style={{ fontSize: "24px", fontWeight: 700, margin: "0 0 8px" }}>تم إنشاء متجرك بنجاح!</h3>
@@ -152,7 +152,7 @@ export default function Onboarding() {
           <h2 style={{ fontFamily: "'Plus Jakarta Sans', sans-serif", fontSize: "28px", fontWeight: 700, color: "#131921", margin: "0 0 4px" }}>M&K Store</h2>
           <p style={{ fontSize: "14px", color: "#565959", margin: 0 }}>أنشئ متجرك الإلكتروني الآن</p>
         </div>
-        {step < 5 && (
+        {step < 4 && (
           <div style={{ display: "flex", justifyContent: "center", gap: "8px", marginBottom: "32px" }}>
             {[1, 2, 3].map((s) => (
               <div key={s} style={{
@@ -165,7 +165,7 @@ export default function Onboarding() {
             </div>
             <div style={{
               width: "32px", height: "32px", borderRadius: "50%", display: "flex", alignItems: "center", justifyContent: "center",
-              background: step >= 5 ? "#FF9900" : "#EAEDED", color: step >= 5 ? "#131921" : "#565959", fontWeight: 700, fontSize: "14px",
+              background: step >= 4 ? "#FF9900" : "#EAEDED", color: step >= 4 ? "#131921" : "#565959", fontWeight: 700, fontSize: "14px",
             }}>✓</div>
           </div>
         )}

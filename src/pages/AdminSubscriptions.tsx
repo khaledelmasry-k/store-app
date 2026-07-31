@@ -1,5 +1,6 @@
 import { useState, useEffect } from "preact/compat";
 import { api } from "../services/api";
+import { useLocation } from "wouter";
 import Sidebar from "../components/Sidebar";
 
 interface Plan {
@@ -22,6 +23,7 @@ interface SubscriptionRequest {
 }
 
 export default function AdminSubscriptions() {
+  const [, navigate] = useLocation();
   const [plans, setPlans] = useState<Plan[]>([]);
   const [requests, setRequests] = useState<SubscriptionRequest[]>([]);
 
@@ -65,7 +67,7 @@ export default function AdminSubscriptions() {
                   </div>
                 ))}
               </div>
-              <button style={{ width: "100%", padding: "12px", borderRadius: "8px", border: "none", background: plan.popular ? "#FF9900" : "#131921", color: plan.popular ? "#131921" : "#fff", fontWeight: 700, fontSize: "14px", cursor: "pointer" }}>
+              <button onClick={() => navigate("/pricing")} style={{ width: "100%", padding: "12px", borderRadius: "8px", border: "none", background: plan.popular ? "#FF9900" : "#131921", color: plan.popular ? "#131921" : "#fff", fontWeight: 700, fontSize: "14px", cursor: "pointer" }}>
                 {plan.custom ? "اتصل بنا" : "ابدأ الاشتراك"}
               </button>
             </div>

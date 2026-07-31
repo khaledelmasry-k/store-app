@@ -1,9 +1,11 @@
 import { useState, useEffect } from "preact/compat";
+import { useLocation } from "wouter";
 import { api } from "../services/api";
 import Sidebar from "../components/Sidebar";
 import type { DashboardStats } from "../types";
 
 export default function SellerDashboard() {
+  const [, navigate] = useLocation();
   const [stats, setStats] = useState<DashboardStats | null>(null);
 
   useEffect(() => {
@@ -23,6 +25,27 @@ export default function SellerDashboard() {
     { icon: "🔄", label: "طلبات مسترجعة", value: stats?.returnedOrders?.toLocaleString() || "...", color: "#A855F7" },
   ];
 
+  const downloadStockCsv = () => {
+    const vs = stats?.variantStock;
+    if (!vs) return;
+    const sizes = Array.from(new Set(Object.values(vs).flatMap((s: Record<string, number>) => Object.keys(s))));
+    const header = ["اللون", ...sizes, "الإجمالي"];
+    const rows = Object.entries(vs).map(([color, sizesMap]) => {
+      const total = Object.values(sizesMap).reduce((a: number, b: number) => a + b, 0);
+      return [color, ...sizes.map((s) => sizesMap[s] ?? 0), total];
+    });
+    const csv = [header, ...rows]
+      .map((r) => r.map((c) => `"${String(c).replace(/"/g, '""')}"`).join(","))
+      .join("\n");
+    const blob = new Blob(["\uFEFF" + csv], { type: "text/csv;charset=utf-8" });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement("a");
+    a.href = url;
+    a.download = "inventory-report.csv";
+    a.click();
+    URL.revokeObjectURL(url);
+  };
+
   return (
     <div style={{ background: "#EAEDED", minHeight: "100vh", display: "flex" }}>
       <Sidebar />
@@ -33,7 +56,7 @@ export default function SellerDashboard() {
               <h2 style={{ fontFamily: "'Plus Jakarta Sans', sans-serif", fontSize: "24px", fontWeight: "600", color: "#0F1111", margin: 0 }}>لوحة التحكم - تاجر</h2>
               <p style={{ fontSize: "14px", color: "#595f68", margin: "4px 0 0" }}>نظرة عامة على أداء متجرك الخاص</p>
             </div>
-            <button style={{ background: "#FF9900", color: "#131921", padding: "8px 24px", borderRadius: "8px", fontWeight: "700", border: "none", cursor: "pointer", boxShadow: "0 1px 3px rgba(0,0,0,0.08)", fontSize: "14px", display: "flex", alignItems: "center", gap: "4px", minHeight: "40px" }} onClick={() => {}}>
+            <button style={{ background: "#FF9900", color: "#131921", padding: "8px 24px", borderRadius: "8px", fontWeight: "700", border: "none", cursor: "pointer", boxShadow: "0 1px 3px rgba(0,0,0,0.08)", fontSize: "14px", display: "flex", alignItems: "center", gap: "4px", minHeight: "40px" }} onClick={() => navigate("/admin/product")}>
               + إضافة منتج جديد
             </button>
           </div>
@@ -101,7 +124,7 @@ export default function SellerDashboard() {
             </table>
           </div>
           <div style={{ padding: "16px", background: "#F1F4F4", textAlign: "center" }}>
-            <button style={{ color: "#007185", fontWeight: "700", border: "none", background: "none", cursor: "pointer", fontSize: "14px" }}>تحميل تقرير المخزون الكامل (CSV)</button>
+            <button onClick={downloadStockCsv} style={{ color: "#007185", fontWeight: "700", border: "none", background: "none", cursor: "pointer", fontSize: "14px" }}>تحميل تقرير المخزون الكامل (CSV)</button>
           </div>
         </section>
 

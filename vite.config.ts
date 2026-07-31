@@ -1,19 +1,23 @@
-import { defineConfig } from 'vite'
+import { defineConfig, loadEnv } from 'vite'
 import preact from '@preact/preset-vite'
 
-export default defineConfig({
-  plugins: [preact()],
-  server: {
-    port: 5173,
-    proxy: {
-      '/api': {
-        target: 'http://localhost:3001',
-        changeOrigin: true,
-      },
-      '/uploads': {
-        target: 'http://localhost:3001',
-        changeOrigin: true,
+export default defineConfig(({ mode }) => {
+  const env = loadEnv(mode, process.cwd(), '')
+  const apiPort = env.PORT || '3001'
+  return {
+    plugins: [preact()],
+    server: {
+      port: 5173,
+      proxy: {
+        '/api': {
+          target: `http://localhost:${apiPort}`,
+          changeOrigin: true,
+        },
+        '/uploads': {
+          target: `http://localhost:${apiPort}`,
+          changeOrigin: true,
+        },
       },
     },
-  },
+  }
 })

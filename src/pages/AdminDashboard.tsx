@@ -37,6 +37,27 @@ export default function AdminDashboard() {
     { icon: "🔄", label: "طلبات مسترجعة", value: stats?.returnedOrders?.toLocaleString() || "...", color: "#A855F7" },
   ];
 
+  const downloadStockCsv = () => {
+    const vs = stats?.variantStock;
+    if (!vs) return;
+    const sizes = Array.from(new Set(Object.values(vs).flatMap((s: Record<string, number>) => Object.keys(s))));
+    const header = ["اللون", ...sizes, "الإجمالي"];
+    const rows = Object.entries(vs).map(([color, sizesMap]) => {
+      const total = Object.values(sizesMap).reduce((a: number, b: number) => a + b, 0);
+      return [color, ...sizes.map((s) => sizesMap[s] ?? 0), total];
+    });
+    const csv = [header, ...rows]
+      .map((r) => r.map((c) => `"${String(c).replace(/"/g, '""')}"`).join(","))
+      .join("\n");
+    const blob = new Blob(["\uFEFF" + csv], { type: "text/csv;charset=utf-8" });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement("a");
+    a.href = url;
+    a.download = "inventory-report.csv";
+    a.click();
+    URL.revokeObjectURL(url);
+  };
+
   const isSuperAdmin = stats?.isSuperAdmin ?? false;
   const storeSections = (stats?.storesStats || []).map((s, i) => ({
     ...s,
@@ -252,7 +273,7 @@ export default function AdminDashboard() {
             </table>
           </div>
           <div style={{ padding: "16px", background: "#F1F4F4", textAlign: "center" }}>
-            <button style={{ color: "#007185", fontWeight: 700, border: "none", background: "none", cursor: "pointer", fontSize: "14px" }}>تحميل تقرير المخزون الكامل (CSV)</button>
+            <button onClick={downloadStockCsv} style={{ color: "#007185", fontWeight: 700, border: "none", background: "none", cursor: "pointer", fontSize: "14px" }}>تحميل تقرير المخزون الكامل (CSV)</button>
           </div>
         </section>
 

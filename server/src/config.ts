@@ -14,7 +14,7 @@ if (!jwtSecret || jwtSecret === "change-me-in-production") {
 }
 
 export const config = {
-  port: parseInt(process.env.PORT || "8080", 10),
+  port: parseInt(process.env.PORT || "3001", 10),
   jwtSecret: jwtSecret || "dev-only-insecure-secret",
   databaseUrl: process.env.DATABASE_URL || "",
   frontendUrl: process.env.FRONTEND_URL || "*",
