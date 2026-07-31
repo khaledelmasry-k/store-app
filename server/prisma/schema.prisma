@@ -159,6 +159,8 @@ model Order {
   city            String
   address         String
   notes           String?
+  merchantNote    String?
+  segment         String      @default("")
   totalPrice      Float       @default(0)
   status          String      @default("NEW")
   createdBy       String?

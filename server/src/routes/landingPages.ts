@@ -5,7 +5,6 @@ import { authMiddleware } from "../middleware/auth.js";
 import { requireStore, requirePermission } from "../middleware/permission.js";
 
 const router = Router();
-router.use(authMiddleware, requireStore);
 
 const pageSchema = z.object({
   name: z.string().min(1),
@@ -13,6 +12,23 @@ const pageSchema = z.object({
   sections: z.string().optional(),
   published: z.boolean().optional(),
 });
+
+// Public route — must be registered before the auth middleware so anonymous
+// visitors can view published landing pages.
+router.get("/public/:slug", async (req: Request<{ slug: string }>, res: Response) => {
+  const page = await prisma.landingPage.findUnique({
+    where: { slug: String(req.params.slug), published: true },
+    include: { store: { select: { name: true, tagLine: true, logo: true, primaryColor: true, active: true } } },
+  });
+  if (!page || !page.store.active) {
+    res.status(404).json({ error: "Page not found or not published" });
+    return;
+  }
+  const sections = JSON.parse(page.sections);
+  res.json({ ...page, sections, store: page.store });
+});
+
+router.use(authMiddleware, requireStore);
 
 router.get("/", async (req: Request, res: Response) => {
   if (!req.storeId) {
@@ -112,19 +128,6 @@ router.post("/:id/publish", requirePermission("landing-pages", "edit"), async (r
     data: { published: !page.published },
   });
   res.json(updated);
-});
-
-router.get("/public/:slug", async (req: Request<{ slug: string }>, res: Response) => {
-  const page = await prisma.landingPage.findUnique({
-    where: { slug: String(req.params.slug), published: true },
-    include: { store: { select: { name: true, tagLine: true, logo: true, primaryColor: true, active: true } } },
-  });
-  if (!page || !page.store.active) {
-    res.status(404).json({ error: "Page not found or not published" });
-    return;
-  }
-  const sections = JSON.parse(page.sections);
-  res.json({ ...page, sections, store: page.store });
 });
 
 export default router;

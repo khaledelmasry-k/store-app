@@ -276,8 +276,13 @@ router.patch("/:id/status", requirePermission("orders", "edit"), async (req: Req
     return;
   }
 
-  // Restore stock for the actual products in the order (per item.productId).
-  if (parsed.data.status === "RETURNED" && order.status !== "RETURNED") {
+  // Restore stock for the actual products in the order (per item.productId)
+  // when the order is returned or cancelled (inventory is released back).
+  if (
+    (parsed.data.status === "RETURNED" || parsed.data.status === "CANCELLED") &&
+    order.status !== "RETURNED" &&
+    order.status !== "CANCELLED"
+  ) {
     await restoreOrderStock(order.items);
   }
 

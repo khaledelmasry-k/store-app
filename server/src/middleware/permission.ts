@@ -79,17 +79,21 @@ async function getTenantRole(req: Request): Promise<string | null> {
   if (!admin) return null;
   if (admin.role === "super_admin") return "SUPER_ADMIN";
 
-  const membership = await prisma.tenantUser.findFirst({
-    where: { adminId: admin.adminId },
-    select: { role: true },
-  });
-  if (membership) return membership.role;
-
-  // Legacy sellers (created before tenantUser rows existed) own their store directly.
+  // Resolve the tenant that owns the current store, then look up the admin's
+  // membership scoped to THAT tenant. Never fall back to an arbitrary membership
+  // from another tenant (prevents cross-tenant role confusion).
   const storeId = req.storeId || (await getAdminStoreId(admin));
   if (storeId) {
-    const owned = await prisma.store.findFirst({ where: { id: storeId, adminId: admin.adminId } });
-    if (owned) return "OWNER";
+    const store = await prisma.store.findUnique({ where: { id: storeId }, select: { tenantId: true, adminId: true } });
+    if (store?.tenantId) {
+      const membership = await prisma.tenantUser.findFirst({
+        where: { adminId: admin.adminId, tenantId: store.tenantId },
+        select: { role: true },
+      });
+      if (membership) return membership.role;
+    }
+    // Legacy sellers (created before tenantUser rows existed) own their store directly.
+    if (store && store.adminId === admin.adminId) return "OWNER";
   }
   return null;
 }
@@ -101,7 +105,7 @@ async function getTenantRole(req: Request): Promise<string | null> {
  * The Role/Permission tables exist but are not wired to users yet, so this
  * uses the tenant membership role as the source of truth.
  */
-export function requirePermission(resource: Resource, action: Action) {
+export function requirePermission(_resource: Resource, action: Action) {
   return async (req: Request, res: Response, next: NextFunction) => {
     try {
       const role = await getTenantRole(req);

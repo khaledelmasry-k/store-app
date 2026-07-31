@@ -1,6 +1,7 @@
 import { Router, Request, Response } from "express";
 import { z } from "zod";
 import bcrypt from "bcryptjs";
+import crypto from "crypto";
 import { prisma } from "../utils/prisma.js";
 import { authMiddleware, requireSuperAdmin } from "../middleware/auth.js";
 
@@ -89,23 +90,22 @@ router.patch("/admin/requests/:id", authMiddleware, requireSuperAdmin, async (re
       return;
     }
 
-    const passwordHash = await bcrypt.hash("password123", 10);
+    // Generate a random one-time password; it is returned to the super admin
+    // so they can share it securely with the merchant. Never use a known default.
+    const tempPassword = crypto.randomBytes(8).toString("hex");
+    const passwordHash = await bcrypt.hash(tempPassword, 10);
+    const usernameBase = request.name.toLowerCase().replace(/\s+/g, "");
+    const username = `${usernameBase || "seller"}${Math.floor(Math.random() * 100000)}`;
     const seller = await prisma.admin.create({
       data: {
-        username: request.name.toLowerCase().replace(/\\s+/g, "") + Math.floor(Math.random() * 1000),
+        username,
         email: request.email,
         passwordHash,
         role: "seller",
       },
     });
 
-    updateData.seller = seller;
-    await prisma.subscriptionRequest.update({
-      where: { id: request.id },
-      data: updateData,
-    });
-
-    res.json({ ...request, message: "Seller created and request approved", seller });
+    res.json({ ...request, message: "Seller created and request approved", seller, tempPassword });
     return;
   }
 

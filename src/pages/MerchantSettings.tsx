@@ -66,7 +66,7 @@ export default function MerchantSettings() {
   const saveSection = async (section: keyof Settings) => {
     setSaving(section);
     try {
-      await api.put("/merchant/settings", { [section]: settings[section] });
+      await api.put("/merchant/settings/settings", { [section]: settings[section] });
       showToast("تم حفظ الإعدادات");
     } catch { showToast("حدث خطأ في الحفظ"); }
     finally { setSaving(null); }

@@ -84,6 +84,14 @@ router.patch("/:id", requirePermission("store-links", "edit"), async (req: Reque
     return;
   }
 
+  if (parsed.data.slug && parsed.data.slug !== existingStoreLink.slug) {
+    const slugTaken = await prisma.storeLink.findUnique({ where: { slug: parsed.data.slug } });
+    if (slugTaken) {
+      res.status(409).json({ error: "Store link slug already exists" });
+      return;
+    }
+  }
+
   const updatedStoreLink = await prisma.storeLink.update({
     where: { id: String(req.params.id) },
     data: parsed.data,

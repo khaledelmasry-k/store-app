@@ -41,74 +41,85 @@ router.post("/register", async (req: Request, res: Response) => {
 
   const passwordHash = await bcrypt.hash(password, 10);
 
-  const admin = await prisma.admin.create({
-    data: { username: email.split("@")[0], email, passwordHash, role: "seller" },
-  });
+  // Unique username: derive from the email local-part; append a suffix if taken.
+  const baseUsername = email.split("@")[0] || "seller";
+  let username = baseUsername;
+  const existingUsername = await prisma.admin.findUnique({ where: { username } });
+  if (existingUsername) username = `${baseUsername}${Math.floor(Math.random() * 100000)}`;
 
-  const tenant = await prisma.tenant.create({
-    data: {
-      name: companyName,
-      subdomain,
-      email,
-      address: "",
-      status: "ACTIVE",
-      plan,
-    },
-  });
+  // Create admin + tenant + store + starter product + subscription atomically.
+  const result = await prisma.$transaction(async (tx) => {
+    const admin = await tx.admin.create({
+      data: { username, email, passwordHash, role: "seller" },
+    });
 
-  await prisma.tenantUser.create({
-    data: { tenantId: tenant.id, adminId: admin.id, role: "OWNER" },
-  });
+    const tenant = await tx.tenant.create({
+      data: {
+        name: companyName,
+        subdomain,
+        email,
+        address: "",
+        status: "ACTIVE",
+        plan,
+      },
+    });
 
-  const ref = subdomain;
-  const store = await prisma.store.create({
-    data: {
-      ref,
-      name: storeName,
-      adminId: admin.id,
-      tenantId: tenant.id,
-      active: true,
-    },
-  });
+    await tx.tenantUser.create({
+      data: { tenantId: tenant.id, adminId: admin.id, role: "OWNER" },
+    });
 
-  await prisma.product.create({
-    data: {
-      storeId: store.id,
-      name: "منتجك الأول",
-      description: "وصف المنتج",
-      price: 0,
-      pricingTiers: JSON.stringify({ 1: 0, 2: 0, 3: 0, 4: 0 }),
-      variantStock: JSON.stringify({}),
-      images: JSON.stringify({}),
-      colors: JSON.stringify([]),
-      sizes: JSON.stringify([]),
-      active: true,
-    },
-  });
+    const ref = subdomain;
+    const store = await tx.store.create({
+      data: {
+        ref,
+        name: storeName,
+        adminId: admin.id,
+        tenantId: tenant.id,
+        active: true,
+      },
+    });
 
-  await prisma.subscription.create({
-    data: {
-      tenantId: tenant.id,
-      adminId: admin.id,
-      plan,
-      price: 0,
-      status: "ACTIVE",
-      currentPeriod: new Date(),
-      nextBilling: new Date(Date.now() + 30 * 24 * 60 * 60 * 1000),
-    },
+    await tx.product.create({
+      data: {
+        storeId: store.id,
+        name: "منتجك الأول",
+        description: "وصف المنتج",
+        price: 0,
+        pricingTiers: JSON.stringify({ 1: 0, 2: 0, 3: 0, 4: 0 }),
+        variantStock: JSON.stringify({}),
+        images: JSON.stringify({}),
+        colors: JSON.stringify([]),
+        sizes: JSON.stringify([]),
+        active: true,
+      },
+    });
+
+    await tx.subscription.create({
+      data: {
+        tenantId: tenant.id,
+        adminId: admin.id,
+        plan,
+        price: 0,
+        status: "ACTIVE",
+        currentPeriod: new Date(),
+        nextBilling: new Date(Date.now() + 30 * 24 * 60 * 60 * 1000),
+      },
+    });
+
+    return { admin, tenant, store };
   });
 
   const token = jwt.sign(
-    { adminId: admin.id, username: admin.username, role: admin.role, tenantId: tenant.id },
+    { adminId: result.admin.id, username: result.admin.username, role: result.admin.role, tenantId: result.tenant.id },
     config.jwtSecret,
     { expiresIn: "24h" }
   );
 
   res.status(201).json({
     token,
-    admin: { id: admin.id, username: admin.username, email: admin.email, role: admin.role, tenantId: tenant.id },
-    tenant: { id: tenant.id, name: tenant.name, subdomain: tenant.subdomain },
-    store: { id: store.id, name: store.name, ref: store.ref },
+    admin: { id: result.admin.id, username: result.admin.username, email: result.admin.email, role: result.admin.role, tenantId: result.tenant.id },
+    tenant: { id: result.tenant.id, name: result.tenant.name, subdomain: result.tenant.subdomain },
+    store: { id: result.store.id, name: result.store.name, ref: result.store.ref },
   });
 });
 

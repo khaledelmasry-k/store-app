@@ -79,7 +79,7 @@ export default function MerchantStoreLinks() {
     fetchAll();
   };
 
-  const getUrl = (slug: string) => `${window.location.origin}/store/${slug}`;
+  const getUrl = (slug: string) => `${window.location.origin}/go/${slug}`;
 
   const copyLink = (slug: string) => {
     const url = getUrl(slug);

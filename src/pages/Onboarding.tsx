@@ -1,5 +1,6 @@
 import { useState } from "preact/compat";
 import { useLocation } from "wouter";
+import { API_BASE } from "../services/api";
 
 const PLANS = [
   { id: "FREE", name: "مجاني", price: "0 ج.م", features: ["منتج واحد", "متجر واحد", "رابط تسويق واحد"] },
@@ -22,7 +23,7 @@ export default function Onboarding() {
     setLoading(true);
     setError("");
     try {
-      const res = await fetch("/api/auth/register", {
+      const res = await fetch(`${API_BASE}/auth/register`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify(form),

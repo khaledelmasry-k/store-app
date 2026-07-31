@@ -1,6 +1,7 @@
 import { Request, Response, NextFunction } from "express";
 import jwt from "jsonwebtoken";
 import { config } from "../config.js";
+import { prisma } from "../utils/prisma.js";
 
 export interface AuthPayload {
   id: string;
@@ -39,9 +40,24 @@ export function authMiddleware(req: Request, res: Response, next: NextFunction) 
   }
 }
 
-export function requireSuperAdmin(req: Request, res: Response, next: NextFunction) {
+export async function requireSuperAdmin(req: Request, res: Response, next: NextFunction) {
   if (req.admin?.role !== "super_admin") {
     res.status(403).json({ error: "Super admin access required" });
+    return;
+  }
+  // Re-validate the role against the DB so a demoted/deleted super admin
+  // does not retain elevated access for the token lifetime.
+  try {
+    const admin = await prisma.admin.findUnique({
+      where: { id: req.admin.adminId },
+      select: { role: true },
+    });
+    if (!admin || admin.role !== "super_admin") {
+      res.status(403).json({ error: "Super admin access required" });
+      return;
+    }
+  } catch (err) {
+    next(err);
     return;
   }
   next();

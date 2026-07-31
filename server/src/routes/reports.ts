@@ -76,6 +76,13 @@ router.get("/period", async (req: Request, res: Response) => {
   });
 });
 
+function csvSafe(val: unknown): string {
+  const s = String(val ?? "");
+  // Escape cells that begin with a spreadsheet-formula trigger to prevent injection.
+  const guarded = /^[=+\-@\t\r]/.test(s) ? `'${s}` : s;
+  return `"${guarded.replace(/"/g, '""')}"`;
+}
+
 router.get("/export-csv", async (req: Request, res: Response) => {
   const where = req.admin!.role !== "super_admin" ? { storeId: req.storeId || "__none__" } : {};
 
@@ -88,7 +95,11 @@ router.get("/export-csv", async (req: Request, res: Response) => {
   const headers = "رقم الطلب,العميل,الهاتف,المحافظة,المدينة,العنوان,الحالة,الإجمالي,التاريخ,المتجر";
   const rows = orders.map((o) => {
     const itemsStr = o.items.map((i) => `${i.name || ""}(${i.color}/${i.size})×${i.quantity}`).join(" | ");
-    return `"${o.orderNumber}","${o.customerName}","${o.phone}","${o.governorate}","${o.city}","${o.address}","${o.status}",${o.totalPrice},"${o.createdAt.toISOString()}","${itemsStr}"`;
+    return [
+      csvSafe(o.orderNumber), csvSafe(o.customerName), csvSafe(o.phone), csvSafe(o.governorate),
+      csvSafe(o.city), csvSafe(o.address), csvSafe(o.status), o.totalPrice,
+      csvSafe(o.createdAt.toISOString()), csvSafe(itemsStr),
+    ].join(",");
   });
 
   const csv = `${headers}\n${rows.join("\n")}`;

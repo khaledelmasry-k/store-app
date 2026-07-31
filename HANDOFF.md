@@ -137,6 +137,17 @@ npm run dev
 
 ---
 
+## Documentation
+
+- `README.md` — overview + quick start
+- `docs/DEPLOYMENT.md` — Northflank + Docker deployment
+- `docs/API.md` — REST API reference
+- `docs/DATABASE.md` — database schema, migrations, RBAC
+- `docs/PROJECT_STRUCTURE.md` — codebase walkthrough
+- `docs/FINAL_REPORT.md` — delivery summary for this release
+
+---
+
 ## Known limitations
 
 - **Uploads are local-only** (`server/uploads/`). Not persisted across container

@@ -314,8 +314,12 @@ export default function AdminProduct() {
                     onMouseLeave={(e) => { (e.currentTarget as HTMLElement).style.background = "#fff"; }}
                     onClick={async () => {
                       if (!window.confirm("هل أنت متأكد من حذف هذا المنتج؟")) return;
-                      await api.delete("/admin/product");
-                      window.location.href = "/admin";
+                      try {
+                        await api.delete("/admin/product");
+                        window.location.href = "/merchant/products";
+                      } catch (err: any) {
+                        showToast(err.message || "حدث خطأ أثناء الحذف");
+                      }
                     }}>
                     حذف المنتج نهائياً
                   </button>

@@ -245,7 +245,7 @@ export default function CustomerStore() {
                 </div>
               </div>
               <div style={{ textAlign: "left" }}>
-                <div style={{ fontWeight: 700, color: "#131921" }}>{item.price.toLocaleString()} ج.م</div>
+                <div style={{ fontWeight: 700, color: "#131921" }}>{getTierPrice(item.quantity, products.find((p) => p.id === item.productId)?.pricingTiers || {}).toLocaleString()} ج.م</div>
                 <button onClick={() => removeFromCart(idx)} style={{ background: "none", border: "none", color: "#B12704", cursor: "pointer", fontSize: "12px", marginTop: "4px" }}>إزالة</button>
               </div>
             </div>

@@ -31,6 +31,7 @@ router.get("/", async (req: Request, res: Response) => {
     select: {
       customerName: true, phone: true, governorate: true, city: true,
       totalPrice: true, createdAt: true, notes: true,
+      merchantNote: true, segment: true,
     },
     orderBy: { createdAt: "desc" },
   });
@@ -50,6 +51,8 @@ router.get("/", async (req: Request, res: Response) => {
       if (o.createdAt.toISOString() > existing.lastOrder) {
         existing.lastOrder = o.createdAt.toISOString();
         existing.name = o.customerName;
+        existing.segment = o.segment || existing.segment;
+        if (o.merchantNote) existing.noteCount = Math.max(existing.noteCount, 1);
       }
       existing.orders.push({ date: o.createdAt.toISOString(), total: o.totalPrice, status: "" });
     } else {
@@ -59,7 +62,7 @@ router.get("/", async (req: Request, res: Response) => {
         orderCount: 1, totalSpent: o.totalPrice,
         lastOrder: o.createdAt.toISOString(),
         orders: [{ date: o.createdAt.toISOString(), total: o.totalPrice, status: "" }],
-        noteCount: 0, segment: "",
+        noteCount: o.merchantNote ? 1 : 0, segment: o.segment || "",
       });
     }
   }
@@ -121,12 +124,27 @@ router.post("/:phone/notes", requirePermission("customers", "edit"), async (req:
   const phone = String(req.params.phone);
   const lastOrder = await prisma.order.findFirst({ where: { storeId: req.storeId, phone }, orderBy: { createdAt: "desc" }, select: { id: true } });
   if (!lastOrder) { res.status(404).json({ error: "Customer not found" }); return; }
+  await prisma.order.update({
+    where: { id: lastOrder.id },
+    data: { merchantNote: String(note) },
+  });
   res.json({ success: true, note });
 });
 
 router.put("/:phone/segment", requirePermission("customers", "edit"), async (req: Request<{ phone: string }>, res: Response) => {
   const { segment } = req.body;
   if (!segment) { res.status(400).json({ error: "Segment is required" }); return; }
+  if (!req.storeId) { res.status(403).json({ error: "Store not found" }); return; }
+  const phone = String(req.params.phone);
+  const orders = await prisma.order.findMany({
+    where: { storeId: req.storeId, phone },
+    select: { id: true },
+  });
+  if (orders.length === 0) { res.status(404).json({ error: "Customer not found" }); return; }
+  await prisma.order.updateMany({
+    where: { id: { in: orders.map((o) => o.id) } },
+    data: { segment: String(segment) },
+  });
   res.json({ success: true, phone: req.params.phone, segment });
 });
 

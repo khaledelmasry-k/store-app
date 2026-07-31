@@ -3,7 +3,7 @@
 ## وصف المشروع
 منصة SaaS متعددة المستأجرين (Multi-Tenant) للتجارة الإلكترونية، مبنية بـ:
 - **الفرونت إند**: Preact + TypeScript + Vite + wouter (راوتر)
-- **الباك إند**: Express.js + Prisma ORM + SQLite/PostgreSQL
+- **الباك إند**: Express.js + Prisma ORM + PostgreSQL
 - **اللغة**: Arabic RTL
 - **التصميم**: Mobile-first
 
@@ -141,7 +141,7 @@ cd server && npx prisma studio     # فتح Prisma Studio
 ```
 
 ## ملاحظات إضافية
-- **Database currently**: SQLite (`server/prisma/dev.db`)
+- **Database**: PostgreSQL (`DATABASE_URL`)
 - **Deployment targets**: Render.com + Firebase Hosting
 - **JWT secret**: في `.env` تحت اسم `JWT_SECRET`
 - **Admin seed**: admin / admin123 (role: super_admin)

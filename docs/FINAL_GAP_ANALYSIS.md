@@ -191,7 +191,7 @@ Additionally, these existing stitch prompts need updating:
 | Dashboard hardcoded to Khaled/Mahmoud | Only works for super admin with V1 seed data | Medium |
 | No RBAC middleware | No permission enforcement | Medium |
 | Documentation out of date | Hard to onboard developers | Low |
-| SQLite in production | Not suitable for production scale | High |
+| ~~SQLite in production~~ | Not suitable for production scale | Resolved — migrated to PostgreSQL |
 | No payment gateway | No real billing | High |
 
 ---
@@ -220,7 +220,7 @@ Additionally, these existing stitch prompts need updating:
 2. **Charts & Analytics** (`/merchant/analytics`) — revenue chart, order pie, top products
 3. **Paginated Customers API** — replace client-side aggregation
 4. **Fix hardcoded reports/dashboard** — make dynamic for any tenant
-5. **Migrate SQLite → PostgreSQL** — production database
+5. ~~**Migrate SQLite → PostgreSQL**~~ — done, PostgreSQL is the only supported database
 
 ### Medium Priority (Complete Before V2 Launch)
 6. **CSV Export** API + UI

@@ -1,6 +1,13 @@
-export async function generateOrderNumber(): Promise<string> {
-  const { prisma } = await import("./prisma.js");
-  const latest = await prisma.order.findFirst({
+import { Prisma } from "@prisma/client";
+
+/**
+ * Generate the next sequential order number (e.g. ORD-00042) inside a transaction.
+ * A Postgres advisory lock serializes concurrent generators so that no two
+ * requests can produce the same number.
+ */
+export async function generateOrderNumber(tx: Prisma.TransactionClient): Promise<string> {
+  await tx.$executeRaw`SELECT pg_advisory_xact_lock(727100)`;
+  const latest = await tx.order.findFirst({
     orderBy: { createdAt: "desc" },
     select: { orderNumber: true },
   });

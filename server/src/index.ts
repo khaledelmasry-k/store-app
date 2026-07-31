@@ -46,11 +46,17 @@ const app = express();
 
 app.use(helmet({ crossOriginResourcePolicy: { policy: "cross-origin" } }));
 const corsOrigins = config.frontendUrl.split(",").map((s) => s.trim()).filter(Boolean);
-const corsOptions: any = { credentials: true };
-if (corsOrigins.length === 0 || corsOrigins[0] === "*") {
-  corsOptions.origin = corsOrigins[0] === "*" ? true : false;
+const corsOptions: cors.CorsOptions = {
+  credentials: true,
+  methods: ["GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"],
+  allowedHeaders: ["Content-Type", "Authorization", "X-Requested-With"],
+  exposedHeaders: ["Content-Disposition"],
+  maxAge: 86400,
+};
+if (corsOrigins.includes("*")) {
+  corsOptions.origin = true;
 } else {
-  corsOptions.origin = corsOrigins.length === 1 ? corsOrigins[0] : corsOrigins;
+  corsOptions.origin = corsOrigins;
 }
 app.use(cors(corsOptions));
 app.use(express.json({ limit: "10mb" }));

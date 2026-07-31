@@ -8,11 +8,6 @@ interface ProductListResponse {
   pagination: { page: number; limit: number; total: number; totalPages: number };
 }
 
-function parseJson<T>(val: string | undefined | null, fallback: T): T {
-  if (!val) return fallback;
-  try { return JSON.parse(val); } catch { return fallback; }
-}
-
 export default function MerchantProducts() {
   const [data, setData] = useState<ProductListResponse | null>(null);
   const [page, setPage] = useState(1);
@@ -58,11 +53,11 @@ export default function MerchantProducts() {
     setEditId(p.id);
     setForm({
       name: p.name, description: p.description, price: p.price, oldPrice: p.oldPrice || 0, sku: (p as any).sku || "", active: p.active,
-      colors: parseJson<string[]>(p.colors as any, []),
-      sizes: parseJson<string[]>(p.sizes as any, []),
-      variantStock: parseJson<Record<string, Record<string, number>>>(p.variantStock as any, {}),
-      pricingTiers: parseJson<Record<string, number>>(p.pricingTiers as any, {}),
-      images: parseJson<Record<string, string>>(p.images as any, {}),
+      colors: Array.isArray(p.colors) ? p.colors : [],
+      sizes: Array.isArray(p.sizes) ? p.sizes : [],
+      variantStock: p.variantStock && typeof p.variantStock === "object" ? p.variantStock : {},
+      pricingTiers: p.pricingTiers && typeof p.pricingTiers === "object" ? p.pricingTiers : {},
+      images: p.images && typeof p.images === "object" ? p.images : {},
     });
     setShowForm(true);
   };

@@ -27,7 +27,7 @@ export default function Landing() {
             </nav>
           </div>
           <div style={{ display: "flex", gap: "12px", alignItems: "center" }}>
-            <button onClick={() => navigate("/admin/login")} style={{ background: "none", border: "1px solid #B0B8C1", color: "#B0B8C1", padding: "8px 20px", borderRadius: "8px", cursor: "pointer", fontSize: "14px", fontWeight: 600, transition: "all 0.2s" }}
+            <button onClick={() => navigate("/login")} style={{ background: "none", border: "1px solid #B0B8C1", color: "#B0B8C1", padding: "8px 20px", borderRadius: "8px", cursor: "pointer", fontSize: "14px", fontWeight: 600, transition: "all 0.2s" }}
               onMouseEnter={(e) => { (e.currentTarget as HTMLElement).style.borderColor = "#fff"; (e.currentTarget as HTMLElement).style.color = "#fff"; }}
               onMouseLeave={(e) => { (e.currentTarget as HTMLElement).style.borderColor = "#B0B8C1"; (e.currentTarget as HTMLElement).style.color = "#B0B8C1"; }}>
               دخول

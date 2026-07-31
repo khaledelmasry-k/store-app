@@ -13,12 +13,14 @@ export default function StoreLinkRedirect() {
     }>(`/orders/links/resolve/${slug}`)
       .then((link) => {
         let url = `/store/${link.storeRef}`;
-        if (link.sellerId) url += `&seller=${link.sellerId}`;
-        if (link.landingPageId) url += `&landing=${link.landingPageId}&landingSlug=${link.landingPageSlug || ""}`;
-        if (link.id) url += `&link=${link.id}`;
-        if (link.utmSource) url += `&utm_source=${link.utmSource}`;
-        if (link.utmMedium) url += `&utm_medium=${link.utmMedium}`;
-        if (link.utmCampaign) url += `&utm_campaign=${link.utmCampaign}`;
+        const q: string[] = [];
+        if (link.sellerId) q.push(`seller=${link.sellerId}`);
+        if (link.landingPageId) q.push(`landing=${link.landingPageId}&landingSlug=${encodeURIComponent(link.landingPageSlug || "")}`);
+        if (link.id) q.push(`link=${link.id}`);
+        if (link.utmSource) q.push(`utm_source=${encodeURIComponent(link.utmSource)}`);
+        if (link.utmMedium) q.push(`utm_medium=${encodeURIComponent(link.utmMedium)}`);
+        if (link.utmCampaign) q.push(`utm_campaign=${encodeURIComponent(link.utmCampaign)}`);
+        if (q.length) url += `?${q.join("&")}`;
         window.location.href = url;
       })
       .catch(() => setMsg("الرابط غير موجود"));

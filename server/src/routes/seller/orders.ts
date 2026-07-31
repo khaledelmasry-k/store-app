@@ -3,6 +3,7 @@ import { z } from "zod";
 import { prisma } from "../../utils/prisma.js";
 import { authMiddleware } from "../../middleware/auth.js";
 import { requireStore, requirePermission } from "../../middleware/permission.js";
+import { parseJsonField } from "../../utils/parseJson.js";
 
 function qs(val: unknown): string {
   return typeof val === "string" ? val : "";
@@ -79,6 +80,14 @@ router.patch("/:id/status", requirePermission("orders", "edit"), async (req: Req
     return;
   }
 
+  if (
+    (parsed.data.status === "RETURNED" || parsed.data.status === "CANCELLED") &&
+    order.status !== "RETURNED" &&
+    order.status !== "CANCELLED"
+  ) {
+    await restoreOrderStock(order.items);
+  }
+
   const updated = await prisma.order.update({
     where: { id: String(req.params.id) },
     data: { status: parsed.data.status },
@@ -86,8 +95,7 @@ router.patch("/:id/status", requirePermission("orders", "edit"), async (req: Req
   res.json(updated);
 });
 
-router.delete("/:id", requirePermission("orders", "delete"), async (req: Request<{ id: string }>, res: Response) => {
-  const where: any = { id: String(req.params.id), ...storeWhere(req) };
+router.delete("/:id", requirePermission("orders", "delete"), async (req: Request<{ id: string }>, res: Response) => {  const where: any = { id: String(req.params.id), ...storeWhere(req) };
   const order = await prisma.order.findFirst({
     where,
     include: { items: true },
@@ -100,5 +108,26 @@ router.delete("/:id", requirePermission("orders", "delete"), async (req: Request
   await prisma.order.delete({ where: { id: String(req.params.id) } });
   res.json({ success: true });
 });
+
+// Restore stock to each product referenced by the order items (per productId).
+async function restoreOrderStock(items: Array<{ productId: string | null; color: string; size: string; quantity: number }>) {
+  const ids = [...new Set(items.filter((i) => i.productId).map((i) => i.productId!))];
+  if (ids.length === 0) return;
+  const products = await prisma.product.findMany({ where: { id: { in: ids } } });
+  for (const product of products) {
+    const vs = parseJsonField<Record<string, Record<string, number>>>(product.variantStock, {});
+    const itemGroup = items.filter((i) => i.productId === product.id);
+    if (itemGroup.length === 0) continue;
+    const newVs = JSON.parse(JSON.stringify(vs));
+    for (const item of itemGroup) {
+      if (!newVs[item.color]) newVs[item.color] = {};
+      newVs[item.color][item.size] = (newVs[item.color][item.size] ?? 0) + item.quantity;
+    }
+    await prisma.product.update({
+      where: { id: product.id },
+      data: { variantStock: JSON.stringify(newVs) },
+    });
+  }
+}
 
 export default router;

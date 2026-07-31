@@ -141,6 +141,20 @@ router.post("/", async (req: Request, res: Response) => {
 
   const { items, ref: _ref, sellerId, landingPageId, landingPageSlug, marketingLinkId, utmSource, utmMedium, utmCampaign, ...orderData } = parsed.data;
 
+  // Validate attribution fields belong to this store (prevents cross-tenant data poisoning).
+  if (sellerId) {
+    const seller = await prisma.seller.findFirst({ where: { id: sellerId, storeId } });
+    if (!seller) { res.status(400).json({ error: "بيانات الإحالة غير صحيحة" }); return; }
+  }
+  if (landingPageId) {
+    const lp = await prisma.landingPage.findFirst({ where: { id: landingPageId, storeId } });
+    if (!lp) { res.status(400).json({ error: "بيانات الإحالة غير صحيحة" }); return; }
+  }
+  if (marketingLinkId) {
+    const ml = await prisma.storeLink.findFirst({ where: { id: marketingLinkId, storeId } });
+    if (!ml) { res.status(400).json({ error: "بيانات الإحالة غير صحيحة" }); return; }
+  }
+
   // Validate stock
   const productIds = [...new Set(items.filter((i) => i.productId).map((i) => i.productId!))];
   const products = productIds.length > 0
@@ -151,8 +165,9 @@ router.post("/", async (req: Request, res: Response) => {
   const productMap = new Map(products.map((p) => [p.id, p]));
   for (const item of items) {
     const pid = item.productId || products[0].id;
-    const product = productMap.get(pid) || products[0];
-    if (!product || !product.active) { res.status(400).json({ error: `المنتج "${item.name || pid}" غير متاح` }); return; }
+    const product = productMap.get(pid);
+    if (!product) { res.status(400).json({ error: `المنتج "${item.name || pid}" غير متاح` }); return; }
+    if (!product.active) { res.status(400).json({ error: `المنتج "${item.name || product.name}" غير متاح` }); return; }
     const vs = parseJsonField<Record<string, Record<string, number>>>(product.variantStock, {});
     const available = vs[item.color]?.[item.size] ?? 0;
     if (item.quantity > available) {
@@ -164,68 +179,74 @@ router.post("/", async (req: Request, res: Response) => {
   let totalPrice = 0;
   for (const item of items) {
     const pid = item.productId || products[0].id;
-    const product = productMap.get(pid) || products[0];
+    const product = productMap.get(pid);
+    if (!product) continue;
     const tiers = parseJsonField<Record<string, number>>(product.pricingTiers, {});
     totalPrice += getTotalPrice(item.quantity, tiers);
   }
 
-  const orderNumber = await generateOrderNumber();
-
-  const order = await prisma.order.create({
-    data: {
-      customerName: orderData.customerName,
-      phone: orderData.phone,
-      governorate: orderData.governorate,
-      city: orderData.city,
-      address: orderData.address,
-      notes: orderData.notes || null,
-      orderNumber,
-      totalPrice,
-      createdBy: _ref || "",
-      storeId,
-      tenantId: tenantId || null,
-      sellerId: sellerId || null,
-      landingPageId: landingPageId || null,
-      landingPageSlug: landingPageSlug || null,
-      marketingLinkId: marketingLinkId || null,
-      utmSource: utmSource || null,
-      utmMedium: utmMedium || null,
-      utmCampaign: utmCampaign || null,
-      status: "NEW",
-      items: {
-        create: items.map((item) => {
-          const pid = item.productId || products[0].id;
-          const product = productMap.get(pid) || products[0];
-          const tiers = parseJsonField<Record<string, number>>(product.pricingTiers, {});
-          const uPrice = getTotalPrice(item.quantity, tiers) / item.quantity;
-          return {
-            productId: pid,
-            name: item.name || product.name,
-            color: item.color,
-            size: item.size,
-            quantity: item.quantity,
-            unitPrice: Math.round(uPrice * 100) / 100,
-          };
-        }),
+  // Create the order and deduct stock atomically to prevent overselling under concurrency.
+  const order = await prisma.$transaction(async (tx) => {
+    const orderNumber = await generateOrderNumber(tx);
+    const created = await tx.order.create({
+      data: {
+        customerName: orderData.customerName,
+        phone: orderData.phone,
+        governorate: orderData.governorate,
+        city: orderData.city,
+        address: orderData.address,
+        notes: orderData.notes || null,
+        orderNumber,
+        totalPrice,
+        createdBy: _ref || "",
+        storeId,
+        tenantId: tenantId || null,
+        sellerId: sellerId || null,
+        landingPageId: landingPageId || null,
+        landingPageSlug: landingPageSlug || null,
+        marketingLinkId: marketingLinkId || null,
+        utmSource: utmSource || null,
+        utmMedium: utmMedium || null,
+        utmCampaign: utmCampaign || null,
+        status: "NEW",
+        items: {
+          create: items.map((item) => {
+            const pid = item.productId || products[0].id;
+            const product = productMap.get(pid);
+            if (!product) throw new Error(`المنتج غير متاح: ${item.name || pid}`);
+            const tiers = parseJsonField<Record<string, number>>(product.pricingTiers, {});
+            const uPrice = getTotalPrice(item.quantity, tiers) / item.quantity;
+            return {
+              productId: pid,
+              name: item.name || product.name,
+              color: item.color,
+              size: item.size,
+              quantity: item.quantity,
+              unitPrice: Math.round(uPrice * 100) / 100,
+            };
+          }),
+        },
       },
-    },
-    include: { items: true },
-  });
+      include: { items: true },
+    });
 
-  // Deduct stock for each product variant
-  for (const pid of [...new Set(items.map((i) => i.productId || products[0].id))]) {
-    const product = productMap.get(pid);
-    if (!product) continue;
-    const vs = parseJsonField<Record<string, Record<string, number>>>(product.variantStock, {});
-    const itemGroup = items.filter((i) => (i.productId || products[0].id) === pid);
-    if (itemGroup.length === 0) continue;
-    const newVs = JSON.parse(JSON.stringify(vs));
-    for (const item of itemGroup) {
-      if (!newVs[item.color]) newVs[item.color] = {};
-      newVs[item.color][item.size] = (newVs[item.color][item.size] ?? 0) - item.quantity;
+    // Deduct stock for each product variant
+    for (const pid of [...new Set(items.map((i) => i.productId || products[0].id))]) {
+      const product = productMap.get(pid);
+      if (!product) continue;
+      const vs = parseJsonField<Record<string, Record<string, number>>>(product.variantStock, {});
+      const itemGroup = items.filter((i) => (i.productId || products[0].id) === pid);
+      if (itemGroup.length === 0) continue;
+      const newVs = JSON.parse(JSON.stringify(vs));
+      for (const item of itemGroup) {
+        if (!newVs[item.color]) newVs[item.color] = {};
+        newVs[item.color][item.size] = (newVs[item.color][item.size] ?? 0) - item.quantity;
+      }
+      await tx.product.update({ where: { id: product.id }, data: { variantStock: JSON.stringify(newVs) } });
     }
-    await prisma.product.update({ where: { id: product.id }, data: { variantStock: JSON.stringify(newVs) } });
-  }
+
+    return created;
+  });
 
   res.status(201).json({
     orderNumber: order.orderNumber,
@@ -236,23 +257,27 @@ router.post("/", async (req: Request, res: Response) => {
 });
 
 // ---- GET /track/:orderNumber — order tracking ----
+// Public endpoint: returns ONLY non-personal order data (no customer name/address/phone).
 router.get("/track/:orderNumber", async (req: Request<{ orderNumber: string }>, res: Response) => {
   const order = await prisma.order.findUnique({
     where: { orderNumber: String(req.params.orderNumber) },
-    include: { items: { select: { name: true, color: true, size: true, quantity: true, unitPrice: true } } },
+    select: {
+      orderNumber: true,
+      totalPrice: true,
+      status: true,
+      createdAt: true,
+      updatedAt: true,
+      items: { select: { name: true, color: true, size: true, quantity: true, unitPrice: true } },
+    },
   });
   if (!order) { res.status(404).json({ error: "الطلب غير موجود" }); return; }
   res.json({
     orderNumber: order.orderNumber,
-    customerName: order.customerName,
     totalPrice: order.totalPrice,
     status: order.status,
-    governorate: order.governorate,
-    city: order.city,
     createdAt: order.createdAt,
+    updatedAt: order.updatedAt,
     items: order.items,
-    utmSource: order.utmSource,
-    utmCampaign: order.utmCampaign,
   });
 });
 

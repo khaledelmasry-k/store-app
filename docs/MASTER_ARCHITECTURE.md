@@ -38,7 +38,7 @@ The M&K Store platform is a Multi-Tenant SaaS e-commerce solution built on a mod
 ┌─────────────────────────┴──────────────────────────────────┐
 │                    Data Layer                              │
 │  ┌──────────────┐  ┌──────────────┐  ┌──────────────┐      │
-│  │  Prisma      │  │  SQLite      │  │  Uploads     │      │
+│  │  Prisma      │  │ PostgreSQL   │  │  Uploads     │      │
 │  │  ORM        │  │  Database    │  │  Storage     │      │
 │  └──────────────┘  └──────────────┘  └──────────────┘      │
 └─────────────────────────────────────────────────────────────┘
@@ -583,7 +583,7 @@ Platform (Super Admin)
 ├── server/
 │   ├── prisma/
 │   │   ├── schema.prisma           # Database schema
-│   │   └── dev.db                  # SQLite database
+│   │   └── migrations/             # PostgreSQL migrations
 │   ├── src/
 │   │   ├── routes/
 │   │   │   ├── admin.ts
@@ -719,7 +719,7 @@ Platform (Super Admin)
 ### Technology Stack Evolution
 - **Frontend**: Preact → React (if needed for ecosystem)
 - **Backend**: Express → NestJS (for enterprise features)
-- **Database**: SQLite → PostgreSQL (for production)
+- **Database**: PostgreSQL (migrated from SQLite — done)
 - **Hosting**: Firebase → Kubernetes (for scale)
 
 ### Payment Integration

@@ -2,7 +2,7 @@ import { Router, Request, Response } from "express";
 import { z } from "zod";
 import { prisma } from "../utils/prisma.js";
 import { authMiddleware } from "../middleware/auth.js";
-import { requireStore, requirePermission } from "../middleware/permission.js";
+import { requireStore, requirePermission, enforcePlanLimit } from "../middleware/permission.js";
 import { parseJsonField } from "../utils/parseJson.js";
 import { computeTotalStock } from "../utils/stock.js";
 
@@ -57,6 +57,7 @@ router.put("/", requirePermission("products", "edit"), async (req: Request, res:
   if (data.sizes) data.sizes = JSON.stringify(data.sizes);
 
   if (!product) {
+    if (!(await enforcePlanLimit(req, res, "products"))) return;
     product = await prisma.product.create({
       data: {
         storeId: req.storeId || undefined,
@@ -85,6 +86,17 @@ router.put("/", requirePermission("products", "edit"), async (req: Request, res:
     colors: parseJsonField<string[]>(updated.colors, []),
     sizes: parseJsonField<string[]>(updated.sizes, []),
   });
+});
+
+router.delete("/", requirePermission("products", "delete"), async (req: Request, res: Response) => {
+  const where = req.storeId ? { storeId: req.storeId } : {};
+  let product = await prisma.product.findFirst({ where, orderBy: { updatedAt: "desc" } });
+  if (!product) {
+    res.status(404).json({ error: "Product not found" });
+    return;
+  }
+  await prisma.product.delete({ where: { id: product.id } });
+  res.json({ success: true });
 });
 
 export default router;

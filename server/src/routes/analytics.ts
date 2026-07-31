@@ -63,14 +63,14 @@ router.get("/overview", async (req: Request, res: Response) => {
   const productOrderCount: Record<string, { name: string; count: number; revenue: number }> = {};
   for (const p of products) productOrderCount[p.id] = { name: p.name, count: 0, revenue: 0 };
   for (const o of orders) {
-    const items = parseJsonField<Array<{ name?: string; productId?: string; quantity: number; price: number }>>(o.items as any, []);
+    const items = parseJsonField<Array<{ name?: string; productId?: string; quantity: number; unitPrice?: number }>>(o.items as any, []);
     for (const item of items) {
       const pid = item.productId || "";
       const key = pid || item.name || "";
       if (key) {
         if (!productOrderCount[key]) productOrderCount[key] = { name: item.name || key, count: 0, revenue: 0 };
         productOrderCount[key].count += item.quantity || 1;
-        productOrderCount[key].revenue += (item.price || 0) * (item.quantity || 1);
+        productOrderCount[key].revenue += (item.unitPrice || 0) * (item.quantity || 1);
       }
     }
   }
@@ -143,12 +143,12 @@ router.get("/top-products", async (req: Request, res: Response) => {
   const orders = await prisma.order.findMany({ where, select: { items: true } });
   const countMap: Record<string, { name: string; quantity: number; revenue: number }> = {};
   for (const o of orders) {
-    const items = parseJsonField<Array<{ name?: string; productId?: string; quantity: number; price: number }>>(o.items as any, []);
+    const items = parseJsonField<Array<{ name?: string; productId?: string; quantity: number; unitPrice?: number }>>(o.items as any, []);
     for (const item of items) {
       const key = item.productId || item.name || "unknown";
       if (!countMap[key]) countMap[key] = { name: item.name || key, quantity: 0, revenue: 0 };
       countMap[key].quantity += item.quantity || 1;
-      countMap[key].revenue += (item.price || 0) * (item.quantity || 1);
+      countMap[key].revenue += (item.unitPrice || 0) * (item.quantity || 1);
     }
   }
   res.json({ products: Object.values(countMap).sort((a, b) => b.quantity - a.quantity) });

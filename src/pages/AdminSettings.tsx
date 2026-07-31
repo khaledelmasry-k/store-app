@@ -10,7 +10,7 @@ export default function AdminSettings() {
   const [showStoreForm, setShowStoreForm] = useState(false);
   const [showAdminForm, setShowAdminForm] = useState(false);
   const [storeForm, setStoreForm] = useState({ ref: "", name: "" });
-  const [adminForm, setAdminForm] = useState({ username: "", email: "", password: "", role: "admin" });
+  const [adminForm, setAdminForm] = useState({ username: "", email: "", password: "", role: "super_admin" });
   const [toastMsg, setToastMsg] = useState("");
   const [toastShow, setToastShow] = useState(false);
   const [loading, setLoading] = useState(true);
@@ -61,7 +61,7 @@ export default function AdminSettings() {
   const addAdmin = async () => {
     try {
       await api.post("/admin/settings/admins", adminForm);
-      setAdminForm({ username: "", email: "", password: "", role: "admin" });
+      setAdminForm({ username: "", email: "", password: "", role: "super_admin" });
       setShowAdminForm(false);
       await loadAdmins();
       showToast("تم إضافة المشرف");
@@ -189,10 +189,7 @@ export default function AdminSettings() {
                     <input className="amazon-input" placeholder="اسم المستخدم" value={adminForm.username} onChange={(e) => setAdminForm({ ...adminForm, username: (e.target as HTMLInputElement).value })} />
                     <input className="amazon-input" type="email" placeholder="البريد الإلكتروني" value={adminForm.email} onChange={(e) => setAdminForm({ ...adminForm, email: (e.target as HTMLInputElement).value })} />
                     <input className="amazon-input" type="password" placeholder="كلمة المرور" value={adminForm.password} onChange={(e) => setAdminForm({ ...adminForm, password: (e.target as HTMLInputElement).value })} />
-                    <select className="amazon-input" value={adminForm.role} onChange={(e) => setAdminForm({ ...adminForm, role: (e.target as HTMLSelectElement).value })} style={{ padding: "8px 12px", borderRadius: "8px", border: "1px solid #DDDDDD", fontSize: "14px" }}>
-                      <option value="admin">مشرف عادي</option>
-                      <option value="super_admin">مشرف عام</option>
-                    </select>
+                    <input type="hidden" value={adminForm.role} />
                     <div style={{ display: "flex", gap: "8px", justifyContent: "flex-end", marginTop: "8px" }}>
                       <button onClick={() => setShowAdminForm(false)} style={{ background: "#fff", border: "1px solid #888C8C", borderRadius: "8px", padding: "8px 16px", cursor: "pointer" }}>إلغاء</button>
                       <button onClick={addAdmin} disabled={!adminForm.username || !adminForm.email || !adminForm.password} style={{ background: "#FF9900", color: "#0F1111", border: "none", borderRadius: "8px", padding: "8px 16px", fontWeight: 600, cursor: "pointer", opacity: !adminForm.username || !adminForm.email || !adminForm.password ? 0.6 : 1 }}>إضافة</button>
