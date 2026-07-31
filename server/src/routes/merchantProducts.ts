@@ -2,7 +2,7 @@ import { Router, Request, Response } from "express";
 import { z } from "zod";
 import { prisma } from "../utils/prisma.js";
 import { authMiddleware } from "../middleware/auth.js";
-import { requireStore, requirePermission } from "../middleware/permission.js";
+import { requireStore, requirePermission, enforcePlanLimit } from "../middleware/permission.js";
 import { parseJsonField } from "../utils/parseJson.js";
 import { computeTotalStock } from "../utils/stock.js";
 
@@ -114,6 +114,7 @@ router.post("/", requirePermission("products", "create"), async (req: Request, r
     res.status(403).json({ error: "Store not found for this account" });
     return;
   }
+  if (!(await enforcePlanLimit(req, res, "products"))) return;
   const data: any = { ...parsed.data, storeId: req.storeId };
   if (data.pricingTiers) data.pricingTiers = JSON.stringify(data.pricingTiers);
   if (data.variantStock) data.variantStock = JSON.stringify(data.variantStock);
@@ -164,6 +165,7 @@ router.post("/:id/duplicate", requirePermission("products", "create"), async (re
     res.status(404).json({ error: "Product not found" });
     return;
   }
+  if (!(await enforcePlanLimit(req, res, "products"))) return;
   const product = await prisma.product.create({
     data: {
       storeId: original.storeId,

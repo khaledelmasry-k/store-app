@@ -2,7 +2,7 @@ import { Router, Request, Response } from "express";
 import { z } from "zod";
 import { prisma } from "../../utils/prisma.js";
 import { authMiddleware } from "../../middleware/auth.js";
-import { requireStore, requirePermission } from "../../middleware/permission.js";
+import { requireStore, requirePermission, enforcePlanLimit } from "../../middleware/permission.js";
 
 const router = Router();
 router.use(authMiddleware, requireStore);
@@ -41,6 +41,8 @@ router.post("/", requirePermission("store-links", "create"), async (req: Request
     res.status(403).json({ error: "Store not found or not authorized" });
     return;
   }
+
+  if (!(await enforcePlanLimit(req, res, "storeLinks"))) return;
 
   const existing = await prisma.storeLink.findUnique({ where: { slug: parsed.data.slug } });
   if (existing) {

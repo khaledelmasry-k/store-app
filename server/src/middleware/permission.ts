@@ -124,3 +124,74 @@ export function requirePermission(resource: Resource, action: Action) {
     }
   };
 }
+
+/** Per-plan limits. null = unlimited. */
+const PLAN_LIMITS: Record<string, { products?: number; stores?: number; storeLinks?: number }> = {
+  FREE: { products: 1, stores: 1, storeLinks: 1 },
+  STARTER: { stores: 1 },
+  PRO: {},
+  BUSINESS: {},
+  ENTERPRISE: {},
+};
+
+/**
+ * Enforce subscription plan limits before creating a resource.
+ * Returns a 403 error via the response when the tenant has reached its limit,
+ * or when the tenant is on an unknown/expired plan with a hard limit.
+ */
+export async function enforcePlanLimit(req: Request, res: Response, resource: "products" | "stores" | "storeLinks"): Promise<boolean> {
+  try {
+    const admin = req.admin;
+    if (!admin || admin.role === "super_admin") return true;
+
+    const tenantId = await getReqTenantId(req);
+    if (!tenantId) {
+      // Legacy merchants (pre-tenant) have no plan to enforce.
+      return true;
+    }
+
+    const tenant = await prisma.tenant.findUnique({ where: { id: tenantId }, select: { plan: true, status: true } });
+    if (!tenant) return true;
+
+    // Suspended tenants cannot create anything.
+    if (tenant.status === "SUSPENDED") {
+      res.status(403).json({ error: "حسابك موقوف، يرجى التواصل مع الدعم" });
+      return false;
+    }
+
+    const plan = tenant.plan || "FREE";
+    const limit = PLAN_LIMITS[plan];
+    if (!limit) {
+      // Unknown plan: default to FREE limits for safety.
+      const fallback = PLAN_LIMITS.FREE;
+      return enforceCount(req, res, resource, fallback);
+    }
+    return enforceCount(req, res, resource, limit);
+  } catch (err) {
+    // Fail-open on unexpected errors so legitimate merchants aren't blocked.
+    console.error("enforcePlanLimit error:", err);
+    return true;
+  }
+}
+
+async function enforceCount(req: Request, res: Response, resource: "products" | "stores" | "storeLinks", limit: { products?: number; stores?: number; storeLinks?: number }): Promise<boolean> {
+  const max = limit[resource];
+  if (!max) return true;
+
+  const storeId = req.storeId;
+  let count = 0;
+  if (resource === "products") {
+    count = await prisma.product.count({ where: storeId ? { storeId } : {} });
+  } else if (resource === "stores") {
+    const tenantId = await getReqTenantId(req);
+    count = await prisma.store.count({ where: tenantId ? { tenantId } : {} });
+  } else if (resource === "storeLinks") {
+    count = await prisma.storeLink.count({ where: storeId ? { storeId } : {} });
+  }
+
+  if (count >= max) {
+    res.status(403).json({ error: `لقد وصلت للحد الأقصى المسموح به في باقة ${resource === "products" ? "المنتجات" : resource === "stores" ? "المتاجر" : "الروابط التسويقية"}، قم بترقية باقتك` });
+    return false;
+  }
+  return true;
+}
