@@ -10,5 +10,8 @@ else
   npx prisma db push --accept-data-loss || echo "db push failed (database might not be ready)"
 fi
 
+echo "Seeding default admin..."
+node dist/seed.js || echo "Seeding skipped"
+
 echo "Starting server..."
 exec node dist/index.js
