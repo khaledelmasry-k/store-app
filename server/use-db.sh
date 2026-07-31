@@ -1,19 +1,11 @@
 #!/usr/bin/env bash
-# Usage: bash use-db.sh [postgres|sqlite]
-# Switches prisma/schema.prisma to the selected database provider.
+# PostgreSQL is the only supported database.
+# Kept as a convenience script that confirms the schema is PostgreSQL.
 set -e
 DIR="$(cd "$(dirname "$0")" && pwd)"
-case "${1:-postgres}" in
-  postgres|pg)
-    cp "$DIR/prisma/schema.postgres.prisma" "$DIR/prisma/schema.prisma" 2>/dev/null || true
-    echo "Switched to PostgreSQL schema"
-    ;;
-  sqlite)
-    cp "$DIR/prisma/schema.sqlite.prisma" "$DIR/prisma/schema.prisma"
-    echo "Switched to SQLite schema"
-    ;;
-  *)
-    echo "Usage: $0 [postgres|sqlite]"
-    exit 1
-    ;;
-esac
+if grep -q 'provider = "postgresql"' "$DIR/prisma/schema.prisma"; then
+  echo "schema.prisma is configured for PostgreSQL ✓"
+else
+  echo "schema.prisma is NOT PostgreSQL — please restore the PostgreSQL schema."
+  exit 1
+fi
