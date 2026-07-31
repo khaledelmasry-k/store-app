@@ -89,7 +89,7 @@ export default function Sidebar() {
   };
 
   const copyLink = (ref: string) => {
-    navigator.clipboard.writeText(`${window.location.origin}/store?ref=${ref}`);
+    navigator.clipboard.writeText(`${window.location.origin}/store/${ref}`);
     const el = document.createElement("div");
     el.className = "amazon-toast amazon-toast-success show";
     el.innerHTML = '<span class="material-symbols-outlined" style="font-size:16px">check</span> تم نسخ الرابط';

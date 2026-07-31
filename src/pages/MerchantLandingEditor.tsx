@@ -11,10 +11,10 @@ interface Section {
 }
 
 const DEFAULT_SECTION: Record<string, Section> = {
-  hero: { type: "hero", content: { headline: "عنوان الصفحة", subtext: "نص فرعي يصف العرض", buttonText: "تسوق الآن", buttonUrl: "/store?ref=", imageUrl: "" } },
+  hero: { type: "hero", content: { headline: "عنوان الصفحة", subtext: "نص فرعي يصف العرض", buttonText: "تسوق الآن", buttonUrl: "/store/", imageUrl: "" } },
   features: { type: "features", content: { title: "مميزاتنا", items: JSON.stringify(["جودة عالية", "سعر مناسب", "شحن سريع"]) } },
   products: { type: "products", content: { title: "منتجاتنا" } },
-  cta: { type: "cta", content: { headline: "احصل على عرضك الآن", buttonText: "اطلب الآن", buttonUrl: "/store?ref=" } },
+  cta: { type: "cta", content: { headline: "احصل على عرضك الآن", buttonText: "اطلب الآن", buttonUrl: "/store/" } },
   footer: { type: "footer", content: { text: "جميع الحقوق محفوظة", socialLinks: "" } },
   testimonials: { type: "testimonials", content: { title: "آراء العملاء", items: JSON.stringify([{ name: "أحمد", text: "منتج رائع جداً", rating: "5" }, { name: "محمد", text: "خدمة ممتازة وسريعة", rating: "5" }]) } },
   faq: { type: "faq", content: { title: "الأسئلة الشائعة", items: JSON.stringify([{ q: "ما هي طرق الدفع؟", a: "الدفع عند الاستلام" }, { q: "كم مدة التوصيل؟", a: "3-5 أيام عمل" }]) } },

@@ -25,7 +25,8 @@ function getTierPrice(qty: number, tiers: Record<string, number>): number {
 
 export default function CustomerStore() {
   const params = new URLSearchParams(window.location.search);
-  const ref = params.get("ref") || "";
+  const pathMatch = window.location.pathname.match(/^\/store\/([^/]+)/);
+  const ref = (pathMatch && pathMatch[1]) || params.get("ref") || "";
   const sellerId = params.get("seller") || "";
   const landingPageId = params.get("landing") || "";
   const landingPageSlug = params.get("landingSlug") || "";

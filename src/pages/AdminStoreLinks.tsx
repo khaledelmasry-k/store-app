@@ -15,7 +15,7 @@ export default function AdminStoreLinks() {
   }, []);
 
   const copyLink = (ref: string, name: string) => {
-    const url = `${window.location.origin}/store?ref=${ref}`;
+    const url = `${window.location.origin}/store/${ref}`;
     navigator.clipboard.writeText(url).then(() => {
       setCopied(name);
       setTimeout(() => setCopied(null), 2000);
@@ -58,7 +58,7 @@ export default function AdminStoreLinks() {
 
               <div style={{ background: "#F6F8F8", borderRadius: "8px", padding: "12px", display: "flex", alignItems: "center", justifyContent: "space-between", gap: "8px", border: "1px solid #EAEDED" }}>
                 <span style={{ fontSize: "13px", color: "#565959", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap", flex: 1 }} dir="ltr">
-                  {window.location.origin}/store?ref={store.ref}
+                  {window.location.origin}/store/{store.ref}
                 </span>
                 <button onClick={() => copyLink(store.ref, store.name)} style={{ background: copied === store.name ? "#067D62" : "#FF9900", border: "none", color: copied === store.name ? "#fff" : "#131921", padding: "8px 16px", borderRadius: "8px", fontWeight: 700, fontSize: "13px", cursor: "pointer", whiteSpace: "nowrap", transition: "all 0.2s" }}>
                   {copied === store.name ? "تم النسخ ✓" : "نسخ الرابط"}
@@ -67,13 +67,13 @@ export default function AdminStoreLinks() {
 
               <div style={{ marginTop: "16px", display: "flex", gap: "12px" }}>
                 <button onClick={() => {
-                  const msg = encodeURIComponent(`تسوق من ${store.name} عبر الرابط التالي:\n${window.location.origin}/store?ref=${store.ref}`);
+                  const msg = encodeURIComponent(`تسوق من ${store.name} عبر الرابط التالي:\n${window.location.origin}/store/${store.ref}`);
                   window.open(`https://wa.me/?text=${msg}`, "_blank");
                 }} style={{ flex: 1, background: "#25D366", border: "none", color: "#fff", padding: "10px", borderRadius: "8px", fontWeight: 600, fontSize: "13px", cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center", gap: "8px" }}>
                   <span>📱</span> مشاركة عبر واتساب
                 </button>
                 <button onClick={() => {
-                  const msg = encodeURIComponent(`تسوق من ${store.name}\n${window.location.origin}/store?ref=${store.ref}`);
+                  const msg = encodeURIComponent(`تسوق من ${store.name}\n${window.location.origin}/store/${store.ref}`);
                   window.open(`https://www.facebook.com/sharer/sharer.php?quote=${msg}`, "_blank");
                 }} style={{ flex: 1, background: "#1877F2", border: "none", color: "#fff", padding: "10px", borderRadius: "8px", fontWeight: 600, fontSize: "13px", cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center", gap: "8px" }}>
                   <span>📘</span> مشاركة عبر فيسبوك

@@ -30,7 +30,7 @@ export default function AdminSettings() {
   }, []);
 
   const copyLink = (ref: string) => {
-    const url = `${window.location.origin}/store?ref=${ref}`;
+    const url = `${window.location.origin}/store/${ref}`;
     navigator.clipboard.writeText(url).then(() => showToast("تم نسخ الرابط"));
   };
 

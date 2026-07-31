@@ -61,6 +61,7 @@ export default function App() {
         <Route path="/home" component={Landing} />
         <Route path="/" component={Landing} />
         <Route path="/store" component={CustomerStore} />
+        <Route path="/store/:ref" component={CustomerStore} />
         <Route path="/go/:slug" component={StoreLinkRedirect} />
         <Route path="/p/:slug" component={PublicLanding} />
         <Route path="/pricing" component={PublicPricing} />

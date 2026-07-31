@@ -12,7 +12,7 @@ export default function StoreLinkRedirect() {
       utmSource?: string; utmMedium?: string; utmCampaign?: string; id?: string;
     }>(`/orders/links/resolve/${slug}`)
       .then((link) => {
-        let url = `/store?ref=${link.storeRef}`;
+        let url = `/store/${link.storeRef}`;
         if (link.sellerId) url += `&seller=${link.sellerId}`;
         if (link.landingPageId) url += `&landing=${link.landingPageId}&landingSlug=${link.landingPageSlug || ""}`;
         if (link.id) url += `&link=${link.id}`;
