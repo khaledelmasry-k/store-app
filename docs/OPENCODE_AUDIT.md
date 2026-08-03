@@ -175,3 +175,16 @@ Store landing, catalog (search + category filter), product detail (variants), ca
 
 **P2 — Landing Page**
 17. Full rebuild: DB-driven pricing (no invented fallback, professional empty state), no fabricated metrics in hero/showcases, real accessible FAQ accordion, correct `/#anchor` links, professional footer, modern indigo/violet RTL responsive design.
+
+**P3/P4/P6 — Final polish**
+18. Register flow shows the selected plan banner (`?plan=<id>`) with activation note + `.plan-selected` styles.
+19. Merchant Dashboard: sales-link performance card (top 5 by revenue) + empty states for orders/products; storefront home empty state for no products.
+20. `stores` client create re-allowed for platform admin only (the "إضافة متجر" action in Platform → Merchants writes via the SDK); merchant/owner creation stays callable-only.
+
+## 17. Verification Status
+
+- `npm run typecheck` — pass
+- `npm run build` (app) — pass
+- `npm run build` (functions) — pass
+- `npm run lint` — no errors; only pre-existing warnings (useCollection/AuthProvider/MerchantLayout exhaustive-deps, unused catch param in ForgotPassword)
+- Safety checkpoint committed on `opencode-repair-20260803-034335` (`9d24376`), 22 files (my changes only; unrelated pre-existing migration deletes left uncommitted).
