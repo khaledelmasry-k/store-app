@@ -84,7 +84,7 @@ function HomeRedirect() {
 
 function LoginByRole() {
   const [loc] = useLocation()
-  const params = new URLSearchParams(loc.split('?')[1] || '')
+  const params = new URLSearchParams(loc.split('?')[1] || window.location.search)
   const role = params.get('role') || 'platform'
   if (role === 'merchant') return <Login role="merchant" />
   if (role === 'customer') return <Login role="customer" />

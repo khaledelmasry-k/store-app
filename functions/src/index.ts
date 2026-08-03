@@ -1,11 +1,11 @@
 import * as admin from 'firebase-admin'
+import { FieldValue, Timestamp } from 'firebase-admin/firestore'
 import { onCall, HttpsError, type CallableRequest } from 'firebase-functions/v2/https'
 
 admin.initializeApp()
 
 const db = admin.firestore()
 const auth = admin.auth()
-const { FieldValue } = admin.firestore
 
 // ─────────────────────────────────────────────────────────────
 // Helpers
@@ -14,7 +14,7 @@ const { FieldValue } = admin.firestore
 const now = () => FieldValue.serverTimestamp()
 
 function tsFromDate(d: Date) {
-  return { seconds: Math.floor(d.getTime() / 1000), nanoseconds: 0 }
+  return Timestamp.fromDate(d)
 }
 
 async function getUserRole(uid: string): Promise<string | null> {
@@ -447,8 +447,8 @@ export const exitImpersonation = onCall(async (request: CallableRequest) => {
   }
   const adminUid = user.impersonatedBy
   await db.doc(`users/${request.auth.uid}`).update({
-    impersonatedBy: admin.firestore.FieldValue.delete(),
-    impersonatedUntil: admin.firestore.FieldValue.delete(),
+    impersonatedBy: FieldValue.delete(),
+    impersonatedUntil: FieldValue.delete(),
   })
   // Record the exit in the admin's audit trail
   await db.collection('auditLogs').add({
@@ -534,7 +534,7 @@ export const recordStoreLinkVisit = onCall(async (request: CallableRequest<{ sto
   }
 
   await linkQuery.docs[0].ref.update({
-    visits: admin.firestore.FieldValue.increment(1),
+    visits: FieldValue.increment(1),
     lastVisitAt: now(),
   })
 
