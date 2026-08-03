@@ -33,8 +33,10 @@ export const ROUTE_PERMISSIONS: Record<string, Permission> = {
   '/dashboard/customers': 'customers:manage',
   '/dashboard/coupons': 'coupons:manage',
   '/dashboard/shipping': 'settings:manage',
-  '/dashboard/reports': 'reports:view',
-  '/dashboard/analytics': 'reports:view',
+  // Reports/Analytics surface order + customer PII (CSV export, revenue breakdown),
+  // so staff need orders:manage to read that data — see firestore.rules L1 fix.
+  '/dashboard/reports': 'orders:manage',
+  '/dashboard/analytics': 'orders:manage',
   '/dashboard/team': 'team:manage',
   '/dashboard/roles': 'team:manage',
   '/dashboard/landing-pages': 'landing:manage',
@@ -114,22 +116,21 @@ export const GOVER_EG = [
 ]
 
 export const NAV_ITEMS = {
+  // Super Admin manages the PLATFORM, not a merchant store.
+  // Merchant-operational modules (products/orders/customers/inventory/sales-links/
+  // team/store-settings) are deliberately NOT exposed here. Merchant inspection
+  // happens via "View Store" and "Impersonate" actions on /platform/stores/​:id.
   platform: [
     { to: '/platform', label: 'نظرة عامة', icon: 'space_dashboard' },
     { to: '/platform/merchants', label: 'التجار', icon: 'storefront' },
     { to: '/platform/stores', label: 'المتاجر', icon: 'store' },
-    { to: '/platform/products', label: 'المنتجات', icon: 'inventory_2' },
-    { to: '/platform/orders', label: 'الطلبات', icon: 'receipt_long' },
-    { to: '/platform/customers', label: 'العملاء', icon: 'groups' },
-    { to: '/platform/subscriptions', label: 'الاشتراكات', icon: 'card_membership' },
     { to: '/platform/plans', label: 'الباقات', icon: 'workspace_premium' },
+    { to: '/platform/subscriptions', label: 'الاشتراكات', icon: 'card_membership' },
     { to: '/platform/payments', label: 'المدفوعات', icon: 'payments' },
-    { to: '/platform/transactions', label: 'المعاملات', icon: 'swap_horiz' },
     { to: '/platform/coupons', label: 'الكوبونات', icon: 'local_offer' },
     { to: '/platform/reports', label: 'التقارير', icon: 'bar_chart' },
-    { to: '/platform/tickets', label: 'تذاكر الدعم', icon: 'support_agent' },
-    { to: '/platform/audit', label: 'سجل التدقيق', icon: 'fact_check' },
     { to: '/platform/notifications', label: 'الإشعارات', icon: 'notifications' },
+    { to: '/platform/audit', label: 'سجل التدقيق', icon: 'fact_check' },
     { to: '/platform/settings', label: 'إعدادات المنصة', icon: 'settings' },
   ],
   dashboard: [

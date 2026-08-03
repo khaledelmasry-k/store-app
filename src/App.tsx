@@ -112,6 +112,7 @@ function PlatformRoutes() {
     <ZoneRouter prefix="/platform" role="superAdmin" layout={PlatformLayout}>
       <Route path="/" component={() => <PlatformDashboard />} />
       <Route path="/merchants" component={() => <PlatformMerchants />} />
+      <Route path="/stores" component={() => <PlatformMerchants />} />
       <Route path="/stores/:id" component={StoreDetailsRoute} />
       <Route path="/products" component={() => <PlatformProducts />} />
       <Route path="/orders" component={() => <PlatformOrders />} />

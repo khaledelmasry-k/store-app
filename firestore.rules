@@ -78,6 +78,18 @@ service cloud.firestore {
       return resource.data.storeId != null;
     }
 
+    // L1 fix — read gates are permission-aware, not merely "belongs to the store".
+    // Being a store member is NOT enough to read Orders or Customers; a staff
+    // member must hold the specific permission (orders:manage / customers:manage).
+    // Merchants (owners) and platform admins always pass for their own tenant.
+    function canReadOrders(storeId) {
+      return isPlatformAdmin() || (canAccessStore(storeId) && (isMerchant() || hasPermission('orders:manage')));
+    }
+
+    function canReadCustomers(storeId) {
+      return isPlatformAdmin() || (canAccessStore(storeId) && (isMerchant() || hasPermission('customers:manage')));
+    }
+
     function validTimestamps() {
       return request.resource.data.createdAt is timestamp && request.resource.data.updatedAt is timestamp;
     }
@@ -135,7 +147,7 @@ service cloud.firestore {
     // Public tracking uses the trackOrder callable (rules can't match phone).
     // ─────────────────────────────────────────────────────────────
     match /orders/{id} {
-      allow read: if isAdminOrStore(resource.data.storeId);
+      allow read: if canReadOrders(resource.data.storeId) || isSameUser(resource.data.customerId);
       allow create: if false; // only via createOrder callable
       allow update: if canManage(resource.data.storeId, 'orders:manage');
       allow delete: if isPlatformAdmin();
@@ -145,7 +157,7 @@ service cloud.firestore {
     // customers — merchant/admin read; write requires customers:manage for staff
     // ─────────────────────────────────────────────────────────────
     match /customers/{id} {
-      allow read: if isAdminOrStore(resource.data.storeId);
+      allow read: if canReadCustomers(resource.data.storeId);
       allow write: if canManage(resource.data.storeId, 'customers:manage');
     }
 

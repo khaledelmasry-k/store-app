@@ -7,6 +7,7 @@ import { Table } from '../../shared/components/ui/Table'
 import { Badge } from '../../shared/components/ui/Badge'
 import { LineChart } from '../../shared/components/charts/LineChart'
 import { useStore } from '../../shared/hooks/useStore'
+import { useAuth } from '../../shared/hooks/useAuth'
 import { useCollection } from '../../shared/hooks/useCollection'
 import { Loading } from '../../shared/components/ui/Loading'
 import { EmptyState } from '../../shared/components/ui/EmptyState'
@@ -17,13 +18,25 @@ import type { Order, Product, StoreLink } from '../../shared/types'
 
 export const MerchantDashboard: FunctionalComponent = () => {
   const { store } = useStore()
+  const { user } = useAuth()
   const storeId = store?.id || ''
 
-  const ordersRes = useCollection<Order>('orders', { storeId, orderBy: { field: 'createdAt' } })
-  const productsRes = useCollection<Product>('products', { storeId })
-  const customersRes = useCollection('customers', { storeId })
-  const analyticsRes = useCollection<any>('analytics', { storeId })
-  const linksRes = useCollection<StoreLink>('storeLinks', { storeId })
+  // L1: staff may only read what their permissions allow. Queries for denied
+  // collections are disabled so they never hit a permission-denied at the
+  // Firestore layer (UI hiding alone is not sufficient).
+  const isOwner = user?.role === 'merchant'
+  const perms = user?.permissions || []
+  const canOrders = isOwner || perms.includes('orders:manage')
+  const canCustomers = isOwner || perms.includes('customers:manage')
+  const canProducts = isOwner || perms.includes('products:manage')
+  const canLinks = isOwner || perms.includes('orders:manage')
+  const canAnalytics = isOwner || perms.includes('reports:view')
+
+  const ordersRes = useCollection<Order>('orders', { storeId, orderBy: { field: 'createdAt' } }, canOrders)
+  const productsRes = useCollection<Product>('products', { storeId }, canProducts)
+  const customersRes = useCollection('customers', { storeId }, canCustomers)
+  const analyticsRes = useCollection<any>('analytics', { storeId }, canAnalytics)
+  const linksRes = useCollection<StoreLink>('storeLinks', { storeId }, canLinks)
 
   const orders = ordersRes.data
   const products = productsRes.data
@@ -56,21 +69,23 @@ export const MerchantDashboard: FunctionalComponent = () => {
         actions={<Link href={`/store/${store?.slug}`}><Button variant="outline" icon="store">عرض المتجر</Button></Link>}
       />
       <div className="stats-grid">
-        <StatsCard title="إيرادات مؤكدة" value={revenue} currency icon="payments" tone="green" />
-        <StatsCard title="طلبات معلقة" value={pending.length} icon="pending_actions" tone="amber" />
-        <StatsCard title="إجمالي الطلبات" value={orders.length} icon="receipt_long" tone="primary" />
-        <StatsCard title="المنتجات النشطة" value={products.filter((p) => p.active).length} icon="inventory_2" tone="blue" />
-        <StatsCard title="العملاء" value={customers.length} icon="groups" tone="violet" />
+        {canOrders && <StatsCard title="إيرادات مؤكدة" value={revenue} currency icon="payments" tone="green" />}
+        {canOrders && <StatsCard title="طلبات معلقة" value={pending.length} icon="pending_actions" tone="amber" />}
+        {canOrders && <StatsCard title="إجمالي الطلبات" value={orders.length} icon="receipt_long" tone="primary" />}
+        {canProducts && <StatsCard title="المنتجات النشطة" value={products.filter((p) => p.active).length} icon="inventory_2" tone="blue" />}
+        {canCustomers && <StatsCard title="العملاء" value={customers.length} icon="groups" tone="violet" />}
       </div>
-      <div className="grid grid-2 mb-2">
-        <Card title="الإيرادات (آخر 14 يوم)">
-          <div style={{ height: 220 }}><LineChart values={revenueSeries} /></div>
-        </Card>
-        <Card title="الطلبات (آخر 14 يوم)">
-          <div style={{ height: 220 }}><LineChart values={ordersSeries} color="var(--success)" /></div>
-        </Card>
-      </div>
-      {lowStock.length > 0 && (
+      {canAnalytics && (
+        <div className="grid grid-2 mb-2">
+          <Card title="الإيرادات (آخر 14 يوم)">
+            <div style={{ height: 220 }}><LineChart values={revenueSeries} /></div>
+          </Card>
+          <Card title="الطلبات (آخر 14 يوم)">
+            <div style={{ height: 220 }}><LineChart values={ordersSeries} color="var(--success)" /></div>
+          </Card>
+        </div>
+      )}
+      {canProducts && lowStock.length > 0 && (
         <Card title="تنبيهات المخزون" className="mb-2">
           {lowStock.map((p) => (
             <div key={p.id} className="flex-between mb-1">
@@ -80,7 +95,7 @@ export const MerchantDashboard: FunctionalComponent = () => {
           ))}
         </Card>
       )}
-      {links.length > 0 && (
+      {canLinks && links.length > 0 && (
         <Card title="أداء روابط البيع" className="mb-2" subtitle="أفضل الروابط حسب الإيرادات">
           <Table
             columns={[
@@ -93,27 +108,37 @@ export const MerchantDashboard: FunctionalComponent = () => {
           />
         </Card>
       )}
-      <Card title="أحدث الطلبات">
-        {orders.length === 0 ? (
+      {canOrders ? (
+        <Card title="أحدث الطلبات">
+          {orders.length === 0 ? (
+            <EmptyState
+              title="لا توجد طلبات بعد"
+              description="عند وصول طلبات من متجرك ستظهر هنا مباشرة."
+              icon="receipt_long"
+              action={<Link href={`/store/${store?.slug}`}><Button variant="outline" size="sm">عرض متجرك</Button></Link>}
+            />
+          ) : (
+            <Table
+              columns={[
+                { key: 'orderNumber', header: 'الرقم', render: (o: Order) => <Link href={`/dashboard/orders/${o.id}`}><span className="monospace">{o.orderNumber}</span></Link> },
+                { key: 'customerName', header: 'العميل' },
+                { key: 'totalPrice', header: 'الإجمالي', render: (o: Order) => formatCurrency(o.totalPrice) },
+                { key: 'status', header: 'الحالة', render: (o: Order) => <Badge tone={STATUS_COLORS[o.status]}>{STATUS_LABELS[o.status]}</Badge> },
+                { key: 'createdAt', header: 'التاريخ', render: (o: Order) => <span className="muted">{timeAgo(o.createdAt)}</span> },
+              ]}
+              rows={orders.slice(0, 8)}
+            />
+          )}
+        </Card>
+      ) : (
+        <Card title="أحدث الطلبات">
           <EmptyState
-            title="لا توجد طلبات بعد"
-            description="عند وصول طلبات من متجرك ستظهر هنا مباشرة."
-            icon="receipt_long"
-            action={<Link href={`/store/${store?.slug}`}><Button variant="outline" size="sm">عرض متجرك</Button></Link>}
+            title="صلاحيات غير كافية"
+            description="حسابك لا يملك صلاحية عرض الطلبات. تواصل مع مالك المتجر لتفعيلها."
+            icon="lock"
           />
-        ) : (
-          <Table
-            columns={[
-              { key: 'orderNumber', header: 'الرقم', render: (o: Order) => <Link href={`/dashboard/orders/${o.id}`}><span className="monospace">{o.orderNumber}</span></Link> },
-              { key: 'customerName', header: 'العميل' },
-              { key: 'totalPrice', header: 'الإجمالي', render: (o: Order) => formatCurrency(o.totalPrice) },
-              { key: 'status', header: 'الحالة', render: (o: Order) => <Badge tone={STATUS_COLORS[o.status]}>{STATUS_LABELS[o.status]}</Badge> },
-              { key: 'createdAt', header: 'التاريخ', render: (o: Order) => <span className="muted">{timeAgo(o.createdAt)}</span> },
-            ]}
-            rows={orders.slice(0, 8)}
-          />
-        )}
-      </Card>
+        </Card>
+      )}
     </div>
   )
 }
