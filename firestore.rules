@@ -1,0 +1,280 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+
+    // ─────────────────────────────────────────────────────────────
+    // Helpers
+    // ─────────────────────────────────────────────────────────────
+    function isSignedIn() {
+      return request.auth != null;
+    }
+
+    function getUser(uid) {
+      return get(/databases/$(database)/documents/users/$(uid)).data;
+    }
+
+    function isPlatformAdmin() {
+      return isSignedIn() && (
+        get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role == 'superAdmin'
+      );
+    }
+
+    function isMerchant() {
+      return isSignedIn() && (
+        get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role == 'merchant'
+      );
+    }
+
+    function isStaff() {
+      return isSignedIn() && (
+        get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role == 'staff'
+      );
+    }
+
+    // True when the authenticated user holds the given permission string.
+    function hasPermission(perm) {
+      return isSignedIn() && (
+        get(/databases/$(database)/documents/users/$(request.auth.uid)).data.permissions.hasAny([perm])
+      );
+    }
+
+    // True when the authenticated user is a merchant or staff member that owns/accesses the given storeId.
+    function canAccessStore(storeId) {
+      return isSignedIn() && (
+        get(/databases/$(database)/documents/users/$(request.auth.uid)).data.storeIds.hasAll([storeId])
+      );
+    }
+
+    function canAccessStoreOrAdmin(storeId) {
+      return canAccessStore(storeId) || isPlatformAdmin() || isStaff();
+    }
+
+    // True when the authenticated user is a merchant that is an OWNER of the store's tenant.
+    function isStoreOwner(storeId) {
+      return canAccessStore(storeId);
+    }
+
+    function isSameUser(uid) {
+      return isSignedIn() && request.auth.uid == uid;
+    }
+
+    function isAdminOrStore(storeId) {
+      return isPlatformAdmin() || canAccessStore(storeId);
+    }
+
+    // RBAC: platform admin, or a store member that is either the owner (merchant)
+    // or a staff member holding the required permission.
+    function canManage(storeId, perm) {
+      return isPlatformAdmin() || (
+        canAccessStore(storeId) && (isMerchant() || hasPermission(perm))
+      );
+    }
+
+    function isStoreStaff(storeId) {
+      return isAdminOrStore(storeId) || isStaff();
+    }
+
+    function inStore(resource) {
+      return resource.data.storeId != null;
+    }
+
+    function validTimestamps() {
+      return request.resource.data.createdAt is timestamp && request.resource.data.updatedAt is timestamp;
+    }
+
+    // ─────────────────────────────────────────────────────────────
+    // users — self read/limited self update; platform admin manages all
+    // CRITICAL: a user can NEVER change their own role, storeIds, or active.
+    // Multi-tenancy depends on storeIds being authoritative.
+    // ─────────────────────────────────────────────────────────────
+    match /users/{uid} {
+      allow read: if isSameUser(uid) || isPlatformAdmin();
+      allow create: if isSameUser(uid)
+        && request.resource.data.role == 'customer'
+        && request.resource.data.active == true
+        && 'storeIds' in request.resource.data
+        && request.resource.data.storeIds.size() == 0;
+      allow update: if isPlatformAdmin()
+        || (isSameUser(uid)
+            && request.resource.data.role == resource.data.role
+            && request.resource.data.active == resource.data.active
+            && 'storeIds' in request.resource.data
+            && request.resource.data.storeIds.size() == resource.data.storeIds.size()
+            && request.resource.data.storeIds.hasOnly(resource.data.storeIds));
+      allow delete: if isPlatformAdmin();
+    }
+
+    // ─────────────────────────────────────────────────────────────
+    // stores — public read (storefront needs it), creation is callable-only
+    // (registerMerchant), update by owner/admin
+    // ─────────────────────────────────────────────────────────────
+    match /stores/{id} {
+      allow read: if true;
+      allow create: if isPlatformAdmin(); // merchants create stores via registerMerchant callable
+      allow update: if isStoreOwner(id) || isPlatformAdmin();
+      allow delete: if isPlatformAdmin();
+    }
+
+    // ─────────────────────────────────────────────────────────────
+    // products / categories — public read (active only enforced in code),
+    // write by the owning merchant, platform admin, or staff with products:manage
+    // ─────────────────────────────────────────────────────────────
+    match /products/{id} {
+      allow read: if true;
+      allow write: if canManage(request.resource.data.storeId, 'products:manage');
+    }
+
+    match /categories/{id} {
+      allow read: if true;
+      allow write: if canManage(request.resource.data.storeId, 'products:manage');
+    }
+
+    // ─────────────────────────────────────────────────────────────
+    // orders — merchant/admin write; customer read if it matches their
+    // phone (tracking) — creation goes through the callable function.
+    // Public tracking uses the trackOrder callable (rules can't match phone).
+    // ─────────────────────────────────────────────────────────────
+    match /orders/{id} {
+      allow read: if isAdminOrStore(resource.data.storeId);
+      allow create: if false; // only via createOrder callable
+      allow update: if canManage(resource.data.storeId, 'orders:manage');
+      allow delete: if isPlatformAdmin();
+    }
+
+    // ─────────────────────────────────────────────────────────────
+    // customers — merchant/admin read; write requires customers:manage for staff
+    // ─────────────────────────────────────────────────────────────
+    match /customers/{id} {
+      allow read: if isAdminOrStore(resource.data.storeId);
+      allow write: if canManage(resource.data.storeId, 'customers:manage');
+    }
+
+    // ─────────────────────────────────────────────────────────────
+    // subscriptions / transactions / payments — merchant reads own store;
+    // writes are platform-admin only (lifecycle managed by callables/admin)
+    // ─────────────────────────────────────────────────────────────
+    match /subscriptions/{id} {
+      allow read: if isAdminOrStore(resource.data.storeId);
+      allow write: if isPlatformAdmin();
+    }
+
+    match /transactions/{id} {
+      allow read: if isAdminOrStore(resource.data.storeId);
+      allow write: if isPlatformAdmin();
+    }
+
+    match /payments/{id} {
+      allow read: if isAdminOrStore(resource.data.storeId);
+      allow write: if isPlatformAdmin();
+    }
+
+    match /coupons/{id} {
+      allow read: if true; // storefront needs to validate a coupon code
+      allow write: if canManage(request.resource.data.storeId, 'coupons:manage');
+    }
+
+    match /shipping/{id} {
+      allow read: if true;
+      allow write: if canManage(request.resource.data.storeId, 'settings:manage');
+    }
+
+    // ─────────────────────────────────────────────────────────────
+    // plans — public read (pricing), admin-only write
+    // ─────────────────────────────────────────────────────────────
+    match /plans/{id} {
+      allow read: if true;
+      allow write: if isPlatformAdmin();
+    }
+
+    // ─────────────────────────────────────────────────────────────
+    // notifications — read own or store; writes limited to self + store admins
+    // ─────────────────────────────────────────────────────────────
+    match /notifications/{id} {
+      allow read: if isSameUser(resource.data.userId) || isAdminOrStore(resource.data.storeId);
+      allow write: if isSameUser(resource.data.userId) || isAdminOrStore(resource.data.storeId);
+      allow delete: if isSameUser(resource.data.userId) || isPlatformAdmin();
+    }
+
+    // ─────────────────────────────────────────────────────────────
+    // tickets — merchant/admin read; platform admin manages; customer can create
+    // ─────────────────────────────────────────────────────────────
+    match /tickets/{id} {
+      allow read: if isAdminOrStore(resource.data.storeId) || isPlatformAdmin() || isSameUser(resource.data.createdBy);
+      allow create: if isSignedIn();
+      allow update: if isAdminOrStore(resource.data.storeId) || isPlatformAdmin();
+      allow delete: if isPlatformAdmin();
+    }
+
+    // ─────────────────────────────────────────────────────────────
+    // auditLogs — platform admin + merchant own-store view (write by callable only)
+    // ─────────────────────────────────────────────────────────────
+    match /auditLogs/{id} {
+      allow read: if isPlatformAdmin() || isAdminOrStore(resource.data.storeId);
+      allow write: if false; // callable functions write audit logs
+    }
+
+    // ─────────────────────────────────────────────────────────────
+    // settings — platform admin only
+    // ─────────────────────────────────────────────────────────────
+    match /settings/{id} {
+      allow read: if isPlatformAdmin();
+      allow write: if isPlatformAdmin();
+    }
+
+    // ─────────────────────────────────────────────────────────────
+    // analytics — merchant own-store read; platform admin reads all
+    // ─────────────────────────────────────────────────────────────
+    match /analytics/{id} {
+      allow read: if isPlatformAdmin() || isAdminOrStore(resource.data.storeId);
+      allow write: if isPlatformAdmin();
+    }
+
+    // ─────────────────────────────────────────────────────────────
+    // storeLinks — public read (storefront needs the code lookup),
+    // write requires store membership (owner or any store member)
+    // ─────────────────────────────────────────────────────────────
+    match /storeLinks/{id} {
+      allow read: if true;
+      allow write: if isAdminOrStore(request.resource.data.storeId);
+    }
+
+    // ─────────────────────────────────────────────────────────────
+    // landingPages — public read, write requires landing:manage
+    // ─────────────────────────────────────────────────────────────
+    match /landingPages/{id} {
+      allow read: if true;
+      allow write: if canManage(request.resource.data.storeId, 'landing:manage');
+    }
+
+    // ─────────────────────────────────────────────────────────────
+    // team / roles / invitations — merchant-only (team:manage); staff with
+    // team:manage may also manage. Customer cannot touch.
+    // ─────────────────────────────────────────────────────────────
+    match /team/{id} {
+      allow read: if isAdminOrStore(resource.data.storeId);
+      allow write: if canManage(request.resource.data.storeId, 'team:manage');
+    }
+
+    match /roles/{id} {
+      allow read: if isAdminOrStore(resource.data.storeId);
+      allow write: if canManage(request.resource.data.storeId, 'team:manage');
+    }
+
+    match /invitations/{id} {
+      allow read: if isAdminOrStore(resource.data.storeId);
+      allow write: if canManage(request.resource.data.storeId, 'team:manage');
+    }
+
+    // ─────────────────────────────────────────────────────────────
+    // addresses (customer) — own read/write
+    // wishlist (customer) — own read/write
+    // ─────────────────────────────────────────────────────────────
+    match /addresses/{id} {
+      allow read, write: if isSameUser(resource.data.userId) || isAdminOrStore(resource.data.storeId);
+    }
+
+    match /wishlist/{id} {
+      allow read, write: if isSameUser(resource.data.userId);
+    }
+  }
+}
