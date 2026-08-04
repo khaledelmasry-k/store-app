@@ -80,6 +80,12 @@ export function approveSubscriptionCallable(input: Record<string, unknown>) {
   return fn(input)
 }
 
+export function rejectSubscriptionCallable(input: Record<string, unknown>) {
+  const functions = getFunctions()
+  const fn = httpsCallable(functions, 'rejectSubscription')
+  return fn(input)
+}
+
 export function impersonateCallable(input: Record<string, unknown>) {
   const functions = getFunctions()
   const fn = httpsCallable(functions, 'impersonate')
@@ -101,5 +107,11 @@ export function trackOrderCallable(input: Record<string, unknown>) {
 export function recordStoreLinkVisitCallable(input: Record<string, unknown>) {
   const functions = getFunctions()
   const fn = httpsCallable(functions, 'recordStoreLinkVisit')
+  return fn(input)
+}
+
+export function inviteStaffCallable(input: Record<string, unknown>) {
+  const functions = getFunctions()
+  const fn = httpsCallable(functions, 'inviteStaff')
   return fn(input)
 }

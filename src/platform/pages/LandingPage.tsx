@@ -9,10 +9,11 @@ import type { SubscriptionPlan } from '../../shared/types'
 import './LandingPage.css'
 
 const NAV_LINKS = [
-  { href: '/#features', label: 'المميزات' },
-  { href: '/#how-it-works', label: 'كيف تعمل' },
-  { href: '/#pricing', label: 'الأسعار' },
-  { href: '/#faq', label: 'الأسئلة الشائعة' },
+  { href: '#features', label: 'المميزات' },
+  { href: '#how-it-works', label: 'كيف تعمل' },
+  { href: '#sales-links', label: 'روابط البيع' },
+  { href: '#pricing', label: 'الأسعار' },
+  { href: '#faq', label: 'الأسئلة الشائعة' },
 ]
 
 const FEATURES = [
@@ -23,7 +24,7 @@ const FEATURES = [
   { icon: 'analytics', title: 'التقارير والتحليلات', desc: 'اعرف إيراداتك وطلباتك وأداء متجرك في لوحة واحدة، واتخذ قرارات مبنية على أرقام حقيقية.' },
   { icon: 'link', title: 'روابط البيع', desc: 'أنشئ رابط تتبع فريداً لكل بائع أو مسوّق واعرف بالضبط من جلب لك كل عملية بيع.' },
   { icon: 'group_add', title: 'فريق العمل', desc: 'أضف أعضاء فريقك مع صلاحيات محددة لكل عضو، واسمح لكل شخص بإدارة مهامه بدقة.' },
-  { icon: 'settings', title: 'إعدادات المتجر', desc: 'خصص هوية متجرك والهوية البصرية والعملة، واجعل متجرك يعبّر عن علامتك التجارية.' },
+  { icon: 'store', title: 'إدارة المتاجر', desc: 'أدر هوية متجرك ورابطه وعملتك وإعداداته من مكان واحد، واجعل متجرك يعبّر عن علامتك التجارية.' },
 ]
 
 const STEPS = [
@@ -41,14 +42,12 @@ const SALES_LINK_STEPS = [
 ]
 
 const FAQS = [
-  { q: 'هل أحتاج إلى خبرة تقنية؟', a: 'لا، المنصة مصممة لتكون سهلة الاستخدام ولا تتطلب أي معرفة تقنية. يمكنك إنشاء متجرك وإدارة منتجاتك من لوحة تحكم بسيطة.' },
-  { q: 'هل يمكنني إنشاء متجر خاص بي؟', a: 'نعم، يمكنك إنشاء متجر خاص بك في دقائق مع تخصيص اسم المتجر والرابط والهوية البصرية.' },
-  { q: 'هل يمكنني إدارة أكثر من متجر؟', a: 'نعم، يمكنك إدارة متاجر متعددة من لوحة تحكم واحدة مع عزل بيانات كل متجر تماماً.' },
-  { q: 'هل يمكنني إضافة فريق عمل؟', a: 'نعم، يمكنك دعوة أعضاء فريقك وتحديد صلاحيات كل عضو حتى يدير كلٌّ مسؤولياته بكفاءة.' },
-  { q: 'ما هي روابط البيع؟', a: 'روابط البيع تتيح لك إنشاء رابط تتبع فريد لكل بائع أو مسوّق، لتعرف بالضبط من أين جاءت كل عملية بيع.' },
-  { q: 'هل أستطيع متابعة أداء كل بائع؟', a: 'نعم، تحصل على أرقام دقيقة لكل رابط: الزيارات والطلبات والإيرادات، لتعرف من يحقق أفضل أداء.' },
-  { q: 'كيف تبدأ الطلبات بالوصول إلي؟', a: 'بعد إنشاء متجرك وإضافة منتجاتك، يمكن للعملاء زيارة متجرك والبدء في الشراء مباشرة، وتصلك الطلبات في لوحة التحكم.' },
-  { q: 'هل يمكنني تغيير خطتي؟', a: 'نعم، يمكنك تغيير خطتك في أي وقت من صفحة الاشتراك في لوحة التحكم.' },
+  { q: 'هل أحتاج إلى خبرة تقنية؟', a: 'لا، المنصة مصممة لتكون سهلة الاستخدام ولا تتطلب أي معرفة تقنية. يمكنك إنشاء متجرك وإضافة منتجاتك وإدارة طلباتك من لوحة تحكم بسيطة وواضحة.' },
+  { q: 'كيف تبدأ الطلبات بالوصول إلي؟', a: 'بعد إنشاء متجرك وإضافة منتجاتك، يمكن للعملاء زيارة رابط متجرك والبدء في الشراء مباشرة، وتصلك الطلبات فوراً في لوحة التحكم لتتمكن من إدارتها.' },
+  { q: 'هل يمكنني إضافة فريق عمل؟', a: 'نعم، يمكنك دعوة أعضاء فريقك وتحديد صلاحيات كل عضو، بحيث يدير كلٌّ مسؤولياته (مثل المنتجات أو المبيعات) ضمن نطاق محدد وآمن.' },
+  { q: 'ما هي روابط البيع وهل أستطيع متابعة أداء كل بائع؟', a: 'روابط البيع تتيح لك إنشاء رابط تتبع فريد لكل بائع أو مسوّق. تحصل على أرقام دقيقة لكل رابط (الزيارات والطلبات والمبيعات) لتعرف من يحقق أفضل أداء.' },
+  { q: 'هل يمكنني إدارة أكثر من متجر؟', a: 'حالياً يدير كل حساب متجراً خاصاً به من لوحة تحكم واحدة. دعم إدارة أكثر من متجر هو ضمن خطة تطوير قادمة وسيُعلن عنه عند إطلاقه.' },
+  { q: 'كيف تعمل الاشتراكات؟', a: 'تختار الباقة المناسبة عند التسجيل ويتم تدوين اشتراكك، ثم تراجع منصة M&#38;K Store الطلب وتفعّل حسابك ومتجرك. جميع بياناتك آمنة ومعزولة تماماً.' },
 ]
 
 export const LandingPage: FunctionalComponent = () => {
@@ -58,6 +57,15 @@ export const LandingPage: FunctionalComponent = () => {
   const plans = useMemo(() => plansRes.data.filter((p) => p.active !== false), [plansRes.data])
 
   const toggleFaq = (i: number) => setOpenFaq(openFaq === i ? null : i)
+
+  const goToAnchor = (href: string) => (e: MouseEvent) => {
+    if (href.startsWith('#')) {
+      e.preventDefault()
+      const el = document.getElementById(href.slice(1))
+      if (el) el.scrollIntoView({ behavior: 'smooth', block: 'start' })
+    }
+    setMenuOpen(false)
+  }
 
   return (
     <div className="landing" dir="rtl">
@@ -81,13 +89,13 @@ export const LandingPage: FunctionalComponent = () => {
           </button>
 
           <nav className={`landing-nav${menuOpen ? ' open' : ''}`} aria-label="التنقل الرئيسي">
-            <a href="/" className="landing-nav-link">الرئيسية</a>
+            <a href="/" className="landing-nav-link" onClick={() => setMenuOpen(false)}>الرئيسية</a>
             {NAV_LINKS.map((l) => (
-              <a key={l.href} href={l.href} className="landing-nav-link">{l.label}</a>
+              <a key={l.href} href={l.href} onClick={goToAnchor(l.href)} className="landing-nav-link">{l.label}</a>
             ))}
             <div className="landing-nav-actions">
               <Link href="/login" className="landing-nav-btn landing-nav-btn-ghost">تسجيل الدخول</Link>
-              <Link href="/register" className="landing-nav-btn landing-nav-btn-primary">ابدأ مجانًا</Link>
+              <Link href="/register" className="landing-nav-btn landing-nav-btn-primary">ابدأ مجاناً</Link>
             </div>
           </nav>
         </div>
@@ -108,7 +116,7 @@ export const LandingPage: FunctionalComponent = () => {
                   <Link href="/register">
                     <Button size="lg" icon="rocket_launch">ابدأ متجرك الآن</Button>
                   </Link>
-                  <a href="/#features" className="hero-cta-secondary">
+                  <a href="#features" className="hero-cta-secondary" onClick={goToAnchor('#features')}>
                     <Button size="lg" variant="secondary" icon="visibility">استكشف المنصة</Button>
                   </a>
                 </div>
@@ -151,6 +159,24 @@ export const LandingPage: FunctionalComponent = () => {
                 <p className="hero-preview-caption">واجهة لوحة التحكم — تمثيل مبسّط</p>
               </div>
             </div>
+          </div>
+        </section>
+
+        <section className="landing-trust-strip" aria-label="مزايا أساسية">
+          <div className="landing-container trust-strip-inner">
+            {[
+              { icon: 'storefront', label: 'متجرك' },
+              { icon: 'receipt_long', label: 'طلباتك' },
+              { icon: 'groups', label: 'عملاؤك' },
+              { icon: 'group_add', label: 'فريقك' },
+              { icon: 'query_stats', label: 'مبيعاتك' },
+            ].map((t) => (
+              <div className="trust-strip-item" key={t.label}>
+                <span className="material-symbols-outlined">{t.icon}</span>
+                <span>{t.label}</span>
+              </div>
+            ))}
+            <p className="trust-strip-tagline">كل ذلك في منصة واحدة</p>
           </div>
         </section>
 
@@ -223,7 +249,7 @@ export const LandingPage: FunctionalComponent = () => {
           </div>
         </section>
 
-        <section className="landing-section landing-sales-links">
+        <section id="sales-links" className="landing-section landing-sales-links">
           <div className="landing-container">
             <div className="section-head">
               <span className="section-eyebrow">روابط البيع</span>
@@ -245,6 +271,22 @@ export const LandingPage: FunctionalComponent = () => {
             <p className="sales-links-note">
               بائع واحد، عدة قنوات: أحمد / Facebook، أحمد / WhatsApp، أحمد / TikTok — كل رابط بأرقامه الخاصة.
             </p>
+            <div className="sales-metrics">
+              {[
+                { label: 'الزيارات', value: '12,480', icon: 'visibility' },
+                { label: 'الطلبات', value: '1,203', icon: 'receipt_long' },
+                { label: 'المبيعات', value: '2,940,000', icon: 'payments', hint: 'ر.س' },
+                { label: 'نسبة التحويل', value: '9.6%', icon: 'trending_up' },
+              ].map((m) => (
+                <div className="sales-metric" key={m.label}>
+                  <span className="sales-metric-icon"><span className="material-symbols-outlined">{m.icon}</span></span>
+                  <div className="sales-metric-text">
+                    <span className="sales-metric-value">{m.value}{m.hint ? <small>{m.hint}</small> : null}</span>
+                    <span className="sales-metric-label">{m.label}</span>
+                  </div>
+                </div>
+              ))}
+            </div>
           </div>
         </section>
 
@@ -268,7 +310,7 @@ export const LandingPage: FunctionalComponent = () => {
                   const isFeatured = idx === Math.floor(plans.length / 2)
                   return (
                     <div key={p.id} className={`pricing-card${isFeatured ? ' pricing-featured' : ''}`}>
-                      {isFeatured && <div className="pricing-badge">الأكثر شيوعًا</div>}
+                      {isFeatured && <div className="pricing-badge">الأكثر شيوعاً</div>}
                       <h3>{p.name}</h3>
                       <p className="pricing-desc">{p.description || 'باقة مميزة لإدارة متجرك'}</p>
                       <div className="pricing-price">
@@ -277,17 +319,22 @@ export const LandingPage: FunctionalComponent = () => {
                         </span>
                         {p.priceMonthly > 0 && <span className="pricing-period">/شهرياً</span>}
                       </div>
-                      {typeof p.productLimit === 'number' && p.productLimit > 0 && (
-                        <p className="pricing-limits">حتى {p.productLimit} منتج</p>
-                      )}
+                      <div className="pricing-limits-row">
+                        {typeof p.productLimit === 'number' && p.productLimit > 0 && (
+                          <p className="pricing-limits">حتى {p.productLimit} منتج</p>
+                        )}
+                        {typeof p.orderLimitPerMonth === 'number' && p.orderLimitPerMonth > 0 && (
+                          <p className="pricing-limits">حتى {p.orderLimitPerMonth} طلب شهرياً</p>
+                        )}
+                      </div>
                       <ul className="pricing-features">
                         {(p.features || []).map((f, fi) => (
                           <li key={fi}><span className="material-symbols-outlined">check</span>{f}</li>
                         ))}
                       </ul>
                       <Link href={`/register?plan=${p.id}`} className="pricing-cta">
-                        <Button variant={isFeatured ? 'primary' : 'outline'} block>
-                          اختر هذه الباقة
+                        <Button variant={isFeatured ? 'primary' : 'outline'} block icon="rocket_launch">
+                          ابدأ الآن
                         </Button>
                       </Link>
                     </div>
@@ -344,7 +391,7 @@ export const LandingPage: FunctionalComponent = () => {
               <Link href="/register">
                 <Button size="lg" icon="rocket_launch">ابدأ متجرك الآن</Button>
               </Link>
-              <a href="/#pricing">
+              <a href="#pricing" onClick={goToAnchor('#pricing')}>
                 <Button size="lg" variant="secondary">تعرّف على الخطط</Button>
               </a>
             </div>
@@ -364,19 +411,19 @@ export const LandingPage: FunctionalComponent = () => {
             </div>
             <div className="footer-col">
               <h4>المنتج</h4>
-              <a href="/#features">المميزات</a>
-              <a href="/#how-it-works">كيف تعمل</a>
-              <a href="/#pricing">الأسعار</a>
-              <a href="/#faq">الأسئلة الشائعة</a>
+              <a href="#features" onClick={goToAnchor('#features')}>المميزات</a>
+              <a href="#how-it-works" onClick={goToAnchor('#how-it-works')}>كيف تعمل</a>
+              <a href="#pricing" onClick={goToAnchor('#pricing')}>الأسعار</a>
+              <a href="#faq" onClick={goToAnchor('#faq')}>الأسئلة الشائعة</a>
             </div>
             <div className="footer-col">
               <h4>الحساب</h4>
-              <Link href="/login">تسجيل الدخول</Link>
-              <Link href="/register">إنشاء حساب</Link>
+              <a href="/login">تسجيل الدخول</a>
+              <a href="/register">إنشاء حساب</a>
             </div>
             <div className="footer-col">
               <h4>الدعم</h4>
-              <a href="/#faq">مركز المساعدة</a>
+              <a href="#faq" onClick={goToAnchor('#faq')}>مركز المساعدة</a>
               <a href="/contact">تواصل معنا</a>
             </div>
             <div className="footer-col">

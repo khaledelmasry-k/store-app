@@ -86,7 +86,7 @@ export const MerchantDashboard: FunctionalComponent = () => {
         </div>
       )}
       {canProducts && lowStock.length > 0 && (
-        <Card title="تنبيهات المخزون" className="mb-2">
+        <Card title="تنبيهات المخزون" className="mb-2" actions={<Link href="/dashboard/inventory" className="link">إدارة المخزون</Link>}>
           {lowStock.map((p) => (
             <div key={p.id} className="flex-between mb-1">
               <span>{p.name}</span>

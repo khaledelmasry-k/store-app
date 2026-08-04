@@ -41,6 +41,7 @@ const PlatformSettings = lazy(() => import('./platform/pages/Settings'))
 
 const MerchantDashboard = lazy(() => import('./merchant/pages/Dashboard'))
 const MerchantProducts = lazy(() => import('./merchant/pages/Products'))
+const MerchantInventory = lazy(() => import('./merchant/pages/Inventory'))
 const MerchantCategories = lazy(() => import('./merchant/pages/Categories'))
 const MerchantOrders = lazy(() => import('./merchant/pages/Orders'))
 const MerchantOrderDetails = lazy(() => import('./merchant/pages/OrderDetails'))
@@ -77,7 +78,8 @@ function HomeRedirect() {
     if (!user) return
     if (user.role === 'superAdmin') navigate('/platform/', { replace: true })
     else if ((user.role === 'merchant' || user.role === 'staff') && user.active !== false) navigate('/dashboard/', { replace: true })
-    else navigate('/login?role=customer', { replace: true })
+    // Customers have no platform dashboard — keep them on the public landing.
+    else if (user.role === 'customer') return
   }, [user, initialized, loading, navigate])
   return <PlatformLanding />
 }
@@ -142,6 +144,7 @@ function MerchantRoutes() {
     <ZoneRouter prefix="/dashboard" role="merchant" permission={permission} layout={MerchantLayout}>
       <Route path="/" component={() => <MerchantDashboard />} />
       <Route path="/products" component={() => <MerchantProducts />} />
+      <Route path="/inventory" component={() => <MerchantInventory />} />
       <Route path="/categories" component={() => <MerchantCategories />} />
       <Route path="/orders" component={() => <MerchantOrders />} />
       <Route path="/orders/:id" component={MerchantOrderRoute} />
@@ -194,8 +197,8 @@ export default function App() {
       <ToastProvider>
         <AuthProvider>
           <StoreProvider>
-            <CartProvider>
-              <Router>
+            <Router>
+              <CartProvider>
                 <Switch>
                   <Route path="/" component={HomeRedirect} />
                   <Route path="/login" component={LoginByRole} />
@@ -251,9 +254,9 @@ export default function App() {
 
                   <Route component={() => <Redirect to="/" replace />} />
                 </Switch>
-              </Router>
-              <ToastViewport />
-            </CartProvider>
+              </CartProvider>
+            </Router>
+            <ToastViewport />
           </StoreProvider>
         </AuthProvider>
       </ToastProvider>

@@ -71,6 +71,7 @@ export const StoreDetails: FunctionalComponent<Props> = ({ id }) => {
         breadcrumb="المتاجر"
         actions={
           <div className="flex" style={{ gap: 8 }}>
+            <Button variant="outline" icon="storefront" onClick={() => window.open(`/store/${store?.slug}`, '_blank')}>عرض المتجر</Button>
             <Button variant="outline" icon="admin_panel_settings" onClick={impersonate} loading={impersonating}>فتح كتاجر</Button>
             <Button variant="outline" icon="edit" onClick={() => { setForm(store || {}); setEditOpen(true) }}>تعديل</Button>
           </div>

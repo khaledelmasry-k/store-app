@@ -18,7 +18,7 @@ export const Register: FunctionalComponent = () => {
   const selectedPlan = planId ? plansRes.data.find((p) => p.id === planId) : undefined
 
   const toast = useToast()
-  const [form, setForm] = useState({ email: '', password: '', name: '', storeName: '', storeRef: '', phone: '' })
+  const [form, setForm] = useState({ email: '', password: '', name: '', storeName: '', storeRef: '' })
   const [error, setError] = useState('')
   const [loading, setLoading] = useState(false)
   const [done, setDone] = useState(false)
@@ -88,7 +88,6 @@ export const Register: FunctionalComponent = () => {
           <Input label="الاسم الكامل" value={form.name} onChange={(v) => setForm({ ...form, name: v })} required />
           <Input label="البريد الإلكتروني" type="email" value={form.email} onChange={(v) => setForm({ ...form, email: v })} required />
           <Input label="كلمة المرور" type="password" value={form.password} onChange={(v) => setForm({ ...form, password: v })} required />
-          <Input label="رقم الهاتف" value={form.phone} onChange={(v) => setForm({ ...form, phone: v })} placeholder="01xxxxxxxxx" />
           <Input label="اسم المتجر" value={form.storeName} onChange={(v) => setForm({ ...form, storeName: v })} required />
           <Input label="الرابط المختصر" value={form.storeRef} onChange={(v) => setForm({ ...form, storeRef: v })} hint="اتركه فارغاً لاستخدام اسم المتجر" />
           {error && <p className="field-error">{error}</p>}

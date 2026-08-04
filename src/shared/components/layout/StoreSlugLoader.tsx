@@ -1,6 +1,6 @@
 import { FunctionalComponent } from 'preact'
 import { useEffect, useState } from 'preact/hooks'
-import { useLocation } from 'wouter'
+import { useLocation, useSearch } from 'wouter'
 import { collection, query, where, onSnapshot, limit as limitQuery, type QuerySnapshot } from 'firebase/firestore'
 import { db } from '../../firebase'
 import { StoreContext } from '../../contexts/store-context'
@@ -16,24 +16,28 @@ interface Props {
 
 export const StoreSlugLoader: FunctionalComponent<Props> = ({ children }) => {
   const [loc] = useLocation()
-  const { slug, ref } = parseStoreLocation(loc)
+  const search = useSearch()
+  const { slug, ref } = parseStoreLocation(loc + (search ? `?${search}` : ''))
   const [store, setStore] = useState<Store | null>(null)
   const [loading, setLoading] = useState(!!slug)
   const [error, setError] = useState<string | null>(null)
 
   useEffect(() => {
-    if (!slug || !ref) return
+    if (!slug || !ref || !store?.id) return
 
     // Persist the referral across the whole shopping session so it survives
-    // navigation from store → product → cart → checkout.
-    sessionStorage.setItem('mk_sales_ref', ref)
+    // navigation from store → product → cart → checkout. The value is keyed by
+    // store id so a ref used in store A can never attribute a purchase made in
+    // store B (cross-tenant attribution).
+    sessionStorage.setItem(`mk_sales_ref_${store.id}`, ref)
 
-    // Count the visit once per session per link, only when a store loads.
-    const countedKey = `mk_ref_counted_${ref}`
+    // Count the visit once per session per (store, link) — keyed by store so a
+    // code used in store A never suppresses counting in store B.
+    const countedKey = `mk_ref_counted_${store.id}_${ref}`
     if (sessionStorage.getItem(countedKey)) return
 
     let cancelled = false
-    recordStoreLinkVisitCallable({ storeId: store?.id, code: ref })
+    recordStoreLinkVisitCallable({ storeId: store.id, code: ref })
       .then(() => {
         if (!cancelled) sessionStorage.setItem(countedKey, '1')
       })

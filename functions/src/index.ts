@@ -27,12 +27,30 @@ async function getUserRole(uid: string): Promise<string | null> {
 }
 
 const _ALL_PERMISSIONS = [
-  'products:manage',
-  'orders:manage',
-  'customers:manage',
+  'products:view',
+  'products:create',
+  'products:edit',
+  'products:delete',
+  'orders:view',
+  'orders:edit',
+  'orders:status',
+  'orders:cancel',
+  'customers:view',
+  'customers:create',
+  'customers:edit',
+  'customers:delete',
+  'inventory:view',
+  'inventory:adjust',
+  'sales_links:view',
+  'sales_links:create',
+  'sales_links:analytics',
   'reports:view',
-  'settings:manage',
-  'team:manage',
+  'team:view',
+  'team:invite',
+  'team:manage_roles',
+  'team:delete',
+  'settings:view',
+  'settings:edit',
   'coupons:manage',
   'landing:manage',
 ] as const
@@ -87,6 +105,18 @@ async function bumpAnalytics(storeId: string, order: { totalPrice: number; statu
   })
 }
 
+async function auditLog(storeId: string | null, userId: string, action: string, resource: string, resourceId: string, extra?: Record<string, any>) {
+  await db.collection('auditLogs').add({
+    storeId,
+    userId,
+    action,
+    resource,
+    resourceId,
+    ...extra,
+    createdAt: now(),
+  })
+}
+
 // ─────────────────────────────────────────────────────────────
 // 1. generateOrderNumber — unique ORD-NNNNN under concurrency
 // ─────────────────────────────────────────────────────────────
@@ -133,6 +163,8 @@ export const createOrder = onCall(async (request: CallableRequest<any>) => {
   const result = await db.runTransaction(async (tx) => {
     const lineItems: any[] = []
     let subtotal = 0
+    let salesLinkId: string | null = null
+    let salesLinkStaffId: string | null = null
     for (const item of items) {
       const productSnap = await tx.get(db.doc(`products/${item.productId}`))
       if (!productSnap.exists) throw new HttpsError('failed-precondition', `المنتج ${item.productId} غير موجود`)
@@ -190,6 +222,8 @@ export const createOrder = onCall(async (request: CallableRequest<any>) => {
           totalRevenue: FieldValue.increment(subtotal),
           updatedAt: now(),
         })
+        salesLinkId = linkDoc.id
+        salesLinkStaffId = linkDoc.data()?.staffId || null
       }
     }
 
@@ -213,6 +247,8 @@ export const createOrder = onCall(async (request: CallableRequest<any>) => {
       couponCode: null,
       trackingCode: null,
       salesLinkRef: salesLinkRef || null,
+      salesLinkId,
+      salesLinkStaffId,
       createdAt: now(),
       updatedAt: now(),
       createdBy: request.auth?.uid || 'guest',
@@ -240,6 +276,8 @@ export const createOrder = onCall(async (request: CallableRequest<any>) => {
   })
 
   await bumpAnalytics(storeId, { totalPrice: result.totalPrice, status: 'NEW' }).catch(() => {})
+
+  await auditLog(storeId, request.auth?.uid || 'guest', 'create_order', 'orders', result.orderId, { orderNumber: result.orderNumber, totalPrice: result.totalPrice })
 
   return result
 })
@@ -356,6 +394,43 @@ export const approveSubscription = onCall(async (request: CallableRequest<{ subs
     createdBy: 'system',
   })
 
+  await auditLog(sub.storeId, request.auth!.uid, 'approve_subscription', 'subscriptions', subscriptionId, { storeId: sub.storeId, ownerId: store.ownerId })
+
+  return { ok: true }
+})
+
+// ─────────────────────────────────────────────────────────────
+// 4b. rejectSubscription — platform admin denies a pending request
+// ─────────────────────────────────────────────────────────────
+export const rejectSubscription = onCall(async (request: CallableRequest<{ subscriptionId?: string }>) => {
+  await assertPlatformAdmin(request)
+  const { subscriptionId } = request.data || {}
+  if (!subscriptionId) throw new HttpsError('invalid-argument', 'subscriptionId مطلوب')
+
+  const subRef = db.doc(`subscriptions/${subscriptionId}`)
+  const subSnap = await subRef.get()
+  if (!subSnap.exists) throw new HttpsError('not-found', 'الاشتراك غير موجود')
+  const sub = subSnap.data()!
+
+  await subRef.update({
+    status: 'rejected',
+    approvedBy: request.auth!.uid,
+    updatedAt: now(),
+  })
+
+  await db.collection('notifications').add({
+    storeId: sub.storeId,
+    userId: null,
+    title: 'تم رفض اشتراكك',
+    body: 'لم يتم اعتماد طلب اشتراكك هذا. يمكنك التواصل مع إدارة المنصة للمزيد من التفاصيل.',
+    type: 'billing',
+    read: false,
+    createdAt: now(),
+    createdBy: 'system',
+  })
+
+  await auditLog(sub.storeId, request.auth!.uid, 'reject_subscription', 'subscriptions', subscriptionId, { storeId: sub.storeId })
+
   return { ok: true }
 })
 
@@ -406,6 +481,8 @@ export const updateOrderStatus = onCall(async (request: CallableRequest<{ orderI
   })
 
   await bumpAnalytics(order.storeId, { totalPrice: order.totalPrice, status }).catch(() => {})
+
+  await auditLog(order.storeId, request.auth.uid, 'update_order_status', 'orders', orderId, { from: order.status, to: status })
 
   return { ok: true }
 })
@@ -512,8 +589,7 @@ export const trackOrder = onCall(async (request: CallableRequest<{ storeId?: str
 //    Validates the link belongs to the store. Clients should
 //    throttle calls (per session) to avoid inflating counts.
 // ─────────────────────────────────────────────────────────────
-export const recordStoreLinkVisit = onCall(async (request: CallableRequest<{ storeId?: string; code?: string }>) => {
-  const { storeId, code } = request.data || {}
+export const recordStoreLinkVisit = onCall(async (request: CallableRequest<{ storeId?: string; code?: string }>) => {  const { storeId, code } = request.data || {}
   if (!storeId || !code) throw new HttpsError('invalid-argument', 'storeId و code مطلوبان')
 
   const storeSnap = await db.doc(`stores/${storeId}`).get()
@@ -539,4 +615,104 @@ export const recordStoreLinkVisit = onCall(async (request: CallableRequest<{ sto
   })
 
   return { ok: true }
+})
+
+// ─────────────────────────────────────────────────────────────
+// 10. inviteStaff — provision a real staff login for a merchant tenant.
+//     The owner (or a staff member with team:manage) invites a colleague.
+//     This creates the Firebase Auth user + the users/{uid} doc (role 'staff')
+//     with permissions copied from the chosen role, plus the team + invitation
+//     records. Returns the one-time initial password for the merchant to pass
+//     to the staff member out-of-band.
+// ─────────────────────────────────────────────────────────────
+export const inviteStaff = onCall(async (request: CallableRequest<{ storeId?: string; name?: string; email?: string; roleId?: string }>) => {
+  if (!request.auth) throw new HttpsError('unauthenticated', 'يجب تسجيل الدخول')
+  const { storeId, name, email, roleId } = request.data || {}
+  if (!storeId || !name || !email || !roleId) {
+    throw new HttpsError('invalid-argument', 'بيانات الدعوة غير مكتملة')
+  }
+  if (!/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(email)) {
+    throw new HttpsError('invalid-argument', 'بريد إلكتروني غير صالح')
+  }
+
+  // Only the store owner (merchant) or a staff member holding team:manage.
+  await assertStoreAccess(request, storeId, 'team:manage')
+
+  // The chosen role must belong to this store.
+  const roleSnap = await db.doc(`roles/${roleId}`).get()
+  if (!roleSnap.exists || roleSnap.data()?.storeId !== storeId) {
+    throw new HttpsError('not-found', 'الدور غير موجود')
+  }
+  const permissions = roleSnap.data()?.permissions || []
+
+  // No account may already exist with this email.
+  const existing = await db.collection('users').where('email', '==', String(email).toLowerCase()).get()
+  if (!existing.empty) {
+    throw new HttpsError('already-exists', 'هذا البريد مستخدم مسبقاً')
+  }
+
+  const uid = db.collection('users').doc().id
+  const initialPassword = Math.random().toString(36).slice(2, 10)
+
+  try {
+    await auth.createUser({ uid, email, password: initialPassword, displayName: name, disabled: false })
+  } catch (err: any) {
+    if (err?.code === 'auth/email-already-exists') {
+      throw new HttpsError('already-exists', 'هذا البريد مستخدم مسبقاً')
+    }
+    throw new HttpsError('internal', err?.message || 'تعذر إنشاء الحساب')
+  }
+
+  await db.doc(`users/${uid}`).set({
+    uid,
+    email,
+    name,
+    role: 'staff',
+    storeIds: [storeId],
+    active: true,
+    permissions,
+    createdBy: request.auth.uid,
+    createdAt: now(),
+    updatedAt: now(),
+  })
+
+  const teamId = db.collection('team').doc().id
+  await db.doc(`team/${teamId}`).set({
+    storeId,
+    userId: uid,
+    email,
+    name,
+    role: roleId,
+    active: true,
+    createdBy: request.auth.uid,
+    createdAt: now(),
+    updatedAt: now(),
+  })
+
+  const invitationId = db.collection('invitations').doc().id
+  await db.doc(`invitations/${invitationId}`).set({
+    storeId,
+    email,
+    role: roleId,
+    token: Math.random().toString(36).slice(2, 12),
+    status: 'accepted',
+    invitedBy: request.auth.uid,
+    createdAt: now(),
+    updatedAt: now(),
+  })
+
+  await db.collection('notifications').add({
+    storeId,
+    userId: null,
+    title: 'تمت إضافة موظف جديد',
+    body: `تم إنشاء حساب الموظف ${name} بدور محدد. سلّم بيانات الدخول للموظف.`,
+    type: 'team',
+    read: false,
+    createdBy: request.auth.uid,
+    createdAt: now(),
+  })
+
+  await auditLog(storeId, request.auth.uid, 'invite_staff', 'users', uid, { email, role: roleId })
+
+  return { uid, email, initialPassword }
 })

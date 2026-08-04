@@ -27,7 +27,9 @@ export const StoreCheckout: FunctionalComponent = () => {
     }
     setLoading(true)
     try {
-      const salesLinkRef = sessionStorage.getItem('mk_sales_ref') || undefined
+      // Attribution is keyed by store so a referral from another store can
+      // never be attributed to this checkout (tenant isolation).
+      const salesLinkRef = store?.id ? sessionStorage.getItem(`mk_sales_ref_${store.id}`) || undefined : undefined
       const res = await createOrderCallable({
         storeId: store?.id,
         items: cart.items.map((i) => ({ productId: i.productId, quantity: i.quantity, color: i.color, size: i.size })),
@@ -38,7 +40,7 @@ export const StoreCheckout: FunctionalComponent = () => {
       const data = res.data as any
       setDone({ orderNumber: data.orderNumber })
       cart.clear()
-      sessionStorage.removeItem('mk_sales_ref')
+      if (store?.id) sessionStorage.removeItem(`mk_sales_ref_${store.id}`)
       toast.push('تم إرسال طلبك بنجاح')
     } catch (err: any) {
       toast.push('تعذر إرسال الطلب', err?.message || 'تحقق من البيانات', 'error')

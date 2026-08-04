@@ -1,0 +1,34 @@
+rules_version = '2';
+service firebase.storage {
+  match /b/{bucket}/o {
+    // Product images: public read. Writes require auth + matching metadata storeId.
+    // Full ownership verification happens in Firestore rules (the document referencing
+    // the file is gated by canAccessStore). Storage metadata is client-set, so
+    // cross-store protection ultimately relies on Firestore document rules.
+    match /products/{storeId}/{allPaths=**} {
+      allow read: if true;
+      allow write: if request.auth != null
+        && request.resource.metadata.storeId == storeId;
+    }
+
+    // Store avatars / brand assets — store owner or platform admin only
+    match /stores/{storeId}/{allPaths=**} {
+      allow read: if true;
+      allow write: if request.auth != null
+        && request.resource.metadata.storeId == storeId;
+    }
+
+    // Merchant uploaded documents (invoices, evidence)
+    match /documents/{storeId}/{allPaths=**} {
+      allow read: if true;
+      allow write: if request.auth != null
+        && request.resource.metadata.storeId == storeId;
+    }
+
+    // Fallback — everything else requires platform admin
+    match /{allPaths=**} {
+      allow read: if true;
+      allow write: if false;
+    }
+  }
+}

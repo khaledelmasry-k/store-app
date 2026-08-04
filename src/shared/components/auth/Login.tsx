@@ -42,7 +42,7 @@ export const Login: FunctionalComponent<Props> = ({ role }) => {
         navigate('/dashboard/', { replace: true })
       }
       else if (user.role === 'customer') navigate('/', { replace: true })
-      else navigate('/', { replace: true })
+      else navigate('/dashboard/', { replace: true })
     }
   }, [user, initialized, navigate])
 

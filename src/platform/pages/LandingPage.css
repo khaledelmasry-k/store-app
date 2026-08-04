@@ -393,6 +393,14 @@
   padding: 4.5rem 0;
 }
 
+#features, #how-it-works, #pricing, #faq {
+  scroll-margin-top: 84px;
+}
+
+html {
+  scroll-behavior: smooth;
+}
+
 .landing-section-soft {
   background: #ffffff;
   border-top: 1px solid #f1f3f7;
@@ -653,6 +661,109 @@
   padding: 0.9rem 1.2rem;
 }
 
+/* ─────────────────── Trust strip ─────────────────── */
+
+.landing-trust-strip {
+  background: linear-gradient(90deg, #6366f1, #8b5cf6);
+  padding: 1.15rem 0;
+  color: #fff;
+}
+
+.trust-strip-inner {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: center;
+  gap: 1rem 2.2rem;
+}
+
+.trust-strip-item {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.5rem;
+  font-weight: 600;
+  font-size: 1.02rem;
+}
+
+.trust-strip-item .material-symbols-outlined {
+  font-size: 1.3rem;
+}
+
+.trust-strip-tagline {
+  width: 100%;
+  text-align: center;
+  margin: 0.55rem 0 0;
+  font-size: 0.92rem;
+  opacity: 0.92;
+  font-weight: 400;
+}
+
+@media (min-width: 720px) {
+  .trust-strip-tagline {
+    width: auto;
+    margin: 0;
+    padding-right: 2rem;
+    border-right: 1px solid rgba(255, 255, 255, 0.35);
+  }
+}
+
+/* ─────────────────── Sales link metrics ─────────────────── */
+
+.sales-metrics {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+  gap: 1rem;
+  margin-top: 2rem;
+}
+
+.sales-metric {
+  display: flex;
+  align-items: center;
+  gap: 0.9rem;
+  background: #fff;
+  border: 1px solid #eef0f5;
+  border-radius: 16px;
+  padding: 1.1rem 1.2rem;
+  box-shadow: 0 8px 24px -18px rgba(15, 23, 42, 0.25);
+}
+
+.sales-metric-icon {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 2.6rem;
+  height: 2.6rem;
+  border-radius: 12px;
+  background: #eef2ff;
+  color: #6366f1;
+  flex-shrink: 0;
+}
+
+.sales-metric-text {
+  display: flex;
+  flex-direction: column;
+}
+
+.sales-metric-value {
+  font-size: 1.35rem;
+  font-weight: 800;
+  color: #0f172a;
+  line-height: 1.1;
+}
+
+.sales-metric-value small {
+  font-size: 0.75rem;
+  font-weight: 600;
+  color: #6366f1;
+  margin-right: 0.25rem;
+}
+
+.sales-metric-label {
+  color: #64748b;
+  font-size: 0.86rem;
+  margin-top: 0.15rem;
+}
+
 /* ─────────────────── Pricing ─────────────────── */
 
 .pricing-grid {
@@ -731,11 +842,21 @@
   color: #94a3b8;
 }
 
+.pricing-limits-row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.4rem 0.9rem;
+  margin-bottom: 1rem;
+}
+
 .pricing-limits {
   font-size: 0.85rem;
   color: #6366f1;
   font-weight: 600;
-  margin-bottom: 1rem;
+  background: #eef2ff;
+  border-radius: 999px;
+  padding: 0.25rem 0.7rem;
+  margin: 0;
 }
 
 .pricing-features {

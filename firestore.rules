@@ -62,21 +62,21 @@ service cloud.firestore {
       return isPlatformAdmin() || canAccessStore(storeId);
     }
 
-    // RBAC: platform admin, or a store member that is either the owner (merchant)
-    // or a staff member holding the required permission.
-    function canManage(storeId, perm) {
-      return isPlatformAdmin() || (
-        canAccessStore(storeId) && (isMerchant() || hasPermission(perm))
-      );
-    }
+// RBAC: platform admin, or a store member that is either the owner (merchant)
+// or a staff member holding the required permission.
+function canManage(storeId, perm) {
+  return isPlatformAdmin() || (
+    canAccessStore(storeId) && (isMerchant() || hasPermission(perm))
+  );
+}
 
-    function isStoreStaff(storeId) {
-      return isAdminOrStore(storeId) || isStaff();
-    }
+function isStoreStaff(storeId) {
+  return isAdminOrStore(storeId) || isStaff();
+}
 
-    function inStore(resource) {
-      return resource.data.storeId != null;
-    }
+function inStore(resource) {
+  return resource.data.storeId != null;
+}
 
     // L1 fix — read gates are permission-aware, not merely "belongs to the store".
     // Being a store member is NOT enough to read Orders or Customers; a staff
@@ -131,35 +131,39 @@ service cloud.firestore {
     // products / categories — public read (active only enforced in code),
     // write by the owning merchant, platform admin, or staff with products:manage
     // ─────────────────────────────────────────────────────────────
-    match /products/{id} {
-      allow read: if true;
-      allow write: if canManage(request.resource.data.storeId, 'products:manage');
-    }
+match /products/{id} {
+       allow read: if true;
+       allow write: if canManage(request.resource.data.storeId, 'products:manage')
+         && request.resource.data.storeId == resource.data.storeId;
+     }
 
-    match /categories/{id} {
-      allow read: if true;
-      allow write: if canManage(request.resource.data.storeId, 'products:manage');
-    }
+     match /categories/{id} {
+       allow read: if true;
+       allow write: if canManage(request.resource.data.storeId, 'products:manage')
+         && request.resource.data.storeId == resource.data.storeId;
+     }
 
     // ─────────────────────────────────────────────────────────────
     // orders — merchant/admin write; customer read if it matches their
     // phone (tracking) — creation goes through the callable function.
     // Public tracking uses the trackOrder callable (rules can't match phone).
     // ─────────────────────────────────────────────────────────────
-    match /orders/{id} {
-      allow read: if canReadOrders(resource.data.storeId) || isSameUser(resource.data.customerId);
-      allow create: if false; // only via createOrder callable
-      allow update: if canManage(resource.data.storeId, 'orders:manage');
-      allow delete: if isPlatformAdmin();
-    }
+match /orders/{id} {
+       allow read: if canReadOrders(resource.data.storeId) || isSameUser(resource.data.customerId);
+       allow create: if false; // only via createOrder callable
+       allow update: if canManage(resource.data.storeId, 'orders:manage')
+         && request.resource.data.storeId == resource.data.storeId;
+       allow delete: if isPlatformAdmin();
+     }
 
-    // ─────────────────────────────────────────────────────────────
-    // customers — merchant/admin read; write requires customers:manage for staff
-    // ─────────────────────────────────────────────────────────────
-    match /customers/{id} {
-      allow read: if canReadCustomers(resource.data.storeId);
-      allow write: if canManage(resource.data.storeId, 'customers:manage');
-    }
+     // ─────────────────────────────────────────────────────────────
+     // customers — merchant/admin read; write requires customers:manage for staff
+     // ─────────────────────────────────────────────────────────────
+     match /customers/{id} {
+       allow read: if canReadCustomers(resource.data.storeId);
+       allow write: if canManage(request.resource.data.storeId, 'customers:manage')
+         && request.resource.data.storeId == resource.data.storeId;
+     }
 
     // ─────────────────────────────────────────────────────────────
     // subscriptions / transactions / payments — merchant reads own store;
@@ -181,7 +185,10 @@ service cloud.firestore {
     }
 
     match /coupons/{id} {
-      allow read: if true; // storefront needs to validate a coupon code
+      // Merchant dashboard + platform need read; coupons are tenant data so a
+      // customer must never enumerate another merchant's codes. Storefront
+      // coupon validation is not read-based (coupon codes are applied server-side).
+      allow read: if isAdminOrStore(resource.data.storeId) || isPlatformAdmin();
       allow write: if canManage(request.resource.data.storeId, 'coupons:manage');
     }
 
@@ -242,11 +249,13 @@ service cloud.firestore {
     }
 
     // ─────────────────────────────────────────────────────────────
-    // storeLinks — public read (storefront needs the code lookup),
-    // write requires store membership (owner or any store member)
+    // storeLinks — sales-link analytics (visits/orders/revenue) are tenant
+    // data. The public storefront resolves a code via the recordStoreLinkVisit
+    // callable (server-side), not by reading storeLinks. So reads are restricted
+    // to store members, owners, and the platform admin.
     // ─────────────────────────────────────────────────────────────
     match /storeLinks/{id} {
-      allow read: if true;
+      allow read: if isAdminOrStore(resource.data.storeId) || isPlatformAdmin();
       allow write: if isAdminOrStore(request.resource.data.storeId);
     }
 

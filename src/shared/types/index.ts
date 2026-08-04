@@ -110,6 +110,8 @@ export interface Order extends Partial<FirestoreMeta> {
   couponCode?: string | null
   trackingCode?: string | null
   salesLinkRef?: string | null
+  salesLinkId?: string | null
+  salesLinkStaffId?: string | null
 }
 
 export interface Customer extends Partial<FirestoreMeta> {
@@ -271,6 +273,8 @@ export interface StoreLink extends Partial<FirestoreMeta> {
   visits: number
   ordersCount?: number
   totalRevenue?: number
+  sellerName?: string
+  staffId?: string
   createdBy: string
 }
 

@@ -1,6 +1,8 @@
 node_modules/
 dist/
-.env
+functions/lib/
+.env*
+!.env.production
 server/prisma/dev.db
 server/prisma/dev.db-journal
 backups/
@@ -8,3 +10,6 @@ backups/
 .DS_Store
 server/uploads
 *.tsbuildinfo
+firebase-debug.log
+firebase-debug.*.log
+.vercel

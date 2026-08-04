@@ -1,26 +1,28 @@
 {
-  "name": "store",
+  "name": "mk-store-app",
   "private": true,
-  "version": "0.0.0",
+  "version": "2.0.0",
   "type": "module",
   "scripts": {
     "dev": "vite",
     "build": "tsc -b && vite build",
-    "build:all": "npm run build && mkdir -p server/dist/public && cp -r dist/* server/dist/public/ && cd server && npx tsc",
-    "start": "node server/dist/index.js",
+    "preview": "vite preview",
     "lint": "oxlint",
-    "preview": "vite preview"
+    "typecheck": "tsc -b --noEmit",
+    "emulators": "firebase emulators:start",
+    "deploy": "firebase deploy"
   },
   "dependencies": {
     "@fontsource/noto-sans-arabic": "^5.3.0",
     "@fontsource/plus-jakarta-sans": "^5.3.0",
+    "firebase": "^11.10.0",
     "material-symbols": "^0.45.9",
     "preact": "^10.29.7",
     "wouter": "^3.10.0"
   },
   "devDependencies": {
     "@preact/preset-vite": "^2.10.6",
-    "@types/node": "^24.13.2",
+    "@types/node": "^24.13.3",
     "@typescript-eslint/eslint-plugin": "^8.65.0",
     "@typescript-eslint/parser": "^8.65.0",
     "eslint-config-prettier": "^10.1.8",

@@ -3,6 +3,7 @@ import { Switch, useLocation, Redirect } from 'wouter'
 import { useAuth } from '../../hooks/useAuth'
 import { Loading } from '../ui/Loading'
 import { EmptyState } from '../ui/EmptyState'
+import { ROUTE_PERMISSIONS } from '../../utils/constants'
 import type { Role } from '../../types'
 
 interface ZoneRouterProps {
@@ -39,9 +40,6 @@ export const ZoneRouter: FunctionalComponent<ZoneRouterProps> = ({ prefix, role,
     return <Redirect to="/" replace />
   }
 
-  // Pending-approval gate: a merchant/staff account that has not been
-  // approved by Platform Admin (users.active === false) must not enter the
-  // dashboard. superAdmin is always active.
   if (user.role !== 'superAdmin' && user.active === false) {
     return (
       <div className="auth-screen">
@@ -60,10 +58,12 @@ export const ZoneRouter: FunctionalComponent<ZoneRouterProps> = ({ prefix, role,
     )
   }
 
-  // Staff RBAC: when a permission is declared for the zone/route, enforce it.
-  if (user.role === 'staff' && permission) {
+  const routeKey = loc.split('?')[0]
+  const resolvedPermission = permission || ROUTE_PERMISSIONS[routeKey] || ROUTE_PERMISSIONS[Object.keys(ROUTE_PERMISSIONS).find((p) => routeKey.startsWith(p + '/')) || '']
+
+  if (user.role === 'staff' && resolvedPermission) {
     const perms = user.permissions || []
-    if (!perms.includes(permission)) {
+    if (!perms.includes(resolvedPermission)) {
       return (
         <EmptyState
           title="صلاحيات غير كافية"

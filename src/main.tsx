@@ -10,5 +10,11 @@ import '@fontsource/plus-jakarta-sans/latin-800.css'
 import 'material-symbols/outlined.css'
 import './index.css'
 import App from './App'
+import { ErrorBoundary } from './shared/components/routing/ErrorBoundary'
 
-render(<App />, document.getElementById('root')!)
+render(
+  <ErrorBoundary>
+    <App />
+  </ErrorBoundary>,
+  document.getElementById('root')!
+)

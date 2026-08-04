@@ -1,5 +1,6 @@
 import { FunctionalComponent } from 'preact'
 import { useState } from 'preact/hooks'
+import { Link } from 'wouter'
 import { useStore } from '../../shared/hooks/useStore'
 import { useAuth } from '../../shared/hooks/useAuth'
 import { useCollection } from '../../shared/hooks/useCollection'
@@ -22,19 +23,33 @@ export const StoreAccount: FunctionalComponent = () => {
   const storeId = store?.id || ''
   const userId = user?.uid || ''
 
-  const wishlistRes = useCollection<WishlistItem>('wishlist', { userId });
+  const isCustomer = user?.role === 'customer'
+  const wishlistRes = useCollection<WishlistItem>('wishlist', { userId }, isCustomer && !!userId);
 
   const wishlist = wishlistRes.data
-  const addressesRes = useCollection<Address>('addresses', { userId });
+  const addressesRes = useCollection<Address>('addresses', { userId }, isCustomer && !!userId);
   const addresses = addressesRes.data
-  const ordersRes = useCollection<Order>('orders', { storeId, ...(user?.role === 'customer' ? { customerId: userId } : {}) });
+  // Always scope by customerId for customers; never fall back to fetching all
+  // store orders for guests/merchants (guests are redirected below).
+  const ordersRes = useCollection<Order>('orders', isCustomer && userId ? { storeId, where: { customerId: { value: userId } } } : { storeId: '' });
   const orders = ordersRes.data
-  const productsRes = useCollection('products', { storeId });
+  const productsRes = useCollection('products', { storeId }, isCustomer && !!userId);
   const products = productsRes.data
 
   const myOrders = orders.filter((o) => o.phone === user?.phone || o.customerId === userId)
 
   const [newAddress, setNewAddress] = useState({ label: '', name: '', phone: '', governorate: '', city: '', address: '' })
+
+  if (!isCustomer) {
+    return (
+      <div className="order-confirmed">
+        <div className="big-check"><span className="material-symbols-outlined">account_circle</span></div>
+        <h1 className="auth-title">تسجيل الدخول مطلوب</h1>
+        <p className="auth-subtitle">سجّل الدخول لعرض طلباتك وعناوينك ومفضلتك.</p>
+        <Link href={`/store/${store?.slug}/login`}><Button>تسجيل الدخول</Button></Link>
+      </div>
+    )
+  }
 
   const addAddress = async () => {
     if (!newAddress.address) {

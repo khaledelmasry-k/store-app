@@ -1,110 +1,85 @@
-# Deployment Guide — M&K Store
+# Deployment
 
-Targets: **Northflank** (API + PostgreSQL) and any Docker-capable host.
-
----
-
-## 1. Prerequisites
-
-- Source repository hosted on GitHub/GitLab.
-- A Northflank account (or any container platform).
-- For local testing: Docker + Docker Compose.
-
----
-
-## 2. Environment variables
-
-All variables are runtime (container) environment, except `VITE_*` which are
-**build-time** (must be set in the Docker build environment).
-
-| Variable         | Required | Description |
-| ---------------- | -------- | ----------- |
-| `DATABASE_URL`   | yes      | PostgreSQL connection string. |
-| `JWT_SECRET`     | yes      | Long random string (generate with `openssl rand -base64 48`). |
-| `NODE_ENV`       | yes      | `production`. |
-| `PORT`           | no       | Default `3001`; Northflank injects its own `PORT`. |
-| `FRONTEND_URL`   | no       | Comma-separated CORS origins. Leave unset for same-origin. |
-| `VITE_API_URL`   | no       | API base path for the frontend bundle (default `/api`). |
-| `VITE_IMG_URL`   | no       | Upload base path for the frontend bundle (default `/uploads`). |
-
-> **Security**: the server refuses to start in `NODE_ENV=production` without a strong
-> `JWT_SECRET` (`server/src/config.ts`).
-
----
-
-## 3. Northflank deployment
-
-1. **Add the repo** to Northflank as a *Build Service* (uses `Dockerfile`).
-2. **Add a PostgreSQL addon** and link it to the service.
-3. **Set environment variables** (see table above). `DATABASE_URL` points at the
-   linked PostgreSQL addon.
-4. **Ports & domains**: publish port `3001` and attach a domain with TLS.
-5. **Deploy.** On first start the container runs `server/entrypoint.sh`:
-   1. `prisma migrate deploy` (applies `server/prisma/migrations/*`),
-   2. `node dist/seed.js` (creates super admin only if missing),
-   3. `exec node dist/index.js`.
-
-Health check: `GET /` returns the SPA; `GET /api/health` returns status (see below).
-
-### Scaling & storage
-
-- The API is stateless — safe to scale horizontally.
-- `server/uploads/` is **not** persistent across replicas/restarts. Mount a
-  Northflank Volume at `/app/server/uploads` or move uploads to an S3-compatible
-  bucket before scaling beyond one replica.
-
----
-
-## 4. Docker / Docker Compose (local)
+## Local dev (emulators)
 
 ```bash
-# Option A — docker compose (PostgreSQL + app together)
-cp .env.example .env
-export JWT_SECRET="$(openssl rand -base64 48)"
-docker compose up --build
+npm install
+cd functions && npm install
 
-# Option B — single container against an existing database
-docker build -t mk-store .
-docker run -p 3001:3001 \
-  -e DATABASE_URL="postgresql://user:pass@host:5432/db" \
-  -e JWT_SECRET="$(openssl rand -base64 48)" \
-  -e NODE_ENV=production \
-  mk-store
+# frontend
+npm run dev                    # http://localhost:5173 (proxies not needed; direct Firestore)
+
+# full backend emulation
+firebase emulators:start       # Auth 9099, Firestore 8080, Functions 5099,
+                               # Storage 9199, Hosting 5000, UI 4000
 ```
 
-`docker-compose.yml` includes a `db` (PostgreSQL 16) with a health check and an
-`app` service with `wget`-based health check. The app waits for the database via
-`depends_on.condition: service_healthy`.
+Set `VITE_FIREBASE_USE_EMULATOR=true` in `.env.local` so the frontend connects to the emulators (see `src/shared/firebase/index.ts`).
 
----
+### Seed the first platform admin
 
-## 5. Container health check
+There is no super-admin by default. Create one via the Auth emulator UI, then assign the role in the Firestore emulator:
 
-- Northflank / compose health check command: `wget -qO- http://localhost:3001/ || exit 1`
-- Dedicated endpoint: `GET /api/health` → `{"status":"ok"}` when the server is up.
+```bash
+firebase firestore:set 'users/{uid}' '{
+  "uid": "<UID>",
+  "email": "admin@mk.local",
+  "name": "Super Admin",
+  "role": "platformAdmin",
+  "storeIds": [],
+  "active": true
+}' -- emulators
+```
 
----
+(Or use the Emulator UI at http://localhost:4000/firestore to add a `users` document with `role: "platformAdmin"`.)
 
-## 6. First-run credentials
+## Production deploy
 
-The seed script creates the super admin **only if it does not exist** (idempotent):
+```bash
+npm run build
+firebase deploy
+```
 
-| Role        | Username | Password  |
-| ----------- | -------- | --------- |
-| Super Admin | `admin`  | `admin123`|
+`firebase deploy` deploys in the right order: Firestore rules → indexes → Functions → Hosting. First-time only, the emulator may warn about missing indexes; create them and re-deploy with:
 
-Change this password immediately after first login.
+```bash
+firebase deploy --only firestore:indexes
+```
 
----
+## CI / GitHub Actions (optional)
 
-## 7. Frontend-only deployment (Firebase Hosting)
+```yaml
+# .github/workflows/deploy.yml
+- run: npm ci
+- run: cd functions && npm ci
+- run: npm run build
+- run: npx firebase deploy --token "$FIREBASE_TOKEN"
+```
 
-If the frontend is served separately (not from the same container):
+Generate a deploy token once with `firebase login:ci`.
 
-1. Build with the API URL baked in:
-   ```bash
-   VITE_API_URL=https://api.example.com/api npm run build
-   ```
-2. Deploy `dist/` to Firebase Hosting (or any static host).
-3. Ensure the API server's `FRONTEND_URL` includes the static host origin
-   (e.g. `https://mk-store-app.web.app`), since the browser calls the API cross-origin.
+## Spark → Blaze upgrade path
+
+Spark Free limits (2026): 50 k reads / 20 k writes / 20 k deletes **per day**, and **no scheduled or background functions**. The V2 architecture is Spark-compatible:
+
+- Analytics are denormalized (written, not recomputed).
+- No cron jobs — nothing depends on scheduled triggers.
+- Order numbers use a Firestore counter transaction (works on Spark).
+
+When traffic grows, the recommended upgrades are:
+
+1. **Blaze plan** — unlocks scheduled functions and higher quotas.
+2. Add a scheduled function (e.g. `computeDailyAnalytics`) to pre-aggregate per-store analytics and reset the daily write count.
+3. Enable **App Check** to block abused clients.
+4. Move the `analytics` doc into a separate collection to distribute writes.
+5. Consider Firestore **codeless** indexes auto-management.
+
+## Custom domain
+
+Add your domain in the Hosting console, then:
+
+```bash
+firebase hosting:channel:deploy <channel>
+```
+
+The `firebase.json` Hosting config rewrites all non-asset routes to `/index.html`, so deep links into `/platform`, `/merchant`, or `/store/:slug` resolve correctly on refresh.
