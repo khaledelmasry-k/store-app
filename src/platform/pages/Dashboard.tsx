@@ -11,18 +11,20 @@ import { Loading } from '../../shared/components/ui/Loading'
 import { formatCurrency, timeAgo } from '../../shared/utils/format'
 import { EmptyState } from '../../shared/components/ui/EmptyState'
 import { Button } from '../../shared/components/ui/Button'
-import type { Store, Order, Subscription } from '../../shared/types'
+import type { Store, Subscription, Transaction } from '../../shared/types'
 
 export const PlatformDashboard: FunctionalComponent = () => {
   const storesRes = useCollection<Store>('stores', { orderBy: { field: 'createdAt' } })
   const subsRes = useCollection<Subscription>('subscriptions', { orderBy: { field: 'createdAt' } })
+  const transactionsRes = useCollection<Transaction>('transactions', { orderBy: { field: 'createdAt' } })
   const analyticsRes = useCollection<any>('analytics', { orderBy: { field: 'date' } })
 
   const stores = storesRes.data
   const subs = subsRes.data
+  const transactions = transactionsRes.data
   const analytics = analyticsRes.data
 
-  if (storesRes.loading || subsRes.loading || analyticsRes.loading) {
+  if (storesRes.loading || subsRes.loading || transactionsRes.loading || analyticsRes.loading) {
     return <Loading />
   }
 
@@ -31,17 +33,30 @@ export const PlatformDashboard: FunctionalComponent = () => {
   const activeSubs = subs.filter((s) => s.status === 'active').length
   const expiredSubs = subs.filter((s) => s.status === 'expired' || s.status === 'rejected').length
 
+  const platformRevenue = transactions
+    .filter((t) => t.type === 'subscription' && t.status === 'completed')
+    .reduce((s, t) => s + (t.amount || 0), 0)
+
   const last14 = Array.from({ length: 14 }, (_, i) => {
     const d = new Date()
     d.setDate(d.getDate() - (13 - i))
     const key = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`
     return { key, date: d }
   })
-  const revenueSeries = last14.map(({ key }) => analytics.filter((a: any) => a.date === key).reduce((s, a: any) => s + (a.revenue || 0), 0))
+
+  const platformRevenueSeries = last14.map(({ key }) =>
+    transactions
+      .filter((t) => t.type === 'subscription' && t.status === 'completed')
+      .reduce((s, t) => {
+        const createdDate = new Date((t.createdAt?.seconds || 0) * 1000)
+        const tKey = `${createdDate.getFullYear()}-${String(createdDate.getMonth() + 1).padStart(2, '0')}-${String(createdDate.getDate()).padStart(2, '0')}`
+        return tKey === key ? s + (t.amount || 0) : s
+      }, 0)
+  )
+
   const ordersSeries = last14.map(({ key }) => analytics.filter((a: any) => a.date === key).reduce((s, a: any) => s + (a.orders || 0), 0))
   const storesSeries = last14.map(({ key }) => analytics.filter((a: any) => a.date === key).reduce((s, a: any) => s + (a.stores || 0), 0))
 
-  const totalRevenue = revenueSeries.reduce((s, v) => s + v, 0)
   const totalOrders = ordersSeries.reduce((s, v) => s + v, 0)
 
   const latestStores = [...stores].sort((a, b) => (b.createdAt?.seconds || 0) - (a.createdAt?.seconds || 0)).slice(0, 5)
@@ -62,23 +77,23 @@ export const PlatformDashboard: FunctionalComponent = () => {
         <StatsCard title="إجمالي التجار" value={stores.length} icon="storefront" tone="primary" />
         <StatsCard title="المتاجر النشطة" value={activeStores} icon="store" tone="green" changeLabel={`${suspendedStores} موقوف`} />
         <StatsCard title="الاشتراكات النشطة" value={activeSubs} icon="card_membership" tone="blue" changeLabel={`${expiredSubs} منتهية`} />
-        <StatsCard title="إجمالي الإيرادات" value={totalRevenue} currency icon="payments" tone="amber" />
+        <StatsCard title="إيرادات المنصة" value={platformRevenue} currency icon="payments" tone="amber" />
       </div>
       <div className="stats-grid">
-        <StatsCard title="الطلبات (آخر 14 يوم)" value={totalOrders} icon="receipt_long" tone="violet" />
-        <StatsCard title="نمو المتاجر" value={storesSeries.length > 0 ? storesSeries[storesSeries.length - 1] : 0} icon="trending_up" tone="green" />
+        <StatsCard title="إجمالي طلبات المتاجر" value={totalOrders} icon="receipt_long" tone="violet" />
+        <StatsCard title="نمو التجار" value={storesSeries.length > 0 ? storesSeries[storesSeries.length - 1] : 0} icon="trending_up" tone="green" />
       </div>
       <div className="grid grid-2 mb-2">
-        <Card title="الإيرادات (آخر 14 يوم)" subtitle="إيرادات مؤكدة يومياً">
-          {revenueSeries.every((v) => v === 0) ? (
-            <EmptyState title="لا توجد إيرادات" description="ستظهر بيانات المبيعات هنا بمجرد ظهور طلبات مكتملة" />
+        <Card title="إيرادات المنصة (آخر 14 يوم)" subtitle="إيرادات الاشتراكات والمدفوعات">
+          {platformRevenueSeries.every((v) => v === 0) ? (
+            <EmptyState title="لا توجد إيرادات" description="ستظهر إيرادات الاشتراكات والمدفوعات هنا" />
           ) : (
-            <div style={{ height: 220 }}><LineChart values={revenueSeries} /></div>
+            <div style={{ height: 220 }}><LineChart values={platformRevenueSeries} /></div>
           )}
         </Card>
-        <Card title="الطلبات (آخر 14 يوم)">
+        <Card title="طلبات المتاجر (آخر 14 يوم)" subtitle="إجمالي الطلبات عبر جميع المتاجر">
           {ordersSeries.every((v) => v === 0) ? (
-            <EmptyState title="لا توجد طلبات" description="ستظهر طلبات العملاء هنا" />
+            <EmptyState title="لا توجد طلبات" description="ستظهر طلبات المتاجر هنا" />
           ) : (
             <div style={{ height: 220 }}><LineChart values={ordersSeries} color="var(--success)" /></div>
           )}
