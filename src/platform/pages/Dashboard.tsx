@@ -9,29 +9,27 @@ import { LineChart } from '../../shared/components/charts/LineChart'
 import { useCollection } from '../../shared/hooks/useCollection'
 import { Loading } from '../../shared/components/ui/Loading'
 import { formatCurrency, timeAgo } from '../../shared/utils/format'
-import { STATUS_LABELS, STATUS_COLORS } from '../../shared/utils/constants'
 import { EmptyState } from '../../shared/components/ui/EmptyState'
 import { Button } from '../../shared/components/ui/Button'
 import type { Store, Order, Subscription } from '../../shared/types'
 
 export const PlatformDashboard: FunctionalComponent = () => {
   const storesRes = useCollection<Store>('stores', { orderBy: { field: 'createdAt' } })
-  const ordersRes = useCollection<Order>('orders', { orderBy: { field: 'createdAt' } })
   const subsRes = useCollection<Subscription>('subscriptions', { orderBy: { field: 'createdAt' } })
   const analyticsRes = useCollection<any>('analytics', { orderBy: { field: 'date' } })
 
   const stores = storesRes.data
-  const orders = ordersRes.data
   const subs = subsRes.data
   const analytics = analyticsRes.data
 
-  if (storesRes.loading || ordersRes.loading || subsRes.loading || analyticsRes.loading) {
+  if (storesRes.loading || subsRes.loading || analyticsRes.loading) {
     return <Loading />
   }
 
-  const revenue = orders.filter((o) => o.status === 'DELIVERED').reduce((s, o) => s + o.totalPrice, 0)
   const activeStores = stores.filter((s) => s.active).length
+  const suspendedStores = stores.filter((s) => !s.active).length
   const activeSubs = subs.filter((s) => s.status === 'active').length
+  const expiredSubs = subs.filter((s) => s.status === 'expired' || s.status === 'rejected').length
 
   const last14 = Array.from({ length: 14 }, (_, i) => {
     const d = new Date()
@@ -41,61 +39,99 @@ export const PlatformDashboard: FunctionalComponent = () => {
   })
   const revenueSeries = last14.map(({ key }) => analytics.filter((a: any) => a.date === key).reduce((s, a: any) => s + (a.revenue || 0), 0))
   const ordersSeries = last14.map(({ key }) => analytics.filter((a: any) => a.date === key).reduce((s, a: any) => s + (a.orders || 0), 0))
+  const storesSeries = last14.map(({ key }) => analytics.filter((a: any) => a.date === key).reduce((s, a: any) => s + (a.stores || 0), 0))
+
+  const totalRevenue = revenueSeries.reduce((s, v) => s + v, 0)
+  const totalOrders = ordersSeries.reduce((s, v) => s + v, 0)
+
+  const latestStores = [...stores].sort((a, b) => (b.createdAt?.seconds || 0) - (a.createdAt?.seconds || 0)).slice(0, 5)
+  const latestSubs = [...subs].sort((a, b) => (b.createdAt?.seconds || 0) - (a.createdAt?.seconds || 0)).slice(0, 5)
 
   return (
     <div>
       <PageHeader
-        title="نظرة عامة على المنصة"
-        subtitle="ملخص أداء جميع المتاجر"
+        title="لوحة تحكم المنصة"
+        subtitle="نظرة عامة على أداء المنصة والتجار"
         actions={
           <Link href="/platform/merchants">
-            <Button variant="outline" icon="add">إضافة متجر</Button>
+            <Button variant="outline" icon="add">إضافة تاجر</Button>
           </Link>
         }
       />
       <div className="stats-grid">
-        <StatsCard title="المتاجر النشطة" value={activeStores} icon="store" tone="primary" changeLabel={`من ${stores.length} إجمالاً`} />
-        <StatsCard title="الاشتراكات النشطة" value={activeSubs} icon="card_membership" tone="blue" changeLabel={`من ${subs.length} اشتراك`} />
-        <StatsCard title="إجمالي الطلبات" value={orders.length} icon="receipt_long" tone="green" />
-        <StatsCard title="إيرادات مؤكدة" value={revenue} currency icon="payments" tone="amber" />
+        <StatsCard title="إجمالي التجار" value={stores.length} icon="storefront" tone="primary" />
+        <StatsCard title="المتاجر النشطة" value={activeStores} icon="store" tone="green" changeLabel={`${suspendedStores} موقوف`} />
+        <StatsCard title="الاشتراكات النشطة" value={activeSubs} icon="card_membership" tone="blue" changeLabel={`${expiredSubs} منتهية`} />
+        <StatsCard title="إجمالي الإيرادات" value={totalRevenue} currency icon="payments" tone="amber" />
+      </div>
+      <div className="stats-grid">
+        <StatsCard title="الطلبات (آخر 14 يوم)" value={totalOrders} icon="receipt_long" tone="violet" />
+        <StatsCard title="نمو المتاجر" value={storesSeries.length > 0 ? storesSeries[storesSeries.length - 1] : 0} icon="trending_up" tone="green" />
       </div>
       <div className="grid grid-2 mb-2">
         <Card title="الإيرادات (آخر 14 يوم)" subtitle="إيرادات مؤكدة يومياً">
           {revenueSeries.every((v) => v === 0) ? (
-            <EmptyState title="لا توجد إيرادات" description="سيظهر بيانات المبيعات هنا بمجرد ظهور طلبات مكتملة" />
+            <EmptyState title="لا توجد إيرادات" description="ستظهر بيانات المبيعات هنا بمجرد ظهور طلبات مكتملة" />
           ) : (
-            <div style={{ height: 220 }}>
-              <LineChart values={revenueSeries} />
-            </div>
+            <div style={{ height: 220 }}><LineChart values={revenueSeries} /></div>
           )}
         </Card>
         <Card title="الطلبات (آخر 14 يوم)">
           {ordersSeries.every((v) => v === 0) ? (
             <EmptyState title="لا توجد طلبات" description="ستظهر طلبات العملاء هنا" />
           ) : (
-            <div style={{ height: 220 }}>
-              <LineChart values={ordersSeries} color="var(--success)" />
-            </div>
+            <div style={{ height: 220 }}><LineChart values={ordersSeries} color="var(--success)" /></div>
           )}
         </Card>
       </div>
-      <Card title="أحدث الطلبات" subtitle="آخر الطلبات عبر المنصة">
-        {orders.length === 0 ? (
-          <EmptyState title="لا توجد طلبات" description="لم يتم إنشاء أي طلبات بعد" />
-        ) : (
-          <Table
-            columns={[
-              { key: 'orderNumber', header: 'رقم الطلب', render: (o: Order) => <span className="monospace">{o.orderNumber}</span> },
-              { key: 'storeId', header: 'المتجر', render: (o: Order) => stores.find((s) => s.id === o.storeId)?.name || '—' },
-              { key: 'customerName', header: 'العميل' },
-              { key: 'totalPrice', header: 'الإجمالي', render: (o: Order) => formatCurrency(o.totalPrice) },
-              { key: 'status', header: 'الحالة', render: (o: Order) => <Badge tone={STATUS_COLORS[o.status]}>{STATUS_LABELS[o.status]}</Badge> },
-              { key: 'createdAt', header: 'التاريخ', render: (o: Order) => <span className="muted">{timeAgo(o.createdAt)}</span> },
-            ]}
-            rows={orders.slice(0, 8)}
-          />
-        )}
-      </Card>
+      <div className="grid grid-2 mb-2">
+        <Card title="نمو المتاجر (آخر 14 يوم)">
+          {storesSeries.every((v) => v === 0) ? (
+            <EmptyState title="لا توجد بيانات" description="ستظهر بيانات المتاجر هنا" />
+          ) : (
+            <div style={{ height: 220 }}><LineChart values={storesSeries} color="var(--primary)" /></div>
+          )}
+        </Card>
+        <Card title="الاشتراكات (آخر 14 يوم)">
+          {ordersSeries.every((v) => v === 0) ? (
+            <EmptyState title="لا توجد بيانات" description="ستظهر بيانات الاشتراكات هنا" />
+          ) : (
+            <div style={{ height: 220 }}><LineChart values={ordersSeries} color="var(--info)" /></div>
+          )}
+        </Card>
+      </div>
+      <div className="grid grid-2">
+        <Card title="آخر التجار" subtitle={`${latestStores.length} من أصل ${stores.length}`}>
+          {latestStores.length === 0 ? (
+            <EmptyState title="لا توجد تجار" description="لم يتم إنشاء أي تجار بعد" />
+          ) : (
+            <Table
+              columns={[
+                { key: 'name', header: 'اسم التاجر' },
+                { key: 'email', header: 'البريد' },
+                { key: 'active', header: 'الحالة', render: (s: Store) => <Badge tone={s.active ? 'green' : 'red'}>{s.active ? 'نشط' : 'موقوف'}</Badge> },
+                { key: 'createdAt', header: 'التاريخ', render: (s: Store) => <span className="muted">{timeAgo(s.createdAt)}</span> },
+              ]}
+              rows={latestStores}
+            />
+          )}
+        </Card>
+        <Card title="آخر الاشتراكات" subtitle={`${latestSubs.length} من أصل ${subs.length}`}>
+          {latestSubs.length === 0 ? (
+            <EmptyState title="لا توجد اشتراكات" description="لم يتم إنشاء أي اشتراكات بعد" />
+          ) : (
+            <Table
+              columns={[
+                { key: 'merchantName', header: 'التاجر' },
+                { key: 'planId', header: 'الخطة' },
+                { key: 'status', header: 'الحالة', render: (s: Subscription) => <Badge tone={s.status === 'active' ? 'green' : 'amber'}>{s.status}</Badge> },
+                { key: 'createdAt', header: 'التاريخ', render: (s: Subscription) => <span className="muted">{timeAgo(s.createdAt)}</span> },
+              ]}
+              rows={latestSubs}
+            />
+          )}
+        </Card>
+      </div>
     </div>
   )
 }
