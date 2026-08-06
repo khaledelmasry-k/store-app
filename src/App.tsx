@@ -31,7 +31,6 @@ const PlatformCustomers = lazy(() => import('./platform/pages/Customers'))
 const PlatformSubscriptions = lazy(() => import('./platform/pages/Subscriptions'))
 const PlatformPlans = lazy(() => import('./platform/pages/Plans'))
 const PlatformPayments = lazy(() => import('./platform/pages/Payments'))
-const PlatformTransactions = lazy(() => import('./platform/pages/Payments'))
 const PlatformCoupons = lazy(() => import('./platform/pages/Coupons'))
 const PlatformReports = lazy(() => import('./platform/pages/Reports'))
 const PlatformTickets = lazy(() => import('./platform/pages/Tickets'))
@@ -41,17 +40,14 @@ const PlatformSettings = lazy(() => import('./platform/pages/Settings'))
 
 const MerchantDashboard = lazy(() => import('./merchant/pages/Dashboard'))
 const MerchantProducts = lazy(() => import('./merchant/pages/Products'))
-const MerchantInventory = lazy(() => import('./merchant/pages/Inventory'))
 const MerchantCategories = lazy(() => import('./merchant/pages/Categories'))
 const MerchantOrders = lazy(() => import('./merchant/pages/Orders'))
 const MerchantOrderDetails = lazy(() => import('./merchant/pages/OrderDetails'))
 const MerchantCustomers = lazy(() => import('./merchant/pages/Customers'))
 const MerchantCoupons = lazy(() => import('./merchant/pages/Coupons'))
 const MerchantShipping = lazy(() => import('./merchant/pages/Shipping'))
-const MerchantReports = lazy(() => import('./merchant/pages/Reports'))
 const MerchantAnalytics = lazy(() => import('./merchant/pages/Analytics'))
 const MerchantTeam = lazy(() => import('./merchant/pages/Team'))
-const MerchantRoles = lazy(() => import('./merchant/pages/Roles'))
 const MerchantLandingPages = lazy(() => import('./merchant/pages/LandingPages'))
 const MerchantStoreLinks = lazy(() => import('./merchant/pages/StoreLinks'))
 const MerchantNotifications = lazy(() => import('./merchant/pages/Notifications'))
@@ -93,20 +89,20 @@ function LoginByRole() {
   return <Login role="platform" />
 }
 
-function StoreDetailsRoute({ id }: { id: string }) {
-  return <StoreDetails id={id} />
+function StoreDetailsRoute({ params }: { params: Record<string, string> }) {
+  return <StoreDetails id={params.id} />
 }
 
-function PlatformOrderRoute({ id }: { id: string }) {
-  return <PlatformOrderDetails id={id} />
+function PlatformOrderRoute({ params }: { params: Record<string, string> }) {
+  return <PlatformOrderDetails id={params.id} />
 }
 
-function MerchantOrderRoute({ id }: { id: string }) {
-  return <MerchantOrderDetails id={id} />
+function MerchantOrderRoute({ params }: { params: Record<string, string> }) {
+  return <MerchantOrderDetails id={params.id} />
 }
 
-function StoreProductRoute({ id }: { id: string }) {
-  return <StoreProduct id={id} />
+function StoreProductRoute({ params }: { params: Record<string, string> }) {
+  return <StoreProduct id={params.id} />
 }
 
 function PlatformRoutes() {
@@ -114,7 +110,7 @@ function PlatformRoutes() {
     <ZoneRouter prefix="/platform" role="superAdmin" layout={PlatformLayout}>
       <Route path="/" component={() => <PlatformDashboard />} />
       <Route path="/merchants" component={() => <PlatformMerchants />} />
-      <Route path="/stores" component={() => <PlatformMerchants />} />
+      <Route path="/stores" component={() => <Redirect to="/platform/merchants" replace />} />
       <Route path="/stores/:id" component={StoreDetailsRoute} />
       <Route path="/products" component={() => <PlatformProducts />} />
       <Route path="/orders" component={() => <PlatformOrders />} />
@@ -123,14 +119,14 @@ function PlatformRoutes() {
       <Route path="/subscriptions" component={() => <PlatformSubscriptions />} />
       <Route path="/plans" component={() => <PlatformPlans />} />
       <Route path="/payments" component={() => <PlatformPayments />} />
-      <Route path="/transactions" component={() => <PlatformTransactions />} />
+      <Route path="/transactions" component={() => <Redirect to="/platform/payments" replace />} />
       <Route path="/coupons" component={() => <PlatformCoupons />} />
       <Route path="/reports" component={() => <PlatformReports />} />
       <Route path="/tickets" component={() => <PlatformTickets />} />
       <Route path="/audit" component={() => <PlatformAudit />} />
       <Route path="/notifications" component={() => <PlatformNotifications />} />
       <Route path="/settings" component={() => <PlatformSettings />} />
-      <Route component={() => <PlatformDashboard />} />
+      <Route component={() => <Redirect to="/platform" replace />} />
     </ZoneRouter>
   )
 }
@@ -144,24 +140,24 @@ function MerchantRoutes() {
     <ZoneRouter prefix="/dashboard" role="merchant" permission={permission} layout={MerchantLayout}>
       <Route path="/" component={() => <MerchantDashboard />} />
       <Route path="/products" component={() => <MerchantProducts />} />
-      <Route path="/inventory" component={() => <MerchantInventory />} />
+      <Route path="/inventory" component={() => <Redirect to="/dashboard/products" replace />} />
       <Route path="/categories" component={() => <MerchantCategories />} />
       <Route path="/orders" component={() => <MerchantOrders />} />
       <Route path="/orders/:id" component={MerchantOrderRoute} />
       <Route path="/customers" component={() => <MerchantCustomers />} />
       <Route path="/coupons" component={() => <MerchantCoupons />} />
       <Route path="/shipping" component={() => <MerchantShipping />} />
-      <Route path="/reports" component={() => <MerchantReports />} />
+      <Route path="/reports" component={() => <Redirect to="/dashboard/analytics" replace />} />
       <Route path="/analytics" component={() => <MerchantAnalytics />} />
       <Route path="/team" component={() => <MerchantTeam />} />
-      <Route path="/roles" component={() => <MerchantRoles />} />
+      <Route path="/roles" component={() => <Redirect to="/dashboard/team" replace />} />
       <Route path="/landing-pages" component={() => <MerchantLandingPages />} />
       <Route path="/store-links" component={() => <MerchantStoreLinks />} />
       <Route path="/notifications" component={() => <MerchantNotifications />} />
       <Route path="/tickets" component={() => <MerchantTickets />} />
       <Route path="/subscription" component={() => <MerchantSubscription />} />
       <Route path="/settings" component={() => <MerchantSettings />} />
-      <Route component={() => <MerchantDashboard />} />
+      <Route component={() => <Redirect to="/dashboard" replace />} />
     </ZoneRouter>
   )
 }

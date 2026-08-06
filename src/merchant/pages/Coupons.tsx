@@ -7,6 +7,7 @@ import { Badge } from '../../shared/components/ui/Badge'
 import { Button } from '../../shared/components/ui/Button'
 import { Modal } from '../../shared/components/ui/Modal'
 import { Input } from '../../shared/components/ui/Input'
+import { Select } from '../../shared/components/ui/Select'
 import { Toggle } from '../../shared/components/ui/Toggle'
 import { ConfirmDialog } from '../../shared/components/ui/ConfirmDialog'
 import { useStore } from '../../shared/hooks/useStore'
@@ -56,7 +57,7 @@ export const MerchantCoupons: FunctionalComponent = () => {
     <div>
       <PageHeader title="الكوبونات" subtitle={`${coupons.length} كوبون`} actions={<Button icon="add" onClick={() => setOpen(true)}>كوبون جديد</Button>} />
       <Card>
-        <Table
+        <Table cardMode
           columns={[
             { key: 'code', header: 'الكود', render: (c: Coupon) => <span className="monospace">{c.code}</span> },
             { key: 'type', header: 'النوع', render: (c: Coupon) => <Badge tone={c.type === 'percent' ? 'violet' : 'blue'}>{c.type === 'percent' ? 'نسبة' : 'مبلغ'}</Badge> },
@@ -73,10 +74,7 @@ export const MerchantCoupons: FunctionalComponent = () => {
       <Modal open={open} onClose={() => setOpen(false)} title="كوبون جديد" footer={<Fragment><Button variant="ghost" onClick={() => setOpen(false)}>إلغاء</Button><Button onClick={submit}>حفظ</Button></Fragment>}>
         <div className="grid grid-2">
           <Input label="الكود" value={form.code || ''} onChange={(v) => setForm({ ...form, code: v })} placeholder="SAVE10" />
-          <select className="input" value={form.type} onChange={(e) => setForm({ ...form, type: (e.target as HTMLSelectElement).value as any })}>
-            <option value="percent">نسبة مئوية</option>
-            <option value="fixed">مبلغ ثابت</option>
-          </select>
+          <Select label="النوع" value={form.type || 'percent'} onChange={(v) => setForm({ ...form, type: v as any })} options={[{ value: 'percent', label: 'نسبة مئوية' }, { value: 'fixed', label: 'مبلغ ثابت' }]} />
         </div>
         <div className="grid grid-2">
           <Input label="القيمة" type="number" value={form.value || ''} onChange={(v) => setForm({ ...form, value: Number(v) })} />

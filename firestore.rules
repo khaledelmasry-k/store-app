@@ -129,18 +129,24 @@ function inStore(resource) {
 
     // ─────────────────────────────────────────────────────────────
     // products / categories — public read (active only enforced in code),
-    // write by the owning merchant, platform admin, or staff with products:manage
+    // write by the owning merchant, platform admin, or staff with products:manage.
+    // The storeId equality guard only applies to updates (on create, `resource`
+    // is null, and canManage already scopes writes to the caller's own store).
     // ─────────────────────────────────────────────────────────────
 match /products/{id} {
        allow read: if true;
-       allow write: if canManage(request.resource.data.storeId, 'products:manage')
+       allow create: if canManage(request.resource.data.storeId, 'products:manage');
+       allow update: if canManage(request.resource.data.storeId, 'products:manage')
          && request.resource.data.storeId == resource.data.storeId;
+       allow delete: if canManage(request.resource.data.storeId, 'products:manage');
      }
 
      match /categories/{id} {
        allow read: if true;
-       allow write: if canManage(request.resource.data.storeId, 'products:manage')
+       allow create: if canManage(request.resource.data.storeId, 'products:manage');
+       allow update: if canManage(request.resource.data.storeId, 'products:manage')
          && request.resource.data.storeId == resource.data.storeId;
+       allow delete: if canManage(request.resource.data.storeId, 'products:manage');
      }
 
     // ─────────────────────────────────────────────────────────────
@@ -161,8 +167,10 @@ match /orders/{id} {
      // ─────────────────────────────────────────────────────────────
      match /customers/{id} {
        allow read: if canReadCustomers(resource.data.storeId);
-       allow write: if canManage(request.resource.data.storeId, 'customers:manage')
+       allow create: if canManage(request.resource.data.storeId, 'customers:manage');
+       allow update: if canManage(request.resource.data.storeId, 'customers:manage')
          && request.resource.data.storeId == resource.data.storeId;
+       allow delete: if canManage(request.resource.data.storeId, 'customers:manage');
      }
 
     // ─────────────────────────────────────────────────────────────

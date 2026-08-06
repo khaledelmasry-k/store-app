@@ -7,6 +7,7 @@ import { useCart } from '../../shared/hooks/useCart'
 import { useToast } from '../../shared/hooks/useToast'
 import { Button } from '../../shared/components/ui/Button'
 import { Badge } from '../../shared/components/ui/Badge'
+import { EmptyState } from '../../shared/components/ui/EmptyState'
 import { formatCurrency } from '../../shared/utils/format'
 import type { Product } from '../../shared/types'
 
@@ -25,10 +26,8 @@ export const StoreProduct: FunctionalComponent<Props> = ({ id }) => {
 
   if (loading) return <div className="loading-screen"><span className="spinner spinner-lg" /></div>
 
-  // Tenant isolation: never render another store's product on this storefront,
-  // even if someone guesses/links a foreign product id directly.
   if (!product || product.storeId !== store?.id) {
-    return <p className="muted">المنتج غير موجود.</p>
+    return <EmptyState icon="inventory_2" title="المنتج غير موجود" description="هذا المنتج غير متوفر في هذا المتجر." />
   }
 
   const addToCart = () => {
@@ -45,9 +44,17 @@ export const StoreProduct: FunctionalComponent<Props> = ({ id }) => {
   }
 
   return (
-    <div className="product-detail">
-      <img src={product.images?.[0] || ''} alt={product.name} className="product-detail-img" />
-      <div>
+    <div>
+      <div className="store-crumb">
+        <Link href={`/store/${store?.slug}`}>الرئيسية</Link>
+        <span className="material-symbols-outlined">chevron_left</span>
+        <Link href={`/store/${store?.slug}/catalog`}>المنتجات</Link>
+        <span className="material-symbols-outlined">chevron_left</span>
+        <span>{product.name}</span>
+      </div>
+      <div className="product-detail">
+        <img src={product.images?.[0] || ''} alt={product.name} className="product-detail-img" />
+        <div>
         <h1 className="page-title">{product.name}</h1>
         <div className="mt-1 mb-1">
           <Badge tone={product.stock > 0 ? 'green' : 'red'}>{product.stock > 0 ? 'متوفر' : 'نفد المخزون'}</Badge>
@@ -94,6 +101,7 @@ export const StoreProduct: FunctionalComponent<Props> = ({ id }) => {
           <Button icon="shopping_cart" onClick={addToCart} disabled={product.stock <= 0}>أضف إلى السلة</Button>
           <Link href={`/store/${store?.slug}/cart`}><Button variant="outline">عرض السلة</Button></Link>
         </div>
+      </div>
       </div>
     </div>
   )

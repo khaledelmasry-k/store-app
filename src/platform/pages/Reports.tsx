@@ -1,55 +1,109 @@
 import { FunctionalComponent } from 'preact'
 import { PageHeader } from '../../shared/components/ui/PageHeader'
 import { Card } from '../../shared/components/ui/Card'
-import { Table } from '../../shared/components/ui/Table'
+import { StatsCard } from '../../shared/components/ui/StatsCard'
+import { EmptyState } from '../../shared/components/ui/EmptyState'
+import { Loading } from '../../shared/components/ui/Loading'
 import { BarChart } from '../../shared/components/charts/BarChart'
 import { DonutChart } from '../../shared/components/charts/DonutChart'
 import { useCollection } from '../../shared/hooks/useCollection'
+import { STATUS_LABELS, STATUS_COLORS } from '../../shared/utils/constants'
+import { deliveredRevenue, formatCurrency } from '../../shared/utils/format'
 import type { Order } from '../../shared/types'
 
+const STATUS_ORDER = ['NEW', 'CONTACTED', 'PROCESSING', 'SHIPPED', 'DELIVERED', 'CANCELLED', 'RETURNED']
+
 export const PlatformReports: FunctionalComponent = () => {
-  const ordersRes = useCollection<Order>('orders', { orderBy: { field: 'createdAt' } });
+  const ordersRes = useCollection<Order>('orders', { orderBy: { field: 'createdAt' } })
   const orders = ordersRes.data
-  const storesRes = useCollection('stores', {});
+  const storesRes = useCollection('stores', {})
   const stores = storesRes.data
 
-  const byStore = stores.map((s: any) => {
-    const storeOrders = orders.filter((o) => o.storeId === s.id)
-    return {
-      id: s.id,
-      name: s.name,
-      count: storeOrders.length,
-      revenue: storeOrders.filter((o) => o.status === 'DELIVERED').reduce((sum, o) => sum + o.totalPrice, 0),
-    }
-  })
+  if (ordersRes.loading || storesRes.loading) return <Loading />
 
-  const byStatus = ['NEW', 'CONTACTED', 'PROCESSING', 'SHIPPED', 'DELIVERED', 'CANCELLED', 'RETURNED'].map((status) => ({
-    label: status,
-    value: orders.filter((o) => o.status === status).length,
-    color: '#6366f1',
-  }))
+  const revenue = deliveredRevenue(orders)
+  const delivered = orders.filter((o) => o.status === 'DELIVERED').length
+  const cancelled = orders.filter((o) => o.status === 'CANCELLED' || o.status === 'RETURNED').length
+
+  const byStore = stores
+    .map((s: any) => {
+      const storeOrders = orders.filter((o) => o.storeId === s.id)
+      return {
+        id: s.id,
+        name: s.name,
+        count: storeOrders.length,
+        revenue: storeOrders.filter((o) => o.status === 'DELIVERED').reduce((sum, o) => sum + o.totalPrice, 0),
+      }
+    })
+    .sort((a: any, b: any) => b.count - a.count)
+
+  const byStatus = STATUS_ORDER
+    .map((status) => ({
+      label: STATUS_LABELS[status as keyof typeof STATUS_LABELS] || status,
+      value: orders.filter((o) => o.status === status).length,
+      color: `var(--${STATUS_COLORS[status as keyof typeof STATUS_COLORS] || 'slate'})`,
+    }))
+    .filter((s) => s.value > 0)
 
   return (
     <div>
       <PageHeader title="تقارير المنصة" subtitle="أداء المتاجر وإجمالي العمليات" />
+
+      <div className="stats-grid mb-2">
+        <StatsCard title="إجمالي الطلبات" value={orders.length} icon="receipt_long" tone="primary" />
+        <StatsCard title="الإيرادات المحققة" value={revenue} currency icon="payments" tone="green" />
+        <StatsCard title="طلبات تم توصيلها" value={delivered} icon="local_shipping" tone="blue" />
+        <StatsCard title="ملغي / مرتجع" value={cancelled} icon="block" tone="red" />
+      </div>
+
       <div className="grid grid-2 mb-2">
-        <Card title="الطلبات حسب المتجر">
-          <BarChart values={byStore.map((s) => s.count)} labels={byStore.map((s) => s.name)} />
-          <Table
-            columns={[
-              { key: 'name', header: 'المتجر' },
-              { key: 'count', header: 'الطلبات' },
-              { key: 'revenue', header: 'الإيرادات' },
-            ]}
-            rows={byStore}
-          />
+        <Card title="الطلبات حسب المتجر" subtitle={stores.length ? `أداء أعلى ${Math.min(byStore.length, 10)} متجر` : undefined}>
+          {byStore.length === 0 ? (
+            <EmptyState title="لا توجد طلبات" description="ستظهر طلبات المتاجر هنا" />
+          ) : (
+            <BarChart
+              values={byStore.slice(0, 10).map((s: any) => s.count)}
+              labels={byStore.slice(0, 10).map((s: any) => s.name)}
+              color="var(--violet)"
+            />
+          )}
         </Card>
-        <Card title="توزيع حالات الطلبات">
-          <div className="flex" style={{ justifyContent: 'center', padding: 20 }}>
+        <Card title="توزيع حالات الطلبات" subtitle={`${orders.length} طلب`}>
+          {byStatus.length === 0 ? (
+            <EmptyState title="لا توجد طلبات" description="لم يتم إنشاء أي طلبات بعد" />
+          ) : (
             <DonutChart data={byStatus} />
-          </div>
+          )}
         </Card>
       </div>
+
+      <Card title="أفضل المتاجر" subtitle="حسب عدد الطلبات والإيرادات">
+        <div className="table-wrap">
+          <table className="table">
+            <thead>
+              <tr>
+                <th>المتجر</th>
+                <th>الطلبات</th>
+                <th>الإيرادات</th>
+              </tr>
+            </thead>
+            <tbody>
+              {byStore.slice(0, 10).map((s: any) => (
+                <tr key={s.id}>
+                  <td style={{ fontWeight: 600 }}>{s.name}</td>
+                  <td>{s.count}</td>
+                  <td>{formatCurrency(s.revenue)}</td>
+                </tr>
+              ))}
+              {byStore.length === 0 && (
+                <tr>
+                  <td className="muted" colSpan={3}>لا توجد بيانات</td>
+                </tr>
+              )}
+            </tbody>
+          </table>
+        </div>
+      </Card>
     </div>
   )
 }

@@ -54,7 +54,7 @@ export const MerchantLandingPages: FunctionalComponent = () => {
     <div>
       <PageHeader title="صفحات الهبوط" subtitle={`${pages.length} صفحة`} actions={<Button icon="add" onClick={() => setOpen(true)}>صفحة جديدة</Button>} />
       <Card>
-        <Table
+        <Table cardMode
           columns={[
             { key: 'title', header: 'العنوان' },
             { key: 'slug', header: 'الرابط', render: (p: LandingPage) => <span className="monospace">/{p.slug}</span> },

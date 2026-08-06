@@ -75,12 +75,12 @@ export const StoreAccount: FunctionalComponent = () => {
             <p className="muted">لا توجد طلبات بعد.</p>
           ) : (
             myOrders.map((o) => (
-              <div key={o.id} className="flex-between mb-1" style={{ paddingBottom: 8, borderBottom: '1px solid var(--border)' }}>
+              <div key={o.id} className="list-row">
                 <div>
                   <span className="monospace">{o.orderNumber}</span>
                   <p className="muted small">{formatDateTime(o.createdAt)} • {formatCurrency(o.totalPrice)}</p>
                 </div>
-                <Badge tone={STATUS_COLORS[o.status]}>{STATUS_LABELS[o.status]}</Badge>
+                <Badge tone={STATUS_COLORS[o.status as keyof typeof STATUS_COLORS]}>{STATUS_LABELS[o.status as keyof typeof STATUS_LABELS] || o.status}</Badge>
               </div>
             ))
           )}
@@ -92,7 +92,7 @@ export const StoreAccount: FunctionalComponent = () => {
             wishlist.map((w) => {
               const product = products.find((p: any) => p.id === w.productId) as any
               return (
-                <div key={w.id} className="flex-between mb-1" style={{ paddingBottom: 8, borderBottom: '1px solid var(--border)' }}>
+                <div key={w.id} className="list-row">
                   <span>{product?.name || 'منتج محذوف'}</span>
                   <button className="icon-btn" onClick={() => removeWish(w.id)} type="button">
                     <span className="material-symbols-outlined">delete</span>
@@ -107,7 +107,7 @@ export const StoreAccount: FunctionalComponent = () => {
         {addresses.length > 0 && (
           <div className="mb-2">
             {addresses.map((a) => (
-              <div key={a.id} className="flex-between mb-1" style={{ paddingBottom: 8, borderBottom: '1px solid var(--border)' }}>
+              <div key={a.id} className="list-row">
                 <div>
                   <strong>{a.label || a.address}</strong>
                   <p className="muted small">{a.governorate} • {a.city} • {a.address}</p>
@@ -125,7 +125,7 @@ export const StoreAccount: FunctionalComponent = () => {
           <Input label="المدينة" value={newAddress.city} onChange={(v) => setNewAddress({ ...newAddress, city: v })} />
           <Input label="العنوان بالتفصيل" value={newAddress.address} onChange={(v) => setNewAddress({ ...newAddress, address: v })} />
         </div>
-        <div className="flex" style={{ justifyContent: 'flex-end' }}>
+        <div className="flex flex-end">
           <Button icon="add" onClick={addAddress}>إضافة عنوان</Button>
         </div>
       </Card>

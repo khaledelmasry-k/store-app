@@ -5,10 +5,11 @@ interface Props {
   title?: string
   description?: string
   action?: any
+  variant?: 'default' | 'list' | 'card' | 'inline'
 }
 
-export const EmptyState: FunctionalComponent<Props> = ({ icon = 'inbox', title = 'لا توجد بيانات', description, action }) => (
-  <div className="empty-state">
+export const EmptyState: FunctionalComponent<Props> = ({ icon = 'inbox', title = 'لا توجد بيانات', description, action, variant = 'default' }) => (
+  <div className={`empty-state empty-state--${variant}`}>
     <div className="empty-icon">
       <span className="material-symbols-outlined">{icon}</span>
     </div>

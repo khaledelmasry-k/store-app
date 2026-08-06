@@ -1,4 +1,4 @@
-import type { OrderStatus } from '../types'
+import type { OrderStatus, OrderUsageLevel, SubscriptionStatus } from '../types'
 
 export const PERMISSIONS = [
   'products:view',
@@ -75,22 +75,75 @@ export const PERMISSION_GROUPS: Record<string, { label: string; icon: string; pe
 
 export const ROUTE_PERMISSIONS: Record<string, Permission> = {
   '/dashboard/products': 'products:view',
-  '/dashboard/inventory': 'inventory:view',
   '/dashboard/categories': 'products:view',
   '/dashboard/orders': 'orders:view',
   '/dashboard/customers': 'customers:view',
   '/dashboard/coupons': 'coupons:manage',
   '/dashboard/shipping': 'settings:edit',
-  '/dashboard/reports': 'reports:view',
   '/dashboard/analytics': 'reports:view',
   '/dashboard/team': 'team:view',
-  '/dashboard/roles': 'team:manage_roles',
   '/dashboard/landing-pages': 'landing:manage',
   '/dashboard/store-links': 'sales_links:view',
   '/dashboard/notifications': 'settings:view',
   '/dashboard/tickets': 'settings:view',
   '/dashboard/subscription': 'settings:view',
   '/dashboard/settings': 'settings:view',
+}
+
+export const SUBSCRIPTION_STATUS_LABELS: Record<SubscriptionStatus, string> = {
+  pending: 'قيد الانتظار',
+  active: 'نشط',
+  expired: 'منتهي',
+  cancelled: 'ملغي',
+  rejected: 'مرفوض',
+}
+
+export const SUBSCRIPTION_STATUS_TONES: Record<SubscriptionStatus, string> = {
+  pending: 'amber',
+  active: 'green',
+  expired: 'red',
+  cancelled: 'slate',
+  rejected: 'red',
+}
+
+export type { OrderUsageLevel }
+
+export const ORDER_USAGE_LABELS: Record<OrderUsageLevel, string> = {
+  none: 'بدون حد',
+  normal: 'طبيعي',
+  moderate: 'متوسط',
+  approaching: 'مرتفع',
+  near: 'قريب من الحد',
+  reached: 'الحد مستنفذ',
+}
+
+export const ORDER_USAGE_TONES: Record<OrderUsageLevel, string> = {
+  none: 'slate',
+  normal: 'green',
+  moderate: 'blue',
+  approaching: 'indigo',
+  near: 'amber',
+  reached: 'red',
+}
+
+export const USAGE_LEVELS: OrderUsageLevel[] = ['normal', 'moderate', 'approaching', 'near', 'reached']
+
+// Usage thresholds (%) that classify a subscription's order usage level.
+export const USAGE_THRESHOLDS: Record<Exclude<OrderUsageLevel, 'none'>, number> = {
+  normal: 60,
+  moderate: 80,
+  approaching: 90,
+  near: 100,
+  reached: 101,
+}
+
+export function usageLevelFor(percent: number, hasLimit: boolean): OrderUsageLevel {
+  if (!hasLimit) return 'none'
+  if (percent >= 100) return 'reached'
+  if (percent >= 90) return 'near'
+  if (percent >= 80) return 'approaching'
+  if (percent >= 60) return 'moderate'
+  return 'normal'
 }
 
 export const ORDER_STATUSES: OrderStatus[] = [
@@ -102,6 +155,47 @@ export const ORDER_STATUSES: OrderStatus[] = [
   'CANCELLED',
   'RETURNED',
 ]
+
+export const NOTIFICATION_TONES: Record<string, string> = {
+  info: 'blue',
+  success: 'green',
+  warning: 'amber',
+  error: 'red',
+  order: 'blue',
+  system: 'violet',
+  billing: 'amber',
+  ticket: 'indigo',
+}
+
+export const TICKET_STATUS_TONES: Record<string, string> = {
+  open: 'blue',
+  in_progress: 'amber',
+  resolved: 'green',
+  closed: 'slate',
+}
+
+export const TICKET_PRIORITY_TONES: Record<string, string> = {
+  low: 'slate',
+  medium: 'blue',
+  high: 'amber',
+  urgent: 'red',
+}
+
+export const PAYMENT_STATUS_TONES: Record<string, string> = {
+  paid: 'green',
+  pending: 'amber',
+  failed: 'red',
+  refunded: 'violet',
+  completed: 'green',
+}
+
+export const AUDIT_ACTION_TONES: Record<string, string> = {
+  create: 'green',
+  update: 'blue',
+  delete: 'red',
+  login: 'violet',
+  logout: 'slate',
+}
 
 export const STATUS_LABELS: Record<OrderStatus, string> = {
   NEW: 'جديد',
@@ -190,9 +284,7 @@ export const NAV_GROUPS: Record<'platform' | 'dashboard', NavGroup[]> = {
       icon: 'storefront',
       items: [
         { to: '/platform/merchants', label: 'التجار', icon: 'storefront' },
-        { to: '/platform/stores', label: 'متاجر التجار', icon: 'store' },
         { to: '/platform/customers', label: 'عملاء التجار', icon: 'groups' },
-        { to: '/platform/accounts', label: 'حسابات التجار', icon: 'person' },
       ],
     },
     {
@@ -202,18 +294,16 @@ export const NAV_GROUPS: Record<'platform' | 'dashboard', NavGroup[]> = {
       items: [
         { to: '/platform/subscriptions', label: 'الاشتراكات', icon: 'card_membership' },
         { to: '/platform/plans', label: 'الخطط والباقات', icon: 'workspace_premium' },
-        { to: '/platform/payments', label: 'المدفوعات', icon: 'payments' },
+        { to: '/platform/payments', label: 'المدفوعات والمعاملات', icon: 'payments' },
         { to: '/platform/coupons', label: 'الكوبونات', icon: 'local_offer' },
       ],
     },
     {
       id: 'analytics',
-      label: 'إحصائيات المنصة',
+      label: 'تحليلات المنصة',
       icon: 'bar_chart',
       items: [
         { to: '/platform/reports', label: 'التقارير', icon: 'bar_chart' },
-        { to: '/platform/analytics', label: 'الإيرادات', icon: 'trending_up' },
-        { to: '/platform/transactions', label: 'المعاملات', icon: 'sync' },
       ],
     },
     {
@@ -224,7 +314,6 @@ export const NAV_GROUPS: Record<'platform' | 'dashboard', NavGroup[]> = {
         { to: '/platform/audit', label: 'سجل التدقيق', icon: 'fact_check' },
         { to: '/platform/notifications', label: 'الإشعارات', icon: 'notifications' },
         { to: '/platform/tickets', label: 'تذاكر الدعم', icon: 'support_agent' },
-        { to: '/platform/roles', label: 'الأدوار والصلاحيات', icon: 'admin_panel_settings' },
       ],
     },
     {
@@ -233,7 +322,6 @@ export const NAV_GROUPS: Record<'platform' | 'dashboard', NavGroup[]> = {
       icon: 'settings',
       items: [
         { to: '/platform/settings', label: 'إعدادات المنصة', icon: 'settings' },
-        { to: '/platform/general', label: 'إعدادات عامة', icon: 'tune' },
       ],
     },
   ],
@@ -251,45 +339,10 @@ export const NAV_GROUPS: Record<'platform' | 'dashboard', NavGroup[]> = {
       label: 'المتجر',
       icon: 'store',
       items: [
-        { to: '/dashboard/store', label: 'واجهة المتجر', icon: 'store' },
-        { to: '/dashboard/store-settings', label: 'إعدادات المتجر', icon: 'settings' },
-        { to: '/dashboard/store-links', label: 'روابط المتجر', icon: 'link' },
-      ],
-    },
-    {
-      id: 'catalog',
-      label: 'الكتالوج',
-      icon: 'inventory_2',
-      items: [
         { to: '/dashboard/products', label: 'المنتجات', icon: 'inventory_2', permission: 'products:view' },
-        { to: '/dashboard/categories', label: 'التصنيفات', icon: 'category', permission: 'products:view' },
-        { to: '/dashboard/inventory', label: 'المخزون', icon: 'inventory', permission: 'inventory:view' },
-      ],
-    },
-    {
-      id: 'orders',
-      label: 'الطلبات',
-      icon: 'receipt_long',
-      items: [
+        { to: '/dashboard/categories', label: 'الفئات', icon: 'category', permission: 'products:view' },
         { to: '/dashboard/orders', label: 'الطلبات', icon: 'receipt_long', permission: 'orders:view' },
-        { to: '/dashboard/shipping', label: 'الشحن والتوصيل', icon: 'local_shipping', permission: 'orders:edit' },
-      ],
-    },
-    {
-      id: 'customers',
-      label: 'العملاء',
-      icon: 'groups',
-      items: [
         { to: '/dashboard/customers', label: 'العملاء', icon: 'groups', permission: 'customers:view' },
-      ],
-    },
-    {
-      id: 'sales',
-      label: 'المبيعات',
-      icon: 'trending_up',
-      items: [
-        { to: '/dashboard/store-links', label: 'روابط البيع', icon: 'link', permission: 'sales_links:view' },
-        { to: '/dashboard/analytics', label: 'التحليلات', icon: 'query_stats', permission: 'reports:view' },
       ],
     },
     {
@@ -297,52 +350,30 @@ export const NAV_GROUPS: Record<'platform' | 'dashboard', NavGroup[]> = {
       label: 'التسويق',
       icon: 'campaign',
       items: [
+        { to: '/dashboard/coupons', label: 'كوبونات', icon: 'local_offer', permission: 'coupons:manage' },
+        { to: '/dashboard/store-links', label: 'روابط البيع', icon: 'link', permission: 'sales_links:view' },
         { to: '/dashboard/landing-pages', label: 'صفحات الهبوط', icon: 'web', permission: 'landing:manage' },
-        { to: '/dashboard/coupons', label: 'الكوبونات', icon: 'local_offer', permission: 'coupons:manage' },
       ],
     },
     {
-      id: 'team',
-      label: 'الفريق والصلاحيات',
-      icon: 'group_add',
-      items: [
-        { to: '/dashboard/team', label: 'الفريق', icon: 'group_add', permission: 'team:view' },
-        { to: '/dashboard/roles', label: 'الأدوار والصلاحيات', icon: 'admin_panel_settings', permission: 'team:manage_roles' },
-      ],
-    },
-    {
-      id: 'reports',
-      label: 'التقارير',
+      id: 'analytics',
+      label: 'التحليلات',
       icon: 'bar_chart',
       items: [
-        { to: '/dashboard/reports', label: 'التقارير', icon: 'bar_chart', permission: 'reports:view' },
+        { to: '/dashboard/analytics', label: 'التحليلات والتقارير', icon: 'query_stats', permission: 'reports:view' },
       ],
     },
     {
-      id: 'subscription',
-      label: 'الاشتراك',
-      icon: 'card_membership',
-      items: [
-        { to: '/dashboard/subscription', label: 'الاشتراك الحالي', icon: 'card_membership', permission: 'settings:view' },
-      ],
-    },
-    {
-      id: 'support',
-      label: 'الدعم',
-      icon: 'support_agent',
-      items: [
-        { to: '/dashboard/tickets', label: 'تذاكر الدعم', icon: 'support_agent', permission: 'settings:view' },
-        { to: '/dashboard/notifications', label: 'الإشعارات', icon: 'notifications', permission: 'settings:view' },
-      ],
-    },
-    {
-      id: 'store-settings',
-      label: 'إعدادات المتجر',
+      id: 'settings',
+      label: 'الإعدادات',
       icon: 'settings',
       items: [
-        { to: '/dashboard/settings', label: 'إعدادات عامة', icon: 'settings', permission: 'settings:edit' },
-        { to: '/dashboard/shipping', label: 'إعدادات الشحن', icon: 'local_shipping', permission: 'settings:edit' },
-        { to: '/dashboard/payments', label: 'إعدادات الدفع', icon: 'payments', permission: 'settings:edit' },
+        { to: '/dashboard/settings', label: 'إعدادات المتجر', icon: 'settings', permission: 'settings:edit' },
+        { to: '/dashboard/shipping', label: 'الشحن والتوصيل', icon: 'local_shipping', permission: 'settings:edit' },
+        { to: '/dashboard/team', label: 'الفريق والصلاحيات', icon: 'group_add', permission: 'team:view' },
+        { to: '/dashboard/subscription', label: 'الاشتراك', icon: 'card_membership', permission: 'settings:view' },
+        { to: '/dashboard/notifications', label: 'الإشعارات', icon: 'notifications', permission: 'settings:view' },
+        { to: '/dashboard/tickets', label: 'تذاكر الدعم', icon: 'support_agent', permission: 'settings:view' },
       ],
     },
   ],

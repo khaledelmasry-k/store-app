@@ -152,10 +152,35 @@ export const createOrder = onCall(async (request: CallableRequest<any>) => {
     throw new HttpsError('invalid-argument', 'طريقة دفع غير صالحة')
   }
 
-  // Verify store exists and is active (IDOR mitigation — never trust storeId without validation)
+  // Verify store exists, is active and published (IDOR mitigation — never trust
+  // storeId without validation). Unpublished stores reject purchases.
   const storeSnap = await db.doc(`stores/${storeId}`).get()
   if (!storeSnap.exists || !storeSnap.data()?.active) {
     throw new HttpsError('not-found', 'المتجر غير موجود أو غير مفعل')
+  }
+  if (!storeSnap.data()?.published) {
+    throw new HttpsError('failed-precondition', 'المتجر غير منشور بعد')
+  }
+
+  // Check subscription limit before creating the order. The ordersUsed counter
+  // on the active subscription tracks orders created in the current period and
+  // is reset when a new subscription period starts (approveSubscription).
+  const subQuery = db.collection('subscriptions').where('storeId', '==', storeId).where('status', '==', 'active').limit(1)
+  const subSnap = await subQuery.get()
+  if (subSnap.empty) {
+    throw new HttpsError('failed-precondition', 'لا يوجد اشتراك نشط لهذا المتجر')
+  }
+  const subRef = subSnap.docs[0].ref
+  const sub = subSnap.docs[0].data()!
+  const planSnap = await db.doc(`plans/${sub.planId}`).get()
+  if (!planSnap.exists) {
+    throw new HttpsError('not-found', 'الباقة غير موجودة')
+  }
+  const plan = planSnap.data() as any
+  const orderLimit = plan.orderLimitPerMonth
+  const ordersUsed = Number(sub.ordersUsed || 0)
+  if (orderLimit && orderLimit > 0 && ordersUsed >= orderLimit) {
+    throw new HttpsError('resource-exhausted', `تم تجاوز حد الطلبات الشهري (${orderLimit})`)
   }
 
   const orderId = db.collection('orders').doc().id
@@ -165,6 +190,14 @@ export const createOrder = onCall(async (request: CallableRequest<any>) => {
     let subtotal = 0
     let salesLinkId: string | null = null
     let salesLinkStaffId: string | null = null
+
+    // Read the order counter first — Firestore requires all reads to happen
+    // before any writes within a transaction.
+    const counterRef = db.doc(`stores/${storeId}/counters/orders`)
+    const counterSnap = await tx.get(counterRef)
+    const seq = (counterSnap.exists ? counterSnap.data()?.value : 0) + 1
+    const orderNumber = `ORD-${String(seq).padStart(5, '0')}`
+
     for (const item of items) {
       const productSnap = await tx.get(db.doc(`products/${item.productId}`))
       if (!productSnap.exists) throw new HttpsError('failed-precondition', `المنتج ${item.productId} غير موجود`)
@@ -203,11 +236,7 @@ export const createOrder = onCall(async (request: CallableRequest<any>) => {
       })
     }
 
-    const counterRef = db.doc(`stores/${storeId}/counters/orders`)
-    const counterSnap = await tx.get(counterRef)
-    const seq = (counterSnap.exists ? counterSnap.data()?.value : 0) + 1
     tx.set(counterRef, { value: seq }, { merge: true })
-    const orderNumber = `ORD-${String(seq).padStart(5, '0')}`
 
     if (salesLinkRef) {
       const linkQuery = await db.collection('storeLinks')
@@ -272,6 +301,11 @@ export const createOrder = onCall(async (request: CallableRequest<any>) => {
       createdBy: 'system',
     })
 
+    // Atomically consume one order slot from the active subscription. The
+    // enforcement check above read the same counter, so concurrent orders can
+    // never overshoot the plan limit.
+    tx.update(subRef, { ordersUsed: FieldValue.increment(1), updatedAt: now() })
+
     return { orderId, orderNumber, totalPrice: subtotal }
   })
 
@@ -283,7 +317,59 @@ export const createOrder = onCall(async (request: CallableRequest<any>) => {
 })
 
 // ─────────────────────────────────────────────────────────────
-// 3. registerMerchant — atomic tenant + store + owner creation
+// 3b. createProduct — merchant creates a product with plan limit enforcement
+// ─────────────────────────────────────────────────────────────
+export const createProduct = onCall(async (request: CallableRequest<any>) => {
+  await assertStoreAccess(request, request.data?.storeId, 'products:manage')
+  const { storeId, name, price, description, images, stock, lowStockThreshold } = request.data || {}
+  if (!storeId || !name) throw new HttpsError('invalid-argument', 'بيانات المنتج غير مكتملة')
+  if (typeof price !== 'number' || price < 0) throw new HttpsError('invalid-argument', 'السعر غير صالح')
+
+  const storeSnap = await db.doc(`stores/${storeId}`).get()
+  if (!storeSnap.exists || !storeSnap.data()?.active) {
+    throw new HttpsError('not-found', 'المتجر غير موجود أو غير مفعل')
+  }
+
+  // Check product limit from subscription plan
+  const subSnap = await db.collection('subscriptions').where('storeId', '==', storeId).where('status', '==', 'active').limit(1).get()
+  if (!subSnap.empty) {
+    const sub = subSnap.docs[0].data() as any
+    const planSnap = await db.doc(`plans/${sub.planId}`).get()
+    if (planSnap.exists) {
+      const plan = planSnap.data() as any
+      const productLimit = plan.productLimit
+      if (productLimit && productLimit > 0) {
+        const existingProducts = await db.collection('products').where('storeId', '==', storeId).get()
+        if (existingProducts.size >= productLimit) {
+          throw new HttpsError('resource-exhausted', `تم تجاوز حد المنتجات (${productLimit})`)
+        }
+      }
+    }
+  }
+
+  const productId = db.collection('products').doc().id
+  await db.doc(`products/${productId}`).set({
+    id: productId,
+    storeId,
+    name,
+    price,
+    description: description || '',
+    images: images || [],
+    stock: stock || 0,
+    lowStockThreshold: lowStockThreshold ?? 5,
+    active: true,
+    createdAt: now(),
+    updatedAt: now(),
+    createdBy: request.auth?.uid || 'guest',
+  })
+
+  await auditLog(storeId, request.auth?.uid || 'guest', 'create_product', 'products', productId, { name })
+
+  return { id: productId, name }
+})
+
+// ─────────────────────────────────────────────────────────────
+// 4. registerMerchant — atomic tenant + store + owner creation
 // ─────────────────────────────────────────────────────────────
 export const registerMerchant = onCall(async (request: CallableRequest<any>) => {
   const { email, password, name, storeName, storeRef, planId } = request.data || {}
@@ -291,10 +377,21 @@ export const registerMerchant = onCall(async (request: CallableRequest<any>) => 
 
   const uid = db.collection('users').doc().id
   const storeId = db.collection('stores').doc().id
-  const slug = (storeRef || storeName).toLowerCase().replace(/[^\w\s-]/g, '').replace(/[\s_-]+/g, '-').replace(/^-+|-+$/g, '')
+  const baseSlug = (storeRef || storeName).toLowerCase().replace(/[^\w\s-]/g, '').replace(/[\s_-]+/g, '-').replace(/^-+|-+$/g, '') || 'store'
 
   const emailQuery = await db.collection('users').where('email', '==', email).get()
   if (!emailQuery.empty) throw new HttpsError('already-exists', 'البريد مسجل مسبقاً')
+
+  // Ensure the storefront slug is unique — append a numeric suffix when a
+  // store already claims the candidate slug.
+  let slug = baseSlug
+  let attempt = 1
+  for (;;) {
+    const slugQuery = await db.collection('stores').where('slug', '==', slug).limit(1).get()
+    if (slugQuery.empty) break
+    attempt += 1
+    slug = `${baseSlug}-${attempt}`
+  }
 
   let planName = 'بانتظار الاختيار'
   if (planId && planId !== 'pending') {
@@ -324,6 +421,7 @@ export const registerMerchant = onCall(async (request: CallableRequest<any>) => 
     name: storeName,
     slug,
     active: true,
+    published: false,
     ownerId: uid,
     currency: 'EGP',
     description: '',
@@ -380,6 +478,7 @@ export const approveSubscription = onCall(async (request: CallableRequest<{ subs
     adminEmail: user.email,
     startedAt: now(),
     expiresAt: tsFromDate(new Date(Date.now() + 30 * 86400000)),
+    ordersUsed: 0,
     updatedAt: now(),
   })
 
@@ -432,6 +531,92 @@ export const rejectSubscription = onCall(async (request: CallableRequest<{ subsc
   await auditLog(sub.storeId, request.auth!.uid, 'reject_subscription', 'subscriptions', subscriptionId, { storeId: sub.storeId })
 
   return { ok: true }
+})
+
+// ─────────────────────────────────────────────────────────────
+// 4c. getPlatformOverview — platform admin operational snapshot.
+//     Returns every store joined with its latest subscription, plan and
+//     owner, plus the live order-usage metrics used by the Super Admin UI.
+// ─────────────────────────────────────────────────────────────
+export const getPlatformOverview = onCall(async (request: CallableRequest) => {
+  await assertPlatformAdmin(request)
+
+  const [storesSnap, subsSnap, plansSnap, usersSnap] = await Promise.all([
+    db.collection('stores').get(),
+    db.collection('subscriptions').get(),
+    db.collection('plans').get(),
+    db.collection('users').get(),
+  ])
+
+  const plans = new Map<string, any>()
+  for (const d of plansSnap.docs) plans.set(d.id, d.data())
+
+  const users = new Map<string, any>()
+  for (const d of usersSnap.docs) {
+    const u = d.data()
+    users.set(u.uid || d.id, u)
+  }
+
+  // Keep only the latest subscription per store (by createdAt).
+  const latestSub = new Map<string, { id: string; data: any }>()
+  for (const d of subsSnap.docs) {
+    const s = d.data()
+    const existing = latestSub.get(s.storeId)
+    if (!existing || (s.createdAt?.seconds || 0) >= (existing.data.createdAt?.seconds || 0)) {
+      latestSub.set(s.storeId, { id: d.id, data: s })
+    }
+  }
+
+  const rows = storesSnap.docs.map((d) => {
+    const store = d.data()
+    const storeId = d.id
+    const subEntry = latestSub.get(storeId)
+    const sub = subEntry?.data || null
+    const plan = sub ? plans.get(sub.planId) : null
+    const orderLimit = Number(plan?.orderLimitPerMonth || 0)
+    const ordersUsed = Number(sub?.ordersUsed || 0)
+    const remaining = orderLimit > 0 ? Math.max(0, orderLimit - ordersUsed) : null
+    const usagePercent = orderLimit > 0 ? Math.min(100, Math.round((ordersUsed / orderLimit) * 100)) : 0
+
+    let usageLevel: string = 'none'
+    if (orderLimit > 0) {
+      if (ordersUsed >= orderLimit) usageLevel = 'reached'
+      else if (usagePercent >= 90) usageLevel = 'near'
+      else if (usagePercent >= 80) usageLevel = 'approaching'
+      else if (usagePercent >= 60) usageLevel = 'moderate'
+      else usageLevel = 'normal'
+    }
+
+    const owner = store.ownerId ? users.get(store.ownerId) : null
+
+    return {
+      storeId,
+      storeName: store.name || '—',
+      ref: store.ref || '',
+      slug: store.slug || '',
+      active: !!store.active,
+      published: !!store.published,
+      createdAt: store.createdAt || null,
+      ownerName: owner?.name || null,
+      ownerEmail: owner?.email || null,
+      ownerRole: owner?.role || null,
+      subId: subEntry?.id || null,
+      planId: sub?.planId || null,
+      planName: plan?.name || sub?.planName || null,
+      planPriceMonthly: Number(plan?.priceMonthly || 0),
+      productLimit: Number(plan?.productLimit || 0),
+      subStatus: sub?.status || null,
+      subStartedAt: sub?.startedAt || null,
+      subExpiresAt: sub?.expiresAt || null,
+      orderLimit,
+      ordersUsed,
+      remaining,
+      usagePercent,
+      usageLevel,
+    }
+  })
+
+  return { rows }
 })
 
 // ─────────────────────────────────────────────────────────────

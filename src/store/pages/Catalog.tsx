@@ -1,22 +1,35 @@
 import { FunctionalComponent } from 'preact'
-import { useState } from 'preact/hooks'
-import { Link, useSearch } from 'wouter'
+import { useState, useEffect } from 'preact/hooks'
+import { useSearch, useLocation } from 'wouter'
 import { useStore } from '../../shared/hooks/useStore'
 import { useCollection } from '../../shared/hooks/useCollection'
 import { Search } from '../../shared/components/ui/Search'
-import { formatCurrency } from '../../shared/utils/format'
+import { Select } from '../../shared/components/ui/Select'
+import { EmptyState } from '../../shared/components/ui/EmptyState'
+import { StoreProductCard } from '../components/StoreProductCard'
 import type { Product, Category } from '../../shared/types'
 
-export const StoreCatalog: FunctionalComponent = () => {
+export const StoreCatalog:FunctionalComponent = () => {
   const { store } = useStore()
   const search = useSearch()
   const params = new URLSearchParams(search)
-  const productsRes = useCollection<Product>('products', { storeId: store?.id || '', where: { active: { value: true } } });
+  const productsRes = useCollection<Product>('products', { storeId: store?.id || '', where: { active: { value: true } } })
   const products = productsRes.data
-  const categoriesRes = useCollection<Category>('categories', { storeId: store?.id || '' });
+  const categoriesRes = useCollection<Category>('categories', { storeId: store?.id || '' })
   const categories = categoriesRes.data
-  const [query, setQuery] = useState('')
+  const [, setLocation] = useLocation()
+  const [query, setQuery] = useState(params.get('q') || '')
   const [cat, setCat] = useState(params.get('cat') || '')
+
+  useEffect(() => {
+    setCat(params.get('cat') || '')
+    setQuery(params.get('q') || '')
+  }, [search])
+
+  const selectCat = (value: string) => {
+    setCat(value)
+    setLocation(value ? `/store/${store?.slug}?cat=${value}` : `/store/${store?.slug}`, { replace: true })
+  }
 
   const filtered = products.filter(
     (p) => p.name.toLowerCase().includes(query.toLowerCase()) && (!cat || p.categoryId === cat),
@@ -27,26 +40,24 @@ export const StoreCatalog: FunctionalComponent = () => {
       <h1 className="page-title mb-2">المنتجات</h1>
       <div className="toolbar">
         <Search value={query} onChange={setQuery} placeholder="ابحث عن منتج..." />
-        <select className="input" style={{ width: 180 }} value={cat} onChange={(e) => setCat((e.target as HTMLSelectElement).value)}>
-          <option value="">كل الفئات</option>
-          {categories.map((c) => <option key={c.id} value={c.id}>{c.name}</option>)}
-        </select>
+        <Select
+          value={cat}
+          onChange={selectCat}
+          placeholder="الفئة"
+          options={[{ value: '', label: 'كل الفئات' }, ...categories.map((c) => ({ value: c.id, label: c.name }))]}
+        />
       </div>
+
       {filtered.length === 0 ? (
-        <p className="muted">لا توجد منتجات مطابقة.</p>
+        <EmptyState
+          title="لا توجد منتجات"
+          description={query ? 'لا توجد نتائج تطابق بحثك.' : 'هذا المتجر لا يحتوي على منتجات بعد.'}
+          icon="inventory_2"
+        />
       ) : (
         <div className="store-grid">
           {filtered.map((p) => (
-            <Link key={p.id} href={`/store/${store?.slug}/product/${p.id}`} className="store-card">
-              <img src={p.images?.[0] || ''} alt={p.name} className="store-card-img" />
-              <div className="store-card-body">
-                <span className="store-card-name">{p.name}</span>
-                <span className="store-card-price">
-                  {formatCurrency(p.price)}
-                  {p.oldPrice && <span className="store-card-old">{formatCurrency(p.oldPrice)}</span>}
-                </span>
-              </div>
-            </Link>
+            <StoreProductCard key={p.id} product={p} />
           ))}
         </div>
       )}

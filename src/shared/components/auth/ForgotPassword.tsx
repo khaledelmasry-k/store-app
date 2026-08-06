@@ -26,7 +26,7 @@ export const ForgotPassword: FunctionalComponent = () => {
       await resetPassword(email)
       setSent(true)
       toast.push('تم إرسال الرابط', 'تفقّد بريدك الإلكتروني لإعادة تعيين كلمة المرور', 'success')
-    } catch (err: any) {
+    } catch {
       setError('تعذّر إرسال رابط إعادة التعيين. تحقق من البريد الإلكتروني.')
       toast.push('فشل الإرسال', undefined, 'error')
     } finally {

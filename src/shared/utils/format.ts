@@ -88,3 +88,18 @@ export function truncate(str: string, n = 40): string {
   if (!str) return ''
   return str.length > n ? str.slice(0, n - 1) + '…' : str
 }
+
+type StockLike = { stock?: number; lowStockThreshold?: number }
+
+export function stockTone(p: StockLike): 'red' | 'amber' | 'green' {
+  const stock = p.stock ?? 0
+  if (stock === 0) return 'red'
+  if (stock <= (p.lowStockThreshold ?? 5)) return 'amber'
+  return 'green'
+}
+
+type OrderLike = { status?: string; totalPrice: number }
+
+export function deliveredRevenue(orders: OrderLike[]): number {
+  return orders.filter((o) => o.status === 'DELIVERED').reduce((s, o) => s + (o.totalPrice || 0), 0)
+}

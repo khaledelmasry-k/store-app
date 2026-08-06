@@ -13,3 +13,6 @@ server/uploads
 firebase-debug.log
 firebase-debug.*.log
 .vercel
+e2e/shots/
+test-results/
+playwright-report/

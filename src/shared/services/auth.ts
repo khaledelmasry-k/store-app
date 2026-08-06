@@ -115,3 +115,9 @@ export function inviteStaffCallable(input: Record<string, unknown>) {
   const fn = httpsCallable(functions, 'inviteStaff')
   return fn(input)
 }
+
+export function getPlatformOverviewCallable() {
+  const functions = getFunctions()
+  const fn = httpsCallable(functions, 'getPlatformOverview')
+  return fn({})
+}

@@ -1,13 +1,15 @@
 import { FunctionalComponent, Fragment } from 'preact'
 import { useState } from 'preact/hooks'
 import { PageHeader } from '../../shared/components/ui/PageHeader'
-import { Card } from '../../shared/components/ui/Card'
 import { Badge } from '../../shared/components/ui/Badge'
 import { Button } from '../../shared/components/ui/Button'
 import { Modal } from '../../shared/components/ui/Modal'
 import { Input } from '../../shared/components/ui/Input'
 import { Textarea } from '../../shared/components/ui/Textarea'
 import { Toggle } from '../../shared/components/ui/Toggle'
+import { ConfirmDialog } from '../../shared/components/ui/ConfirmDialog'
+import { EmptyState } from '../../shared/components/ui/EmptyState'
+import { SegmentedControl } from '../../shared/components/ui/SegmentedControl'
 import { useCollection } from '../../shared/hooks/useCollection'
 import { useToast } from '../../shared/hooks/useToast'
 import { plansService } from '../../shared/services/billing'
@@ -15,18 +17,37 @@ import { formatCurrency } from '../../shared/utils/format'
 import type { SubscriptionPlan } from '../../shared/types'
 
 export const PlatformPlans: FunctionalComponent = () => {
-  const plansRes = useCollection<SubscriptionPlan>('plans', { orderBy: { field: 'priceMonthly' } });
+  const plansRes = useCollection<SubscriptionPlan>('plans', { orderBy: { field: 'priceMonthly' } })
   const plans = plansRes.data
   const toast = useToast()
+  const [billing, setBilling] = useState<'monthly' | 'yearly'>('monthly')
   const [open, setOpen] = useState(false)
+  const [editing, setEditing] = useState<SubscriptionPlan | null>(null)
+  const [deleteTarget, setDeleteTarget] = useState<SubscriptionPlan | null>(null)
   const [form, setForm] = useState<Partial<SubscriptionPlan>>({ features: [] as string[] })
+
+  const recommendedId = [...plans].sort((a, b) => a.priceMonthly - b.priceMonthly)[Math.max(0, Math.floor((plans.length - 1) / 2))]?.id
+
+  const priceOf = (p: SubscriptionPlan) => (billing === 'monthly' ? p.priceMonthly : p.priceYearly || p.priceMonthly * 10)
+
+  const openCreate = () => {
+    setEditing(null)
+    setForm({ features: [] })
+    setOpen(true)
+  }
+
+  const openEdit = (p: SubscriptionPlan) => {
+    setEditing(p)
+    setForm({ ...p, features: p.features || [] })
+    setOpen(true)
+  }
 
   const submit = async () => {
     if (!form.name || !form.priceMonthly) {
       toast.push('أكمل بيانات الباقة', undefined, 'error')
       return
     }
-    await plansService.create({
+    const payload = {
       name: form.name,
       description: form.description || '',
       priceMonthly: Number(form.priceMonthly),
@@ -35,31 +56,95 @@ export const PlatformPlans: FunctionalComponent = () => {
       orderLimitPerMonth: Number(form.orderLimitPerMonth || 0),
       features: form.features || [],
       active: form.active ?? true,
-    })
-    toast.push('تم إنشاء الباقة')
+    }
+    if (editing) {
+      await plansService.update(editing.id, payload)
+      toast.push('تم تحديث الباقة')
+    } else {
+      await plansService.create(payload)
+      toast.push('تم إنشاء الباقة')
+    }
     setOpen(false)
-    setForm({ features: [] })
+  }
+
+  const remove = async () => {
+    if (!deleteTarget) return
+    await plansService.remove(deleteTarget.id)
+    toast.push('تم حذف الباقة')
+    setDeleteTarget(null)
   }
 
   return (
     <div>
-      <PageHeader title="باقات الاشتراك" subtitle={`${plans.length} باقة`} actions={<Button icon="add" onClick={() => setOpen(true)}>باقة جديدة</Button>} />
-      <div className="grid grid-3">
-        {plans.map((p) => (
-          <Card key={p.id} title={p.name} subtitle={p.description}>
-            <p className="stat-value">{formatCurrency(p.priceMonthly)}<span className="muted small"> /شهرياً</span></p>
-            <div className="mt-2 small">
-              <p><Badge tone={p.active ? 'green' : 'slate'}>{p.active ? 'متاحة' : 'موقوفة'}</Badge></p>
-              <p className="mt-1">المنتجات: {p.productLimit} • الطلبات/شهر: {p.orderLimitPerMonth}</p>
-              <ul className="mt-1">
-                {p.features.map((f, i) => <li key={i}>• {f}</li>)}
-              </ul>
-            </div>
-          </Card>
-        ))}
+      <PageHeader
+        title="باقات الاشتراك"
+        subtitle={`${plans.length} باقة`}
+        actions={<Button icon="add" onClick={openCreate}>باقة جديدة</Button>}
+      />
+
+      <div className="flex-between mb-2">
+        <SegmentedControl
+          value={billing}
+          onChange={(v) => setBilling(v as 'monthly' | 'yearly')}
+          options={[{ value: 'monthly', label: 'شهري' }, { value: 'yearly', label: 'سنوي' }]}
+        />
       </div>
 
-      <Modal open={open} onClose={() => setOpen(false)} title="إنشاء باقة جديدة" footer={<Fragment><Button variant="ghost" onClick={() => setOpen(false)}>إلغاء</Button><Button onClick={submit}>حفظ</Button></Fragment>}>
+      {plans.length === 0 ? (
+        <EmptyState title="لا توجد باقات" description="أنشئ أول باقة اشتراك للتجار" icon="workspace_premium" />
+      ) : (
+        <div className="plan-grid">
+          {plans.map((p) => {
+            const recommended = p.id === recommendedId
+            return (
+              <div key={p.id} className={`plan-pricing-card${recommended ? ' plan-pricing-card--featured' : ''}`}>
+                {recommended && <span className="plan-pricing-badge">الأكثر طلباً</span>}
+                <div className="plan-pricing-head">
+                  <h3 className="plan-pricing-name">{p.name}</h3>
+                  {p.active ? <Badge tone="green">متاحة</Badge> : <Badge tone="slate">موقوفة</Badge>}
+                </div>
+                {p.description && <p className="plan-pricing-desc">{p.description}</p>}
+                <div className="plan-pricing-price">
+                  <strong>{formatCurrency(priceOf(p))}</strong>
+                  <span>/ {billing === 'monthly' ? 'شهرياً' : 'سنوياً'}</span>
+                </div>
+                <ul className="plan-pricing-features">
+                  {p.features.map((f, i) => (
+                    <li key={i}>
+                      <span className="material-symbols-outlined">check_circle</span>
+                      {f}
+                    </li>
+                  ))}
+                  <li>
+                    <span className="material-symbols-outlined">inventory_2</span>
+                    حتى {p.productLimit} منتج
+                  </li>
+                  <li>
+                    <span className="material-symbols-outlined">receipt_long</span>
+                    {p.orderLimitPerMonth > 0 ? `حتى ${p.orderLimitPerMonth} طلب شهرياً` : 'طلبات غير محدودة'}
+                  </li>
+                </ul>
+                <div className="plan-pricing-actions">
+                  <Button variant="soft" size="sm" icon="edit" onClick={() => openEdit(p)}>تعديل</Button>
+                  <Button variant="ghost" size="sm" icon="delete" onClick={() => setDeleteTarget(p)}>حذف</Button>
+                </div>
+              </div>
+            )
+          })}
+        </div>
+      )}
+
+      <Modal
+        open={open}
+        onClose={() => setOpen(false)}
+        title={editing ? 'تعديل الباقة' : 'إنشاء باقة جديدة'}
+        footer={
+          <Fragment>
+            <Button variant="ghost" onClick={() => setOpen(false)}>إلغاء</Button>
+            <Button onClick={submit}>حفظ</Button>
+          </Fragment>
+        }
+      >
         <Input label="اسم الباقة" value={form.name || ''} onChange={(v) => setForm({ ...form, name: v })} required />
         <Textarea label="الوصف" value={form.description || ''} onChange={(v) => setForm({ ...form, description: v })} rows={2} />
         <div className="grid grid-2">
@@ -75,6 +160,8 @@ export const PlatformPlans: FunctionalComponent = () => {
           <Toggle checked={form.active ?? true} onChange={(v) => setForm({ ...form, active: v })} label="متاحة للاشتراك" />
         </div>
       </Modal>
+
+      <ConfirmDialog open={!!deleteTarget} onCancel={() => setDeleteTarget(null)} onConfirm={remove} title="حذف الباقة" description={`سيتم حذف باقة "${deleteTarget?.name}" نهائياً. قد يتأثر التجار المشتركون بها.`} confirmLabel="حذف" />
     </div>
   )
 }

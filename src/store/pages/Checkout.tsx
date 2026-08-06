@@ -6,6 +6,7 @@ import { useCart } from '../../shared/hooks/useCart'
 import { useToast } from '../../shared/hooks/useToast'
 import { Button } from '../../shared/components/ui/Button'
 import { Input } from '../../shared/components/ui/Input'
+import { Select } from '../../shared/components/ui/Select'
 import { Textarea } from '../../shared/components/ui/Textarea'
 import { createOrderCallable } from '../../shared/services/auth'
 import { GOVER_EG } from '../../shared/utils/constants'
@@ -74,13 +75,7 @@ export const StoreCheckout: FunctionalComponent = () => {
             <Input label="رقم الهاتف" value={form.phone} onChange={(v) => setForm({ ...form, phone: v })} placeholder="01xxxxxxxxx" required />
           </div>
           <div className="grid grid-2">
-            <label className="field">
-              <span className="field-label">المحافظة</span>
-              <select className="input" value={form.governorate} onChange={(e) => setForm({ ...form, governorate: (e.target as HTMLSelectElement).value })} required>
-                <option value="">اختر المحافظة</option>
-                {GOVER_EG.map((g) => <option key={g} value={g}>{g}</option>)}
-              </select>
-            </label>
+            <Select label="المحافظة" value={form.governorate} onChange={(v) => setForm({ ...form, governorate: v })} placeholder="اختر المحافظة" options={GOVER_EG.map((g) => ({ value: g, label: g }))} />
             <Input label="المدينة" value={form.city} onChange={(v) => setForm({ ...form, city: v })} required />
           </div>
           <Textarea label="العنوان بالتفصيل" value={form.address} onChange={(v) => setForm({ ...form, address: v })} rows={2} required />

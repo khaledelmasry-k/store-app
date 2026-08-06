@@ -3,6 +3,7 @@ import { Link } from 'wouter'
 import { useCart } from '../../shared/hooks/useCart'
 import { useStore } from '../../shared/hooks/useStore'
 import { Button } from '../../shared/components/ui/Button'
+import { Card } from '../../shared/components/ui/Card'
 import { formatCurrency } from '../../shared/utils/format'
 
 export const StoreCart: FunctionalComponent = () => {
@@ -22,28 +23,34 @@ export const StoreCart: FunctionalComponent = () => {
 
   return (
     <div>
-      <h1 className="page-title mb-2">سلة التسوق</h1>
+      <div className="page-header">
+        <h1 className="page-title">سلة التسوق</h1>
+        <p className="page-subtitle">{cart.count} منتج</p>
+      </div>
+
       <div className="cart-layout">
         <div>
           {cart.items.map((item, i) => (
-            <div key={i} className="cart-line">
-              <img src={item.image || ''} alt={item.name} className="cart-line-img" />
-              <div className="grow">
-                <p><strong>{item.name}</strong></p>
-                <p className="muted small">
-                  {[item.color, item.size].filter(Boolean).join(' • ')} • {formatCurrency(item.price)}
-                </p>
+            <Card key={i} className="cart-line">
+              <div className="flex flex-gap-lg">
+                {item.image && <img src={item.image} alt={item.name} className="cart-line-img" />}
+                <div className="grow">
+                  <p><strong>{item.name}</strong></p>
+                  <p className="muted small">
+                    {[item.color, item.size].filter(Boolean).join(' • ')} • {formatCurrency(item.price)}
+                  </p>
+                </div>
+                <div className="qty-stepper">
+                  <button type="button" className="qty-btn" onClick={() => cart.setQty(i, Math.max(1, item.quantity - 1))}>−</button>
+                  <strong>{item.quantity}</strong>
+                  <button type="button" className="qty-btn" onClick={() => cart.setQty(i, item.quantity + 1)}>+</button>
+                </div>
+                <strong>{formatCurrency(item.price * item.quantity)}</strong>
+                <button className="icon-btn" onClick={() => cart.remove(i)} type="button">
+                  <span className="material-symbols-outlined">delete</span>
+                </button>
               </div>
-              <div className="qty-stepper">
-                <button type="button" className="qty-btn" onClick={() => cart.setQty(i, Math.max(1, item.quantity - 1))}>−</button>
-                <strong>{item.quantity}</strong>
-                <button type="button" className="qty-btn" onClick={() => cart.setQty(i, item.quantity + 1)}>+</button>
-              </div>
-              <strong>{formatCurrency(item.price * item.quantity)}</strong>
-              <button className="icon-btn" onClick={() => cart.remove(i)} type="button">
-                <span className="material-symbols-outlined">delete</span>
-              </button>
-            </div>
+            </Card>
           ))}
         </div>
         <div className="order-summary">

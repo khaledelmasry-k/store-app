@@ -1,5 +1,5 @@
 import { FunctionalComponent, Fragment } from 'preact'
-import { useState, useEffect, useCallback } from 'preact/hooks'
+import { useState, useEffect, useCallback, useMemo } from 'preact/hooks'
 import { Link, useLocation } from 'wouter'
 import { doc, onSnapshot } from 'firebase/firestore'
 import { useAuth } from '../../hooks/useAuth'
@@ -8,7 +8,7 @@ import { logout, exitImpersonationCallable } from '../../services/auth'
 import { Avatar } from '../ui/Avatar'
 import { Dropdown } from '../ui/Dropdown'
 import { db } from '../../firebase'
-import { NAV_GROUPS, type NavGroup, type NavItem } from '../../utils/constants'
+import { NAV_GROUPS, ROLE_LABELS, type NavGroup, type NavItem } from '../../utils/constants'
 
 interface Props {
   navKey: 'platform' | 'dashboard'
@@ -28,6 +28,25 @@ export const AppShell: FunctionalComponent<Props> = ({ navKey, brand, storeSwitc
   const multiStore = storeSwitcher && (storeSwitcher.storeIds.length > 1)
 
   const isStaff = user?.role === 'staff'
+
+  const pageContext = useMemo(() => {
+    const path = location.split('?')[0]
+    for (const group of NAV_GROUPS[navKey]) {
+      for (const item of group.items) {
+        const itemPath = item.to.split('?')[0]
+        const isZoneRoot = /^\/[^/]+\/?$/.test(itemPath)
+        if (path === itemPath || path === itemPath.replace(/\/$/, '') + '/') {
+          return { group: group.label, item: item.label }
+        }
+        if (!isZoneRoot && path.startsWith(itemPath + '/')) {
+          return { group: group.label, item: item.label }
+        }
+      }
+    }
+    return null
+  }, [location, navKey])
+
+  const notificationsHref = navKey === 'platform' ? '/platform/notifications' : '/dashboard/notifications'
 
   const [groupsState, setGroupsState] = useState<Record<string, boolean>>({})
 
@@ -112,8 +131,11 @@ export const AppShell: FunctionalComponent<Props> = ({ navKey, brand, storeSwitc
         </div>
       )}
       <div className="sidebar-brand">
-        <span className="material-symbols-outlined">storefront</span>
-        <strong>{brand}</strong>
+        <span className="brand-mark">MK</span>
+        <div className="brand-text">
+          <strong>{brand}</strong>
+          <span className="brand-sub">{navKey === 'platform' ? 'منصة المتاجر' : 'لوحة التاجر'}</span>
+        </div>
       </div>
       {storefrontHref && (
         <a href={storefrontHref} className="sidebar-link" target="_blank" rel="noopener noreferrer">
@@ -160,10 +182,13 @@ export const AppShell: FunctionalComponent<Props> = ({ navKey, brand, storeSwitc
         })}
       </nav>
       <div className="sidebar-foot">
-        <button type="button" className="sidebar-link" onClick={theme.toggle}>
-          <span className="material-symbols-outlined">{theme.theme === 'dark' ? 'light_mode' : 'dark_mode'}</span>
-          <span>{theme.theme === 'dark' ? 'الوضع الفاتح' : 'الوضع الداكن'}</span>
-        </button>
+        <span className="sidebar-foot-user">
+          <Avatar name={user?.name || '?'} size="sm" src={user?.photoURL} />
+          <span>
+            <strong>{user?.name}</strong>
+            <small>{user?.role ? ROLE_LABELS[user.role] : ''}</small>
+          </span>
+        </span>
       </div>
     </Fragment>
   )
@@ -176,7 +201,7 @@ export const AppShell: FunctionalComponent<Props> = ({ navKey, brand, storeSwitc
         </aside>
         <div className="shell-main">
           <header className="topbar">
-            <div className="topbar-spacer">
+            <div className="topbar-main">
               <button
                 type="button"
                 className="btn btn-ghost sidebar-toggle"
@@ -185,9 +210,18 @@ export const AppShell: FunctionalComponent<Props> = ({ navKey, brand, storeSwitc
               >
                 <span className="material-symbols-outlined">menu</span>
               </button>
+              {pageContext ? (
+                <nav className="topbar-crumb" aria-label="مسار الصفحة">
+                  <span className="crumb-parent">{pageContext.group}</span>
+                  <span className="crumb-sep">/</span>
+                  <span className="crumb-current">{pageContext.item}</span>
+                </nav>
+              ) : (
+                <span className="topbar-brand-inline">{brand}</span>
+              )}
             </div>
-            {multiStore && (
-              <div className="topbar-store" style={{ marginInlineEnd: 12 }}>
+            <div className="topbar-actions">
+              {multiStore && (
                 <Dropdown
                   align="left"
                   trigger={
@@ -202,22 +236,37 @@ export const AppShell: FunctionalComponent<Props> = ({ navKey, brand, storeSwitc
                     onClick: () => handleSwitchStore(s.id),
                   }))}
                 />
+              )}
+              <Link href={notificationsHref} className="topbar-icon-btn" aria-label="الإشعارات" title="الإشعارات">
+                <span className="material-symbols-outlined">notifications</span>
+              </Link>
+              <button
+                type="button"
+                className="topbar-icon-btn"
+                aria-label="تبديل السمة"
+                title={theme.theme === 'dark' ? 'الوضع الفاتح' : 'الوضع الداكن'}
+                onClick={theme.toggle}
+              >
+                <span className="material-symbols-outlined">{theme.theme === 'dark' ? 'light_mode' : 'dark_mode'}</span>
+              </button>
+              <div className="topbar-user">
+                <Dropdown
+                  align="left"
+                  trigger={
+                    <button type="button" className="user-chip">
+                      <Avatar name={user?.name || '?'} size="sm" src={user?.photoURL} />
+                      <span className="user-chip-meta">
+                        <strong>{user?.name}</strong>
+                        <small>{user?.role ? ROLE_LABELS[user.role] : ''}</small>
+                      </span>
+                      <span className="material-symbols-outlined">expand_more</span>
+                    </button>
+                  }
+                  items={[
+                    { label: 'تسجيل الخروج', icon: 'logout', danger: true, onClick: handleLogout },
+                  ]}
+                />
               </div>
-            )}
-            <div className="topbar-user">
-              <Dropdown
-                align="left"
-                trigger={
-                  <button type="button" className="user-chip">
-                    <Avatar name={user?.name || '?'} size="sm" src={user?.photoURL} />
-                    <span>{user?.name}</span>
-                    <span className="material-symbols-outlined">expand_more</span>
-                  </button>
-                }
-                items={[
-                  { label: 'تسجيل الخروج', icon: 'logout', danger: true, onClick: handleLogout },
-                ]}
-              />
             </div>
           </header>
           <main className="shell-content">{children}</main>
@@ -227,7 +276,7 @@ export const AppShell: FunctionalComponent<Props> = ({ navKey, brand, storeSwitc
         <div className="sidebar-drawer-overlay" onClick={() => setDrawerOpen(false)}>
           <div className="sidebar-drawer" onClick={(e) => e.stopPropagation()}>
             <div className="sidebar-drawer-header">
-              <span className="material-symbols-outlined">storefront</span>
+              <span className="brand-mark brand-mark-sm">MK</span>
               <strong>{brand}</strong>
               <button type="button" className="btn btn-ghost" aria-label="إغلاق القائمة" onClick={() => setDrawerOpen(false)}>
                 <span className="material-symbols-outlined">close</span>

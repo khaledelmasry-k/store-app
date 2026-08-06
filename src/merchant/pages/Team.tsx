@@ -1,4 +1,4 @@
-import { FunctionalComponent } from 'preact'
+import { FunctionalComponent, Fragment } from 'preact'
 import { useState } from 'preact/hooks'
 import { PageHeader } from '../../shared/components/ui/PageHeader'
 import { Card } from '../../shared/components/ui/Card'
@@ -8,11 +8,13 @@ import { Button } from '../../shared/components/ui/Button'
 import { Modal } from '../../shared/components/ui/Modal'
 import { Input } from '../../shared/components/ui/Input'
 import { Select } from '../../shared/components/ui/Select'
+import { Tabs } from '../../shared/components/ui/Tabs'
 import { useStore } from '../../shared/hooks/useStore'
 import { useCollection } from '../../shared/hooks/useCollection'
 import { useToast } from '../../shared/hooks/useToast'
 import { inviteStaffCallable } from '../../shared/services/auth'
 import { formatDate } from '../../shared/utils/format'
+import { RolesTab } from './Roles'
 import type { TeamMember, RoleDef } from '../../shared/types'
 
 export const MerchantTeam: FunctionalComponent = () => {
@@ -23,6 +25,7 @@ export const MerchantTeam: FunctionalComponent = () => {
   const rolesRes = useCollection<RoleDef>('roles', { storeId })
   const roles = rolesRes.data
   const toast = useToast()
+  const [tab, setTab] = useState('members')
   const [open, setOpen] = useState(false)
   const [email, setEmail] = useState('')
   const [name, setName] = useState('')
@@ -58,19 +61,41 @@ export const MerchantTeam: FunctionalComponent = () => {
 
   return (
     <div>
-      <PageHeader title="فريق المتجر" subtitle={`${team.length} عضو`} actions={<Button icon="person_add" onClick={() => setOpen(true)}>دعوة عضو</Button>} />
-      <Card title="الأعضاء">
-        <Table
-          columns={[
-            { key: 'name', header: 'الاسم' },
-            { key: 'email', header: 'البريد' },
-            { key: 'role', header: 'الدور', render: (m: TeamMember) => <Badge tone="indigo">{(roles.find((r: any) => r.id === m.role) as any)?.name || m.role}</Badge> },
-            { key: 'active', header: 'الحالة', render: (m: TeamMember) => <Badge tone={m.active ? 'green' : 'slate'}>{m.active ? 'نشط' : 'موقوف'}</Badge> },
-            { key: 'createdAt', header: 'الانضمام', render: (m: TeamMember) => <span className="muted">{formatDate(m.createdAt)}</span> },
-          ]}
-          rows={team}
-        />
-      </Card>
+      <PageHeader
+        title="الفريق والصلاحيات"
+        subtitle={tab === 'members' ? `إدارة أعضاء فريقك ودعوة موظفين (${team.length} عضو)` : `إدارة الأدوار والصلاحيات (${roles.length} دور)`}
+        actions={
+          tab === 'members' ? (
+            <Button icon="person_add" onClick={() => setOpen(true)}>دعوة عضو</Button>
+          ) : undefined
+        }
+      />
+
+      <Tabs
+        tabs={[
+          { key: 'members', label: 'الأعضاء', count: team.length },
+          { key: 'roles', label: 'الأدوار والصلاحيات', count: roles.length },
+        ]}
+        active={tab}
+        onChange={setTab}
+      />
+
+      {tab === 'members' ? (
+        <Card title="الأعضاء">
+          <Table cardMode
+            columns={[
+              { key: 'name', header: 'الاسم' },
+              { key: 'email', header: 'البريد' },
+              { key: 'role', header: 'الدور', render: (m: TeamMember) => <Badge tone="indigo">{(roles.find((r: any) => r.id === m.role) as any)?.name || m.role}</Badge> },
+              { key: 'active', header: 'الحالة', render: (m: TeamMember) => <Badge tone={m.active ? 'green' : 'slate'}>{m.active ? 'نشط' : 'موقوف'}</Badge> },
+              { key: 'createdAt', header: 'الانضمام', render: (m: TeamMember) => <span className="muted">{formatDate(m.createdAt)}</span> },
+            ]}
+            rows={team}
+          />
+        </Card>
+      ) : (
+        <RolesTab />
+      )}
 
       <Modal open={open} onClose={close} title={credentials ? 'حساب الموظف جاهز' : 'دعوة عضو جديد'} footer={!credentials && <><Button variant="ghost" onClick={close}>إلغاء</Button><Button onClick={invite} loading={loading}>إنشاء الحساب</Button></>}>
         {credentials ? (
@@ -89,12 +114,12 @@ export const MerchantTeam: FunctionalComponent = () => {
             <Button onClick={close} block icon="done">تم</Button>
           </div>
         ) : (
-          <>
+          <Fragment>
             <Input label="الاسم" value={name} onChange={setName} required />
             <Input label="البريد الإلكتروني" type="email" value={email} onChange={setEmail} required />
             <Select label="الدور" value={roleId} onChange={(v) => setRoleId(v)} options={roles.map((r: any) => ({ value: r.id, label: r.name }))} />
-            {roles.length === 0 && <p className="muted small">أنشئ دوراً أولاً من صفحة الأدوار والصلاحيات.</p>}
-          </>
+            {roles.length === 0 && <p className="muted small">أنشئ دوراً أولاً من تبويب «الأدوار والصلاحيات».</p>}
+          </Fragment>
         )}
       </Modal>
     </div>

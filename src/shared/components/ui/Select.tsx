@@ -15,7 +15,6 @@ interface Props {
   error?: string
   name?: string
   disabled?: boolean
-  multiple?: boolean
 }
 
 export const Select: FunctionalComponent<Props> = ({
@@ -27,7 +26,6 @@ export const Select: FunctionalComponent<Props> = ({
   error,
   name,
   disabled,
-  multiple,
 }) => (
   <label className="field">
     {label && <span className="field-label">{label}</span>}
@@ -36,7 +34,6 @@ export const Select: FunctionalComponent<Props> = ({
       value={value}
       name={name}
       disabled={disabled}
-      multiple={multiple}
       onChange={(e) => onChange?.((e.target as HTMLSelectElement).value)}
     >
       {placeholder && <option value="">{placeholder}</option>}

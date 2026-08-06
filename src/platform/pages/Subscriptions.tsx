@@ -6,19 +6,13 @@ import { StatsCard } from '../../shared/components/ui/StatsCard'
 import { Table } from '../../shared/components/ui/Table'
 import { Badge } from '../../shared/components/ui/Badge'
 import { Button } from '../../shared/components/ui/Button'
+import { FilterBar } from '../../shared/components/ui/FilterBar'
 import { useCollection } from '../../shared/hooks/useCollection'
 import { useToast } from '../../shared/hooks/useToast'
 import { approveSubscriptionCallable, rejectSubscriptionCallable } from '../../shared/services/auth'
 import { formatDate, timeAgo } from '../../shared/utils/format'
+import { SUBSCRIPTION_STATUS_TONES } from '../../shared/utils/constants'
 import type { Subscription } from '../../shared/types'
-
-const STATUS_TONES: Record<string, string> = {
-  active: 'green',
-  pending: 'amber',
-  expired: 'slate',
-  cancelled: 'red',
-  rejected: 'red',
-}
 
 export const PlatformSubscriptions: FunctionalComponent = () => {
   const subsRes = useCollection<Subscription>('subscriptions', { orderBy: { field: 'createdAt' } })
@@ -26,6 +20,7 @@ export const PlatformSubscriptions: FunctionalComponent = () => {
   const storesRes = useCollection('stores', {})
   const stores = storesRes.data
   const toast = useToast()
+  const [status, setStatus] = useState('')
   const [approvingId, setApprovingId] = useState<string | null>(null)
   const [rejectingId, setRejectingId] = useState<string | null>(null)
 
@@ -59,6 +54,8 @@ export const PlatformSubscriptions: FunctionalComponent = () => {
     expired: subs.filter((s) => s.status === 'expired').length,
   }
 
+  const filtered = status ? subs.filter((s) => s.status === status) : subs
+
   return (
     <div>
       <PageHeader title="الاشتراكات" subtitle={`${subs.length} اشتراك`} />
@@ -67,12 +64,23 @@ export const PlatformSubscriptions: FunctionalComponent = () => {
         <StatsCard title="بانتظار الموافقة" value={counts.pending} icon="hourglass" tone="amber" />
         <StatsCard title="منتهي" value={counts.expired} icon="schedule" tone="slate" />
       </div>
+      <FilterBar
+        segments={[
+          { label: 'الكل', value: '' },
+          { label: 'نشط', value: 'active' },
+          { label: 'قيد الانتظار', value: 'pending' },
+          { label: 'منتهي', value: 'expired' },
+          { label: 'ملغي', value: 'cancelled' },
+        ]}
+        activeSegment={status}
+        onSegmentChange={setStatus}
+      />
       <Card>
-        <Table
+        <Table cardMode
           columns={[
             { key: 'storeId', header: 'المتجر', render: (s: Subscription) => (stores.find((x: any) => x.id === s.storeId) as any)?.name || '—' },
             { key: 'planName', header: 'الباقة' },
-            { key: 'status', header: 'الحالة', render: (s: Subscription) => <Badge tone={(STATUS_TONES[s.status] as any) || 'slate'}>{s.status}</Badge> },
+            { key: 'status', header: 'الحالة', render: (s: Subscription) => <Badge tone={(SUBSCRIPTION_STATUS_TONES[s.status] as any) || 'slate'}>{s.status}</Badge> },
             { key: 'startedAt', header: 'البداية', render: (s: Subscription) => <span className="muted">{formatDate(s.startedAt)}</span> },
             { key: 'expiresAt', header: 'الانتهاء', render: (s: Subscription) => <span className="muted">{formatDate(s.expiresAt)}</span> },
             { key: 'createdAt', header: 'التاريخ', render: (s: Subscription) => <span className="muted">{timeAgo(s.createdAt)}</span> },
@@ -81,29 +89,16 @@ export const PlatformSubscriptions: FunctionalComponent = () => {
               header: 'الإجراءات',
               render: (s: Subscription) =>
                 s.status === 'pending' ? (
-                  <div className="flex" style={{ gap: 6 }}>
-                    <Button
-                      size="sm"
-                      loading={approvingId === s.id}
-                      onClick={() => handleApprove(s.id)}
-                    >
-                      تفعيل
-                    </Button>
-                    <Button
-                      size="sm"
-                      variant="ghost"
-                      loading={rejectingId === s.id}
-                      onClick={() => handleReject(s.id)}
-                    >
-                      رفض
-                    </Button>
+                  <div className="flex flex-gap-sm">
+                    <Button size="sm" icon="check" loading={approvingId === s.id} onClick={() => handleApprove(s.id)}>تفعيل</Button>
+                    <Button size="sm" variant="ghost" icon="close" loading={rejectingId === s.id} onClick={() => handleReject(s.id)}>رفض</Button>
                   </div>
                 ) : (
                   <span className="muted small">مكتمل</span>
                 ),
             },
           ]}
-          rows={subs}
+          rows={filtered}
         />
       </Card>
     </div>

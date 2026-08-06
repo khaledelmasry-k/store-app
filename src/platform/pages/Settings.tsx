@@ -22,25 +22,27 @@ export const PlatformSettings: FunctionalComponent = () => {
 
   return (
     <div>
-      <PageHeader title="إعدادات المنصة" subtitle="الإعدادات العامة للمنصة" />
-      <Card title="الإعدادات العامة" className="mb-2">
+      <PageHeader title="إعدادات المنصة" subtitle="الإعدادات العامة للمنصة" actions={<Button icon="save" onClick={save}>حفظ الإعدادات</Button>} />
+
+      <Card title="التجارة" subtitle="العملة وحدود الاشتراك" className="mb-2">
         <div className="grid grid-2">
           <Input label="العملة الافتراضية" value={form.currency ?? data?.currency ?? 'EGP'} onChange={(v) => setForm({ ...form, currency: v })} />
-          <Input label="بريد الدعم" type="email" value={form.contactEmail ?? data?.contactEmail ?? ''} onChange={(v) => setForm({ ...form, contactEmail: v })} />
-          <Input label="هاتف الدعم" value={form.supportPhone ?? data?.supportPhone ?? ''} onChange={(v) => setForm({ ...form, supportPhone: v })} />
           <Input label="حد المتاجر لكل تاجر" type="number" value={form.maxStoresPerMerchant ?? data?.maxStoresPerMerchant ?? 1} onChange={(v) => setForm({ ...form, maxStoresPerMerchant: Number(v) })} />
         </div>
-        <div className="field">
+      </Card>
+
+      <Card title="التواصل والدعم" subtitle="بينات التواصل التي تظهر للتجار" className="mb-2">
+        <div className="grid grid-2">
+          <Input label="بريد الدعم" type="email" value={form.contactEmail ?? data?.contactEmail ?? ''} onChange={(v) => setForm({ ...form, contactEmail: v })} />
+          <Input label="هاتف الدعم" value={form.supportPhone ?? data?.supportPhone ?? ''} onChange={(v) => setForm({ ...form, supportPhone: v })} />
+        </div>
+      </Card>
+
+      <Card title="السياسات" subtitle="تفعيل أو إيقاف الخدمات">
+        <div className="settings-flags">
           <Toggle checked={form.registrationEnabled ?? data?.registrationEnabled ?? true} onChange={(v) => setForm({ ...form, registrationEnabled: v })} label="تفعيل تسجيل التجار" />
-        </div>
-        <div className="field">
           <Toggle checked={form.allowCustomerAccounts ?? data?.allowCustomerAccounts ?? true} onChange={(v) => setForm({ ...form, allowCustomerAccounts: v })} label="تفعيل حسابات العملاء" />
-        </div>
-        <div className="field">
           <Toggle checked={form.maintenanceMode ?? data?.maintenanceMode ?? false} onChange={(v) => setForm({ ...form, maintenanceMode: v })} label="وضع الصيانة" />
-        </div>
-        <div className="flex" style={{ justifyContent: 'flex-end' }}>
-          <Button onClick={save}>حفظ الإعدادات</Button>
         </div>
       </Card>
     </div>

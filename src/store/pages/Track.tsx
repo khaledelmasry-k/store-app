@@ -52,7 +52,11 @@ export const StoreTrack: FunctionalComponent = () => {
 
   return (
     <div>
-      <h1 className="page-title mb-2">تتبع طلبك</h1>
+      <div className="page-header">
+        <h1 className="page-title">تتبع طلبك</h1>
+        <p className="page-subtitle">أدخل رقم الهاتف للبحث عن طلبك</p>
+      </div>
+
       <Card className="mb-2">
         <form onSubmit={search}>
           <div className="grid grid-2">
@@ -62,7 +66,9 @@ export const StoreTrack: FunctionalComponent = () => {
           <Button type="submit" loading={loading} icon="search" className="mt-1">تتبع الطلب</Button>
         </form>
       </Card>
+
       {error && <p className="muted">{error}</p>}
+
       <div>
         {orders?.map((o) => (
           <Card key={o.id} className="mb-2">

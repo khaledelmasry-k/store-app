@@ -12,14 +12,8 @@ import { useAuth } from '../../shared/hooks/useAuth'
 import { useToast } from '../../shared/hooks/useToast'
 import { ticketsService } from '../../shared/services/system'
 import { formatDateTime } from '../../shared/utils/format'
+import { TICKET_STATUS_TONES, TICKET_PRIORITY_TONES } from '../../shared/utils/constants'
 import type { Ticket } from '../../shared/types'
-
-const STATUS_TONES: Record<string, string> = {
-  open: 'red',
-  in_progress: 'amber',
-  resolved: 'green',
-  closed: 'slate',
-}
 
 export const PlatformTickets: FunctionalComponent = () => {
   const ticketsRes = useCollection<Ticket>('tickets', { orderBy: { field: 'createdAt' } });
@@ -44,12 +38,12 @@ export const PlatformTickets: FunctionalComponent = () => {
     <div>
       <PageHeader title="تذاكر الدعم" subtitle={`${tickets.length} تذكرة`} />
       <Card>
-        <Table
+        <Table cardMode
           columns={[
             { key: 'subject', header: 'الموضوع' },
             { key: 'createdBy', header: 'المُنشئ', render: (t: Ticket) => <span className="monospace">{t.createdBy.slice(0, 8)}</span> },
-            { key: 'priority', header: 'الأولوية', render: (t: Ticket) => <Badge tone={t.priority === 'urgent' ? 'red' : t.priority === 'high' ? 'amber' : 'slate'}>{t.priority}</Badge> },
-            { key: 'status', header: 'الحالة', render: (t: Ticket) => <Badge tone={(STATUS_TONES[t.status] as any) || 'slate'}>{t.status}</Badge> },
+            { key: 'priority', header: 'الأولوية', render: (t: Ticket) => <Badge tone={(TICKET_PRIORITY_TONES[t.priority] as any) || 'slate'}>{t.priority}</Badge> },
+            { key: 'status', header: 'الحالة', render: (t: Ticket) => <Badge tone={(TICKET_STATUS_TONES[t.status] as any) || 'slate'}>{t.status}</Badge> },
             { key: 'createdAt', header: 'التاريخ', render: (t: Ticket) => <span className="muted">{formatDateTime(t.createdAt)}</span> },
           ]}
           rows={tickets}
@@ -68,7 +62,7 @@ export const PlatformTickets: FunctionalComponent = () => {
           ))}
         </div>
         <Textarea label="رد جديد" value={reply} onChange={setReply} rows={3} />
-        <div className="flex" style={{ justifyContent: 'flex-end' }}>
+        <div className="flex flex-end">
           <Button variant="ghost" onClick={() => setOpen(false)}>إغلاق</Button>
           <Button onClick={submitReply} disabled={!reply.trim()}>إرسال الرد</Button>
         </div>

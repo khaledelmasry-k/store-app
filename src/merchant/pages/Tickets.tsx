@@ -11,14 +11,8 @@ import { useAuth } from '../../shared/hooks/useAuth'
 import { useToast } from '../../shared/hooks/useToast'
 import { ticketsService } from '../../shared/services/system'
 import { formatDateTime } from '../../shared/utils/format'
+import { TICKET_STATUS_TONES } from '../../shared/utils/constants'
 import type { Ticket } from '../../shared/types'
-
-const STATUS_TONES: Record<string, string> = {
-  open: 'red',
-  in_progress: 'amber',
-  resolved: 'green',
-  closed: 'slate',
-}
 
 export const MerchantTickets: FunctionalComponent = () => {
   const { store } = useStore()
@@ -58,7 +52,7 @@ export const MerchantTickets: FunctionalComponent = () => {
           <div className="mt-1">
             <Textarea label="الوصف" value={description} onChange={setDescription} rows={4} />
           </div>
-          <div className="flex" style={{ justifyContent: 'flex-end' }}>
+          <div className="flex flex-end">
             <Button onClick={submit} disabled={!subject || !description}>إرسال</Button>
           </div>
         </Card>
@@ -72,7 +66,7 @@ export const MerchantTickets: FunctionalComponent = () => {
                   <p className="small"><strong>{t.subject}</strong></p>
                   <p className="muted small">{formatDateTime(t.createdAt)}</p>
                 </div>
-                <Badge tone={(STATUS_TONES[t.status] as any) || 'slate'}>{t.status}</Badge>
+                <Badge tone={(TICKET_STATUS_TONES[t.status] as any) || 'slate'}>{t.status}</Badge>
               </div>
             ))
           )}

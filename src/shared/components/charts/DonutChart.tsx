@@ -7,9 +7,10 @@ interface Slice {
 interface Props {
   data: Slice[]
   size?: number
+  showLegend?: boolean
 }
 
-export function DonutChart({ data, size = 160 }: Props) {
+export function DonutChart({ data, size = 160, showLegend = true }: Props) {
   const total = data.reduce((s, d) => s + d.value, 0)
   if (total === 0) {
     return (
@@ -31,7 +32,8 @@ export function DonutChart({ data, size = 160 }: Props) {
     offset -= frac * 100
     return seg
   })
-  return (
+
+  const donut = (
     <div className="donut-wrap">
       <svg viewBox="0 0 42 42" width={size} height={size}>
         <circle cx="21" cy="21" r={r} fill="none" stroke="var(--border)" strokeWidth="4" />
@@ -47,12 +49,31 @@ export function DonutChart({ data, size = 160 }: Props) {
             strokeDasharray={s.strokeDasharray}
             strokeDashoffset={s.strokeDashoffset}
             strokeLinecap="round"
-          />
+          >
+            <title>{`${s.label} — ${s.value}`}</title>
+          </circle>
         ))}
       </svg>
       <div className="donut-center">
         <strong>{total}</strong>
         <span>إجمالي</span>
+      </div>
+    </div>
+  )
+
+  if (!showLegend) return donut
+
+  return (
+    <div className="donut-layout">
+      {donut}
+      <div className="donut-legend">
+        {data.map((d) => (
+          <div key={d.label} className="donut-legend-item">
+            <span className="donut-dot" style={{ background: d.color }} />
+            <span>{d.label}</span>
+            <strong>{d.value}{d.value > 0 && total > 0 ? ` (${Math.round((d.value / total) * 100)}٪)` : ''}</strong>
+          </div>
+        ))}
       </div>
     </div>
   )

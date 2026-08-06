@@ -21,19 +21,29 @@ export interface User extends Partial<FirestoreMeta> {
   impersonatedUntil?: { seconds: number; nanoseconds: number }
 }
 
+export interface StoreTheme {
+  primary: string
+  secondary?: string
+  darkMode: boolean
+}
+
 export interface Store extends Partial<FirestoreMeta> {
   id: string
   ref: string
   name: string
   slug: string
   active: boolean
+  /** Whether the storefront is publicly visible and can accept orders. */
+  published: boolean
   ownerId: string
   currency: string
   logo?: string
   description?: string
   phone?: string
   address?: string
-  theme: { primary: string; darkMode: boolean }
+  seoTitle?: string
+  seoDescription?: string
+  theme: StoreTheme
 }
 
 export interface Category extends Partial<FirestoreMeta> {
@@ -145,6 +155,35 @@ export interface SubscriptionPlan extends Partial<FirestoreMeta> {
 
 export type SubscriptionStatus = 'pending' | 'active' | 'expired' | 'cancelled' | 'rejected'
 
+export type OrderUsageLevel = 'none' | 'normal' | 'moderate' | 'approaching' | 'near' | 'reached'
+
+/** One row of the Super Admin operational view (getPlatformOverview). */
+export interface PlatformMerchantRow {
+  storeId: string
+  storeName: string
+  ref: string
+  slug: string
+  active: boolean
+  published: boolean
+  createdAt?: { seconds: number; nanoseconds: number } | null
+  ownerName: string | null
+  ownerEmail: string | null
+  ownerRole: string | null
+  subId: string | null
+  planId: string | null
+  planName: string | null
+  planPriceMonthly: number
+  productLimit: number
+  subStatus: SubscriptionStatus | null
+  subStartedAt?: { seconds: number; nanoseconds: number } | null
+  subExpiresAt?: { seconds: number; nanoseconds: number } | null
+  orderLimit: number
+  ordersUsed: number
+  remaining: number | null
+  usagePercent: number
+  usageLevel: OrderUsageLevel
+}
+
 export interface Subscription extends Partial<FirestoreMeta> {
   id: string
   storeId: string
@@ -156,6 +195,8 @@ export interface Subscription extends Partial<FirestoreMeta> {
   approvedBy?: string
   adminEmail?: string
   requestNote?: string
+  /** Live counter of orders created during the current subscription period. */
+  ordersUsed?: number
 }
 
 export type TransactionType = 'subscription' | 'payment' | 'refund' | 'adjustment'

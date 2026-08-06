@@ -4,6 +4,7 @@ import { Card } from '../ui/Card'
 import { Badge } from '../ui/Badge'
 import { Button } from '../ui/Button'
 import { Select } from '../ui/Select'
+import { Table } from '../ui/Table'
 import { useDocument } from '../../hooks/useDocument'
 import { useToast } from '../../hooks/useToast'
 import { updateOrderStatusCallable } from '../../services/auth'
@@ -14,6 +15,9 @@ import type { Order } from '../../types'
 interface Props {
   id: string
 }
+
+const PROGRESS: Order['status'][] = ['NEW', 'CONTACTED', 'PROCESSING', 'SHIPPED', 'DELIVERED']
+const TERMINAL: Order['status'][] = ['CANCELLED', 'RETURNED']
 
 export const OrderDetails: FunctionalComponent<Props> = ({ id }) => {
   const { data: order, loading } = useDocument<Order>('orders', id)
@@ -38,12 +42,44 @@ export const OrderDetails: FunctionalComponent<Props> = ({ id }) => {
     }
   }
 
+  const stepIndex = PROGRESS.indexOf(order.status)
+  const isTerminal = TERMINAL.includes(order.status)
+  const statusTone = isTerminal ? 'red' : (STATUS_COLORS[order.status as keyof typeof STATUS_COLORS] || 'slate')
+  const statusLabel = STATUS_LABELS[order.status as keyof typeof STATUS_LABELS] || order.status
+
   return (
     <Fragment>
       <div className="flex-between mb-2">
-        <h1 className="page-title"><span className="monospace">{order.orderNumber}</span></h1>
-        <Badge tone={STATUS_COLORS[order.status]}>{STATUS_LABELS[order.status]}</Badge>
+        <h1 className="page-title">
+          <span className="monospace">{order.orderNumber}</span>
+        </h1>
+        <Badge tone={statusTone}>{statusLabel}</Badge>
       </div>
+
+      <Card className="mb-2">
+        <div className="order-steps">
+          {PROGRESS.map((s, i) => {
+            const done = stepIndex >= 0 && i <= stepIndex
+            const active = i === stepIndex
+            return (
+              <div key={s} className={`order-step${done ? ' order-step--done' : ''}${active ? ' order-step--active' : ''}`}>
+                <span className="order-step-dot">
+                  {done && !active ? <span className="material-symbols-outlined">check</span> : i + 1}
+                </span>
+                <span className="order-step-label">{STATUS_LABELS[s] || s}</span>
+                {i < PROGRESS.length - 1 && <span className="order-step-line" />}
+              </div>
+            )
+          })}
+        </div>
+        {isTerminal && (
+          <div className="order-step-terminal">
+            <Badge tone="red">{STATUS_LABELS[order.status]}</Badge>
+            <span className="muted small">هذا الطلب في حالة نهائية ولا يمكن متابعة تنفيذه.</span>
+          </div>
+        )}
+      </Card>
+
       <div className="grid grid-2">
         <Card title="معلومات العميل">
           <dl className="kv">
@@ -61,26 +97,25 @@ export const OrderDetails: FunctionalComponent<Props> = ({ id }) => {
             <div className="kv-item"><dt>الشحن</dt><dd>{formatCurrency(order.shippingFee)}</dd></div>
             {order.discount > 0 && <div className="kv-item"><dt>الخصم</dt><dd>-{formatCurrency(order.discount)}</dd></div>}
             <div className="kv-item"><dt>الإجمالي</dt><dd>{formatCurrency(order.totalPrice)}</dd></div>
-            <div className="kv-item"><dt>طريقة الدفع</dt><dd>{order.paymentMethod}</dd></div>
+            <div className="kv-item"><dt>طريقة الدفع</dt><dd>{order.paymentMethod === 'cod' ? 'عند الاستلام' : order.paymentMethod === 'bank' ? 'تحويل بنكي' : order.paymentMethod}</dd></div>
             <div className="kv-item"><dt>التاريخ</dt><dd>{formatDateTime(order.createdAt)}</dd></div>
           </dl>
         </Card>
       </div>
-      <Card title="المنتجات" className="mt-2 mb-2">
-        <table className="table">
-          <thead><tr><th>المنتج</th><th>الخيارات</th><th>الكمية</th><th>السعر</th></tr></thead>
-          <tbody>
-            {order.items.map((item) => (
-              <tr key={item.id}>
-                <td>{item.name}</td>
-                <td className="muted">{[item.color, item.size].filter(Boolean).join(' • ')}</td>
-                <td>{item.quantity}</td>
-                <td>{formatCurrency(item.price * item.quantity)}</td>
-              </tr>
-            ))}
-          </tbody>
-        </table>
+
+      <Card title="المنتجات" subtitle={`${order.items.length} منتج`} className="mt-2 mb-2">
+        <Table
+          columns={[
+            { key: 'name', header: 'المنتج' },
+            { key: 'options', header: 'الخيارات', render: (item: any) => <span className="muted">{[item.color, item.size].filter(Boolean).join(' • ')}</span> },
+            { key: 'quantity', header: 'الكمية' },
+            { key: 'price', header: 'السعر', render: (item: any) => formatCurrency(item.price) },
+            { key: 'total', header: 'الإجمالي', render: (item: any) => formatCurrency(item.price * item.quantity) },
+          ]}
+          rows={order.items as any}
+        />
       </Card>
+
       <Card title="تغيير الحالة">
         <div className="flex">
           <Select

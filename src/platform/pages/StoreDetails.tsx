@@ -1,127 +1,182 @@
 import { FunctionalComponent } from 'preact'
 import { useState } from 'preact/hooks'
-import { signInWithCustomToken } from 'firebase/auth'
+import { useDocument } from '../../shared/hooks/useDocument'
+import { useCollection } from '../../shared/hooks/useCollection'
+import { useToast } from '../../shared/hooks/useToast'
 import { PageHeader } from '../../shared/components/ui/PageHeader'
+import { Breadcrumb } from '../../shared/components/ui/Breadcrumb'
 import { Card } from '../../shared/components/ui/Card'
 import { StatsCard } from '../../shared/components/ui/StatsCard'
 import { Table } from '../../shared/components/ui/Table'
 import { Badge } from '../../shared/components/ui/Badge'
 import { Button } from '../../shared/components/ui/Button'
-import { Toggle } from '../../shared/components/ui/Toggle'
-import { Modal } from '../../shared/components/ui/Modal'
 import { Input } from '../../shared/components/ui/Input'
-import { useDocument } from '../../shared/hooks/useDocument'
-import { useCollection } from '../../shared/hooks/useCollection'
-import { useToast } from '../../shared/hooks/useToast'
+import { Toggle } from '../../shared/components/ui/Toggle'
+import { Progress } from '../../shared/components/ui/Progress'
+import { EmptyState } from '../../shared/components/ui/EmptyState'
+import { formatCurrency, formatDate, formatNumber } from '../../shared/utils/format'
+import { storePublicUrl } from '../../shared/utils/store-url'
+import { STATUS_LABELS, STATUS_COLORS, SUBSCRIPTION_STATUS_LABELS, SUBSCRIPTION_STATUS_TONES, ORDER_USAGE_LABELS, ORDER_USAGE_TONES, usageLevelFor } from '../../shared/utils/constants'
 import { storesService } from '../../shared/services/stores'
-import { impersonateCallable } from '../../shared/services/auth'
-import { auth } from '../../shared/firebase'
-import { formatCurrency, formatDate } from '../../shared/utils/format'
-import { STATUS_LABELS } from '../../shared/utils/constants'
-import type { Store, Order } from '../../shared/types'
+import { approveSubscriptionCallable } from '../../shared/services/auth'
+import type { Store, Subscription, SubscriptionPlan, Order, Product } from '../../shared/types'
 
 interface Props {
   id: string
 }
 
-export const StoreDetails: FunctionalComponent<Props> = ({ id }) => {
-  const { data: store, loading } = useDocument<Store>('stores', id)
-  const ordersRes = useCollection<Order>('orders', { storeId: id, orderBy: { field: 'createdAt' } });
-  const orders = ordersRes.data
-  const productsRes = useCollection('products', { storeId: id });
-  const products = productsRes.data
+export const PlatformStoreDetails: FunctionalComponent<Props> = ({ id }) => {
+  const storeDoc = useDocument<Store>('stores', id)
+  const store = storeDoc.data
   const toast = useToast()
-  const [editOpen, setEditOpen] = useState(false)
   const [form, setForm] = useState<Partial<Store>>({})
-  const [impersonating, setImpersonating] = useState(false)
+  const [busy, setBusy] = useState(false)
 
-  if (loading) return <div className="loading-screen"><span className="spinner spinner-lg" /></div>
+  const subsRes = useCollection<Subscription>('subscriptions', store?.id ? { storeId: store.id } : {})
+  const subs = subsRes.data
+  const plansRes = useCollection<SubscriptionPlan>('plans', {})
+  const plans = plansRes.data
+  const ordersRes = useCollection<Order>('orders', store?.id ? { storeId: store.id } : {})
+  const orders = ordersRes.data
+  const productsRes = useCollection<Product>('products', store?.id ? { storeId: store.id } : {})
+  const products = productsRes.data
 
-  const revenue = orders.filter((o) => o.status === 'DELIVERED').reduce((s, o) => s + o.totalPrice, 0)
-  const pending = orders.filter((o) => ['NEW', 'CONTACTED', 'PROCESSING', 'SHIPPED'].includes(o.status))
+  const latestSub = [...subs].sort((a, b) => (b.createdAt?.seconds || 0) - (a.createdAt?.seconds || 0))[0]
+  const plan = latestSub ? plans.find((p) => p.id === latestSub.planId) : null
+  const orderLimit = plan?.orderLimitPerMonth || 0
+  const ordersUsed = latestSub?.ordersUsed || 0
+  const usagePercent = orderLimit > 0 ? Math.min(100, Math.round((ordersUsed / orderLimit) * 100)) : 0
+  const usageLevel = usageLevelFor(usagePercent, orderLimit > 0)
+  const remaining = orderLimit > 0 ? Math.max(0, orderLimit - ordersUsed) : null
 
   const save = async () => {
-    await storesService.update(id, form)
-    toast.push('تم حفظ التعديلات')
-    setEditOpen(false)
+    if (!store?.id) return
+    await storesService.update(store.id, form)
+    toast.push('تم حفظ التغييرات')
   }
 
-  // Deliberate "Impersonate Merchant" action — platform admin inspects the store
-  // as its owner. Auth switches to a custom token; AppShell shows the exit banner.
-  const impersonate = async () => {
-    setImpersonating(true)
+  const approve = async () => {
+    if (!latestSub || busy) return
+    setBusy(true)
     try {
-      const res = await impersonateCallable({ storeId: id })
-      const token = (res.data as any)?.customToken
-      if (!token) throw new Error('no token')
-      await signInWithCustomToken(auth, token)
-      window.location.href = '/dashboard/'
-    } catch {
-      toast.push('تعذر فتح المتجر', 'تحقق من أن مالك المتجر حساب نشط', 'error')
+      await approveSubscriptionCallable({ subscriptionId: latestSub.id })
+      toast.push('تمت الموافقة على الاشتراك', 'تم تفعيل حساب المتجر', 'success')
+    } catch (err: any) {
+      toast.push('فشل الموافقة', err?.message || 'حدث خطأ غير متوقع', 'error')
     } finally {
-      setImpersonating(false)
+      setBusy(false)
     }
+  }
+
+  if (storeDoc.loading) return <div className="loading-screen"><span className="spinner spinner-lg" /></div>
+
+  if (!store) {
+    return (
+      <div>
+        <PageHeader title="تفاصيل المتجر" subtitle="غير موجود" />
+        <EmptyState icon="storefront" title="المتجر غير موجود" />
+      </div>
+    )
   }
 
   return (
     <div>
+      <Breadcrumb items={[{ label: 'التجار والمتاجر', href: '/platform/merchants' }, { label: store.name }]} />
       <PageHeader
-        title={store?.name || 'المتجر'}
-        subtitle={`الرابط: ${store?.ref} • ${store?.slug}`}
-        breadcrumb="المتاجر"
+        title={store.name}
+        subtitle={storePublicUrl(store)}
         actions={
-          <div className="flex" style={{ gap: 8 }}>
-            <Button variant="outline" icon="storefront" onClick={() => window.open(`/store/${store?.slug}`, '_blank')}>عرض المتجر</Button>
-            <Button variant="outline" icon="admin_panel_settings" onClick={impersonate} loading={impersonating}>فتح كتاجر</Button>
-            <Button variant="outline" icon="edit" onClick={() => { setForm(store || {}); setEditOpen(true) }}>تعديل</Button>
-          </div>
+          store.active ? (
+            <a href={`/store/${store.slug}`} target="_blank" rel="noreferrer">
+              <Button variant="outline" icon="store">عرض المتجر</Button>
+            </a>
+          ) : (
+            <Badge tone="slate">موقوف</Badge>
+          )
         }
       />
+
       <div className="stats-grid">
         <StatsCard title="الطلبات" value={orders.length} icon="receipt_long" tone="primary" />
+        <StatsCard title="المبيعات" value={orders.filter((o) => o.status === 'DELIVERED').reduce((s, o) => s + o.totalPrice, 0)} currency icon="payments" tone="green" />
         <StatsCard title="المنتجات" value={products.length} icon="inventory_2" tone="blue" />
-        <StatsCard title="إيرادات مؤكدة" value={revenue} currency icon="payments" tone="green" />
-        <StatsCard title="طلبات معلقة" value={pending.length} icon="pending" tone="amber" />
+        <StatsCard title="استهلاك الطلبات" value={orderLimit > 0 ? `${ordersUsed} / ${orderLimit}` : '—'} icon="signal_cellular_alt" tone="amber" changeLabel={orderLimit > 0 ? `${usagePercent}%` : 'بدون حد'} />
       </div>
-      <div className="grid grid-2">
-        <Card title="بيانات المتجر">
-          <dl className="kv">
-            <div className="kv-item"><dt>الاسم</dt><dd>{store?.name}</dd></div>
-            <div className="kv-item"><dt>الحالة</dt><dd>{store?.active ? 'نشط' : 'موقوف'}</dd></div>
-            <div className="kv-item"><dt>العملة</dt><dd>{store?.currency}</dd></div>
-            <div className="kv-item"><dt>تاريخ الإنشاء</dt><dd>{formatDate(store?.createdAt)}</dd></div>
-          </dl>
+
+      <div className="grid grid-2 mb-2">
+        <Card title="الاشتراك والاستخدام">
+          {!latestSub ? (
+            <p className="muted">لا يوجد اشتراك لهذا المتجر.</p>
+          ) : (
+            <div>
+              <div className="list-row">
+                <span>الباقة</span>
+                <strong>{plan?.name || latestSub.planName || '—'}</strong>
+              </div>
+              <div className="list-row">
+                <span>الحالة</span>
+                <Badge tone={SUBSCRIPTION_STATUS_TONES[latestSub.status] || 'slate'}>{SUBSCRIPTION_STATUS_LABELS[latestSub.status] || latestSub.status}</Badge>
+              </div>
+              <div className="list-row">
+                <span>بداية الاشتراك</span>
+                <span>{formatDate(latestSub.startedAt)}</span>
+              </div>
+              <div className="list-row">
+                <span>انتهاء الاشتراك</span>
+                <span>{formatDate(latestSub.expiresAt)}</span>
+              </div>
+              {orderLimit > 0 && (
+                <div className="mt-2">
+                  <div className="flex-between small mb-1">
+                    <span className="font-semibold">طلبات الدورة: {formatNumber(ordersUsed)} / {formatNumber(orderLimit)}</span>
+                    <Badge tone={ORDER_USAGE_TONES[usageLevel]}>{ORDER_USAGE_LABELS[usageLevel]}</Badge>
+                  </div>
+                  <Progress value={ordersUsed} max={orderLimit} tone={usageLevel === 'reached' ? 'red' : usageLevel === 'near' || usageLevel === 'approaching' ? 'amber' : 'primary'} />
+                  <div className="muted small mt-1">المتبقي: {formatNumber(remaining ?? 0)} — نسبة الاستخدام {usagePercent}%</div>
+                </div>
+              )}
+              {latestSub.status === 'pending' && (
+                <div className="mt-2">
+                  <Button icon="check" loading={busy} onClick={approve}>الموافقة على الاشتراك</Button>
+                </div>
+              )}
+            </div>
+          )}
         </Card>
-        <Card title="حالة الطلبات">
-          <Table
-            columns={[
-              { key: 'status', header: 'الحالة' },
-              { key: 'count', header: 'العدد' },
-              { key: 'amount', header: 'القيمة' },
-            ]}
-            rows={Object.entries(STATUS_LABELS).map(([k, label]) => ({
-              id: k,
-              status: <Badge>{label}</Badge>,
-              count: orders.filter((o) => o.status === k).length,
-              amount: formatCurrency(orders.filter((o) => o.status === k).reduce((s, o) => s + o.totalPrice, 0)),
-            }))}
-          />
+
+        <Card title="معلومات المتجر">
+          <div className="grid grid-2">
+            <Input label="اسم المتجر" value={form.name ?? store.name} onChange={(v) => setForm({ ...form, name: v })} />
+            <Input label="الرابط (ref)" value={form.ref ?? store.ref} onChange={(v) => setForm({ ...form, ref: v })} />
+            <Input label="الهاتف" value={form.phone ?? store.phone} onChange={(v) => setForm({ ...form, phone: v })} />
+            <Input label="العنوان" value={form.address ?? store.address} onChange={(v) => setForm({ ...form, address: v })} />
+          </div>
+          <div className="field mt-1">
+            <Toggle checked={form.active ?? store.active} onChange={(v) => setForm({ ...form, active: v })} label="المتجر نشط" />
+          </div>
+          <div className="field mt-1">
+            <Toggle checked={form.published ?? store.published} onChange={(v) => setForm({ ...form, published: v })} label="منشور للعملاء (يسمح بالطلبات)" />
+          </div>
+          <div className="flex flex-end mt-2">
+            <Button variant="soft" icon="save" onClick={save}>حفظ التغييرات</Button>
+          </div>
         </Card>
       </div>
 
-      <Modal open={editOpen} onClose={() => setEditOpen(false)} title="تعديل المتجر">
-        <Input label="اسم المتجر" value={form.name || ''} onChange={(v) => setForm({ ...form, name: v })} />
-        <Input label="الرابط" value={form.ref || ''} onChange={(v) => setForm({ ...form, ref: v })} />
-        <div className="field">
-          <span className="field-label">متجر نشط</span>
-          <Toggle checked={!!form.active} onChange={(v) => setForm({ ...form, active: v })} />
-        </div>
-        <div className="flex" style={{ justifyContent: 'flex-end' }}>
-          <Button variant="ghost" onClick={() => setEditOpen(false)}>إلغاء</Button>
-          <Button onClick={save}>حفظ</Button>
-        </div>
-      </Modal>
+      <Card title="الطلبات الأخيرة">
+        <Table
+          cardMode
+          columns={[
+            { key: 'orderNumber', header: 'الرقم' },
+            { key: 'customerName', header: 'العميل' },
+            { key: 'totalPrice', header: 'الإجمالي', render: (o: Order) => formatCurrency(o.totalPrice) },
+            { key: 'status', header: 'الحالة', render: (o: Order) => <Badge tone={STATUS_COLORS[o.status as keyof typeof STATUS_COLORS]}>{STATUS_LABELS[o.status as keyof typeof STATUS_LABELS] || o.status}</Badge> },
+            { key: 'createdAt', header: 'التاريخ', render: (o: Order) => <span className="muted">{formatDate(o.createdAt)}</span> },
+          ]}
+          rows={orders.slice(0, 10)}
+        />
+      </Card>
     </div>
   )
 }
-export default StoreDetails
+export default PlatformStoreDetails
