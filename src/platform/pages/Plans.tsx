@@ -15,6 +15,7 @@ import { useToast } from '../../shared/hooks/useToast'
 import { plansService } from '../../shared/services/billing'
 import { formatCurrency } from '../../shared/utils/format'
 import type { SubscriptionPlan } from '../../shared/types'
+import { Icon } from '../../shared/components/ui/Icon'
 
 export const PlatformPlans: FunctionalComponent = () => {
   const plansRes = useCollection<SubscriptionPlan>('plans', { orderBy: { field: 'priceMonthly' } })
@@ -111,16 +112,16 @@ export const PlatformPlans: FunctionalComponent = () => {
                 <ul className="plan-pricing-features">
                   {p.features.map((f, i) => (
                     <li key={i}>
-                      <span className="material-symbols-outlined">check_circle</span>
+                      <Icon name="check_circle" />
                       {f}
                     </li>
                   ))}
                   <li>
-                    <span className="material-symbols-outlined">inventory_2</span>
+                    <Icon name="inventory_2" />
                     حتى {p.productLimit} منتج
                   </li>
                   <li>
-                    <span className="material-symbols-outlined">receipt_long</span>
+                    <Icon name="receipt_long" />
                     {p.orderLimitPerMonth > 0 ? `حتى ${p.orderLimitPerMonth} طلب شهرياً` : 'طلبات غير محدودة'}
                   </li>
                 </ul>

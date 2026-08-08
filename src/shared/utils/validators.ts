@@ -24,6 +24,14 @@ export function generateToken(len = 32): string {
   return out
 }
 
+/** Short unique id for entities created client-side (variants, color options). */
+export function uid(len = 8): string {
+  const chars = 'abcdefghijklmnopqrstuvwxyz0123456789'
+  let out = ''
+  for (let i = 0; i < len; i++) out += chars[Math.floor(Math.random() * chars.length)]
+  return out
+}
+
 export function csvEscape(value: unknown): string {
   const s = value == null ? '' : String(value)
   if (/[",\n;]/.test(s)) return `"${s.replace(/"/g, '""')}"`

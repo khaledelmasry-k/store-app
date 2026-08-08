@@ -11,6 +11,7 @@ import { updateOrderStatusCallable } from '../../services/auth'
 import { formatCurrency, formatDateTime } from '../../utils/format'
 import { ORDER_STATUSES, STATUS_LABELS, STATUS_COLORS } from '../../utils/constants'
 import type { Order } from '../../types'
+import { Icon } from '../ui/Icon'
 
 interface Props {
   id: string
@@ -64,7 +65,7 @@ export const OrderDetails: FunctionalComponent<Props> = ({ id }) => {
             return (
               <div key={s} className={`order-step${done ? ' order-step--done' : ''}${active ? ' order-step--active' : ''}`}>
                 <span className="order-step-dot">
-                  {done && !active ? <span className="material-symbols-outlined">check</span> : i + 1}
+                  {done && !active ? <Icon name="check" /> : i + 1}
                 </span>
                 <span className="order-step-label">{STATUS_LABELS[s] || s}</span>
                 {i < PROGRESS.length - 1 && <span className="order-step-line" />}

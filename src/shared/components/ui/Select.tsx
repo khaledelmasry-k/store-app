@@ -13,6 +13,7 @@ interface Props {
   options: Option[]
   placeholder?: string
   error?: string
+  hint?: string
   name?: string
   disabled?: boolean
 }
@@ -24,6 +25,7 @@ export const Select: FunctionalComponent<Props> = ({
   options,
   placeholder,
   error,
+  hint,
   name,
   disabled,
 }) => (
@@ -43,6 +45,7 @@ export const Select: FunctionalComponent<Props> = ({
         </option>
       ))}
     </select>
+    {hint && <span className="field-hint">{hint}</span>}
     {error && <span className="field-error">{error}</span>}
   </label>
 )

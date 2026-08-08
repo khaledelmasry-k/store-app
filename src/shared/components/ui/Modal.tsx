@@ -1,6 +1,7 @@
 import { FunctionalComponent, Fragment } from 'preact'
 import { useEffect } from 'preact/hooks'
 import { clsx } from '../../utils/clsx'
+import { Icon } from './Icon'
 
 interface Props {
   open: boolean
@@ -33,7 +34,7 @@ export const Modal: FunctionalComponent<Props> = ({ open, onClose, title, size =
         <div className="modal-head">
           <h3 className="modal-title">{title}</h3>
           <button className="icon-btn" onClick={onClose} type="button">
-            <span className="material-symbols-outlined">close</span>
+            <Icon name="close" />
           </button>
         </div>
         <div className="modal-body">{children}</div>

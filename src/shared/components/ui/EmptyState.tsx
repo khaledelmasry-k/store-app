@@ -1,4 +1,5 @@
 import { FunctionalComponent } from 'preact'
+import { Icon } from './Icon'
 
 interface Props {
   icon?: string
@@ -11,7 +12,7 @@ interface Props {
 export const EmptyState: FunctionalComponent<Props> = ({ icon = 'inbox', title = 'لا توجد بيانات', description, action, variant = 'default' }) => (
   <div className={`empty-state empty-state--${variant}`}>
     <div className="empty-icon">
-      <span className="material-symbols-outlined">{icon}</span>
+      <Icon name={icon} />
     </div>
     <h3 className="empty-title">{title}</h3>
     {description && <p className="empty-desc">{description}</p>}

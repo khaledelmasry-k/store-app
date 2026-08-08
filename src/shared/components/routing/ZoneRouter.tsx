@@ -5,6 +5,7 @@ import { Loading } from '../ui/Loading'
 import { EmptyState } from '../ui/EmptyState'
 import { ROUTE_PERMISSIONS } from '../../utils/constants'
 import type { Role } from '../../types'
+import { Icon } from '../ui/Icon'
 
 interface ZoneRouterProps {
   prefix: string
@@ -46,7 +47,7 @@ export const ZoneRouter: FunctionalComponent<ZoneRouterProps> = ({ prefix, role,
         <div className="auth-card">
           <div className="order-confirmed">
             <div className="big-check">
-              <span className="material-symbols-outlined">hourglass_top</span>
+              <Icon name="hourglass_top" />
             </div>
             <h1 className="auth-title">الحساب قيد المراجعة</h1>
             <p className="auth-subtitle">

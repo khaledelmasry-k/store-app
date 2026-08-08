@@ -111,7 +111,7 @@ export const MerchantTeam: FunctionalComponent = () => {
               <label className="field-label">كلمة المرور المؤقتة</label>
               <input className="input" readOnly value={credentials.password} />
             </div>
-            <Button onClick={close} block icon="done">تم</Button>
+            <Button onClick={close} block icon="check">تم</Button>
           </div>
         ) : (
           <Fragment>

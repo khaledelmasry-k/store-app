@@ -1,5 +1,6 @@
 import { FunctionalComponent } from 'preact'
 import { formatCurrency } from '../../utils/format'
+import { Icon } from './Icon'
 
 interface Props {
   title: string
@@ -22,7 +23,7 @@ export const StatsCard: FunctionalComponent<Props> = ({
 }) => (
   <div className={`stat-card stat-${tone}`}>
     <div className="stat-icon">
-      <span className="material-symbols-outlined">{icon}</span>
+      <Icon name={icon} />
     </div>
     <div className="stat-body">
       <p className="stat-title">{title}</p>

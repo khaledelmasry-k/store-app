@@ -4,7 +4,10 @@ import { useCart } from '../../shared/hooks/useCart'
 import { useStore } from '../../shared/hooks/useStore'
 import { Button } from '../../shared/components/ui/Button'
 import { Card } from '../../shared/components/ui/Card'
+import { SmartImage } from '../../shared/components/ui/SmartImage'
 import { formatCurrency } from '../../shared/utils/format'
+import { lineSubtotal } from '../../shared/utils/pricing'
+import { Icon } from '../../shared/components/ui/Icon'
 
 export const StoreCart: FunctionalComponent = () => {
   const cart = useCart()
@@ -13,7 +16,7 @@ export const StoreCart: FunctionalComponent = () => {
   if (cart.items.length === 0) {
     return (
       <div className="order-confirmed">
-        <div className="big-check"><span className="material-symbols-outlined">shopping_cart</span></div>
+        <div className="big-check"><Icon name="shopping_cart" /></div>
         <h1 className="auth-title">سلتك فارغة</h1>
         <p className="auth-subtitle">أضف بعض المنتجات وعد إلى هنا لإتمام الطلب.</p>
         <Link href={`/store/${store?.slug}/catalog`}><Button variant="outline">تصفح المنتجات</Button></Link>
@@ -33,7 +36,7 @@ export const StoreCart: FunctionalComponent = () => {
           {cart.items.map((item, i) => (
             <Card key={i} className="cart-line">
               <div className="flex flex-gap-lg">
-                {item.image && <img src={item.image} alt={item.name} className="cart-line-img" />}
+                {item.image && <SmartImage src={item.image} alt={item.name} className="cart-line-img" placeholderClassName="cart-line-img" />}
                 <div className="grow">
                   <p><strong>{item.name}</strong></p>
                   <p className="muted small">
@@ -45,9 +48,9 @@ export const StoreCart: FunctionalComponent = () => {
                   <strong>{item.quantity}</strong>
                   <button type="button" className="qty-btn" onClick={() => cart.setQty(i, item.quantity + 1)}>+</button>
                 </div>
-                <strong>{formatCurrency(item.price * item.quantity)}</strong>
+                <strong>{formatCurrency(lineSubtotal(item))}</strong>
                 <button className="icon-btn" onClick={() => cart.remove(i)} type="button">
-                  <span className="material-symbols-outlined">delete</span>
+                  <Icon name="delete" />
                 </button>
               </div>
             </Card>
@@ -58,7 +61,7 @@ export const StoreCart: FunctionalComponent = () => {
           <div className="summary-row"><span>المنتجات</span><span>{cart.count}</span></div>
           <div className="summary-row"><span>المجموع الفرعي</span><span>{formatCurrency(cart.subtotal)}</span></div>
           <div className="summary-row total"><span>الإجمالي</span><span>{formatCurrency(cart.subtotal)}</span></div>
-          <Link href={`/store/${store?.slug}/checkout`}><Button block icon="checkout" className="mt-1">إتمام الطلب</Button></Link>
+          <Link href={`/store/${store?.slug}/checkout`}><Button block icon="shopping_cart_checkout" className="mt-1">إتمام الطلب</Button></Link>
         </div>
       </div>
     </div>

@@ -7,15 +7,18 @@ import { useStore } from '../../hooks/useStore'
 import { logout } from '../../services/auth'
 import { Dropdown } from '../ui/Dropdown'
 import { Avatar } from '../ui/Avatar'
+import { SmartImage } from '../ui/SmartImage'
 import { useTheme } from '../../hooks/useTheme'
+import { getTemplate } from '../../utils/themes'
 import { contrastFor, hexToRgba, shadeHex } from '../../utils/color'
 import type { CSSProperties } from 'preact/compat'
+import { Icon } from '../ui/Icon'
 
 interface Props {
   children?: any
 }
 
-function themeStyleFor(primary?: string, secondary?: string): CSSProperties {
+export function themeStyleFor(primary?: string, secondary?: string): CSSProperties {
   if (!primary) return {}
   return {
     '--primary': primary,
@@ -37,6 +40,7 @@ export const StoreLayout: FunctionalComponent<Props> = ({ children }) => {
 
   const slug = store?.slug
   const base = `/store/${slug}`
+  const templateClass = getTemplate(store?.theme?.template).cssClass
 
   // SEO: title + meta description for the storefront.
   useEffect(() => {
@@ -58,9 +62,9 @@ export const StoreLayout: FunctionalComponent<Props> = ({ children }) => {
   // store staff, and platform admins. Purchases are rejected server-side too.
   if (store && !store.published && !canPreview) {
     return (
-      <div className="store-shell" style={themeStyleFor(store.theme?.primary, store.theme?.secondary)}>
+      <div className={`store-shell ${templateClass}`} style={themeStyleFor(store.theme?.primary, store.theme?.secondary)}>
         <div className="store-coming-soon">
-          <span className="store-brand-mark material-symbols-outlined">storefront</span>
+          <Icon name="storefront" className="store-brand-mark" />
           <h1>{store.name}</h1>
           <p>{store.seoDescription || store.description || 'المتجر قيد الإعداد — سنعود قريباً بمنتجاتنا.'}</p>
           <a href="/" className="btn btn-invert btn-lg">العودة للرئيسية</a>
@@ -90,22 +94,22 @@ export const StoreLayout: FunctionalComponent<Props> = ({ children }) => {
     ))
 
   return (
-    <div className="store-shell" style={themeStyleFor(store?.theme?.primary, store?.theme?.secondary)}>
+    <div className={`store-shell ${templateClass}`} style={themeStyleFor(store?.theme?.primary, store?.theme?.secondary)}>
       <header className="store-header">
         <button type="button" className="icon-btn store-menu-btn" onClick={() => setMenuOpen(!menuOpen)} title="القائمة">
-          <span className="material-symbols-outlined">{menuOpen ? 'close' : 'menu'}</span>
+          <Icon name={menuOpen ? 'close' : 'menu'} />
         </button>
         <Link href={base} className="store-brand">
           {store?.logo ? (
-            <img src={store.logo} alt={store.name} className="store-logo" />
+            <SmartImage src={store.logo} alt={store.name} className="store-logo" placeholderClassName="store-logo" />
           ) : (
-            <span className="store-brand-mark material-symbols-outlined">storefront</span>
+            <Icon name="storefront" className="store-brand-mark" />
           )}
           <strong>{store?.name || 'المتجر'}</strong>
         </Link>
         <nav className="store-nav">{navLinks()}</nav>
         <form className="store-search" onSubmit={submitSearch}>
-          <span className="material-symbols-outlined store-search-icon">search</span>
+          <Icon name="search" className="store-search-icon" />
           <input
             className="store-search-input"
             value={q}
@@ -115,10 +119,10 @@ export const StoreLayout: FunctionalComponent<Props> = ({ children }) => {
         </form>
         <div className="store-actions">
           <button type="button" className="icon-btn" onClick={theme.toggle} title="تغيير الوضع">
-            <span className="material-symbols-outlined">{theme.theme === 'dark' ? 'light_mode' : 'dark_mode'}</span>
+            <Icon name={theme.theme === 'dark' ? 'light_mode' : 'dark_mode'} />
           </button>
           <Link href={`${base}/cart`} className="icon-btn cart-btn" title="السلة">
-            <span className="material-symbols-outlined">shopping_cart</span>
+            <Icon name="shopping_cart" />
             {cart.count > 0 && <span className="cart-badge">{cart.count}</span>}
           </Link>
           {user && user.role === 'customer' ? (
@@ -146,7 +150,7 @@ export const StoreLayout: FunctionalComponent<Props> = ({ children }) => {
       {menuOpen && (
         <div className="store-mobile-menu">
           <form className="store-search" onSubmit={submitSearch}>
-            <span className="material-symbols-outlined store-search-icon">search</span>
+            <Icon name="search" className="store-search-icon" />
             <input
               className="store-search-input"
               value={q}
@@ -164,7 +168,7 @@ export const StoreLayout: FunctionalComponent<Props> = ({ children }) => {
         <div className="store-footer-grid">
           <div>
             <div className="store-footer-brand">
-              {store?.logo ? <img src={store.logo} alt={store.name} className="store-logo" /> : <span className="material-symbols-outlined">storefront</span>}
+              {store?.logo ? <SmartImage src={store.logo} alt={store.name} className="store-logo" placeholderClassName="store-logo" /> : <Icon name="storefront" />}
               <strong>{store?.name || 'M&K'}</strong>
             </div>
             <p className="muted small">{store?.description || 'متجرك على منصة M&K'}</p>

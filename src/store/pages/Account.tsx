@@ -15,6 +15,7 @@ import { formatCurrency, formatDateTime } from '../../shared/utils/format'
 import { STATUS_LABELS, STATUS_COLORS } from '../../shared/utils/constants'
 import { GOVER_EG } from '../../shared/utils/constants'
 import type { WishlistItem, Address, Order } from '../../shared/types'
+import { Icon } from '../../shared/components/ui/Icon'
 
 export const StoreAccount: FunctionalComponent = () => {
   const { store } = useStore()
@@ -43,7 +44,7 @@ export const StoreAccount: FunctionalComponent = () => {
   if (!isCustomer) {
     return (
       <div className="order-confirmed">
-        <div className="big-check"><span className="material-symbols-outlined">account_circle</span></div>
+        <div className="big-check"><Icon name="account_circle" /></div>
         <h1 className="auth-title">تسجيل الدخول مطلوب</h1>
         <p className="auth-subtitle">سجّل الدخول لعرض طلباتك وعناوينك ومفضلتك.</p>
         <Link href={`/store/${store?.slug}/login`}><Button>تسجيل الدخول</Button></Link>
@@ -95,7 +96,7 @@ export const StoreAccount: FunctionalComponent = () => {
                 <div key={w.id} className="list-row">
                   <span>{product?.name || 'منتج محذوف'}</span>
                   <button className="icon-btn" onClick={() => removeWish(w.id)} type="button">
-                    <span className="material-symbols-outlined">delete</span>
+                    <Icon name="delete" />
                   </button>
                 </div>
               )

@@ -2,6 +2,7 @@ import { clsx } from '../../utils/clsx'
 import { EmptyState } from './EmptyState'
 import { Loading } from './Loading'
 import { useEffect, useState } from 'preact/hooks'
+import { Icon } from './Icon'
 
 interface Column<T> {
   key: string
@@ -45,7 +46,7 @@ export function Table<T extends { id: string }>({
       {cardMode && !isMobile && (
         <div className="table-toolbar">
           <button type="button" className="btn btn-ghost btn-sm" onClick={() => setMobileCard(!mobileCard)}>
-            <span className="material-symbols-outlined">{mobileCard ? 'table_chart' : 'grid_view'}</span>
+            <Icon name={mobileCard ? 'table_chart' : 'grid_view'} />
             {mobileCard ? 'جدول' : 'بطاقات'}
           </button>
         </div>

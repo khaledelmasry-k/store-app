@@ -3,12 +3,15 @@ import { useState } from 'preact/hooks'
 import { Link, useLocation } from 'wouter'
 import { Button } from '../ui/Button'
 import { Input } from '../ui/Input'
+import { BrandMark } from '../brand/BrandMark'
+import { AuthShell } from './AuthShell'
 import { registerMerchant } from '../../services/auth'
 import { useToast } from '../../hooks/useToast'
 import { useCollection } from '../../hooks/useCollection'
 import { formatCurrency } from '../../utils/format'
 import { isEmailValid } from '../../utils/validators'
 import type { SubscriptionPlan } from '../../types'
+import { Icon } from '../ui/Icon'
 
 const STEPS = [
   { key: 'account', label: 'إنشاء الحساب', icon: 'person' },
@@ -77,25 +80,25 @@ export const Register:FunctionalComponent = () => {
 
   if (done) {
     return (
-      <div className="auth-screen">
+      <AuthShell>
         <div className="auth-card">
           <div className="order-confirmed">
-            <div className="big-check"><span className="material-symbols-outlined">check</span></div>
+            <div className="big-check"><Icon name="check" /></div>
             <h1 className="auth-title">تم تقديم طلب التسجيل</h1>
             <p className="auth-subtitle">طلبك قيد المراجعة من إدارة المنصة. ستتلقى بيانات الدخول بعد الموافقة على اشتراكك.</p>
             <Link href="/login?role=merchant"><Button variant="outline">العودة لتسجيل الدخول</Button></Link>
           </div>
         </div>
-      </div>
+      </AuthShell>
     )
   }
 
   return (
-    <div className="auth-screen">
+    <AuthShell>
       <div className="auth-card">
         <div className="auth-brand">
-          <span className="material-symbols-outlined">storefront</span>
-          <span>منصة M&K</span>
+          <BrandMark />
+          <span>منصة M&amp;K</span>
         </div>
 
         <div className="auth-stepper">
@@ -103,7 +106,7 @@ export const Register:FunctionalComponent = () => {
             <Fragment key={s.key}>
               <div className="auth-step">
                 <div className={`auth-step-dot${i <= step ? (i < step ? ' auth-step-dot--done' : ' auth-step-dot--active') : ''}`}>
-                  {i < step ? <span className="material-symbols-outlined">check</span> : i + 1}
+                  {i < step ? <Icon name="check" /> : i + 1}
                 </div>
                 <span className={`auth-step-label${i <= step ? ' auth-step-label--active' : ''}`}>{s.label}</span>
               </div>
@@ -134,7 +137,7 @@ export const Register:FunctionalComponent = () => {
             <p className="auth-subtitle">اختر الباقة المناسبة لمتجرك</p>
             {selectedPlan && (
               <div className="plan-selected">
-                <span className="material-symbols-outlined">workspace_premium</span>
+                <Icon name="workspace_premium" />
                 <div>
                   <strong>{selectedPlan.name}</strong>
                   <span className="muted small">
@@ -152,7 +155,7 @@ export const Register:FunctionalComponent = () => {
                 >
                   <div className="plan-card-name">
                     <span>{p.name}</span>
-                    {p.id === selectedPlan?.id && <span className="material-symbols-outlined">check_circle</span>}
+                    {p.id === selectedPlan?.id && <Icon name="check_circle" />}
                   </div>
                   {p.description && <p className="plan-card-desc">{p.description}</p>}
                   <span className="plan-card-price">
@@ -186,6 +189,6 @@ export const Register:FunctionalComponent = () => {
 
         <p className="auth-switch">لديك حساب بالفعل؟ <Link href="/login?role=merchant">سجّل الدخول</Link></p>
       </div>
-    </div>
+    </AuthShell>
   )
 }

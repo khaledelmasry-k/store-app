@@ -109,7 +109,7 @@ export const PlatformDashboard: FunctionalComponent = () => {
         <StatsCard title="إجمالي التجار" value={stores.length} icon="storefront" tone="primary" />
         <StatsCard title="المتاجر النشطة" value={activeStores} icon="store" tone="green" changeLabel={`${suspendedStores} موقوف`} />
         <StatsCard title="الاشتراكات النشطة" value={activeSubs} icon="card_membership" tone="blue" changeLabel={`${pendingSubs} بانتظار`} />
-        <StatsCard title="قريب من الحد" value={nearCount} icon="signal_cellular_connected_no_internet_1_bar" tone="amber" />
+        <StatsCard title="قريب من الحد" value={nearCount} icon="signal_cellular_alt_1_bar" tone="amber" />
         <StatsCard title="استنفد الحد" value={reachedCount} icon="block" tone="red" />
       </div>
 

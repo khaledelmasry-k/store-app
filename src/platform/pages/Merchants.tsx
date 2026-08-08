@@ -162,7 +162,7 @@ export const PlatformMerchants: FunctionalComponent = () => {
         <StatsCard title="إجمالي التجار" value={rows.length} icon="storefront" tone="primary" />
         <StatsCard title="نشط" value={activeCount} icon="check_circle" tone="green" />
         <StatsCard title="بانتظار الاشتراك" value={pendingCount} icon="hourglass" tone="amber" />
-        <StatsCard title="قريب من الحد" value={near} icon="signal_cellular_connected_no_internet_1_bar" tone="amber" changeLabel={`${reached} مستنفد الحد`} />
+        <StatsCard title="قريب من الحد" value={near} icon="signal_cellular_alt_1_bar" tone="amber" changeLabel={`${reached} مستنفد الحد`} />
       </div>
 
       <Card>

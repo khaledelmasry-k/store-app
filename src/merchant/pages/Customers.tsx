@@ -19,6 +19,7 @@ import { customersService } from '../../shared/services/customers'
 import { formatCurrency, formatDate } from '../../shared/utils/format'
 import { GOVER_EG as GOVERNORATES } from '../../shared/utils/constants'
 import type { Customer } from '../../shared/types'
+import { Icon } from '../../shared/components/ui/Icon'
 
 const PAGE_SIZE = 10
 
@@ -119,7 +120,7 @@ export const MerchantCustomers: FunctionalComponent = () => {
                 header: '',
                 render: (c: Customer) => (
                   <button className="icon-btn" onClick={() => openEdit(c)} title="تعديل">
-                    <span className="material-symbols-outlined">edit</span>
+                    <Icon name="edit" />
                   </button>
                 ),
               },

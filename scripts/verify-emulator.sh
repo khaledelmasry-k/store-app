@@ -4,8 +4,13 @@
 set -euo pipefail
 cd "$(dirname "$0")/.."
 
+echo "── Building functions..."
+(cd functions && npm run build)
+
 echo "── Seeding emulator data..."
 node scripts/seed-emulator.mjs
+echo "── Checking icon integrity..."
+node scripts/check-icons.mjs
 
 echo "── Starting vite preview on :4173..."
 npx vite preview --port 4173 --strictPort &

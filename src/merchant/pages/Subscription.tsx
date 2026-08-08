@@ -15,6 +15,7 @@ import {
   usageLevelFor,
 } from '../../shared/utils/constants'
 import type { Subscription, SubscriptionPlan } from '../../shared/types'
+import { Icon } from '../../shared/components/ui/Icon'
 
 function daysUntil(input?: { seconds: number; nanoseconds: number } | null): number | null {
   if (!input) return null
@@ -105,16 +106,16 @@ export const MerchantSubscription: FunctionalComponent = () => {
           <ul className="plan-pricing-features">
             {plan.features.map((f, i) => (
               <li key={i}>
-                <span className="material-symbols-outlined">check_circle</span>
+                <Icon name="check_circle" />
                 {f}
               </li>
             ))}
             <li>
-              <span className="material-symbols-outlined">inventory_2</span>
+              <Icon name="inventory_2" />
               حتى {plan.productLimit} منتج
             </li>
             <li>
-              <span className="material-symbols-outlined">receipt_long</span>
+              <Icon name="receipt_long" />
               {plan.orderLimitPerMonth > 0 ? `حتى ${plan.orderLimitPerMonth} طلب شهرياً` : 'طلبات غير محدودة'}
             </li>
           </ul>

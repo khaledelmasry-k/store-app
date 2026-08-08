@@ -57,7 +57,7 @@ export const PlatformCoupons: FunctionalComponent = () => {
       <PageHeader title="الكوبونات" subtitle={`${coupons.length} كوبون`} actions={<Button icon="add" onClick={() => setOpen(true)}>كوبون جديد</Button>} />
 
       <div className="stats-grid">
-        <StatsCard title="الكوبونات النشطة" value={activeCount} icon="local_offer" tone="green" />
+        <StatsCard title="الكوبونات النشطة" value={activeCount} icon="sell" tone="green" />
         <StatsCard title="منتهية" value={expiredCount} icon="cancel" tone="red" />
         <StatsCard title="إجمالي الكوبونات" value={coupons.length} icon="confirmation_number" tone="primary" />
       </div>
@@ -69,7 +69,7 @@ export const PlatformCoupons: FunctionalComponent = () => {
           onSegmentChange={setStoreId}
         />
         {coupons.length === 0 ? (
-          <EmptyState icon="local_offer" title="لا توجد كوبونات" description={storeId ? 'لا توجد كوبونات لهذا المتجر' : 'لم يتم إنشاء أي كوبونات بعد'} />
+          <EmptyState icon="sell" title="لا توجد كوبونات" description={storeId ? 'لا توجد كوبونات لهذا المتجر' : 'لم يتم إنشاء أي كوبونات بعد'} />
         ) : (
           <Table cardMode
             columns={[

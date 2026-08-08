@@ -1,4 +1,5 @@
 import { FunctionalComponent } from 'preact'
+import { Icon } from './Icon'
 
 interface Props {
   value: string
@@ -8,7 +9,7 @@ interface Props {
 
 export const Search: FunctionalComponent<Props> = ({ value, onChange, placeholder = 'بحث...' }) => (
   <div className="search-box">
-    <span className="material-symbols-outlined search-icon">search</span>
+    <Icon name="search" className="search-icon" />
     <input
       className="input"
       value={value}
@@ -17,7 +18,7 @@ export const Search: FunctionalComponent<Props> = ({ value, onChange, placeholde
     />
     {value && (
       <button className="search-clear" onClick={() => onChange('')} type="button">
-        <span className="material-symbols-outlined">close</span>
+        <Icon name="close" />
       </button>
     )}
   </div>

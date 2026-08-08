@@ -1,6 +1,7 @@
 import { FunctionalComponent } from 'preact'
 import { Link } from 'wouter'
 import { Button } from '../../shared/components/ui/Button'
+import { Icon } from '../../shared/components/ui/Icon'
 
 interface Props {
   title: string
@@ -12,7 +13,7 @@ export const InfoPage: FunctionalComponent<Props> = ({ title, body }) => (
     <header className="landing-header">
       <div className="landing-container landing-header-inner">
         <Link href="/" className="landing-brand">
-          <span className="landing-logo"><span className="material-symbols-outlined">storefront</span></span>
+          <span className="landing-logo"><Icon name="storefront" /></span>
           <span>M&amp;K Store</span>
         </Link>
         <nav className="landing-nav">

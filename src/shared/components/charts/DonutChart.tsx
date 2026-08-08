@@ -1,3 +1,4 @@
+import { Icon } from '../ui/Icon'
 interface Slice {
   label: string
   value: number
@@ -15,7 +16,7 @@ export function DonutChart({ data, size = 160, showLegend = true }: Props) {
   if (total === 0) {
     return (
       <div className="chart-empty">
-        <span className="material-symbols-outlined">donut_small</span>
+        <Icon name="donut_small" />
         <p>لا توجد بيانات</p>
       </div>
     )

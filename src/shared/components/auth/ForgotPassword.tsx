@@ -5,7 +5,10 @@ import { resetPassword } from '../../services/auth'
 import { useToast } from '../../hooks/useToast'
 import { Button } from '../ui/Button'
 import { Input } from '../ui/Input'
+import { BrandMark } from '../brand/BrandMark'
+import { AuthShell } from './AuthShell'
 import { isEmailValid } from '../../utils/validators'
+import { Icon } from '../ui/Icon'
 
 export const ForgotPassword: FunctionalComponent = () => {
   const [email, setEmail] = useState('')
@@ -35,16 +38,16 @@ export const ForgotPassword: FunctionalComponent = () => {
   }
 
   return (
-    <div className="auth-screen">
+    <AuthShell>
       <div className="auth-card">
         <div className="auth-brand">
-          <span className="material-symbols-outlined">lock_reset</span>
+          <BrandMark />
           <span>منصة M&amp;K</span>
         </div>
         <h1 className="auth-title">نسيت كلمة المرور؟</h1>
         {sent ? (
           <div className="order-confirmed mt-2">
-            <div className="big-check"><span className="material-symbols-outlined">mark_email_read</span></div>
+            <div className="big-check"><Icon name="mark_email_read" /></div>
             <p className="auth-subtitle">تم إرسال رابط إعادة تعيين كلمة المرور إلى <strong>{email}</strong>.</p>
             <Link href="/login"><Button variant="outline">العودة لتسجيل الدخول</Button></Link>
           </div>
@@ -72,7 +75,7 @@ export const ForgotPassword: FunctionalComponent = () => {
           </>
         )}
       </div>
-    </div>
+    </AuthShell>
   )
 }
 

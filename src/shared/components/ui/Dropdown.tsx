@@ -1,6 +1,7 @@
 import { FunctionalComponent, Fragment } from 'preact'
 import { useEffect, useRef, useState } from 'preact/hooks'
 import { clsx } from '../../utils/clsx'
+import { Icon } from './Icon'
 
 interface Item {
   label?: string
@@ -45,7 +46,7 @@ export const Dropdown: FunctionalComponent<Props> = ({ trigger, items, align = '
                   item.onClick?.()
                 }}
               >
-                {item.icon && <span className="material-symbols-outlined">{item.icon}</span>}
+                {item.icon && <Icon name={item.icon} />}
                 {item.label}
               </button>
             </Fragment>

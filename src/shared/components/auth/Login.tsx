@@ -6,6 +6,9 @@ import { useAuth } from '../../hooks/useAuth'
 import { useToast } from '../../hooks/useToast'
 import { Button } from '../ui/Button'
 import { Input } from '../ui/Input'
+import { BrandMark } from '../brand/BrandMark'
+import { AuthShell } from './AuthShell'
+import { Icon } from '../ui/Icon'
 
 interface Props {
   role: 'platform' | 'merchant' | 'customer'
@@ -62,11 +65,11 @@ export const Login: FunctionalComponent<Props> = ({ role }) => {
 
   if (pending) {
     return (
-      <div className="auth-screen">
+      <AuthShell>
         <div className="auth-card">
           <div className="order-confirmed">
             <div className="big-check">
-              <span className="material-symbols-outlined">hourglass_top</span>
+              <Icon name="hourglass_top" />
             </div>
             <h1 className="auth-title">الحساب قيد المراجعة</h1>
             <p className="auth-subtitle">
@@ -77,15 +80,15 @@ export const Login: FunctionalComponent<Props> = ({ role }) => {
             </button>
           </div>
         </div>
-      </div>
+      </AuthShell>
     )
   }
 
   return (
-    <div className="auth-screen">
+    <AuthShell>
       <div className="auth-card">
         <div className="auth-brand">
-          <span className="material-symbols-outlined">{meta.icon}</span>
+          <BrandMark />
           <span>{meta.brand}</span>
         </div>
         <h1 className="auth-title">{meta.title}</h1>
@@ -113,6 +116,6 @@ export const Login: FunctionalComponent<Props> = ({ role }) => {
           </p>
         )}
       </div>
-    </div>
+    </AuthShell>
   )
 }

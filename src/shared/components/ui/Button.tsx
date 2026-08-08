@@ -1,5 +1,6 @@
 import { FunctionalComponent } from 'preact'
 import { clsx } from '../../utils/clsx'
+import { Icon } from './Icon'
 
 type Variant = 'primary' | 'secondary' | 'soft' | 'ghost' | 'danger' | 'outline'
 type Size = 'sm' | 'md' | 'lg'
@@ -41,7 +42,7 @@ export const Button: FunctionalComponent<Props> = ({
     title={title}
   >
     {loading && <span className="spinner spinner-sm" />}
-    {!loading && icon && <span className="material-symbols-outlined btn-icon">{icon}</span>}
+    {!loading && icon && <Icon name={icon} className="btn-icon" />}
     {!iconOnly && children}
   </button>
 )

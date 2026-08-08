@@ -16,6 +16,7 @@ import { useToast } from '../../shared/hooks/useToast'
 import { couponsService } from '../../shared/services/billing'
 import { formatCurrency, formatDate } from '../../shared/utils/format'
 import type { Coupon } from '../../shared/types'
+import { Icon } from '../../shared/components/ui/Icon'
 
 export const MerchantCoupons: FunctionalComponent = () => {
   const { store } = useStore()
@@ -65,7 +66,7 @@ export const MerchantCoupons: FunctionalComponent = () => {
             { key: 'usedCount', header: 'الاستخدام', render: (c: Coupon) => `${c.usedCount}${c.maxUses ? ` / ${c.maxUses}` : ''}` },
             { key: 'active', header: 'الحالة', render: (c: Coupon) => <Toggle checked={c.active} onChange={(v) => couponsService.update(c.id, { active: v })} /> },
             { key: 'expiresAt', header: 'الانتهاء', render: (c: Coupon) => <span className="muted">{formatDate(c.expiresAt)}</span> },
-            { key: 'actions', header: '', render: (c: Coupon) => <button className="icon-btn" onClick={() => setDeleteTarget(c)}><span className="material-symbols-outlined">delete</span></button> },
+            { key: 'actions', header: '', render: (c: Coupon) => <button className="icon-btn" onClick={() => setDeleteTarget(c)}><Icon name="delete" /></button> },
           ]}
           rows={coupons}
         />

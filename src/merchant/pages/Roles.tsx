@@ -16,6 +16,7 @@ import { rolesService } from '../../shared/services/system'
 import { PERMISSION_GROUPS, PERMISSION_LABELS, type Permission } from '../../shared/utils/constants'
 import { formatDate } from '../../shared/utils/format'
 import type { RoleDef } from '../../shared/types'
+import { Icon } from '../../shared/components/ui/Icon'
 
 export const RolesTab: FunctionalComponent = () => {
   const { store } = useStore()
@@ -83,7 +84,7 @@ export const RolesTab: FunctionalComponent = () => {
                 ),
               },
               { key: 'createdAt', header: 'التاريخ', render: (r: RoleDef) => <span className="muted">{formatDate(r.createdAt)}</span> },
-              { key: 'actions', header: '', render: (r: RoleDef) => <button className="icon-btn" onClick={() => setDeleteTarget(r)} title="حذف"><span className="material-symbols-outlined">delete</span></button> },
+              { key: 'actions', header: '', render: (r: RoleDef) => <button className="icon-btn" onClick={() => setDeleteTarget(r)} title="حذف"><Icon name="delete" /></button> },
             ]}
             rows={roles}
           />
@@ -98,7 +99,7 @@ export const RolesTab: FunctionalComponent = () => {
             {Object.entries(PERMISSION_GROUPS).map(([key, group]) => (
               <div key={key} className="perm-group">
                 <div className="perm-group-head">
-                  <span className="material-symbols-outlined">{group.icon}</span>
+                  <Icon name={group.icon} />
                   <span>{group.label}</span>
                 </div>
                 <div className="perm-group-items">

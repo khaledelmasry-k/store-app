@@ -1,3 +1,4 @@
+import { Icon } from '../ui/Icon'
 interface Props {
   values: number[]
   labels?: string[]
@@ -10,7 +11,7 @@ export function BarChart({ values, labels, height = 220, color = 'var(--primary)
   if (values.length === 0) {
     return (
       <div className="chart-empty">
-        <span className="material-symbols-outlined">bar_chart</span>
+        <Icon name="bar_chart" />
         <p>لا توجد بيانات</p>
       </div>
     )

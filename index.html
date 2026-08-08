@@ -3,11 +3,12 @@
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
     <title>M&amp;K Store</title>
 
     <style>
       #root { min-height: 100vh; }
-      body { background: #EAEDED; margin: 0; font-family: 'Noto Sans Arabic', sans-serif; }
+      body { background: #EAEDED; margin: 0; font-family: 'IBM Plex Sans Arabic', 'Plus Jakarta Sans', system-ui, sans-serif; }
       #root .splash {
         min-height: 100vh;
         display: flex;
@@ -16,12 +17,18 @@
         justify-content: center;
         text-align: center;
       }
+      #root .splash .splash-mark {
+        width: 64px;
+        height: 64px;
+        margin-bottom: 14px;
+        filter: drop-shadow(0 8px 18px rgba(99, 102, 241, 0.35));
+      }
       #root .splash h1 {
         font-size: 20px;
         font-weight: 800;
         margin: 0 0 8px;
         color: #0F1111;
-        font-family: 'Plus Jakarta Sans', 'Noto Sans Arabic', sans-serif;
+        font-family: 'Plus Jakarta Sans', 'IBM Plex Sans Arabic', sans-serif;
       }
       #root .splash p {
         font-size: 14px;
@@ -32,7 +39,7 @@
         width: 24px;
         height: 24px;
         border: 3px solid #DDDDDD;
-        border-top-color: #FF9900;
+        border-top-color: #6366f1;
         border-radius: 50%;
         animation: spin 0.8s linear infinite;
         margin: 16px auto 0;
@@ -43,7 +50,7 @@
   <body>
     <div id="root">
       <div class="splash">
-        <div style="font-size:40px;margin-bottom:8px">🏪</div>
+        <img class="splash-mark" src="/mk-mark.svg" alt="" aria-hidden="true" />
         <h1>M&amp;K Store</h1>
         <p>جاري التحميل...</p>
         <div class="spinner"></div>

@@ -1,4 +1,5 @@
 import { useId } from 'preact/hooks'
+import { Icon } from '../ui/Icon'
 
 interface Props {
   values: number[]
@@ -12,7 +13,7 @@ export function LineChart({ values, height = 220, color = 'var(--primary)', labe
   if (values.length < 2) {
     return (
       <div className="chart-empty">
-        <span className="material-symbols-outlined">show_chart</span>
+        <Icon name="show_chart" />
         <p>بيانات غير كافية</p>
       </div>
     )

@@ -1,9 +1,10 @@
 import { FunctionalComponent } from 'preact'
-import { useState } from 'preact/hooks'
+import { useMemo, useState } from 'preact/hooks'
 import { Link } from 'wouter'
 import { useStore } from '../../shared/hooks/useStore'
 import { useCart } from '../../shared/hooks/useCart'
 import { useToast } from '../../shared/hooks/useToast'
+import { useCollection } from '../../shared/hooks/useCollection'
 import { Button } from '../../shared/components/ui/Button'
 import { Input } from '../../shared/components/ui/Input'
 import { Select } from '../../shared/components/ui/Select'
@@ -11,6 +12,10 @@ import { Textarea } from '../../shared/components/ui/Textarea'
 import { createOrderCallable } from '../../shared/services/auth'
 import { GOVER_EG } from '../../shared/utils/constants'
 import { formatCurrency, todayKey } from '../../shared/utils/format'
+import { cartSubtotal, lineSubtotal } from '../../shared/utils/pricing'
+import { calculateShipping } from '../../shared/utils/shipping'
+import type { ShippingZone } from '../../shared/types'
+import { Icon } from '../../shared/components/ui/Icon'
 
 export const StoreCheckout: FunctionalComponent = () => {
   const { store } = useStore()
@@ -19,6 +24,16 @@ export const StoreCheckout: FunctionalComponent = () => {
   const [form, setForm] = useState({ customerName: '', phone: '', governorate: '', city: '', address: '', notes: '', paymentMethod: 'cod' })
   const [loading, setLoading] = useState(false)
   const [done, setDone] = useState<{ orderNumber: string } | null>(null)
+
+  const zonesRes = useCollection<ShippingZone>('shipping', { storeId: store?.id || '' })
+  const zones = zonesRes.data || []
+  const subtotal = cartSubtotal(cart.items)
+
+  const quote = useMemo(
+    () => calculateShipping({ store, zones, subtotal, governorate: form.governorate }),
+    [store, zones, subtotal, form.governorate],
+  )
+  const total = subtotal + quote.fee
 
   const submit = async (e: Event) => {
     e.preventDefault()
@@ -31,17 +46,22 @@ export const StoreCheckout: FunctionalComponent = () => {
       // Attribution is keyed by store so a referral from another store can
       // never be attributed to this checkout (tenant isolation).
       const salesLinkRef = store?.id ? sessionStorage.getItem(`mk_sales_ref_${store.id}`) || undefined : undefined
+      const landingPageId = store?.id ? sessionStorage.getItem(`mk_landing_${store.id}`) || undefined : undefined
       const res = await createOrderCallable({
         storeId: store?.id,
-        items: cart.items.map((i) => ({ productId: i.productId, quantity: i.quantity, color: i.color, size: i.size })),
+        items: cart.items.map((i) => ({ productId: i.productId, quantity: i.quantity, color: i.color, size: i.size, variantId: i.variantId })),
         customer: { name: form.customerName, phone: form.phone, governorate: form.governorate, city: form.city, address: form.address, notes: form.notes || '' },
         paymentMethod: form.paymentMethod,
         salesLinkRef,
+        landingPageId,
       })
       const data = res.data as any
       setDone({ orderNumber: data.orderNumber })
       cart.clear()
-      if (store?.id) sessionStorage.removeItem(`mk_sales_ref_${store.id}`)
+      if (store?.id) {
+        sessionStorage.removeItem(`mk_sales_ref_${store.id}`)
+        sessionStorage.removeItem(`mk_landing_${store.id}`)
+      }
       toast.push('تم إرسال طلبك بنجاح')
     } catch (err: any) {
       toast.push('تعذر إرسال الطلب', err?.message || 'تحقق من البيانات', 'error')
@@ -53,7 +73,7 @@ export const StoreCheckout: FunctionalComponent = () => {
   if (done) {
     return (
       <div className="order-confirmed">
-        <div className="big-check"><span className="material-symbols-outlined">check_circle</span></div>
+        <div className="big-check"><Icon name="check_circle" /></div>
         <h1 className="auth-title">تم تأكيد طلبك!</h1>
         <p className="auth-subtitle">رقم طلبك: <strong className="monospace">{done.orderNumber}</strong></p>
         <p className="auth-subtitle">سنتواصل معك لتأكيد الطلب والتوصيل.</p>
@@ -87,8 +107,8 @@ export const StoreCheckout: FunctionalComponent = () => {
               <button type="button" className={`btn ${form.paymentMethod === 'bank' ? 'btn-primary' : 'btn-outline'}`} onClick={() => setForm({ ...form, paymentMethod: 'bank' })}>تحويل بنكي</button>
             </div>
           </div>
-          <Button type="submit" block size="lg" loading={loading} icon="checkout">
-            تأكيد الطلب — {formatCurrency(cart.subtotal)}
+          <Button type="submit" block size="lg" loading={loading} icon="shopping_cart_checkout">
+            تأكيد الطلب — {formatCurrency(total)}
           </Button>
         </form>
         <div className="order-summary">
@@ -96,10 +116,16 @@ export const StoreCheckout: FunctionalComponent = () => {
           {cart.items.map((item, i) => (
             <div key={i} className="summary-row">
               <span>{item.name} × {item.quantity}</span>
-              <span>{formatCurrency(item.price * item.quantity)}</span>
+              <span>{formatCurrency(lineSubtotal(item))}</span>
             </div>
           ))}
-          <div className="summary-row total"><span>الإجمالي</span><span>{formatCurrency(cart.subtotal)}</span></div>
+          <div className="summary-row"><span>الإجمالي الفرعي</span><span>{formatCurrency(subtotal)}</span></div>
+          <div className="summary-row">
+            <span>الشحن {quote.method ? `(${quote.method})` : ''}</span>
+            <span>{quote.freeDelivery ? 'مجاني' : formatCurrency(quote.fee)}</span>
+          </div>
+          <div className="summary-row total"><span>الإجمالي</span><span>{formatCurrency(total)}</span></div>
+          {quote.policy && <p className="muted small mt-1">{quote.policy}</p>}
           <p className="muted small mt-1">تاريخ اليوم: {todayKey()}</p>
         </div>
       </div>

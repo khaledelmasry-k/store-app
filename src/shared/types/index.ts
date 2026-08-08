@@ -25,6 +25,36 @@ export interface StoreTheme {
   primary: string
   secondary?: string
   darkMode: boolean
+  /** Selected storefront template id (see shared/utils/themes.ts). */
+  template?: string
+}
+
+/** Shipping provider a store works with (e.g. Aramex, Bosta, local courier). */
+export interface ShippingProvider {
+  id: string
+  name: string
+  /** Flat fee charged by this provider (fallback when no zone matches). */
+  fee: number
+  estimatedDays?: string
+  active: boolean
+}
+
+export type ShippingModel = 'flat' | 'zones'
+
+/** Per-store shipping configuration. */
+export interface StoreShipping {
+  /** Master switch — when false, no shipping fee is charged at checkout. */
+  enabled: boolean
+  /** flat = single flat fee; zones = per-governorate shipping zones. */
+  model: ShippingModel
+  /** Flat fee used when model === 'flat'. */
+  flatFee: number
+  /** Free shipping above this subtotal (0/undefined = disabled). */
+  freeAbove?: number
+  /** Policy shown at checkout for refused deliveries. */
+  refusedPolicy?: string
+  /** Preferred shipping providers used by this store. */
+  providers?: ShippingProvider[]
 }
 
 export interface Store extends Partial<FirestoreMeta> {
@@ -44,6 +74,7 @@ export interface Store extends Partial<FirestoreMeta> {
   seoTitle?: string
   seoDescription?: string
   theme: StoreTheme
+  shipping?: StoreShipping
 }
 
 export interface Category extends Partial<FirestoreMeta> {
@@ -55,11 +86,40 @@ export interface Category extends Partial<FirestoreMeta> {
   active: boolean
 }
 
-export interface ProductVariant {
-  color: string
-  size: string
-  stock: number
+/** A color the merchant can assign to a product, optionally mapped to images. */
+export interface ColorOption {
+  id: string
+  name: string
+  hex: string
+  /** Index into `Product.images` — the image shown when this color is selected. */
+  imageIndex?: number
+  /** All image indexes valid for this color (defaults to `imageIndex`). */
+  imageIndexes?: number[]
 }
+
+export interface ProductVariant {
+  /** Stable variant id (nanoid for new products; legacy: `${color}|${size}`). */
+  id?: string
+  color?: string
+  /** Links the variant to a ColorOption when present. */
+  colorId?: string
+  size?: string
+  sku?: string
+  /** Optional per-variant price — falls back to the product price. */
+  price?: number
+  stock: number
+  /** Index into `Product.images` for a variant-specific image. */
+  imageIndex?: number
+}
+
+/** One quantity-pricing tier. `maxQuantity: null` means "from minQuantity upward". */
+export interface QuantityTier {
+  minQuantity: number
+  maxQuantity: number | null
+  price: number
+}
+
+export type PricingMode = 'standard' | 'quantity'
 
 export interface Product extends Partial<FirestoreMeta> {
   id: string
@@ -75,9 +135,25 @@ export interface Product extends Partial<FirestoreMeta> {
   variants: ProductVariant[]
   colors: string[]
   sizes: string[]
+  /** Rich color definitions (name/hex/image mapping). Legacy products omit this. */
+  colorOptions?: ColorOption[]
+  /** Pricing mode — 'standard' (unit price) or 'quantity' (tiered bulk pricing). */
+  pricingMode?: PricingMode
+  /** Quantity tiers, used when `pricingMode === 'quantity'`. */
+  quantityTiers?: QuantityTier[]
   active: boolean
   featured?: boolean
   lowStockThreshold?: number
+}
+
+/** Variant display label, e.g. "أسود / M". */
+export function variantLabel(color?: string | null, size?: string | null): string {
+  return [color, size].filter(Boolean).join(' / ')
+}
+
+/** Deterministic fallback variant id for legacy variants without an explicit id. */
+export function legacyVariantId(color?: string | null, size?: string | null): string {
+  return `${color || ''}|${size || ''}`
 }
 
 export type OrderStatus =
@@ -97,6 +173,21 @@ export interface OrderItem {
   quantity: number
   color?: string
   size?: string
+  /** Exact variant id when the customer selected a variant. */
+  variantId?: string
+  /** Unit price actually charged (may differ from base price under quantity pricing). */
+  unitPrice?: number
+  /** Pricing snapshot — 'standard' or 'quantity'. */
+  pricingMode?: PricingMode
+}
+
+/** Snapshot of the shipping calculation at order time. */
+export interface ShippingSnapshot {
+  enabled: boolean
+  model?: ShippingModel
+  freeDelivery?: boolean
+  providerId?: string | null
+  zoneId?: string | null
 }
 
 export interface Order extends Partial<FirestoreMeta> {
@@ -113,6 +204,10 @@ export interface Order extends Partial<FirestoreMeta> {
   items: OrderItem[]
   subtotal: number
   shippingFee: number
+  /** Shipping method label captured at order time. */
+  shippingMethod?: string
+  /** Snapshot of the shipping configuration/quote at order time. */
+  shippingSnapshot?: ShippingSnapshot
   discount: number
   totalPrice: number
   status: OrderStatus
@@ -122,6 +217,7 @@ export interface Order extends Partial<FirestoreMeta> {
   salesLinkRef?: string | null
   salesLinkId?: string | null
   salesLinkStaffId?: string | null
+  salesLinkSnapshot?: SalesLinkSnapshot | null
 }
 
 export interface Customer extends Partial<FirestoreMeta> {
@@ -246,6 +342,8 @@ export interface ShippingZone extends Partial<FirestoreMeta> {
   governorates: string[]
   fee: number
   freeAbove?: number
+  estimatedDays?: string
+  providerId?: string
   active: boolean
 }
 
@@ -305,18 +403,62 @@ export interface DailyAnalytics extends Partial<FirestoreMeta> {
   byStatus: Record<string, number>
 }
 
+export type StoreLinkDestinationType = 'home' | 'catalog' | 'product' | 'landing' | 'custom'
+
 export interface StoreLink extends Partial<FirestoreMeta> {
   id: string
   storeId: string
+  /** Short unique code used in the public `/s/:code` URL. */
   code: string
+  /** Display name (e.g. "رابط فيسبوك لمحمود"). */
+  name: string
   title: string
   active: boolean
+  /** Hidden from the storefront + redirect (soft-delete). */
+  archived?: boolean
   visits: number
   ordersCount?: number
   totalRevenue?: number
   sellerName?: string
   staffId?: string
+  /** Where the link should take visitors. */
+  destinationType: StoreLinkDestinationType
+  /** Product id / landing page id / custom URL depending on destinationType. */
+  destinationId?: string
+  /** Campaign/tracking metadata (UTM-ish). */
+  source?: string
+  campaign?: string
+  content?: string
   createdBy: string
+}
+
+/** Snapshot of the sales link captured on the order at creation time. */
+export interface SalesLinkSnapshot {
+  code: string
+  title?: string
+  sellerName?: string
+  destinationType?: StoreLinkDestinationType
+}
+
+export type LandingPageStatus = 'draft' | 'published'
+
+export interface LandingHero {
+  image?: string
+  title: string
+  subtitle?: string
+  ctaText?: string
+}
+
+export interface LandingSectionItem {
+  title?: string
+  body?: string
+}
+
+export interface LandingSection {
+  type: 'features' | 'steps' | 'testimonials' | 'faq' | 'cta'
+  title?: string
+  body?: string
+  items?: LandingSectionItem[]
 }
 
 export interface LandingPage extends Partial<FirestoreMeta> {
@@ -324,10 +466,19 @@ export interface LandingPage extends Partial<FirestoreMeta> {
   storeId: string
   slug: string
   title: string
-  subtitle?: string
-  heroImage?: string
-  ctaText?: string
-  sections: { type: 'hero' | 'features' | 'cta' | 'testimonials'; title?: string; body?: string }[]
+  status: LandingPageStatus
+  /** Storefront template id used for rendering (see shared/utils/themes.ts). */
+  template: string
+  /** Featured product shown in the embedded QuickBuy panel. */
+  productId?: string | null
+  hero: LandingHero
+  seo?: { title?: string; description?: string }
+  sections: LandingSection[]
+  views: number
+  /** DELIVERED-only orders attributed to this page. */
+  ordersCount: number
+  /** DELIVERED-only revenue attributed to this page. */
+  totalRevenue: number
   active: boolean
 }
 
@@ -386,6 +537,12 @@ export interface CartLine {
   quantity: number
   color?: string
   size?: string
+  /** Exact variant id — used to merge/keep distinct variants in the cart. */
+  variantId?: string
+  /** Pricing mode snapshot at add-time — used to recompute line totals with quantity pricing. */
+  pricingMode?: PricingMode
+  /** Quantity tiers snapshot at add-time. */
+  quantityTiers?: QuantityTier[]
 }
 
 export interface ApiResult<T> {

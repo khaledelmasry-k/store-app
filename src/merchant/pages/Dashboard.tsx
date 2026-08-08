@@ -21,6 +21,7 @@ import { storePublicUrl } from '../../shared/utils/store-url'
 import { STATUS_LABELS, STATUS_COLORS } from '../../shared/utils/constants'
 import { storesService } from '../../shared/services/stores'
 import type { Order, Product, StoreLink, Subscription, SubscriptionPlan } from '../../shared/types'
+import { Icon } from '../../shared/components/ui/Icon'
 
 interface ChecklistStep {
   done: boolean
@@ -87,6 +88,10 @@ export const MerchantDashboard: FunctionalComponent = () => {
   const copyLink = async () => {
     if (!store) return
     const url = storePublicUrl(store)
+    if (!url) {
+      toast.push('رابط المتجر غير متاح بعد', 'حدد رابطاً صالحاً للمتجر من الإعدادات أولاً', 'error')
+      return
+    }
     try {
       await navigator.clipboard.writeText(url)
       toast.push('تم نسخ الرابط', url, 'success')
@@ -127,8 +132,10 @@ export const MerchantDashboard: FunctionalComponent = () => {
         subtitle="نظرة عامة على أداء متجرك اليوم"
         actions={
           store && (
-            <div className="flex flex-gap-sm">
-              <Button variant="ghost" icon="link" onClick={copyLink}>نسخ الرابط</Button>
+            <div className="flex flex-gap-sm flex-wrap">
+              <Button variant="ghost" icon="link" onClick={copyLink} disabled={!storePublicUrl(store)} title={!storePublicUrl(store) ? 'رابط المتجر غير متاح بعد' : undefined}>
+                نسخ الرابط
+              </Button>
               <a href={`/store/${store.slug}`} target="_blank" rel="noreferrer">
                 <Button variant="outline" icon="store">عرض المتجر</Button>
               </a>
@@ -138,11 +145,18 @@ export const MerchantDashboard: FunctionalComponent = () => {
       />
 
       <Card title={allDone ? 'متجرك جاهز' : 'ابدأ تشغيل متجرك'} subtitle={allDone ? 'أنجزت كل خطوات الإطلاق' : 'أكمل الخطوات التالية لنشر متجرك'} className="mb-2">
+        <div className="list-row mb-1" style={{ paddingBottom: 12, borderBottom: '1px solid var(--border)' }}>
+          <div>
+            <span className="font-semibold">حالة المتجر</span>
+            <div className="muted small">{store?.published ? 'متجرك منشور ويمكنه استقبال الطلبات' : 'المتجر مسودة — غير متاح للشراء بعد'}</div>
+          </div>
+          {store?.published ? <Badge tone="green">🟢 منشور</Badge> : <Badge tone="amber">🟡 مسودة</Badge>}
+        </div>
         <div className="checklist">
           {steps.map((s, i) => (
             <div key={i} className={`checklist-item ${s.done ? 'checklist-item--done' : ''}`}>
               <span className={`checklist-mark ${s.done ? 'checklist-mark--done' : ''}`}>
-                <span className="material-symbols-outlined">{s.done ? 'check' : i + 1}</span>
+                {s.done ? <Icon name="check" /> : i + 1}
               </span>
               <div className="grow">
                 <div className="font-semibold">{s.label}</div>
@@ -158,23 +172,26 @@ export const MerchantDashboard: FunctionalComponent = () => {
           {allDone && store && (
             <div className="checklist-item">
               <span className="checklist-mark checklist-mark--done">
-                <span className="material-symbols-outlined">link</span>
+                <Icon name="link" />
               </span>
               <div className="grow">
                 <div className="font-semibold">شارك رابط متجرك</div>
-                <div className="muted small">{storePublicUrl(store)}</div>
+                <div className="muted small" dir="ltr">{storePublicUrl(store) || 'لم يتم إنشاء رابط المتجر بعد'}</div>
               </div>
-              <Button variant="soft" size="sm" icon="link" onClick={copyLink}>نسخ</Button>
+              <Button variant="soft" size="sm" icon="link" onClick={copyLink} disabled={!storePublicUrl(store)} title={!storePublicUrl(store) ? 'رابط المتجر غير متاح بعد' : undefined}>نسخ</Button>
             </div>
           )}
         </div>
         {store && isOwner && (
-          <div className="list-row mt-2" style={{ paddingTop: 12, borderTop: '1px solid var(--border)' }}>
+          <div className="flex-between mt-2" style={{ paddingTop: 12, borderTop: '1px solid var(--border)' }}>
             <div>
               <span className="font-semibold">نشر المتجر</span>
               <div className="muted small">{store.published ? 'متجرك ظاهر للعملاء ويمكنه استقبال الطلبات' : 'الطلبات متوقفة حتى نشر المتجر'}</div>
             </div>
-            <Toggle checked={!!store.published} onChange={togglePublish} disabled={publishing} label="منشور" />
+            <div className="flex" style={{ gap: 12, alignItems: 'center' }}>
+              <Link href="/dashboard/themes"><Button variant="ghost" size="sm" icon="palette">المظهر والقالب</Button></Link>
+              <Toggle checked={!!store.published} onChange={togglePublish} disabled={publishing} label="منشور" />
+            </div>
           </div>
         )}
       </Card>

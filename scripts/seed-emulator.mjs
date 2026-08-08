@@ -25,6 +25,7 @@ const COLLECTIONS = [
   'plans', 'users', 'stores', 'subscriptions', 'orders', 'products', 'customers',
   'analytics', 'transactions', 'payments', 'coupons', 'categories', 'storeLinks',
   'notifications', 'auditLogs', 'shipping', 'team', 'roles', 'invitations',
+  'landingPages',
 ]
 
 async function wipe() {
@@ -183,6 +184,21 @@ async function seedAnalytics(storeId, perDayOrders, perDayRevenue, days = 14) {
   }
 }
 
+async function createShipping(storeId, name, governorates, fee, opts = {}) {
+  const ref = await db.collection('shipping').add({
+    storeId,
+    name,
+    governorates,
+    fee,
+    freeAbove: opts.freeAbove || undefined,
+    estimatedDays: opts.estimatedDays || '3-5 أيام',
+    providerId: opts.providerId || '',
+    active: opts.active ?? true,
+    createdAt: ts(), updatedAt: ts(), createdBy: 'seed',
+  })
+  return ref.id
+}
+
 async function main() {
   console.log(`Seeding project "${projectId}" (emulator)...`)
   await wipe()
@@ -208,6 +224,22 @@ async function main() {
     seoTitle: 'بيت الشاي — متجر شاي وقهوة',
     seoDescription: 'تشكيلة واسعة من الشاي والقهوة وأدوات التحضير بتوصيل سريع.',
   })
+  await db.collection('stores').doc('store-a').update({
+    shipping: {
+      enabled: true,
+      model: 'zones',
+      flatFee: 0,
+      freeAbove: 800,
+      refusedPolicy: 'في حالة رفض الاستلام يتم تحميل العميل رسوم شحن ذهاب وإياب بقيمة ٦٠ جنيهاً.',
+      providers: [
+        { id: 'p-bosta', name: 'بوستة', fee: 35, estimatedDays: '2-4 أيام', active: true },
+        { id: 'p-aramex', name: 'أرامكس', fee: 45, estimatedDays: '1-3 أيام', active: false },
+      ],
+    },
+  })
+  await createShipping('store-a', 'القاهرة الكبرى', ['القاهرة', 'الجيزة', 'القليوبية'], 40, { freeAbove: 800 })
+  await createShipping('store-a', 'الإسكندرية والساحل', ['الإسكندرية', 'مطروح'], 50, { freeAbove: 800 })
+  await createShipping('store-a', 'بقية المحافظات', ['الدقهلية', 'الشرقية', 'الغربية', 'المنوفية', 'كفر الشيخ', 'البحيرة', 'دمياط', 'بورسعيد', 'الإسماعيلية', 'السويس', 'الفيوم', 'بني سويف', 'المنيا', 'أسيوط', 'سوهاج', 'قنا', 'الأقصر', 'أسوان', 'البحر الأحمر', 'الوادي الجديد', 'شمال سيناء', 'جنوب سيناء'], 70, { freeAbove: 800 })
   await createSubscription('store-a', 'plan-growth', 'active', {
     planName: 'النمو',
     startedAt: new Date(Date.now() - 12 * 86400000),
@@ -230,6 +262,117 @@ async function main() {
   await createCustomer('store-a', 'منى خليل', '01000000004', 1, 320)
   await seedAnalytics('store-a', 6, 1200)
 
+  // Sales links for store A — one to home, one to a product.
+  await db.collection('storeLinks').add({
+    storeId: 'store-a',
+    code: 'ahmed',
+    name: 'رابط أحمد',
+    title: 'رابط أحمد',
+    sellerName: 'أحمد',
+    destinationType: 'home',
+    destinationId: null,
+    source: 'facebook',
+    campaign: 'حملة رمضان',
+    content: 'ad-1',
+    active: true,
+    archived: false,
+    visits: 42,
+    ordersCount: 3,
+    totalRevenue: 540,
+    createdAt: ts(), updatedAt: ts(), createdBy: 'seed',
+  })
+  await db.collection('storeLinks').add({
+    storeId: 'store-a',
+    code: 'teashop',
+    name: 'رابط منتج الشاي',
+    title: 'رابط منتج الشاي',
+    sellerName: 'منى',
+    destinationType: 'product',
+    destinationId: p1,
+    source: 'instagram',
+    campaign: '',
+    content: '',
+    active: true,
+    archived: false,
+    visits: 18,
+    ordersCount: 1,
+    totalRevenue: 180,
+    createdAt: ts(), updatedAt: ts(), createdBy: 'seed',
+  })
+
+  // Landing pages for store A.
+  await db.collection('landingPages').add({
+    storeId: 'store-a',
+    slug: 'tea-ramadan',
+    title: 'عرض رمضان — شاي وقهوة',
+    template: 'modern',
+    status: 'published',
+    active: true,
+    productId: p1,
+    hero: {
+      title: 'تخفيضات رمضان على الشاي والقهوة',
+      subtitle: 'تشكيلة مختارة من أجود أنواع الشاي بأسعار خاصة لفترة محدودة.',
+      image: '',
+      ctaText: 'اطلب الآن',
+    },
+    seo: { title: 'عرض رمضان — بيت الشاي', description: 'عروض رمضان على الشاي والقهوة' },
+    sections: [
+      {
+        type: 'features',
+        title: 'لماذا تختارنا؟',
+        body: '',
+        items: [
+          { title: 'جودة فاخرة', body: 'منتجات مختارة بعناية من أفضل الموردين' },
+          { title: 'توصيل سريع', body: 'نوصل لجميع المحافظات خلال أيام قليلة' },
+          { title: 'دفع عند الاستلام', body: 'ادفع بسهولة عند استلام طلبك' },
+        ],
+      },
+      {
+        type: 'steps',
+        title: 'كيف تطلب؟',
+        body: '',
+        items: [
+          { title: 'اختر الكمية', body: 'حدد عدد العلب التي تريدها' },
+          { title: 'أدخل بياناتك', body: 'الاسم ورقم الهاتف والعنوان' },
+          { title: 'استلم طلبك', body: 'ادفع عند الاستلام وتمتع بطلبك' },
+        ],
+      },
+      {
+        type: 'faq',
+        title: 'أسئلة شائعة',
+        body: '',
+        items: [
+          { title: 'هل الدفع عند الاستلام متاح؟', body: 'نعم، الدفع عند الاستلام متاح لجميع المحافظات.' },
+          { title: 'كم تستغرق مدة التوصيل؟', body: 'من 2 إلى 4 أيام حسب المحافظة.' },
+        ],
+      },
+    ],
+    views: 128,
+    ordersCount: 4,
+    totalRevenue: 720,
+    createdAt: ts(), updatedAt: ts(), createdBy: 'seed',
+  })
+  await db.collection('landingPages').add({
+    storeId: 'store-a',
+    slug: 'coffee-coming-soon',
+    title: 'قهوة مختصة — قريباً',
+    template: 'beauty',
+    status: 'draft',
+    active: true,
+    productId: p2,
+    hero: {
+      title: 'قهوة مختصة',
+      subtitle: 'صفحة قيد الإعداد للقهوة المختصة.',
+      image: '',
+      ctaText: 'اشترك الآن',
+    },
+    sections: [],
+    views: 0,
+    ordersCount: 0,
+    totalRevenue: 0,
+    createdAt: ts(), updatedAt: ts(), createdBy: 'seed',
+  })
+
   // Store B — active starter plan, published, near limit
   const bUid = 'seed-owner-b'
   await createUser(bUid, 'owner@b.store', 'Owner12345', 'نور الشاذلي', 'merchant', ['store-b'])
@@ -238,6 +381,16 @@ async function main() {
     primary: '#0284c7',
     secondary: '#f43f5e',
     description: 'أحذية رياضية وعصريّة للرجال والنساء بأسعار منافسة.',
+  })
+  await db.collection('stores').doc('store-b').update({
+    shipping: {
+      enabled: true,
+      model: 'flat',
+      flatFee: 30,
+      freeAbove: 0,
+      refusedPolicy: '',
+      providers: [],
+    },
   })
   await createSubscription('store-b', 'plan-starter', 'active', {
     planName: 'البداية',

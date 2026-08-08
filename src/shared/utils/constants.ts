@@ -69,7 +69,7 @@ export const PERMISSION_GROUPS: Record<string, { label: string; icon: string; pe
   reports: { label: 'التقارير', icon: 'bar_chart', permissions: ['reports:view'] },
   team: { label: 'الفريق والصلاحيات', icon: 'group_add', permissions: ['team:view', 'team:invite', 'team:manage_roles', 'team:delete'] },
   settings: { label: 'الإعدادات', icon: 'settings', permissions: ['settings:view', 'settings:edit'] },
-  coupons: { label: 'الكوبونات', icon: 'local_offer', permissions: ['coupons:manage'] },
+  coupons: { label: 'الكوبونات', icon: 'sell', permissions: ['coupons:manage'] },
   landing: { label: 'صفحات الهبوط', icon: 'web', permissions: ['landing:manage'] },
 }
 
@@ -87,6 +87,7 @@ export const ROUTE_PERMISSIONS: Record<string, Permission> = {
   '/dashboard/notifications': 'settings:view',
   '/dashboard/tickets': 'settings:view',
   '/dashboard/subscription': 'settings:view',
+  '/dashboard/themes': 'settings:edit',
   '/dashboard/settings': 'settings:view',
 }
 
@@ -295,7 +296,7 @@ export const NAV_GROUPS: Record<'platform' | 'dashboard', NavGroup[]> = {
         { to: '/platform/subscriptions', label: 'الاشتراكات', icon: 'card_membership' },
         { to: '/platform/plans', label: 'الخطط والباقات', icon: 'workspace_premium' },
         { to: '/platform/payments', label: 'المدفوعات والمعاملات', icon: 'payments' },
-        { to: '/platform/coupons', label: 'الكوبونات', icon: 'local_offer' },
+        { to: '/platform/coupons', label: 'الكوبونات', icon: 'sell' },
       ],
     },
     {
@@ -350,7 +351,7 @@ export const NAV_GROUPS: Record<'platform' | 'dashboard', NavGroup[]> = {
       label: 'التسويق',
       icon: 'campaign',
       items: [
-        { to: '/dashboard/coupons', label: 'كوبونات', icon: 'local_offer', permission: 'coupons:manage' },
+        { to: '/dashboard/coupons', label: 'كوبونات', icon: 'sell', permission: 'coupons:manage' },
         { to: '/dashboard/store-links', label: 'روابط البيع', icon: 'link', permission: 'sales_links:view' },
         { to: '/dashboard/landing-pages', label: 'صفحات الهبوط', icon: 'web', permission: 'landing:manage' },
       ],
@@ -369,6 +370,7 @@ export const NAV_GROUPS: Record<'platform' | 'dashboard', NavGroup[]> = {
       icon: 'settings',
       items: [
         { to: '/dashboard/settings', label: 'إعدادات المتجر', icon: 'settings', permission: 'settings:edit' },
+        { to: '/dashboard/themes', label: 'المظهر والقالب', icon: 'palette', permission: 'settings:edit' },
         { to: '/dashboard/shipping', label: 'الشحن والتوصيل', icon: 'local_shipping', permission: 'settings:edit' },
         { to: '/dashboard/team', label: 'الفريق والصلاحيات', icon: 'group_add', permission: 'team:view' },
         { to: '/dashboard/subscription', label: 'الاشتراك', icon: 'card_membership', permission: 'settings:view' },

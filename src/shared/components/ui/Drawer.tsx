@@ -1,6 +1,7 @@
 import { FunctionalComponent, Fragment } from 'preact'
 import { useEffect } from 'preact/hooks'
 import { clsx } from '../../utils/clsx'
+import { Icon } from './Icon'
 
 interface Props {
   open: boolean
@@ -8,9 +9,10 @@ interface Props {
   title: string
   children?: any
   side?: 'right' | 'left'
+  size?: 'md' | 'lg'
 }
 
-export const Drawer: FunctionalComponent<Props> = ({ open, onClose, title, children, side = 'right' }) => {
+export const Drawer: FunctionalComponent<Props> = ({ open, onClose, title, children, side = 'right', size = 'md' }) => {
   useEffect(() => {
     if (!open) return
     const onKey = (e: KeyboardEvent) => {
@@ -28,11 +30,11 @@ export const Drawer: FunctionalComponent<Props> = ({ open, onClose, title, child
   return (
     <Fragment>
       <div className="modal-backdrop" onClick={onClose} />
-      <div className={clsx('drawer', `drawer-${side}`)} role="dialog" aria-modal="true">
+      <div className={clsx('drawer', `drawer-${side}`, size === 'lg' && 'drawer-lg')} role="dialog" aria-modal="true">
         <div className="modal-head">
           <h3 className="modal-title">{title}</h3>
           <button className="icon-btn" onClick={onClose} type="button">
-            <span className="material-symbols-outlined">close</span>
+            <Icon name="close" />
           </button>
         </div>
         <div className="drawer-body">{children}</div>

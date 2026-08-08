@@ -17,12 +17,71 @@ function tsFromDate(d: Date) {
   return Timestamp.fromDate(d)
 }
 
+// Mirrors src/shared/utils/pricing.ts (client). Functions is a separate
+// package, so tier resolution is duplicated here on purpose and must stay in
+// sync. Never accept a client-supplied price.
+function tierForQuantity(tiers: any[] | null | undefined, qty: number): any | null {
+  if (!tiers || tiers.length === 0 || qty < 1) return null
+  const sorted = [...tiers].sort((a, b) => Number(a.minQuantity) - Number(b.minQuantity))
+  for (const t of sorted) {
+    if (qty >= Number(t.minQuantity) && (t.maxQuantity == null || qty <= Number(t.maxQuantity))) return t
+  }
+  const last = sorted[sorted.length - 1]
+  if (last && last.maxQuantity != null && qty > Number(last.maxQuantity)) return last
+  return null
+}
+
+function unitPriceForQty(basePrice: number, qty: number, pricingMode?: string | null, tiers?: any[] | null): number {
+  if (pricingMode === 'quantity') {
+    const tier = tierForQuantity(tiers, qty)
+    if (tier && typeof tier.price === 'number') return tier.price
+  }
+  return basePrice || 0
+}
+
 async function getUserRole(uid: string): Promise<string | null> {
   try {
     const snap = await db.doc(`users/${uid}`).get()
     return snap.exists ? (snap.data()?.role as string) || null : null
   } catch {
     return null
+  }
+}
+
+// Mirrors src/shared/utils/shipping.ts (client). Never trust a client-supplied
+// shipping fee — recompute from the stored store config + zones.
+function isFreeShipping(threshold: number | undefined | null, subtotal: number) {
+  return !!threshold && threshold > 0 && subtotal >= threshold
+}
+
+function computeShippingFee(cfg: any, zones: any[], subtotal: number, governorate: string): { fee: number; method: string; policy: string; snapshot: any } {
+  if (!cfg?.enabled) return { fee: 0, method: '', policy: cfg?.refusedPolicy || '', snapshot: { enabled: false } }
+  if (isFreeShipping(cfg.freeAbove, subtotal)) {
+    return { fee: 0, method: 'توصيل مجاني', policy: cfg.refusedPolicy || '', snapshot: { enabled: true, model: cfg.model, freeDelivery: true } }
+  }
+  if (cfg.model === 'flat') {
+    const provider = Array.isArray(cfg.providers) ? cfg.providers.find((p: any) => p.active) : null
+    const fee = provider?.fee ?? cfg.flatFee ?? 0
+    return {
+      fee,
+      method: provider?.name || 'شحن',
+      policy: cfg.refusedPolicy || '',
+      snapshot: { enabled: true, model: 'flat', providerId: provider?.id || null },
+    }
+  }
+  // zones model
+  const zone = (zones || []).find((z: any) => z.active && Array.isArray(z.governorates) && z.governorates.includes(governorate))
+  if (!zone) {
+    return { fee: 0, method: 'الشحن غير متوفر لهذه المنطقة', policy: cfg.refusedPolicy || '', snapshot: { enabled: true, model: 'zones', zoneId: null } }
+  }
+  if (isFreeShipping(zone.freeAbove, subtotal)) {
+    return { fee: 0, method: `${zone.name} — توصيل مجاني`, policy: cfg.refusedPolicy || '', snapshot: { enabled: true, model: 'zones', zoneId: zone.id, freeDelivery: true } }
+  }
+  return {
+    fee: zone.fee || 0,
+    method: zone.name || 'شحن',
+    policy: cfg.refusedPolicy || '',
+    snapshot: { enabled: true, model: 'zones', zoneId: zone.id },
   }
 }
 
@@ -84,20 +143,22 @@ async function assertStoreAccess(request: CallableRequest, storeId: string, perm
   throw new HttpsError('permission-denied', 'صلاحيات غير كافية')
 }
 
-async function bumpAnalytics(storeId: string, order: { totalPrice: number; status: string }) {
+async function bumpAnalytics(storeId: string, opts: { totalPrice?: number; status?: string; countOrder?: boolean; revenueDelta?: number }) {
   const d = new Date()
   const key = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`
   const ref = db.doc(`analytics/${storeId}_${key}`)
+  const countOrder = opts.countOrder ?? false
+  const revenueDelta = opts.revenueDelta ?? (opts.status === 'DELIVERED' ? (opts.totalPrice || 0) : 0)
   await db.runTransaction(async (tx) => {
     const snap = await tx.get(ref)
     const prev = (snap.exists ? snap.data() : {}) || {}
     const byStatus = { ...(prev.byStatus || {}) }
-    byStatus[order.status] = (byStatus[order.status] || 0) + 1
+    if (opts.status) byStatus[opts.status] = (byStatus[opts.status] || 0) + 1
     tx.set(ref, {
       storeId,
       date: key,
-      orders: (prev.orders || 0) + 1,
-      revenue: FieldValue.increment(order.totalPrice),
+      orders: (prev.orders || 0) + (countOrder ? 1 : 0),
+      revenue: FieldValue.increment(revenueDelta),
       newCustomers: prev.newCustomers || 0,
       byStatus,
       updatedAt: now(),
@@ -143,7 +204,7 @@ export const generateOrderNumber = onCall(async (request: CallableRequest<{ stor
 // 2. createOrder — atomic stock deduction + order creation
 // ─────────────────────────────────────────────────────────────
 export const createOrder = onCall(async (request: CallableRequest<any>) => {
-  const { storeId, items, customer, paymentMethod, salesLinkRef } = request.data || {}
+  const { storeId, items, customer, paymentMethod, salesLinkRef, landingPageId } = request.data || {}
   if (!storeId || !Array.isArray(items) || items.length === 0) throw new HttpsError('invalid-argument', 'بيانات الطلب غير مكتملة')
   if (!customer?.name || !customer?.phone) throw new HttpsError('invalid-argument', 'بيانات العميل مطلوبة')
 
@@ -185,11 +246,24 @@ export const createOrder = onCall(async (request: CallableRequest<any>) => {
 
   const orderId = db.collection('orders').doc().id
 
+  const storeData = storeSnap.data()!
+  const shippingCfg = storeData.shipping
+  // Pre-fetch zones for the zones shipping model. All reads must happen before
+  // any writes within the transaction, and the subtotal is only known mid-tx,
+  // so zones are fetched up-front and matched inside the transaction.
+  const zonesSnap = shippingCfg?.enabled && shippingCfg?.model === 'zones'
+    ? await db.collection('shipping').where('storeId', '==', storeId).where('active', '==', true).get()
+    : null
+  const zones = zonesSnap ? zonesSnap.docs.map((d) => ({ ...d.data(), id: d.id })) : []
+
   const result = await db.runTransaction(async (tx) => {
     const lineItems: any[] = []
     let subtotal = 0
     let salesLinkId: string | null = null
     let salesLinkStaffId: string | null = null
+    let salesLinkSnapshot: any = null
+    let landingPageSnapshot: any = null
+    let shippingSnapshot: any = { enabled: false }
 
     // Read the order counter first — Firestore requires all reads to happen
     // before any writes within a transaction.
@@ -211,28 +285,55 @@ export const createOrder = onCall(async (request: CallableRequest<any>) => {
 
       const qty = Number(item.quantity) || 1
 
-      if (item.color && item.size && Array.isArray(product.variants)) {
-        const variant = product.variants.find((v: any) => v.color === item.color && v.size === item.size)
-        if (variant) {
-          if ((variant.stock || 0) < qty) throw new HttpsError('failed-precondition', `الكمية غير متوفرة لـ ${product.name}`)
-          variant.stock -= qty
-          tx.update(db.doc(`products/${item.productId}`), { variants: product.variants })
+      // Match the exact variant: prefer variantId (new checkout), then fall
+      // back to color+size, color-only or size-only matching for legacy items.
+      let matchedVariant: any = null
+      if (Array.isArray(product.variants)) {
+        if (item.variantId) {
+          matchedVariant = product.variants.find((v: any) => v.id === item.variantId) || null
         }
+        if (!matchedVariant) {
+          const normColor = item.color || ''
+          const normSize = item.size || ''
+          matchedVariant =
+            product.variants.find((v: any) => (v.color || '') === normColor && (v.size || '') === normSize) ||
+            (normColor
+              ? product.variants.find((v: any) => (v.color || '') === normColor && !v.size) || null
+              : null) ||
+            (normSize
+              ? product.variants.find((v: any) => !v.color && (v.size || '') === normSize) || null
+              : null) ||
+            null
+        }
+      }
+      if (matchedVariant) {
+        if ((matchedVariant.stock || 0) < qty) {
+          throw new HttpsError('failed-precondition', `الكمية غير متوفرة لـ ${product.name}`)
+        }
+        matchedVariant.stock -= qty
+        tx.update(db.doc(`products/${item.productId}`), { variants: product.variants })
       }
 
       if ((product.stock || 0) < qty) throw new HttpsError('failed-precondition', `الكمية غير متوفرة لـ ${product.name}`)
       tx.update(db.doc(`products/${item.productId}`), { stock: FieldValue.increment(-qty) })
 
-      const price = Number(product.price) || 0
+      // Resolve unit price server-side. Quantity-tier pricing is recomputed
+      // from the stored product, never trusted from the client.
+      const basePrice = typeof matchedVariant?.price === 'number' ? matchedVariant.price : (Number(product.price) || 0)
+      const price = unitPriceForQty(basePrice, qty, product.pricingMode, product.quantityTiers)
       subtotal += price * qty
+      const variantId = matchedVariant?.id || item.variantId
       lineItems.push({
-        id: `${item.productId}-${item.color || ''}-${item.size || ''}`,
+        id: `${item.productId}-${variantId || `${item.color || ''}-${item.size || ''}`}`,
         productId: item.productId,
         name: product.name,
         price,
+        unitPrice: price,
         quantity: qty,
-        color: item.color || '',
-        size: item.size || '',
+        pricingMode: product.pricingMode || 'standard',
+        color: (matchedVariant?.color ?? item.color) || '',
+        size: (matchedVariant?.size ?? item.size) || '',
+        ...(variantId ? { variantId } : {}),
       })
     }
 
@@ -246,15 +347,42 @@ export const createOrder = onCall(async (request: CallableRequest<any>) => {
         .get()
       if (!linkQuery.empty) {
         const linkDoc = linkQuery.docs[0]
-        tx.update(linkDoc.ref, {
-          ordersCount: FieldValue.increment(1),
-          totalRevenue: FieldValue.increment(subtotal),
-          updatedAt: now(),
-        })
+        const linkData = linkDoc.data()
+        // Orders and revenue are counted on the link only when the order is
+        // DELIVERED (canonical revenue rule) — updateOrderStatus adjusts the
+        // counters on the DELIVERED transition. Here we only snapshot.
+        tx.update(linkDoc.ref, { updatedAt: now() })
         salesLinkId = linkDoc.id
-        salesLinkStaffId = linkDoc.data()?.staffId || null
+        salesLinkStaffId = linkData?.staffId || null
+        salesLinkSnapshot = {
+          code: linkData?.code || salesLinkRef,
+          title: linkData?.title || '',
+          sellerName: linkData?.sellerName || '',
+          destinationType: linkData?.destinationType || 'home',
+        }
       }
     }
+
+    if (landingPageId) {
+      // Landing-page attribution. Orders/revenue are counted on the landing page
+      // only when the order is DELIVERED (canonical revenue rule) — here we only
+      // validate tenant ownership + snapshot the page metadata.
+      const landingDoc = await db.collection('landingPages').doc(landingPageId).get()
+      if (landingDoc.exists) {
+        const landingData = landingDoc.data()
+        if (landingData?.storeId === storeId) {
+          landingPageSnapshot = {
+            slug: landingData?.slug || '',
+            title: landingData?.title || '',
+          }
+        }
+      }
+    }
+
+    // Compute shipping server-side from stored config + zones (mirrors the
+    // client quote; never trusts a client-supplied fee).
+    const shipping = computeShippingFee(shippingCfg, zones, subtotal, customer.governorate || '')
+    shippingSnapshot = shipping.snapshot
 
     tx.set(db.doc(`orders/${orderId}`), {
       storeId,
@@ -268,9 +396,11 @@ export const createOrder = onCall(async (request: CallableRequest<any>) => {
       customerId: request.auth?.uid || null,
       items: lineItems,
       subtotal,
-      shippingFee: 0,
+      shippingFee: shipping.fee,
+      shippingMethod: shipping.method,
+      shippingSnapshot,
       discount: 0,
-      totalPrice: subtotal,
+      totalPrice: subtotal + shipping.fee,
       status: 'NEW',
       paymentMethod: paymentMethod || 'cod',
       couponCode: null,
@@ -278,6 +408,9 @@ export const createOrder = onCall(async (request: CallableRequest<any>) => {
       salesLinkRef: salesLinkRef || null,
       salesLinkId,
       salesLinkStaffId,
+      salesLinkSnapshot,
+      landingPageId: landingPageSnapshot ? landingPageId : null,
+      landingPageSnapshot,
       createdAt: now(),
       updatedAt: now(),
       createdBy: request.auth?.uid || 'guest',
@@ -306,10 +439,10 @@ export const createOrder = onCall(async (request: CallableRequest<any>) => {
     // never overshoot the plan limit.
     tx.update(subRef, { ordersUsed: FieldValue.increment(1), updatedAt: now() })
 
-    return { orderId, orderNumber, totalPrice: subtotal }
+    return { orderId, orderNumber, totalPrice: subtotal + shipping.fee, shippingFee: shipping.fee }
   })
 
-  await bumpAnalytics(storeId, { totalPrice: result.totalPrice, status: 'NEW' }).catch(() => {})
+  await bumpAnalytics(storeId, { totalPrice: result.totalPrice, status: 'NEW', countOrder: true }).catch(() => {})
 
   await auditLog(storeId, request.auth?.uid || 'guest', 'create_order', 'orders', result.orderId, { orderNumber: result.orderNumber, totalPrice: result.totalPrice })
 
@@ -652,8 +785,22 @@ export const updateOrderStatus = onCall(async (request: CallableRequest<{ orderI
         const productSnap = await tx.get(productRef)
         if (!productSnap.exists) continue
         const product = productSnap.data()!
-        if (item.color && item.size && Array.isArray(product.variants)) {
-          const variant = product.variants.find((v: any) => v.color === item.color && v.size === item.size)
+        if (Array.isArray(product.variants)) {
+          let variant: any = null
+          if (item.variantId) {
+            variant = product.variants.find((v: any) => v.id === item.variantId) || null
+          }
+          if (!variant) {
+            variant =
+              product.variants.find((v: any) => (v.color || '') === (item.color || '') && (v.size || '') === (item.size || '')) ||
+              (item.color
+                ? product.variants.find((v: any) => (v.color || '') === item.color && !v.size) || null
+                : null) ||
+              (item.size
+                ? product.variants.find((v: any) => !v.color && (v.size || '') === item.size) || null
+                : null) ||
+              null
+          }
           if (variant) {
             variant.stock = (variant.stock || 0) + item.quantity
             tx.update(productRef, { variants: product.variants })
@@ -665,7 +812,65 @@ export const updateOrderStatus = onCall(async (request: CallableRequest<{ orderI
     tx.update(orderRef, { status, updatedAt: now() })
   })
 
-  await bumpAnalytics(order.storeId, { totalPrice: order.totalPrice, status }).catch(() => {})
+  // Revenue is counted only for DELIVERED orders (canonical rule). Entering
+  // DELIVERED adds the order value; leaving DELIVERED subtracts it. The order
+  // count itself is not re-incremented on status changes.
+  let revenueDelta = 0
+  if (order.status !== 'DELIVERED' && status === 'DELIVERED') revenueDelta = order.totalPrice || 0
+  if (order.status === 'DELIVERED' && status !== 'DELIVERED') revenueDelta = -(order.totalPrice || 0)
+  await bumpAnalytics(order.storeId, { totalPrice: order.totalPrice, status, revenueDelta }).catch(() => {})
+
+  // Adjust the linked sales-link counters to match DELIVERED-only attribution.
+  // Orders/revenue are attributed to the link only once the order is delivered.
+  if (order.salesLinkId) {
+    try {
+      const linkRef = db.doc(`storeLinks/${order.salesLinkId}`)
+      const linkSnap = await linkRef.get()
+      if (linkSnap.exists && linkSnap.data()?.storeId === order.storeId) {
+        if (order.status !== 'DELIVERED' && status === 'DELIVERED') {
+          await linkRef.update({
+            ordersCount: FieldValue.increment(1),
+            totalRevenue: FieldValue.increment(order.totalPrice || 0),
+            updatedAt: now(),
+          })
+        } else if (order.status === 'DELIVERED' && status !== 'DELIVERED') {
+          await linkRef.update({
+            ordersCount: FieldValue.increment(-1),
+            totalRevenue: FieldValue.increment(-(order.totalPrice || 0)),
+            updatedAt: now(),
+          })
+        }
+      }
+    } catch {
+      // A stale/removed link must never fail a status update.
+    }
+  }
+
+  // Adjust the linked landing-page counters to match DELIVERED-only
+  // attribution (same canonical rule as sales links).
+  if (order.landingPageId) {
+    try {
+      const landingRef = db.doc(`landingPages/${order.landingPageId}`)
+      const landingSnap = await landingRef.get()
+      if (landingSnap.exists && landingSnap.data()?.storeId === order.storeId) {
+        if (order.status !== 'DELIVERED' && status === 'DELIVERED') {
+          await landingRef.update({
+            ordersCount: FieldValue.increment(1),
+            totalRevenue: FieldValue.increment(order.totalPrice || 0),
+            updatedAt: now(),
+          })
+        } else if (order.status === 'DELIVERED' && status !== 'DELIVERED') {
+          await landingRef.update({
+            ordersCount: FieldValue.increment(-1),
+            totalRevenue: FieldValue.increment(-(order.totalPrice || 0)),
+            updatedAt: now(),
+          })
+        }
+      }
+    } catch {
+      // A stale/removed landing page must never fail a status update.
+    }
+  }
 
   await auditLog(order.storeId, request.auth.uid, 'update_order_status', 'orders', orderId, { from: order.status, to: status })
 
@@ -800,6 +1005,70 @@ export const recordStoreLinkVisit = onCall(async (request: CallableRequest<{ sto
   })
 
   return { ok: true }
+})
+
+// ─────────────────────────────────────────────────────────────
+// 9c. recordLandingPageView — count a view on a landing page.
+//     Validates the page is active + published and its store is
+//     active. Clients throttle to once per session.
+// ─────────────────────────────────────────────────────────────
+export const recordLandingPageView = onCall(async (request: CallableRequest<{ landingPageId?: string }>) => {
+  const { landingPageId } = request.data || {}
+  if (!landingPageId) throw new HttpsError('invalid-argument', 'landingPageId مطلوب')
+
+  const landingSnap = await db.doc(`landingPages/${landingPageId}`).get()
+  if (!landingSnap.exists) return { ok: false }
+  const landing = landingSnap.data()!
+  if (!landing.active || landing.status !== 'published') return { ok: false }
+
+  const storeSnap = await db.doc(`stores/${landing.storeId}`).get()
+  if (!storeSnap.exists || !storeSnap.data()?.active) return { ok: false }
+
+  await landingSnap.ref.update({
+    views: FieldValue.increment(1),
+    lastViewAt: now(),
+  })
+
+  return { ok: true }
+})
+
+// ─────────────────────────────────────────────────────────────
+// 9b. resolveStoreLink — public resolver for the short `/s/:code` URL.
+//     Returns only the destination info needed to redirect (store slug +
+//     destination). Never leaks internal fields (staffId, revenue, …). Only
+//     active, non-archived links resolve. The caller records the click via
+//     recordStoreLinkVisit once the storefront has loaded (StoreSlugLoader).
+// ─────────────────────────────────────────────────────────────
+export const resolveStoreLink = onCall(async (request: CallableRequest<{ code?: string }>) => {
+  const { code } = request.data || {}
+  if (!code) throw new HttpsError('invalid-argument', 'code مطلوب')
+
+  const linkQuery = await db
+    .collection('storeLinks')
+    .where('code', '==', String(code))
+    .where('active', '==', true)
+    .limit(1)
+    .get()
+
+  if (linkQuery.empty) {
+    return { ok: false }
+  }
+  const link = linkQuery.docs[0]
+  const linkData = link.data()
+  if (linkData.archived) return { ok: false }
+
+  const storeSnap = await db.doc(`stores/${linkData.storeId}`).get()
+  if (!storeSnap.exists) return { ok: false }
+  const store = storeSnap.data() as any
+  if (!store?.active || !store?.published || !store?.slug) return { ok: false }
+
+  return {
+    ok: true,
+    storeSlug: store.slug,
+    destinationType: linkData.destinationType || 'home',
+    destinationId: linkData.destinationId || null,
+    title: linkData.title || linkData.name || '',
+  }
 })
 
 // ─────────────────────────────────────────────────────────────

@@ -9,6 +9,7 @@ import { Avatar } from '../ui/Avatar'
 import { Dropdown } from '../ui/Dropdown'
 import { db } from '../../firebase'
 import { NAV_GROUPS, ROLE_LABELS, type NavGroup, type NavItem } from '../../utils/constants'
+import { Icon } from '../ui/Icon'
 
 interface Props {
   navKey: 'platform' | 'dashboard'
@@ -123,7 +124,7 @@ export const AppShell: FunctionalComponent<Props> = ({ navKey, brand, storeSwitc
     <Fragment>
       {impersonating && (
         <div className="impersonation-banner">
-          <span className="material-symbols-outlined">admin_panel_settings</span>
+          <Icon name="admin_panel_settings" />
           <span>أنت تتصفح المتجر كتاجر (وضع التجسس من مدير المنصة)</span>
           <button type="button" className="btn btn-primary btn-sm" onClick={handleExitImpersonation} disabled={exiting}>
             {exiting ? 'جاري الخروج...' : 'الخروج من وضع التجسس'}
@@ -139,7 +140,7 @@ export const AppShell: FunctionalComponent<Props> = ({ navKey, brand, storeSwitc
       </div>
       {storefrontHref && (
         <a href={storefrontHref} className="sidebar-link" target="_blank" rel="noopener noreferrer">
-          <span className="material-symbols-outlined">storefront</span>
+          <Icon name="storefront" />
           <span>متجري (المتجر الإلكتروني)</span>
         </a>
       )}
@@ -157,9 +158,9 @@ export const AppShell: FunctionalComponent<Props> = ({ navKey, brand, storeSwitc
                 onClick={() => toggleGroup(group.id)}
                 aria-expanded={open}
               >
-                <span className="material-symbols-outlined sidebar-group-icon">{group.icon}</span>
+                <Icon name={group.icon} className="sidebar-group-icon" />
                 <span className="sidebar-group-label">{group.label}</span>
-                <span className={`material-symbols-outlined sidebar-chevron${open ? ' open' : ''}`}>expand_more</span>
+                <Icon name="keyboard_arrow_down" className={`sidebar-chevron${open ? ' open' : ''}`} />
               </button>
               <div className={`sidebar-group-items${open ? ' open' : ''}`}>
                 {items.map((item) => {
@@ -171,7 +172,7 @@ export const AppShell: FunctionalComponent<Props> = ({ navKey, brand, storeSwitc
                       className={`sidebar-link sidebar-child-link${itemActive ? ' active' : ''}`}
                       onClick={() => setDrawerOpen(false)}
                     >
-                      <span className="material-symbols-outlined sidebar-child-icon">{item.icon}</span>
+                      <Icon name={item.icon} className="sidebar-child-icon" />
                       <span>{item.label}</span>
                     </Link>
                   )
@@ -208,7 +209,7 @@ export const AppShell: FunctionalComponent<Props> = ({ navKey, brand, storeSwitc
                 aria-label="فتح القائمة"
                 onClick={() => setDrawerOpen(true)}
               >
-                <span className="material-symbols-outlined">menu</span>
+                <Icon name="menu" />
               </button>
               {pageContext ? (
                 <nav className="topbar-crumb" aria-label="مسار الصفحة">
@@ -226,7 +227,7 @@ export const AppShell: FunctionalComponent<Props> = ({ navKey, brand, storeSwitc
                   align="left"
                   trigger={
                     <button type="button" className="btn btn-outline btn-sm">
-                      <span className="material-symbols-outlined" style={{ fontSize: 16 }}>store</span>
+                      <Icon name="store" style={{ fontSize: 16 }} />
                       <span>{(stores.find((s) => s.id === storeSwitcher?.currentId)?.name || brand)}</span>
                     </button>
                   }
@@ -238,7 +239,7 @@ export const AppShell: FunctionalComponent<Props> = ({ navKey, brand, storeSwitc
                 />
               )}
               <Link href={notificationsHref} className="topbar-icon-btn" aria-label="الإشعارات" title="الإشعارات">
-                <span className="material-symbols-outlined">notifications</span>
+                <Icon name="notifications" />
               </Link>
               <button
                 type="button"
@@ -247,7 +248,7 @@ export const AppShell: FunctionalComponent<Props> = ({ navKey, brand, storeSwitc
                 title={theme.theme === 'dark' ? 'الوضع الفاتح' : 'الوضع الداكن'}
                 onClick={theme.toggle}
               >
-                <span className="material-symbols-outlined">{theme.theme === 'dark' ? 'light_mode' : 'dark_mode'}</span>
+                <Icon name={theme.theme === 'dark' ? 'light_mode' : 'dark_mode'} />
               </button>
               <div className="topbar-user">
                 <Dropdown
@@ -259,7 +260,7 @@ export const AppShell: FunctionalComponent<Props> = ({ navKey, brand, storeSwitc
                         <strong>{user?.name}</strong>
                         <small>{user?.role ? ROLE_LABELS[user.role] : ''}</small>
                       </span>
-                      <span className="material-symbols-outlined">expand_more</span>
+                      <Icon name="keyboard_arrow_down" />
                     </button>
                   }
                   items={[
@@ -279,7 +280,7 @@ export const AppShell: FunctionalComponent<Props> = ({ navKey, brand, storeSwitc
               <span className="brand-mark brand-mark-sm">MK</span>
               <strong>{brand}</strong>
               <button type="button" className="btn btn-ghost" aria-label="إغلاق القائمة" onClick={() => setDrawerOpen(false)}>
-                <span className="material-symbols-outlined">close</span>
+                <Icon name="close" />
               </button>
             </div>
             {sidebarContent}

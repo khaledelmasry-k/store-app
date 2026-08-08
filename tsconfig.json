@@ -12,6 +12,14 @@
     "noEmit": true,
     "jsx": "react-jsx",
     "jsxImportSource": "preact",
+    "paths": {
+      "react": ["./node_modules/preact/compat/"],
+      "react-dom": ["./node_modules/preact/compat/"],
+      "react-dom/client": ["./node_modules/preact/compat/client/"],
+      "react-dom/server": ["./node_modules/preact/compat/server/"],
+      "react/jsx-runtime": ["./node_modules/preact/jsx-runtime/"],
+      "react/jsx-dev-runtime": ["./node_modules/preact/jsx-dev-runtime/"]
+    },
     "strict": true,
     "strictNullChecks": false,
     "noUnusedLocals": false,

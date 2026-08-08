@@ -15,7 +15,7 @@ import { Toggle } from '../../shared/components/ui/Toggle'
 import { Progress } from '../../shared/components/ui/Progress'
 import { EmptyState } from '../../shared/components/ui/EmptyState'
 import { formatCurrency, formatDate, formatNumber } from '../../shared/utils/format'
-import { storePublicUrl } from '../../shared/utils/store-url'
+import { storePublicUrl, ensureUniqueSlug } from '../../shared/utils/store-url'
 import { STATUS_LABELS, STATUS_COLORS, SUBSCRIPTION_STATUS_LABELS, SUBSCRIPTION_STATUS_TONES, ORDER_USAGE_LABELS, ORDER_USAGE_TONES, usageLevelFor } from '../../shared/utils/constants'
 import { storesService } from '../../shared/services/stores'
 import { approveSubscriptionCallable } from '../../shared/services/auth'
@@ -51,7 +51,17 @@ export const PlatformStoreDetails: FunctionalComponent<Props> = ({ id }) => {
 
   const save = async () => {
     if (!store?.id) return
-    await storesService.update(store.id, form)
+    const patch: Record<string, unknown> = { ...form }
+    // Keep slug and ref in sync so the public URL (/store/<slug>) always
+    // resolves to the storefront, which looks stores up by slug.
+    const candidate = String(patch.ref || store.ref || store.slug || '')
+    const name = String(patch.name || store.name || '')
+    if (patch.ref || patch.name) {
+      const slug = await ensureUniqueSlug(candidate || name, store.id)
+      patch.slug = slug
+      patch.ref = slug
+    }
+    await storesService.update(store.id, patch)
     toast.push('تم حفظ التغييرات')
   }
 
@@ -84,15 +94,18 @@ export const PlatformStoreDetails: FunctionalComponent<Props> = ({ id }) => {
       <Breadcrumb items={[{ label: 'التجار والمتاجر', href: '/platform/merchants' }, { label: store.name }]} />
       <PageHeader
         title={store.name}
-        subtitle={storePublicUrl(store)}
+        subtitle={storePublicUrl(store) || 'لم يتم إنشاء رابط المتجر بعد'}
         actions={
-          store.active ? (
-            <a href={`/store/${store.slug}`} target="_blank" rel="noreferrer">
-              <Button variant="outline" icon="store">عرض المتجر</Button>
-            </a>
-          ) : (
-            <Badge tone="slate">موقوف</Badge>
-          )
+          <div className="flex" style={{ gap: 8 }}>
+            {store.published ? <Badge tone="green">🟢 منشور</Badge> : <Badge tone="amber">🟡 مسودة</Badge>}
+            {store.active ? (
+              <a href={`/store/${store.slug}`} target="_blank" rel="noreferrer">
+                <Button variant="outline" icon="store">عرض المتجر</Button>
+              </a>
+            ) : (
+              <Badge tone="slate">موقوف</Badge>
+            )}
+          </div>
         }
       />
 
@@ -147,7 +160,7 @@ export const PlatformStoreDetails: FunctionalComponent<Props> = ({ id }) => {
         <Card title="معلومات المتجر">
           <div className="grid grid-2">
             <Input label="اسم المتجر" value={form.name ?? store.name} onChange={(v) => setForm({ ...form, name: v })} />
-            <Input label="الرابط (ref)" value={form.ref ?? store.ref} onChange={(v) => setForm({ ...form, ref: v })} />
+            <Input label="رابط المتجر (Slug)" value={form.ref ?? store.ref} onChange={(v) => setForm({ ...form, ref: v })} hint="يُحدَّث تلقائياً عند الحفظ لمنع الازدواج" />
             <Input label="الهاتف" value={form.phone ?? store.phone} onChange={(v) => setForm({ ...form, phone: v })} />
             <Input label="العنوان" value={form.address ?? store.address} onChange={(v) => setForm({ ...form, address: v })} />
           </div>

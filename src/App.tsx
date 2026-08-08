@@ -16,6 +16,7 @@ import { PlatformLayout } from './shared/components/layout/PlatformLayout'
 import { MerchantLayout } from './shared/components/layout/MerchantLayout'
 import { StoreLayout } from './shared/components/layout/StoreLayout'
 import { StoreSlugLoader } from './shared/components/layout/StoreSlugLoader'
+import { StoreLinkRedirect } from './shared/components/layout/StoreLinkRedirect'
 import { parseStoreLocation } from './shared/utils/store-route'
 import { ROUTE_PERMISSIONS } from './shared/utils/constants'
 import { InfoPage } from './platform/pages/InfoPage'
@@ -54,6 +55,7 @@ const MerchantNotifications = lazy(() => import('./merchant/pages/Notifications'
 const MerchantTickets = lazy(() => import('./merchant/pages/Tickets'))
 const MerchantSubscription = lazy(() => import('./merchant/pages/Subscription'))
 const MerchantSettings = lazy(() => import('./merchant/pages/Settings'))
+const MerchantThemes = lazy(() => import('./merchant/pages/Themes'))
 
 const StoreHome = lazy(() => import('./store/pages/Home'))
 const StoreCatalog = lazy(() => import('./store/pages/Catalog'))
@@ -63,6 +65,7 @@ const StoreCheckout = lazy(() => import('./store/pages/Checkout'))
 const StoreTrack = lazy(() => import('./store/pages/Track'))
 const StoreAccount = lazy(() => import('./store/pages/Account'))
 const StoreLogin = lazy(() => import('./store/pages/Login'))
+const StoreLanding = lazy(() => import('./store/pages/Landing'))
 
 function HomeRedirect() {
   const { user, loading, initialized } = useAuth()
@@ -103,6 +106,14 @@ function MerchantOrderRoute({ params }: { params: Record<string, string> }) {
 
 function StoreProductRoute({ params }: { params: Record<string, string> }) {
   return <StoreProduct id={params.id} />
+}
+
+function StoreLinkRedirectRoute({ params }: { params: Record<string, string> }) {
+  return <StoreLinkRedirect code={params.code} />
+}
+
+function StoreLandingRoute({ params }: { params: Record<string, string> }) {
+  return <StoreLanding slug={params.slug} />
 }
 
 function PlatformRoutes() {
@@ -156,6 +167,7 @@ function MerchantRoutes() {
       <Route path="/notifications" component={() => <MerchantNotifications />} />
       <Route path="/tickets" component={() => <MerchantTickets />} />
       <Route path="/subscription" component={() => <MerchantSubscription />} />
+      <Route path="/themes" component={() => <MerchantThemes />} />
       <Route path="/settings" component={() => <MerchantSettings />} />
       <Route component={() => <Redirect to="/dashboard" replace />} />
     </ZoneRouter>
@@ -247,6 +259,10 @@ export default function App() {
 
                   <Route path="/store/:slug" component={StoreRoutes} />
                   <Route path="/store/:slug/*" component={StoreRoutes} />
+
+                  <Route path="/s/:code" component={StoreLinkRedirectRoute} />
+
+                  <Route path="/landing/:slug" component={StoreLandingRoute} />
 
                   <Route component={() => <Redirect to="/" replace />} />
                 </Switch>

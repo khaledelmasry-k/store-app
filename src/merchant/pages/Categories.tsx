@@ -17,6 +17,7 @@ import { useToast } from '../../shared/hooks/useToast'
 import { categoriesService } from '../../shared/services/categories'
 import { slugify } from '../../shared/utils/format'
 import type { Category } from '../../shared/types'
+import { Icon } from '../../shared/components/ui/Icon'
 
 export const MerchantCategories: FunctionalComponent = () => {
   const { store } = useStore()
@@ -74,7 +75,7 @@ export const MerchantCategories: FunctionalComponent = () => {
               { key: 'slug', header: 'الرابط', render: (c: Category) => <span className="monospace">{c.slug}</span> },
               { key: 'order', header: 'الترتيب' },
               { key: 'active', header: 'الحالة', render: (c: Category) => <Badge tone={c.active ? 'green' : 'slate'}>{c.active ? 'نشطة' : 'مخفية'}</Badge> },
-              { key: 'actions', header: '', render: (c: Category) => <button className="icon-btn" onClick={() => setDeleteTarget(c)}><span className="material-symbols-outlined">delete</span></button> },
+              { key: 'actions', header: '', render: (c: Category) => <button className="icon-btn" onClick={() => setDeleteTarget(c)}><Icon name="delete" /></button> },
             ]}
             rows={filtered}
           />

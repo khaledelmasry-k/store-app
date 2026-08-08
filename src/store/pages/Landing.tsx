@@ -1,0 +1,382 @@
+import { FunctionalComponent } from 'preact'
+import { useEffect, useState } from 'preact/hooks'
+import { Link } from 'wouter'
+import { collection, query, where, onSnapshot, limit as limitQuery, type QuerySnapshot } from 'firebase/firestore'
+import { db } from '../../shared/firebase'
+import { useDocument } from '../../shared/hooks/useDocument'
+import { useCart } from '../../shared/hooks/useCart'
+import { useToast } from '../../shared/hooks/useToast'
+import { recordLandingPageViewCallable, recordStoreLinkVisitCallable } from '../../shared/services/auth'
+import { Button } from '../../shared/components/ui/Button'
+import { Badge } from '../../shared/components/ui/Badge'
+import { EmptyState } from '../../shared/components/ui/EmptyState'
+import { Loading } from '../../shared/components/ui/Loading'
+import { SmartImage } from '../../shared/components/ui/SmartImage'
+import { getTemplate } from '../../shared/utils/themes'
+import { formatCurrency } from '../../shared/utils/format'
+import { productUnitPrice, tierForQuantity } from '../../shared/utils/pricing'
+import { availableSizes, findVariant, variantStock } from '../../shared/utils/product-variants'
+import { themeStyleFor } from '../../shared/components/layout/StoreLayout'
+import type { LandingPage, LandingSection, Product, Store } from '../../shared/types'
+import { Icon } from '../../shared/components/ui/Icon'
+
+interface Props {
+  slug: string
+}
+
+function LandingSectionView({ section, storeSlug }: { section: LandingSection; storeSlug: string }) {
+  const items = section.items || []
+  switch (section.type) {
+    case 'features':
+      return (
+        <section className="lp-section">
+          <div className="lp-container">
+            {section.title && <h2 className="lp-section-title">{section.title}</h2>}
+            {section.body && <p className="lp-section-desc">{section.body}</p>}
+            {items.length > 0 && (
+              <div className="lp-grid lp-grid-3">
+                {items.map((it, i) => (
+                  <div className="lp-card" key={i}>
+                    <div className="lp-card-icon"><Icon name="check_circle" /></div>
+                    <h3>{it.title}</h3>
+                    {it.body && <p className="muted small">{it.body}</p>}
+                  </div>
+                ))}
+              </div>
+            )}
+          </div>
+        </section>
+      )
+    case 'steps':
+      return (
+        <section className="lp-section lp-section-soft">
+          <div className="lp-container">
+            {section.title && <h2 className="lp-section-title">{section.title}</h2>}
+            {items.length > 0 && (
+              <div className="lp-steps">
+                {items.map((it, i) => (
+                  <div className="lp-step" key={i}>
+                    <span className="lp-step-num">{String(i + 1).padStart(2, '0')}</span>
+                    <div>
+                      <h3>{it.title}</h3>
+                      {it.body && <p className="muted small">{it.body}</p>}
+                    </div>
+                  </div>
+                ))}
+              </div>
+            )}
+          </div>
+        </section>
+      )
+    case 'testimonials':
+      return (
+        <section className="lp-section">
+          <div className="lp-container">
+            {section.title && <h2 className="lp-section-title">{section.title}</h2>}
+            {items.length > 0 && (
+              <div className="lp-grid lp-grid-3">
+                {items.map((it, i) => (
+                  <div className="lp-card lp-quote" key={i}>
+                    <Icon name="format_quote" className="lp-quote-icon" />
+                    <p>{it.body}</p>
+                    {it.title && <strong className="small">{it.title}</strong>}
+                  </div>
+                ))}
+              </div>
+            )}
+          </div>
+        </section>
+      )
+    case 'faq':
+      return (
+        <section className="lp-section lp-section-soft">
+          <div className="lp-container lp-narrow">
+            {section.title && <h2 className="lp-section-title">{section.title}</h2>}
+            {items.length > 0 && (
+              <div className="lp-faq">
+                {items.map((it, i) => (
+                  <details className="lp-faq-item" key={i}>
+                    <summary>{it.title}</summary>
+                    <p className="muted small">{it.body}</p>
+                  </details>
+                ))}
+              </div>
+            )}
+          </div>
+        </section>
+      )
+    case 'cta':
+      return (
+        <section className="lp-section lp-cta-band">
+          <div className="lp-container lp-narrow">
+            <h2>{section.title}</h2>
+            {section.body && <p>{section.body}</p>}
+            <Link href={`/store/${storeSlug}`}><Button icon="storefront">زيارة المتجر</Button></Link>
+          </div>
+        </section>
+      )
+    default:
+      return null
+  }
+}
+
+/**
+ * Public landing page at `/landing/:slug`. The page resolves its own store from
+ * `landingPage.storeId`, so it renders as a standalone themed page (no store
+ * slug in the URL). Includes an embedded QuickBuy panel for the featured product.
+ */
+export const StoreLanding: FunctionalComponent<Props> = ({ slug }) => {
+  const [landing, setLanding] = useState<LandingPage | null>(null)
+  const [loading, setLoading] = useState(true)
+  const [notFound, setNotFound] = useState(false)
+  const { data: store, loading: storeLoading } = useDocument<Store>('stores', landing?.storeId || null)
+  const { data: product } = useDocument<Product>('products', landing?.productId || null)
+  const cart = useCart()
+  const toast = useToast()
+  const [qty, setQty] = useState(1)
+  const [color, setColor] = useState('')
+  const [size, setSize] = useState('')
+
+  useEffect(() => {
+    if (!slug) {
+      setNotFound(true)
+      setLoading(false)
+      return
+    }
+    setLoading(true)
+    setNotFound(false)
+    const q = query(collection(db, 'landingPages'), where('slug', '==', slug), limitQuery(1))
+    const unsub = onSnapshot(
+      q,
+      (snap: QuerySnapshot) => {
+        if (!snap.empty) {
+          const doc = snap.docs[0]
+          const data = doc.data() as Partial<LandingPage>
+          if (data.active !== false && (data.status === undefined || data.status === 'published')) {
+            setLanding({ id: doc.id, ...data } as LandingPage)
+          } else {
+            setNotFound(true)
+          }
+        } else {
+          setNotFound(true)
+        }
+        setLoading(false)
+      },
+      () => {
+        setNotFound(true)
+        setLoading(false)
+      },
+    )
+    return () => unsub()
+  }, [slug])
+
+  // Attribution + analytics once the landing and its store are resolved.
+  useEffect(() => {
+    if (!landing || !store?.id) return
+    sessionStorage.setItem(`mk_landing_${store.id}`, landing.id)
+    // Pin the cart to this store so QuickBuy items reach the storefront cart.
+    cart.setScopeSlug(store.slug || null)
+
+    const params = new URLSearchParams(window.location.search)
+    const ref = params.get('ref')
+    if (ref) {
+      sessionStorage.setItem(`mk_sales_ref_${store.id}`, ref)
+      const countedKey = `mk_ref_counted_${store.id}_${ref}`
+      if (!sessionStorage.getItem(countedKey)) {
+        sessionStorage.setItem(countedKey, '1')
+        recordStoreLinkVisitCallable({ storeId: store.id, code: ref }).catch(() => {})
+      }
+    }
+
+    const viewedKey = `mk_landing_viewed_${landing.id}`
+    if (!sessionStorage.getItem(viewedKey)) {
+      // Set the guard first so a re-render (fresh landing object from the
+      // snapshot) can't fire a second concurrent call before the first resolves.
+      sessionStorage.setItem(viewedKey, '1')
+      recordLandingPageViewCallable({ landingPageId: landing.id }).catch(() => {})
+    }
+  }, [landing, store?.id])
+
+  if (loading || (landing && storeLoading)) return <Loading />
+
+  if (notFound || !landing || !store) {
+    return (
+      <div className="loading-screen">
+        <EmptyState
+          title="الصفحة غير موجودة"
+          description="هذه الصفحة غير متاحة أو تم إيقافها."
+          icon="web"
+          action={<button className="btn btn-primary" onClick={() => (window.location.href = '/')}>العودة للرئيسية</button>}
+        />
+      </div>
+    )
+  }
+
+  const templateClass = getTemplate(store?.theme?.template).cssClass
+  const sections = Array.isArray(landing.sections) ? landing.sections : []
+  const hero = landing.hero || { title: landing.title }
+  const heroImage = hero.image || ''
+
+  const hasVariants = product && (product.variants || []).length > 0
+  const requiresColor = hasVariants && (product.colors || []).length > 0
+  const requiresSize = hasVariants && (product.sizes || []).length > 0
+  const selectionComplete = (!requiresColor || !!color) && (!requiresSize || !!size)
+  const variant = hasVariants && selectionComplete ? findVariant(product!, { color, size }) : undefined
+  const displayPrice = hasVariants && selectionComplete && variant ? variant.price ?? product!.price : product?.price
+  const unitPrice = product ? productUnitPrice(product, variant, qty) : 0
+  const activeTier = tierForQuantity(product?.quantityTiers, qty)
+  const outOfStock = product ? variantStock(product, color, size) <= 0 : true
+  // Gate on the cart being pinned to this store: `setScopeSlug` is applied in an
+  // effect, so until it flushes the add would land in the unscoped `mk-cart` key.
+  const scopePinned = !!store?.slug && cart.scopeSlug === store.slug
+  const canAdd = !!product && product.active && selectionComplete && !outOfStock && scopePinned
+
+  const addToCart = () => {
+    if (!canAdd || !product) return
+    cart.add({
+      productId: product.id,
+      name: product.name,
+      price: unitPrice,
+      image: (product.images || [])[0],
+      quantity: qty,
+      color: color || undefined,
+      size: size || undefined,
+      variantId: variant?.id,
+      pricingMode: product.pricingMode,
+      quantityTiers: product.quantityTiers,
+    })
+    toast.push('تمت إضافة المنتج إلى السلة')
+  }
+
+  return (
+    <div className={`lp-shell ${templateClass}`} style={themeStyleFor(store?.theme?.primary, store?.theme?.secondary)}>
+      <header className="lp-header">
+        <div className="lp-container lp-header-inner">
+          <Link href={`/store/${store?.slug}`} className="lp-brand">
+            {store?.logo ? <SmartImage src={store.logo} alt={store?.name || ''} className="store-logo" placeholderClassName="store-logo" /> : <Icon name="storefront" className="lp-brand-mark" />}
+            <strong>{store?.name || 'المتجر'}</strong>
+          </Link>
+          <Link href={`/store/${store?.slug}`} className="btn btn-outline btn-sm">زيارة المتجر</Link>
+        </div>
+      </header>
+
+      <main>
+        <section className="lp-hero">
+          <div className="lp-container lp-hero-inner">
+            <div className="lp-hero-copy">
+              <h1>{hero.title || landing.title}</h1>
+              {hero.subtitle && <p className="lp-hero-sub">{hero.subtitle}</p>}
+              {product && (
+                <div className="lp-hero-actions">
+                  <a href="#lp-buy" className="btn btn-primary btn-lg">{hero.ctaText || 'اطلب الآن'}</a>
+                  <Link href={`/store/${store?.slug}`}><Button variant="ghost" icon="arrow_downward">استعرض المتجر</Button></Link>
+                </div>
+              )}
+            </div>
+            {heroImage && (
+              <div className="lp-hero-media">
+                <SmartImage src={heroImage} alt="" className="lp-hero-img" placeholderClassName="lp-hero-img" loading="eager" />
+              </div>
+            )}
+          </div>
+        </section>
+
+        {sections.map((s, i) => (
+          <LandingSectionView key={i} section={s} storeSlug={store?.slug || ''} />
+        ))}
+
+        {product && (
+          <section className="lp-section lp-buy" id="lp-buy">
+            <div className="lp-container">
+              <div className="lp-buy-card">
+                <div className="lp-buy-media">
+                  {(product.images || []).length > 0 ? (
+                    <SmartImage src={product.images[0]} alt={product.name} className="lp-buy-img" placeholderClassName="lp-buy-img" loading="eager" />
+                  ) : (
+                    <div className="product-detail-empty"><Icon name="image" /><span className="muted">لا توجد صورة</span></div>
+                  )}
+                </div>
+                <div className="lp-buy-body">
+                  <h2>{product.name}</h2>
+                  <div className="mt-1 mb-1">
+                    <Badge tone={outOfStock ? 'red' : 'green'}>{outOfStock ? 'نفد المخزون' : 'متوفر'}</Badge>
+                  </div>
+                  <p className="stat-value mb-2">
+                    {formatCurrency(unitPrice)}
+                    {product.oldPrice && Number(product.oldPrice) > Number(displayPrice) && <span className="store-card-old">{formatCurrency(product.oldPrice)}</span>}
+                  </p>
+                  {product.pricingMode === 'quantity' && product.quantityTiers && product.quantityTiers.length > 0 && (
+                    <div className="qty-tier-table mb-2">
+                      <span className="field-label">السعر حسب الكمية</span>
+                      <div className="qty-tier-list">
+                        {[...product.quantityTiers]
+                          .sort((a, b) => a.minQuantity - b.minQuantity)
+                          .map((t) => (
+                            <div key={t.minQuantity} className={`qty-tier-row${activeTier && activeTier.minQuantity === t.minQuantity ? ' qty-tier-row--active' : ''}`}>
+                              <span>{t.minQuantity} {t.minQuantity === 1 ? 'قطعة' : t.minQuantity === 2 ? 'قطعتان' : t.minQuantity <= 10 ? 'قطع' : 'قطعة'}</span>
+                              <span>{formatCurrency(t.price)}</span>
+                            </div>
+                          ))}
+                      </div>
+                    </div>
+                  )}
+
+                  {(product.colors || []).length > 0 && (
+                    <div className="mb-2">
+                      <span className="field-label">اللون:</span>
+                      <div className="flex flex-wrap mt-1">
+                        {(product.colors || []).map((c) => (
+                          <button key={c} type="button" className={`btn color-btn${color === c ? ' color-btn--active' : ''}`} onClick={() => { setColor(c); setQty(1) }}>
+                            {c}
+                          </button>
+                        ))}
+                      </div>
+                    </div>
+                  )}
+
+                  {(product.sizes || []).length > 0 && (
+                    <div className="mb-2">
+                      <span className="field-label">المقاس:</span>
+                      <div className="flex flex-wrap mt-1">
+                        {(product.sizes || []).map((s) => {
+                          const disabled = hasVariants && !availableSizes(product, color).includes(s)
+                          return (
+                            <button key={s} type="button" className={`btn size-btn${size === s ? ' size-btn--active' : ''}${disabled ? ' size-btn--disabled' : ''}`} disabled={disabled} onClick={() => setSize(s)}>
+                              {s}
+                            </button>
+                          )
+                        })}
+                      </div>
+                    </div>
+                  )}
+
+                  <div className="flex mb-2">
+                    <div className="qty-stepper">
+                      <button type="button" className="qty-btn" onClick={() => setQty(Math.max(1, qty - 1))}>−</button>
+                      <strong>{qty}</strong>
+                      <button type="button" className="qty-btn" onClick={() => setQty(qty + 1)}>+</button>
+                    </div>
+                  </div>
+
+                  <div className="flex flex-wrap">
+                    <Button icon="shopping_cart" onClick={addToCart} disabled={!canAdd}>أضف إلى السلة</Button>
+                    <Link href={`/store/${store?.slug}/cart`}><Button variant="outline">عرض السلة</Button></Link>
+                    <Link href={`/store/${store?.slug}/product/${product.id}`}><Button variant="ghost" icon="open_in_new">صفحة المنتج</Button></Link>
+                  </div>
+                </div>
+              </div>
+            </div>
+          </section>
+        )}
+      </main>
+
+      <footer className="lp-footer">
+        <div className="lp-container lp-footer-inner">
+          <p className="muted small">© {new Date().getFullYear()} {store?.name || 'M&K'} — {store?.description || ''}</p>
+          <Link href={`/store/${store?.slug}`} className="small">استعرض المتجر</Link>
+        </div>
+      </footer>
+    </div>
+  )
+}
+export default StoreLanding

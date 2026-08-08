@@ -110,6 +110,18 @@ export function recordStoreLinkVisitCallable(input: Record<string, unknown>) {
   return fn(input)
 }
 
+export function resolveStoreLinkCallable(input: { code: string }) {
+  const functions = getFunctions()
+  const fn = httpsCallable(functions, 'resolveStoreLink')
+  return fn(input)
+}
+
+export function recordLandingPageViewCallable(input: { landingPageId: string }) {
+  const functions = getFunctions()
+  const fn = httpsCallable(functions, 'recordLandingPageView')
+  return fn(input)
+}
+
 export function inviteStaffCallable(input: Record<string, unknown>) {
   const functions = getFunctions()
   const fn = httpsCallable(functions, 'inviteStaff')
