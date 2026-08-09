@@ -4,6 +4,7 @@ import { Input } from '../../shared/components/ui/Input'
 import { Button } from '../../shared/components/ui/Button'
 import { Icon } from '../../shared/components/ui/Icon'
 import { formatCurrency } from '../../shared/utils/format'
+import { piecesLabel } from '../../shared/utils/pricing'
 
 interface Props {
   tiers: QuantityTier[]
@@ -17,8 +18,8 @@ export const QuantityTiersEditor: FunctionalComponent<Props> = ({ tiers, onChang
   }
 
   const add = () => {
-    const maxMin = tiers.reduce((m, t) => Math.max(m, t.minQuantity || 0), 0)
-    onChange([...tiers, { minQuantity: maxMin + 1, maxQuantity: null, price: 0 }])
+    const maxQty = tiers.reduce((m, t) => Math.max(m, t.quantity || 0), 0)
+    onChange([...tiers, { quantity: maxQty + 1, price: 0 }])
   }
 
   const remove = (index: number) => {
@@ -33,12 +34,13 @@ export const QuantityTiersEditor: FunctionalComponent<Props> = ({ tiers, onChang
     onChange(next)
   }
 
-  const sorted = [...tiers].sort((a, b) => a.minQuantity - b.minQuantity)
+  const sorted = [...tiers].sort((a, b) => (a.quantity || 0) - (b.quantity || 0))
 
   return (
     <div className="qty-tier-editor mt-1">
       <div className="field">
-        <span className="field-label">السعر حسب الكمية</span>
+        <span className="field-label">السعر الإجمالي حسب عدد القطع</span>
+        <p className="field-hint">السعر هو إجمالي ثمن الباقة كاملة — لا يُضرب في عدد القطع.</p>
       </div>
       <div className="qty-tier-editor-list">
         {tiers.map((t, i) => (
@@ -49,9 +51,8 @@ export const QuantityTiersEditor: FunctionalComponent<Props> = ({ tiers, onChang
             <button type="button" className="icon-btn" disabled={i === tiers.length - 1} onClick={() => move(i, 1)} title="تحريك لأسفل">
               <Icon name="arrow_downward" />
             </button>
-            <Input label="من الكمية" type="number" value={t.minQuantity || ''} onChange={(v) => update(i, { minQuantity: Math.max(1, Number(v) || 1) })} />
-            <Input label="إلى الكمية (فارغ = وما فوق)" type="number" value={t.maxQuantity ?? ''} onChange={(v) => update(i, { maxQuantity: v === '' ? null : Number(v) })} />
-            <Input label="السعر للقطعة" type="number" value={t.price || ''} onChange={(v) => update(i, { price: Number(v) })} />
+            <Input label="عدد القطع" type="number" value={t.quantity || ''} onChange={(v) => update(i, { quantity: Math.max(1, Math.round(Number(v) || 1)) })} />
+            <Input label="السعر الإجمالي" type="number" value={t.price || ''} onChange={(v) => update(i, { price: Number(v) })} />
             <button type="button" className="icon-btn icon-btn-danger" onClick={() => remove(i)} title="حذف المستوى">
               <Icon name="delete" />
             </button>
@@ -63,11 +64,8 @@ export const QuantityTiersEditor: FunctionalComponent<Props> = ({ tiers, onChang
         <div className="qty-tier-editor-summary muted small mt-1">
           <div className="field-label">معاينة للعميل</div>
           {sorted.map((t) => (
-            <div key={t.minQuantity} className="summary-row">
-              <span>
-                {t.minQuantity} {t.minQuantity === 1 ? 'قطعة' : t.minQuantity === 2 ? 'قطعتان' : t.minQuantity <= 10 ? 'قطع' : 'قطعة'}
-                {t.maxQuantity != null ? ` – ${t.maxQuantity}` : '+'}
-              </span>
+            <div key={t.quantity} className="summary-row">
+              <span>{t.quantity} {piecesLabel(t.quantity)}</span>
               <span>{formatCurrency(t.price || 0)}</span>
             </div>
           ))}

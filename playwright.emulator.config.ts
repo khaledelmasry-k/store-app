@@ -16,12 +16,12 @@ export default defineConfig({
   projects: [
     {
       name: 'desktop',
-      testMatch: /emulator\.spec\.ts|landing\.spec\.ts|products\.spec\.ts/,
+      testMatch: /emulator\.spec\.ts|subscription\.spec\.ts|landing\.spec\.ts|products\.spec\.ts|customer-flow\.spec\.ts/,
       use: { viewport: { width: 1440, height: 900 } },
     },
     {
       name: 'mobile-390',
-      testMatch: /emulator\.spec\.ts|landing\.spec\.ts|products\.spec\.ts/,
+      testMatch: /emulator\.spec\.ts|subscription\.spec\.ts|landing\.spec\.ts|products\.spec\.ts|customer-flow\.spec\.ts/,
       use: { viewport: { width: 390, height: 844 } },
     },
     {

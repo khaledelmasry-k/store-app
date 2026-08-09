@@ -93,17 +93,33 @@ export const ROUTE_PERMISSIONS: Record<string, Permission> = {
 
 export const SUBSCRIPTION_STATUS_LABELS: Record<SubscriptionStatus, string> = {
   pending: 'قيد الانتظار',
+  trialing: 'تجربة مجانية',
   active: 'نشط',
   expired: 'منتهي',
+  suspended: 'موقوف',
   cancelled: 'ملغي',
   rejected: 'مرفوض',
 }
 
 export const SUBSCRIPTION_STATUS_TONES: Record<SubscriptionStatus, string> = {
   pending: 'amber',
+  trialing: 'indigo',
   active: 'green',
   expired: 'red',
+  suspended: 'amber',
   cancelled: 'slate',
+  rejected: 'red',
+}
+
+export const SUBSCRIPTION_PAYMENT_STATUS_LABELS: Record<string, string> = {
+  pending: 'قيد المراجعة',
+  approved: 'معتمد',
+  rejected: 'مرفوض',
+}
+
+export const SUBSCRIPTION_PAYMENT_STATUS_TONES: Record<string, string> = {
+  pending: 'amber',
+  approved: 'green',
   rejected: 'red',
 }
 

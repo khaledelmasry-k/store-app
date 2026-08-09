@@ -26,7 +26,7 @@ export const MerchantOrders: FunctionalComponent = () => {
   const [query, setQuery] = useState('')
   const [status, setStatus] = useState('')
   const [payment, setPayment] = useState('')
-  const [sort] = useState('newest')
+  const [sort, setSort] = useState('newest')
   const [page, setPage] = useState(1)
   const PAGE_SIZE = 10
 
@@ -74,7 +74,14 @@ export const MerchantOrders: FunctionalComponent = () => {
           activeSegment={status}
           onSegmentChange={(s) => { setStatus(s); setPage(1) }}
           actions={
-            <Select value={payment} onChange={(v) => { setPayment(v); setPage(1) }} placeholder="طريقة الدفع" options={[{ value: '', label: 'كل الطرق' }, ...paymentOptions]} />
+            <div className="flex gap-1">
+              <Select value={sort} onChange={(v) => setSort(v)} placeholder="الترتيب" options={[
+                { value: 'newest', label: 'الأحدث' },
+                { value: 'oldest', label: 'الأقدم' },
+                { value: 'total', label: 'الأعلى قيمة' },
+              ]} />
+              <Select value={payment} onChange={(v) => { setPayment(v); setPage(1) }} placeholder="طريقة الدفع" options={[{ value: '', label: 'كل الطرق' }, ...paymentOptions]} />
+            </div>
           }
         />
         {filtered.length === 0 ? (

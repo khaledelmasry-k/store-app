@@ -7,12 +7,11 @@ import { Modal } from '../../shared/components/ui/Modal'
 import { Input } from '../../shared/components/ui/Input'
 import { Textarea } from '../../shared/components/ui/Textarea'
 import { Toggle } from '../../shared/components/ui/Toggle'
-import { ConfirmDialog } from '../../shared/components/ui/ConfirmDialog'
 import { EmptyState } from '../../shared/components/ui/EmptyState'
 import { SegmentedControl } from '../../shared/components/ui/SegmentedControl'
 import { useCollection } from '../../shared/hooks/useCollection'
 import { useToast } from '../../shared/hooks/useToast'
-import { plansService } from '../../shared/services/billing'
+import { savePlanCallable } from '../../shared/services/auth'
 import { formatCurrency } from '../../shared/utils/format'
 import type { SubscriptionPlan } from '../../shared/types'
 import { Icon } from '../../shared/components/ui/Icon'
@@ -24,7 +23,6 @@ export const PlatformPlans: FunctionalComponent = () => {
   const [billing, setBilling] = useState<'monthly' | 'yearly'>('monthly')
   const [open, setOpen] = useState(false)
   const [editing, setEditing] = useState<SubscriptionPlan | null>(null)
-  const [deleteTarget, setDeleteTarget] = useState<SubscriptionPlan | null>(null)
   const [form, setForm] = useState<Partial<SubscriptionPlan>>({ features: [] as string[] })
 
   const recommendedId = [...plans].sort((a, b) => a.priceMonthly - b.priceMonthly)[Math.max(0, Math.floor((plans.length - 1) / 2))]?.id
@@ -53,26 +51,34 @@ export const PlatformPlans: FunctionalComponent = () => {
       description: form.description || '',
       priceMonthly: Number(form.priceMonthly),
       priceYearly: Number(form.priceYearly || 0),
+      trialDays: Number(form.trialDays || 3),
+      launchPrice: Number(form.launchPrice || 0),
+      launchEnabled: !!form.launchEnabled,
       productLimit: Number(form.productLimit || 10),
       orderLimitPerMonth: Number(form.orderLimitPerMonth || 0),
+      landingPagesLimit: Number(form.landingPagesLimit || 0),
+      salesLinksLimit: Number(form.salesLinksLimit || 0),
+      staffLimit: Number(form.staffLimit || 0),
+      storageLimit: Number(form.storageLimit || 0),
       features: form.features || [],
       active: form.active ?? true,
     }
-    if (editing) {
-      await plansService.update(editing.id, payload)
-      toast.push('تم تحديث الباقة')
-    } else {
-      await plansService.create(payload)
-      toast.push('تم إنشاء الباقة')
+    try {
+      await savePlanCallable({ planId: editing?.id, plan: payload })
+      toast.push(editing ? 'تم تحديث الباقة' : 'تم إنشاء الباقة')
+      setOpen(false)
+    } catch (err: any) {
+      toast.push('فشل حفظ الباقة', err?.message || 'حدث خطأ غير متوقع', 'error')
     }
-    setOpen(false)
   }
 
-  const remove = async () => {
-    if (!deleteTarget) return
-    await plansService.remove(deleteTarget.id)
-    toast.push('تم حذف الباقة')
-    setDeleteTarget(null)
+  const toggleActive = async (p: SubscriptionPlan) => {
+    try {
+      await savePlanCallable({ planId: p.id, plan: { ...p, active: !p.active } })
+      toast.push(p.active ? 'تم إيقاف الباقة' : 'تم تفعيل الباقة')
+    } catch (err: any) {
+      toast.push('فشل تحديث حالة الباقة', err?.message || 'حدث خطأ غير متوقع', 'error')
+    }
   }
 
   return (
@@ -109,6 +115,10 @@ export const PlatformPlans: FunctionalComponent = () => {
                   <strong>{formatCurrency(priceOf(p))}</strong>
                   <span>/ {billing === 'monthly' ? 'شهرياً' : 'سنوياً'}</span>
                 </div>
+                {p.launchEnabled && Number(p.launchPrice) > 0 && (
+                  <div className="plan-pricing-launch">أول شهر {formatCurrency(p.launchPrice)} (خصم إطلاق)</div>
+                )}
+                <div className="plan-pricing-trial">تجربة مجانية {Number(p.trialDays || 3)} يوم</div>
                 <ul className="plan-pricing-features">
                   {p.features.map((f, i) => (
                     <li key={i}>
@@ -124,10 +134,22 @@ export const PlatformPlans: FunctionalComponent = () => {
                     <Icon name="receipt_long" />
                     {p.orderLimitPerMonth > 0 ? `حتى ${p.orderLimitPerMonth} طلب شهرياً` : 'طلبات غير محدودة'}
                   </li>
+                  <li>
+                    <Icon name="web" />
+                    حتى {p.landingPagesLimit || 0} صفحة هبوط
+                  </li>
+                  <li>
+                    <Icon name="link" />
+                    حتى {p.salesLinksLimit || 0} رابط بيع
+                  </li>
+                  <li>
+                    <Icon name="group_add" />
+                    حتى {p.staffLimit || 1} عضو فريق
+                  </li>
                 </ul>
                 <div className="plan-pricing-actions">
                   <Button variant="soft" size="sm" icon="edit" onClick={() => openEdit(p)}>تعديل</Button>
-                  <Button variant="ghost" size="sm" icon="delete" onClick={() => setDeleteTarget(p)}>حذف</Button>
+                  <Button variant={p.active ? 'ghost' : 'outline'} size="sm" icon={p.active ? 'block' : 'check'} onClick={() => toggleActive(p)}>{p.active ? 'إيقاف' : 'تفعيل'}</Button>
                 </div>
               </div>
             )
@@ -153,16 +175,29 @@ export const PlatformPlans: FunctionalComponent = () => {
           <Input label="السعر السنوي" type="number" value={form.priceYearly || ''} onChange={(v) => setForm({ ...form, priceYearly: Number(v) })} />
         </div>
         <div className="grid grid-2">
+          <Input label="مدة التجربة (أيام)" type="number" value={form.trialDays || 3} onChange={(v) => setForm({ ...form, trialDays: Number(v) })} />
+          <Input label="سعر الإطلاق (الشهر الأول)" type="number" value={form.launchPrice || ''} onChange={(v) => setForm({ ...form, launchPrice: Number(v) })} />
+        </div>
+        <div className="field">
+          <Toggle checked={form.launchEnabled ?? false} onChange={(v) => setForm({ ...form, launchEnabled: v })} label="تفعيل خصم الإطلاق للشهر الأول" />
+        </div>
+        <div className="grid grid-2">
           <Input label="حد المنتجات" type="number" value={form.productLimit || 10} onChange={(v) => setForm({ ...form, productLimit: Number(v) })} />
           <Input label="حد الطلبات الشهري" type="number" value={form.orderLimitPerMonth || ''} onChange={(v) => setForm({ ...form, orderLimitPerMonth: Number(v) })} />
+        </div>
+        <div className="grid grid-2">
+          <Input label="حد صفحات الهبوط" type="number" value={form.landingPagesLimit || ''} onChange={(v) => setForm({ ...form, landingPagesLimit: Number(v) })} />
+          <Input label="حد روابط البيع" type="number" value={form.salesLinksLimit || ''} onChange={(v) => setForm({ ...form, salesLinksLimit: Number(v) })} />
+        </div>
+        <div className="grid grid-2">
+          <Input label="حد أعضاء الفريق" type="number" value={form.staffLimit || ''} onChange={(v) => setForm({ ...form, staffLimit: Number(v) })} />
+          <Input label="حد التخزين (MB)" type="number" value={form.storageLimit || ''} onChange={(v) => setForm({ ...form, storageLimit: Number(v) })} />
         </div>
         <Textarea label="المميزات (كل سطر ميزة)" value={(form.features || []).join('\n')} onChange={(v) => setForm({ ...form, features: v.split('\n').filter(Boolean) })} rows={4} />
         <div className="field">
           <Toggle checked={form.active ?? true} onChange={(v) => setForm({ ...form, active: v })} label="متاحة للاشتراك" />
         </div>
       </Modal>
-
-      <ConfirmDialog open={!!deleteTarget} onCancel={() => setDeleteTarget(null)} onConfirm={remove} title="حذف الباقة" description={`سيتم حذف باقة "${deleteTarget?.name}" نهائياً. قد يتأثر التجار المشتركون بها.`} confirmLabel="حذف" />
     </div>
   )
 }

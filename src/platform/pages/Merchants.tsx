@@ -62,7 +62,7 @@ export const PlatformMerchants: FunctionalComponent = () => {
   const [page, setPage] = useState(1)
   const PAGE_SIZE = 10
   const [open, setOpen] = useState(false)
-  const [form, setForm] = useState({ name: '', ref: '', email: '', ownerName: '', password: '' })
+  const [form, setForm] = useState({ name: '', ref: '', email: '', ownerName: '', phone: '', password: '' })
   const [busyId, setBusyId] = useState<string | null>(null)
 
   const hasLimit = (r: PlatformMerchantRow) => r.orderLimit > 0
@@ -112,7 +112,7 @@ export const PlatformMerchants: FunctionalComponent = () => {
   }
 
   const submit = async () => {
-    if (!form.name || !form.email || !form.ownerName || !form.password) {
+    if (!form.name || !form.email || !form.ownerName || !form.phone || !form.password) {
       toast.push('أكمل البيانات المطلوبة', undefined, 'error')
       return
     }
@@ -125,12 +125,13 @@ export const PlatformMerchants: FunctionalComponent = () => {
         email: form.email,
         password: form.password,
         name: form.ownerName,
+        phone: form.phone,
         storeName: form.name,
         storeRef: form.ref || slugify(form.name),
       })
-      toast.push('تم إضافة المتجر', 'الحساب بانتظار موافقة الاشتراك', 'success')
+      toast.push('تم إضافة المتجر', 'تم إنشاء الحساب مع تفعيل التجربة المجانية', 'success')
       setOpen(false)
-      setForm({ name: '', ref: '', email: '', ownerName: '', password: '' })
+      setForm({ name: '', ref: '', email: '', ownerName: '', phone: '', password: '' })
       await refresh()
     } catch (err: any) {
       toast.push('فشل إضافة المتجر', err?.message || 'حدث خطأ غير متوقع', 'error')
@@ -296,7 +297,8 @@ export const PlatformMerchants: FunctionalComponent = () => {
         <Input label="الرابط (ref)" value={form.ref} onChange={(v) => setForm({ ...form, ref: v })} hint="اتركه فارغاً لتوليده تلقائياً — سيمنع الازدواج تلقائياً" />
         <Input label="اسم المالك" value={form.ownerName} onChange={(v) => setForm({ ...form, ownerName: v })} required />
         <Input label="بريد المالك" value={form.email} onChange={(v) => setForm({ ...form, email: v })} type="email" required />
-        <Input label="كلمة مرور المالك" value={form.password} onChange={(v) => setForm({ ...form, password: v })} type="password" required hint="6 أحرف على الأقل — سيكتمل التفعيل بعد الموافقة على الاشتراك" />
+        <Input label="رقم هاتف المالك" value={form.phone} onChange={(v) => setForm({ ...form, phone: v })} type="tel" required />
+        <Input label="كلمة مرور المالك" value={form.password} onChange={(v) => setForm({ ...form, password: v })} type="password" required hint="6 أحرف على الأقل — يُفعّل الاشتراك فوراً مع التجربة المجانية" />
       </Modal>
     </div>
   )

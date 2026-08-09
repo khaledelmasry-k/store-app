@@ -6,7 +6,7 @@ import { Button } from '../../shared/components/ui/Button'
 import { Card } from '../../shared/components/ui/Card'
 import { SmartImage } from '../../shared/components/ui/SmartImage'
 import { formatCurrency } from '../../shared/utils/format'
-import { lineSubtotal } from '../../shared/utils/pricing'
+import { lineSubtotal, nextTierQuantity, piecesLabel } from '../../shared/utils/pricing'
 import { Icon } from '../../shared/components/ui/Icon'
 
 export const StoreCart: FunctionalComponent = () => {
@@ -33,28 +33,40 @@ export const StoreCart: FunctionalComponent = () => {
 
       <div className="cart-layout">
         <div>
-          {cart.items.map((item, i) => (
-            <Card key={i} className="cart-line">
-              <div className="flex flex-gap-lg">
-                {item.image && <SmartImage src={item.image} alt={item.name} className="cart-line-img" placeholderClassName="cart-line-img" />}
-                <div className="grow">
-                  <p><strong>{item.name}</strong></p>
-                  <p className="muted small">
-                    {[item.color, item.size].filter(Boolean).join(' • ')} • {formatCurrency(item.price)}
-                  </p>
+          {cart.items.map((item, i) => {
+            const isQtyMode = item.pricingMode === 'quantity' && item.quantityTiers && item.quantityTiers.length > 0
+            const step = (dir: -1 | 1) => {
+              if (isQtyMode) {
+                const next = nextTierQuantity(item.quantityTiers, item.quantity, dir)
+                if (next != null) cart.setQty(i, next)
+              } else {
+                cart.setQty(i, Math.max(1, item.quantity + dir))
+              }
+            }
+            return (
+              <Card key={i} className="cart-line">
+                <div className="flex flex-gap-lg">
+                  {item.image && <SmartImage src={item.image} alt={item.name} className="cart-line-img" placeholderClassName="cart-line-img" />}
+                  <div className="grow">
+                    <p><strong>{item.name}</strong></p>
+                    <p className="muted small">
+                      {[item.color, item.size].filter(Boolean).join(' • ')}
+                      {isQtyMode ? ` • ${item.quantity} ${piecesLabel(item.quantity)}` : ` • ${formatCurrency(item.price)}`}
+                    </p>
+                  </div>
+                  <div className="qty-stepper">
+                    <button type="button" className="qty-btn" onClick={() => step(-1)}>−</button>
+                    <strong>{item.quantity}</strong>
+                    <button type="button" className="qty-btn" onClick={() => step(1)}>+</button>
+                  </div>
+                  <strong>{formatCurrency(lineSubtotal(item))}</strong>
+                  <button className="icon-btn" onClick={() => cart.remove(i)} type="button">
+                    <Icon name="delete" />
+                  </button>
                 </div>
-                <div className="qty-stepper">
-                  <button type="button" className="qty-btn" onClick={() => cart.setQty(i, Math.max(1, item.quantity - 1))}>−</button>
-                  <strong>{item.quantity}</strong>
-                  <button type="button" className="qty-btn" onClick={() => cart.setQty(i, item.quantity + 1)}>+</button>
-                </div>
-                <strong>{formatCurrency(lineSubtotal(item))}</strong>
-                <button className="icon-btn" onClick={() => cart.remove(i)} type="button">
-                  <Icon name="delete" />
-                </button>
-              </div>
-            </Card>
-          ))}
+              </Card>
+            )
+          })}
         </div>
         <div className="order-summary">
           <h3 className="card-title mb-1">ملخص الطلب</h3>

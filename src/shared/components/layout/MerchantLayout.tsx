@@ -2,6 +2,7 @@ import { FunctionalComponent } from 'preact'
 import { useEffect } from 'preact/hooks'
 import { useAuth } from '../../hooks/useAuth'
 import { useStore } from '../../hooks/useStore'
+import { SubscriptionBanner } from '../subscription/SubscriptionBanner'
 import { AppShell } from './AppShell'
 
 export const MerchantLayout: FunctionalComponent = ({ children }) => {
@@ -26,6 +27,7 @@ export const MerchantLayout: FunctionalComponent = ({ children }) => {
       storefrontHref={store ? `/store/${store.slug}` : undefined}
       storeSwitcher={{ storeIds: user?.role === 'merchant' ? (user.storeIds || []) : [], currentId: store?.id || '', onSwitch: setStoreId }}
     >
+      {user?.role === 'merchant' && <SubscriptionBanner />}
       {children}
     </AppShell>
   )

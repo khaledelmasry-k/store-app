@@ -79,20 +79,32 @@ export const MerchantProducts: FunctionalComponent = () => {
 
   const remove = async () => {
     if (!deleteTarget) return
-    await productsService.remove(deleteTarget.id)
-    toast.push('تم حذف المنتج')
+    try {
+      await productsService.remove(deleteTarget.id)
+      toast.push('تم حذف المنتج')
+    } catch (err: any) {
+      toast.push('تعذر حذف المنتج', err?.message || 'حدث خطأ غير متوقع', 'error')
+    }
     setDeleteTarget(null)
   }
 
   const toggleActive = async (p: Product) => {
-    await productsService.update(p.id, { active: !p.active })
+    try {
+      await productsService.update(p.id, { active: !p.active })
+    } catch (err: any) {
+      toast.push('تعذر تحديث حالة النشر', err?.message || 'حدث خطأ غير متوقع', 'error')
+    }
   }
 
   const applyAdjustment = async () => {
     if (!adjusting || !delta) return
     const newStock = Math.max(0, (adjusting.stock ?? 0) + delta)
-    await productsService.update(adjusting.id, { stock: newStock })
-    toast.push(`تم تحديث مخزون "${adjusting.name}"`)
+    try {
+      await productsService.update(adjusting.id, { stock: newStock })
+      toast.push(`تم تحديث مخزون "${adjusting.name}"`)
+    } catch (err: any) {
+      toast.push('تعذر تحديث المخزون', err?.message || 'حدث خطأ غير متوقع', 'error')
+    }
     setAdjusting(null)
     setDelta(0)
   }

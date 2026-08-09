@@ -63,7 +63,9 @@ function draftFrom(initial?: Product | null): Draft {
     stock: String(initial.stock ?? 0),
     lowStockThreshold: String(initial.lowStockThreshold ?? 5),
     pricingMode: initial.pricingMode === 'quantity' ? 'quantity' : 'standard',
-    quantityTiers: (initial.quantityTiers || []).map((t) => ({ ...t })),
+    quantityTiers: (initial.quantityTiers || []).map((t) =>
+      typeof t.quantity === 'number' ? { ...t } : { quantity: t.minQuantity || 1, price: t.price || 0 },
+    ),
     images: [...(initial.images || [])],
     colorOptions,
     sizes: [...(initial.sizes || [])],
@@ -184,7 +186,7 @@ export const ProductForm: FunctionalComponent<Props> = ({ storeId, initial, cate
             { value: 'standard', label: 'سعر موحد (ثابت)' },
             { value: 'quantity', label: 'سعر حسب الكمية (أسعار متدرجة)' },
           ]}
-          hint={draft.pricingMode === 'quantity' ? 'سيتم حساب السعر تلقائياً حسب الكمية المختارة من العميل' : undefined}
+          hint={draft.pricingMode === 'quantity' ? 'العميل يختار باقة محددة بعدد قطع معين بسعر إجمالي ثابت' : undefined}
         />
       </div>
       {draft.pricingMode === 'quantity' && (

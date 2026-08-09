@@ -25,7 +25,7 @@ const COLLECTIONS = [
   'plans', 'users', 'stores', 'subscriptions', 'orders', 'products', 'customers',
   'analytics', 'transactions', 'payments', 'coupons', 'categories', 'storeLinks',
   'notifications', 'auditLogs', 'shipping', 'team', 'roles', 'invitations',
-  'landingPages',
+  'landingPages', 'subscriptionPayments',
 ]
 
 async function wipe() {
@@ -37,15 +37,22 @@ async function wipe() {
   }
 }
 
-async function createPlan(id, name, priceMonthly, productLimit, orderLimitPerMonth, description, features) {
+async function createPlan(id, name, priceMonthly, productLimit, orderLimitPerMonth, description, features, opts = {}) {
   await db.collection('plans').doc(id).set({
     id,
     name,
     description,
     priceMonthly,
     priceYearly: Math.round(priceMonthly * 10),
+    trialDays: opts.trialDays ?? 3,
+    launchPrice: opts.launchPrice ?? 0,
+    launchEnabled: opts.launchEnabled ?? false,
     productLimit,
     orderLimitPerMonth,
+    landingPagesLimit: opts.landingPagesLimit ?? 1,
+    salesLinksLimit: opts.salesLinksLimit ?? 2,
+    staffLimit: opts.staffLimit ?? 1,
+    storageLimit: opts.storageLimit ?? 500,
     features,
     active: true,
     createdAt: ts(),
@@ -91,13 +98,22 @@ async function createSubscription(storeId, planId, status, opts = {}) {
     status,
     requestNote: 'بيانات تجريبية',
     ordersUsed: opts.ordersUsed || 0,
+    periodNumber: opts.periodNumber ?? 0,
     createdAt: opts.createdAt ? admin.firestore.Timestamp.fromDate(opts.createdAt) : ts(),
     updatedAt: ts(),
     createdBy: 'seed',
   }
   if (opts.startedAt) sub.startedAt = admin.firestore.Timestamp.fromDate(opts.startedAt)
   if (opts.expiresAt) sub.expiresAt = admin.firestore.Timestamp.fromDate(opts.expiresAt)
+  if (opts.trialStartedAt) sub.trialStartedAt = admin.firestore.Timestamp.fromDate(opts.trialStartedAt)
+  if (opts.trialEndsAt) sub.trialEndsAt = admin.firestore.Timestamp.fromDate(opts.trialEndsAt)
+  if (opts.currentPeriodStart) sub.currentPeriodStart = admin.firestore.Timestamp.fromDate(opts.currentPeriodStart)
+  if (opts.currentPeriodEnd) sub.currentPeriodEnd = admin.firestore.Timestamp.fromDate(opts.currentPeriodEnd)
+  if (opts.activatedAt) sub.activatedAt = admin.firestore.Timestamp.fromDate(opts.activatedAt)
   if (opts.approvedBy) sub.approvedBy = opts.approvedBy
+  if (opts.normalPriceSnapshot != null) sub.normalPriceSnapshot = opts.normalPriceSnapshot
+  if (opts.launchPriceSnapshot != null) sub.launchPriceSnapshot = opts.launchPriceSnapshot
+  if (opts.launchUsed != null) sub.launchUsed = opts.launchUsed
   const ref = await db.collection('subscriptions').add(sub)
   return ref.id
 }
@@ -109,7 +125,7 @@ async function createCategory(storeId, name, slug, order) {
   return ref.id
 }
 
-async function createProduct(storeId, categoryId, name, price, stock, description = '') {
+async function createProduct(storeId, categoryId, name, price, stock, description = '', extra = {}) {
   const ref = await db.collection('products').doc()
   await ref.set({
     id: ref.id,
@@ -123,6 +139,7 @@ async function createProduct(storeId, categoryId, name, price, stock, descriptio
     active: true,
     featured: false,
     lowStockThreshold: 5,
+    ...extra,
     createdAt: ts(), updatedAt: ts(), createdBy: 'seed',
   })
   return ref.id
@@ -204,10 +221,10 @@ async function main() {
   await wipe()
   console.log('Wiped existing data.')
 
-  // Plans
-  await createPlan('plan-starter', 'البداية', 500, 20, 50, 'للنشاطات الصغيرة', ['متجر إلكتروني كامل', 'دعم بالهاتف', 'روابط بيع'])
-  await createPlan('plan-growth', 'النمو', 1200, 100, 200, 'للمتاجر المتنامية', ['كل مزايا البداية', 'تحليلات متقدمة', 'فريق حتى 5 أعضاء'])
-  await createPlan('plan-pro', 'الاحتراف', 2500, 500, 500, 'للمتاجر الكبيرة', ['كل مزايا النمو', 'طلبات غير محدودة تقريباً', 'أولوية دعم'])
+  // Plans — fixed pricing with launch-discount and trial config
+  await createPlan('plan-starter', 'البداية', 299, 20, 50, 'للنشاطات الصغيرة', ['متجر إلكتروني كامل', 'دعم بالهاتف', 'روابط بيع'], { launchPrice: 99, launchEnabled: true })
+  await createPlan('plan-growth', 'النمو', 599, 100, 200, 'للمتاجر المتنامية', ['كل مزايا البداية', 'تحليلات متقدمة', 'فريق حتى 5 أعضاء'], { launchPrice: 199, launchEnabled: true, landingPagesLimit: 5, salesLinksLimit: 10, staffLimit: 5, storageLimit: 2000 })
+  await createPlan('plan-pro', 'الاحتراف', 999, 500, 500, 'للمتاجر الكبيرة', ['كل مزايا النمو', 'طلبات غير محدودة تقريباً', 'أولوية دعم'], { launchPrice: 299, launchEnabled: true, landingPagesLimit: 20, salesLinksLimit: 50, staffLimit: 10, storageLimit: 5000 })
 
   // Platform admin
   const adminUid = 'seed-admin'
@@ -244,14 +261,31 @@ async function main() {
     planName: 'النمو',
     startedAt: new Date(Date.now() - 12 * 86400000),
     expiresAt: new Date(Date.now() + 18 * 86400000),
+    currentPeriodStart: new Date(Date.now() - 12 * 86400000),
+    currentPeriodEnd: new Date(Date.now() + 18 * 86400000),
+    activatedAt: new Date(Date.now() - 12 * 86400000),
     approvedBy: adminUid,
     ordersUsed: 132,
+    periodNumber: 1,
+    normalPriceSnapshot: 599,
+    launchPriceSnapshot: 199,
+    launchUsed: true,
   })
   const teaCat = await createCategory('store-a', 'شاي', 'tea', 1)
   const coffeeCat = await createCategory('store-a', 'قهوة', 'coffee', 2)
   const p1 = await createProduct('store-a', teaCat, 'شاي صيني ممتاز', 180, 40, 'شاي أخضر فاخر')
   const p2 = await createProduct('store-a', coffeeCat, 'قهوة مختصة', 320, 25, 'حبوب محمصة طازجة')
   const p3 = await createProduct('store-a', teaCat, 'أدوات تحضير الشاي', 150, 60, 'إبريق زجاجي ومصفاة')
+  // Bundle-priced product: 1/2/3/4 pieces at a TOTAL package price (500/900/1200/1400).
+  const p4 = await createProduct('store-a', teaCat, 'علبة هدايا شاي فاخرة', 500, 40, 'باقة شاي منوّعة في علبة هدايا', {
+    pricingMode: 'quantity',
+    quantityTiers: [
+      { quantity: 1, price: 500 },
+      { quantity: 2, price: 900 },
+      { quantity: 3, price: 1200 },
+      { quantity: 4, price: 1400 },
+    ],
+  })
   await createOrder('store-a', 'store-a', 'ORD-00001', p1, 'أحمد حسن', '01000000001', 180, 'DELIVERED', 8)
   await createOrder('store-a', 'store-a', 'ORD-00002', p2, 'سارة أحمد', '01000000002', 320, 'DELIVERED', 5)
   await createOrder('store-a', 'store-a', 'ORD-00003', p3, 'خالد محمود', '01000000003', 150, 'SHIPPED', 3)
@@ -396,8 +430,15 @@ async function main() {
     planName: 'البداية',
     startedAt: new Date(Date.now() - 20 * 86400000),
     expiresAt: new Date(Date.now() + 10 * 86400000),
+    currentPeriodStart: new Date(Date.now() - 20 * 86400000),
+    currentPeriodEnd: new Date(Date.now() + 10 * 86400000),
+    activatedAt: new Date(Date.now() - 20 * 86400000),
     approvedBy: adminUid,
     ordersUsed: 46,
+    periodNumber: 2,
+    normalPriceSnapshot: 299,
+    launchPriceSnapshot: 99,
+    launchUsed: true,
   })
   const shoesCat = await createCategory('store-b', 'أحذية', 'shoes', 1)
   const sp1 = await createProduct('store-b', shoesCat, 'حذاء رياضي', 550, 20, 'مقاسات متعددة')
@@ -406,29 +447,66 @@ async function main() {
   await createOrder('store-b', 'store-b', 'ORD-00002', sp2, 'عمر فاروق', '01000000011', 720, 'NEW', 0)
   await seedAnalytics('store-b', 3, 1500)
 
-  // Store C — pending subscription
+  // Store C — trialing (instant self-serve trial), with a pending activation request
   const cUid = 'seed-owner-c'
   await createUser(cUid, 'owner@c.store', 'Owner12345', 'طارق فؤاد', 'merchant', ['store-c'])
-  await createStore('store-c', 'zeina-gifts', 'زينة الجملة', cUid, { published: false })
-  await createSubscription('store-c', 'plan-starter', 'pending', { planName: 'البداية' })
+  await createStore('store-c', 'zeina-gifts', 'زينة الجملة', cUid, { published: true })
+  const cSubId = await createSubscription('store-c', 'plan-starter', 'trialing', {
+    planName: 'البداية',
+    trialStartedAt: new Date(Date.now() - 2 * 86400000),
+    trialEndsAt: new Date(Date.now() + 1 * 86400000),
+    startedAt: new Date(Date.now() - 2 * 86400000),
+    expiresAt: new Date(Date.now() + 1 * 86400000),
+    normalPriceSnapshot: 299,
+    launchPriceSnapshot: 99,
+    ordersUsed: 5,
+  })
+  await db.collection('subscriptionPayments').add({
+    id: 'seed-pay-c1',
+    subscriptionId: cSubId,
+    storeId: 'store-c',
+    planId: 'plan-starter',
+    planName: 'البداية',
+    amount: 99,
+    paymentMethod: 'فودافون كاش',
+    reference: '487221900123',
+    note: 'تحويل أول شهر بسعر الإطلاق',
+    screenshotUrl: null,
+    status: 'pending',
+    periodNumber: 1,
+    createdAt: admin.firestore.Timestamp.fromDate(new Date(Date.now() - 86400000)),
+    updatedAt: admin.firestore.Timestamp.fromDate(new Date(Date.now() - 86400000)),
+    createdBy: cUid,
+  })
 
-  // Store D — expired subscription
+  // Store D — trial expired (data preserved, storefront gated)
   const dUid = 'seed-owner-d'
   await createUser(dUid, 'owner@d.store', 'Owner12345', 'هدى رمضان', 'merchant', ['store-d'])
-  await createStore('store-d', 'noor-cafe', 'كافتيريا النور', dUid, { published: false })
+  await createStore('store-d', 'noor-cafe', 'كافتيريا النور', dUid, { published: true })
   await createSubscription('store-d', 'plan-pro', 'expired', {
     planName: 'الاحتراف',
-    startedAt: new Date(Date.now() - 40 * 86400000),
-    expiresAt: new Date(Date.now() - 10 * 86400000),
+    trialStartedAt: new Date(Date.now() - 12 * 86400000),
+    trialEndsAt: new Date(Date.now() - 4 * 86400000),
+    startedAt: new Date(Date.now() - 12 * 86400000),
+    expiresAt: new Date(Date.now() - 4 * 86400000),
+    normalPriceSnapshot: 999,
+    launchPriceSnapshot: 299,
     ordersUsed: 40,
   })
 
+  // Store E — legacy pending subscription (admin-approval flow still supported)
+  const eUid = 'seed-owner-e'
+  await createUser(eUid, 'owner@e.store', 'Owner12345', 'سلمى عادل', 'merchant', ['store-e'])
+  await createStore('store-e', 'amal-kids', 'أمل للأطفال', eUid, { published: false })
+  await createSubscription('store-e', 'plan-starter', 'pending', { planName: 'البداية' })
+
   console.log('Seed complete:')
   console.log('  admin     -> admin@mk.store / Admin12345')
-  console.log('  store A   -> owner@a.store / Owner12345 (published, moderate usage)')
-  console.log('  store B   -> owner@b.store / Owner12345 (published, near limit)')
-  console.log('  store C   -> owner@c.store / Owner12345 (pending subscription)')
-  console.log('  store D   -> owner@d.store / Owner12345 (expired subscription)')
+  console.log('  store A   -> owner@a.store / Owner12345 (published, moderate usage, paid growth)')
+  console.log('  store B   -> owner@b.store / Owner12345 (published, near limit, paid starter)')
+  console.log('  store C   -> owner@c.store / Owner12345 (trialing + pending activation request)')
+  console.log('  store D   -> owner@d.store / Owner12345 (trial expired — storefront gated)')
+  console.log('  store E   -> owner@e.store / Owner12345 (pending legacy subscription)')
   process.exit(0)
 }
 

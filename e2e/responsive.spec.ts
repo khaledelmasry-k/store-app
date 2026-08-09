@@ -20,7 +20,7 @@ test('published storefront renders themed and fits viewport', async ({ page }) =
 })
 
 test('coming-soon page fits viewport with no overflow', async ({ page }) => {
-  await page.goto('/store/zeina-gifts', { waitUntil: 'domcontentloaded' })
+  await page.goto('/store/amal-kids', { waitUntil: 'domcontentloaded' })
   await expect(page.locator('.store-coming-soon')).toBeVisible({ timeout: 15000 })
   const overflow = await noHScroll(page)
   expect(overflow).toBeLessThan(20)

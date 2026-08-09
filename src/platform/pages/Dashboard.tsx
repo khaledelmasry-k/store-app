@@ -38,7 +38,7 @@ export const PlatformDashboard: FunctionalComponent = () => {
   const storesRes = useCollection<Store>('stores', { orderBy: { field: 'createdAt' } })
   const subsRes = useCollection<Subscription>('subscriptions', { orderBy: { field: 'createdAt' } })
   const plansRes = useCollection<SubscriptionPlan>('plans', { orderBy: { field: 'priceMonthly' } })
-  const { rows, loading: overviewLoading } = usePlatformOverview()
+  const { rows, metrics, loading: overviewLoading } = usePlatformOverview()
   const toast = useToast()
 
   const stores = storesRes.data
@@ -51,15 +51,11 @@ export const PlatformDashboard: FunctionalComponent = () => {
 
   const activeStores = stores.filter((s) => s.active).length
   const suspendedStores = stores.filter((s) => !s.active).length
-  const activeSubs = subs.filter((s) => s.status === 'active').length
-  const pendingSubs = subs.filter((s) => s.status === 'pending').length
 
   const attention = rows.filter(needsAttention).sort((a, b) => {
     const order: Record<string, number> = { none: 6, normal: 6, moderate: 6, reached: 0, near: 1, approaching: 2, pending: 3, expired: 4 }
     return (order[a.usageLevel] ?? 5) - (order[b.usageLevel] ?? 5)
   })
-  const reachedCount = rows.filter((r) => r.usageLevel === 'reached').length
-  const nearCount = rows.filter((r) => r.usageLevel === 'near' || r.usageLevel === 'approaching').length
 
   const last6Months = Array.from({ length: 6 }, (_, i) => {
     const d = new Date()
@@ -108,9 +104,10 @@ export const PlatformDashboard: FunctionalComponent = () => {
       <div className="stats-grid">
         <StatsCard title="إجمالي التجار" value={stores.length} icon="storefront" tone="primary" />
         <StatsCard title="المتاجر النشطة" value={activeStores} icon="store" tone="green" changeLabel={`${suspendedStores} موقوف`} />
-        <StatsCard title="الاشتراكات النشطة" value={activeSubs} icon="card_membership" tone="blue" changeLabel={`${pendingSubs} بانتظار`} />
-        <StatsCard title="قريب من الحد" value={nearCount} icon="signal_cellular_alt_1_bar" tone="amber" />
-        <StatsCard title="استنفد الحد" value={reachedCount} icon="block" tone="red" />
+        <StatsCard title="الإيراد الشهري المتكرر" value={metrics.mrr} currency icon="payments" tone="blue" changeLabel={`${metrics.activeSubscriptions} اشتراك مدفوع`} />
+        <StatsCard title="تجربة مجانية" value={metrics.trialing} icon="hourglass_top" tone="indigo" />
+        <StatsCard title="طلبات تفعيل معلقة" value={metrics.pendingPaymentRequests} icon="hourglass" tone="amber" />
+        <StatsCard title="تفعيلات بسعر الإطلاق" value={metrics.launchActivations} icon="local_offer" tone="green" />
       </div>
 
       <Card title="يحتاج اهتماماً" subtitle={attention.length ? `${attention.length} متجر يتطلب إجراء` : 'كل المتاجر بحالة جيدة'} className="mb-2">

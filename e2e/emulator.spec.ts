@@ -38,6 +38,16 @@ async function countProducts(storeId: string) {
 
 async function login(page: Page, role: 'platform' | 'merchant', email: string, password: string) {
   await page.goto(`/login?role=${role}`, { waitUntil: 'domcontentloaded' })
+  // The auth guard redirects an already-authenticated session away from /login
+  // after hydration. If the login form never renders, sign out and retry.
+  await page.waitForTimeout(600)
+  if ((await page.locator('button[type="submit"]').count()) === 0) {
+    await page.locator('.user-chip').first().click()
+    await page.getByText('تسجيل الخروج').first().click()
+    await page.waitForURL(/\/login/, { timeout: 15000 })
+    await page.waitForLoadState('domcontentloaded')
+    await page.goto(`/login?role=${role}`, { waitUntil: 'domcontentloaded' })
+  }
   await page.locator('input[type="email"]').fill(email)
   await page.locator('input[type="password"]').fill(password)
   await page.locator('button[type="submit"]').click()
@@ -52,6 +62,13 @@ async function logout(page: Page) {
   await page.waitForTimeout(500)
 }
 
+function phoneFromEmail(email: string) {
+  const raw = email.replace(/[^a-z0-9]/gi, '')
+  let h = 0
+  for (const c of raw) h = (h * 31 + c.charCodeAt(0)) % 100000000
+  return `01${String(h).padStart(8, '0')}`
+}
+
 async function registerStore(
   page: Page,
   opts: { email: string; password: string; name: string; storeName: string; storeRef: string; planName: string },
@@ -60,17 +77,27 @@ async function registerStore(
   await page.locator('.auth-card input[type="email"]').fill(opts.email)
   await page.locator('.auth-card input[type="password"]').fill(opts.password)
   await page.locator('.auth-card input').nth(0).fill(opts.name)
+  await page.locator('.auth-card input').nth(1).fill(phoneFromEmail(opts.email))
   await page.getByRole('button', { name: 'التالي' }).click()
   await page.locator('.plan-card', { hasText: opts.planName }).click()
   await page.getByRole('button', { name: 'التالي' }).click()
   await page.locator('.auth-card input').nth(0).fill(opts.storeName)
   await page.locator('.auth-card input').nth(1).fill(opts.storeRef)
   await page.getByRole('button', { name: 'إنشاء الحساب' }).click()
-  await expect(page.getByText('تم تقديم طلب التسجيل')).toBeVisible({ timeout: 30000 })
+  await expect(page.getByText('تم إنشاء حسابك بنجاح')).toBeVisible({ timeout: 30000 })
 }
 
 async function merchantRow(page: Page, text: string) {
-  return page.locator('tr, .card-table-card', { hasText: text }).first()
+  const base = page.locator('tr, .card-table-card')
+  for (let p = 0; p < 5; p++) {
+    const row = base.filter({ hasText: text }).first()
+    if ((await row.count()) > 0) return row
+    const next = page.locator('button', { hasText: 'التالي' })
+    if ((await next.count()) === 0 || (await next.isDisabled())) break
+    await next.click()
+    await page.waitForTimeout(300)
+  }
+  return base.filter({ hasText: text }).first()
 }
 
 async function pollValue<T>(fn: () => Promise<T>, ok: (v: T) => boolean, timeout = 15000): Promise<T> {
@@ -100,7 +127,7 @@ function ctx() {
 }
 
 // ─────────────────────────────────────────────────────────────
-test('register new merchant (published=false, pending) + slug created', async ({ page }) => {
+test('register new merchant (published=false, trialing) + slug created', async ({ page }) => {
   const { email, storeName, ref } = ctx()
   await registerStore(page, {
     email,
@@ -116,8 +143,12 @@ test('register new merchant (published=false, pending) + slug created', async ({
   expect(store!.data()!.published).toBe(false)
   const sub = await latestSub(store!.id)
   expect(sub).not.toBeNull()
-  expect(sub!.status).toBe('pending')
+  expect(sub!.status).toBe('trialing')
   expect(sub!.planId).toBe('plan-starter')
+  expect(sub!.trialEndsAt).toBeTruthy()
+  expect(sub!.normalPriceSnapshot).toBe(299)
+  expect(sub!.launchPriceSnapshot).toBe(99)
+  expect(sub!.launchUsed).toBeFalsy()
 })
 
 test('register duplicate slug gets a numeric suffix', async ({ page }) => {
@@ -135,36 +166,15 @@ test('register duplicate slug gets a numeric suffix', async ({ page }) => {
   expect(dup!.data()!.ref).toBe(`${ref}-2`)
 })
 
-test('platform approves -> merchant enabled; publish + theme + product', async ({ page }) => {
-  const { uniq, email, ref } = ctx()
-  // Admin approves the pending subscription.
-  await login(page, 'platform', 'admin@mk.store', 'Admin12345')
-  await page.waitForURL(/\/platform/, { timeout: 15000 })
-  await page.goto('/platform/merchants', { waitUntil: 'domcontentloaded' })
-  await page.getByPlaceholder(/بحث بالاسم/).fill(email)
-  const row = await merchantRow(page, email)
-  await expect(row).toBeVisible({ timeout: 15000 })
-  await row.getByRole('button', { name: 'موافقة' }).click()
-
+test('trial merchant self-serves: publish + theme + product', async ({ page }) => {
+  const { email, ref } = ctx()
   const store = (await pollValue(() => storeBySlug(ref), (s) => s != null))!
-  const ownerId = store.data()!.ownerId as string
-  const subStatus = await pollValue(
-    async () => (await latestSub(store.id))?.status,
-    (s) => s === 'active',
-  )
-  expect(subStatus).toBe('active')
-  const userSnap = await db.doc(`users/${ownerId}`).get()
-  expect(userSnap.data()!.active).toBe(true)
-  const authUser = await admin.auth().getUser(ownerId)
-  expect(authUser.disabled).toBe(false)
-  await shot(page, `platform-merchants-${uniq}`)
-  await logout(page)
 
-  // Merchant logs in now that the account is enabled.
+  // Merchant account is active immediately (instant trial — no admin approval).
   await login(page, 'merchant', email, PASSWORD)
   await page.waitForURL(/\/dashboard/, { timeout: 15000 })
 
-  // Publish from the dashboard toggle.
+  // Publish from the dashboard toggle (trialing grant allows it).
   await page.goto('/dashboard', { waitUntil: 'domcontentloaded' })
   await expect(page.locator('.checklist')).toBeVisible({ timeout: 15000 })
   await page.locator('.toggle').click()
@@ -262,7 +272,7 @@ test('storefront theme vars, cart -> checkout -> order, ordersUsed increments', 
   await page.locator('.field', { hasText: 'العنوان بالتفصيل' }).locator('textarea').fill('شارع 9، عمارة 4')
   await page.getByRole('button', { name: 'تأكيد الطلب' }).click()
 
-  await expect(page.getByText('تم تأكيد طلبك!')).toBeVisible({ timeout: 30000 })
+  await expect(page.getByText('تم إنشاء طلبك بنجاح')).toBeVisible({ timeout: 30000 })
   await shot(page, `checkout-confirmed-${uniq}`)
 
   const store = (await storeBySlug(slug))!
@@ -278,14 +288,14 @@ test('storefront theme vars, cart -> checkout -> order, ordersUsed increments', 
 test('unpublished store shows coming-soon to visitors; owner can preview', async ({ page }) => {
   const { uniq } = ctx()
   // Anonymous visitor -> coming soon.
-  await page.goto('/store/zeina-gifts', { waitUntil: 'domcontentloaded' })
+  await page.goto('/store/amal-kids', { waitUntil: 'domcontentloaded' })
   await expect(page.locator('.store-coming-soon')).toBeVisible({ timeout: 15000 })
   await shot(page, `coming-soon-${uniq}`)
 
-  // Owner (seeded store C) can preview the storefront.
-  await login(page, 'merchant', 'owner@c.store', 'Owner12345')
+  // Owner (seeded store E) can preview the storefront.
+  await login(page, 'merchant', 'owner@e.store', 'Owner12345')
   await page.waitForURL(/\/dashboard/, { timeout: 15000 })
-  await page.goto('/store/zeina-gifts', { waitUntil: 'domcontentloaded' })
+  await page.goto('/store/amal-kids', { waitUntil: 'domcontentloaded' })
   await expect(page.locator('.store-coming-soon')).toHaveCount(0, { timeout: 15000 })
   await expect(page.locator('.store-header')).toBeVisible()
 })
@@ -306,11 +316,13 @@ test('platform Merchants shows seeded usage bars (132/200 moderate, 46/50 near)'
   await expect(rowB).toContainText('قريب من الحد')
   await shot(page, 'platform-usage-b')
 
-  // Pending + expired segments still present from the seed.
+  // Trialing + expired segments present from the seed.
   const rowC = await merchantRow(page, 'zeina-gifts')
-  await expect(rowC).toContainText('قيد الانتظار')
+  await expect(rowC).toContainText('تجربة مجانية')
   const rowD = await merchantRow(page, 'noor-cafe')
   await expect(rowD).toContainText('منتهي')
+  const rowE = await merchantRow(page, 'amal-kids')
+  await expect(rowE).toContainText('قيد الانتظار')
 })
 
 test('merchant subscription page shows persisted usage (132/200) and countdown', async ({ page }) => {
@@ -330,7 +342,7 @@ test('merchant subscription page shows persisted usage (132/200) and countdown',
 test('shipping: zones store shows zone fee at checkout and persists shippingFee + snapshot', async ({ page }) => {
   // Reuse this project's flow store (created earlier in the run) so we never
   // add an extra merchant row and overflow the platform merchants table.
-  const { uniq, ref } = ctx()
+  const { ref } = ctx()
   const store = (await storeBySlug(ref))!
   await db.collection('stores').doc(store.id).update({
     shipping: {
@@ -369,7 +381,7 @@ test('shipping: zones store shows zone fee at checkout and persists shippingFee 
   await page.locator('.field', { hasText: 'المدينة' }).locator('input').fill('مدينة نصر')
   await page.locator('.field', { hasText: 'العنوان بالتفصيل' }).locator('textarea').fill('شارع 5')
   await page.getByRole('button', { name: 'تأكيد الطلب' }).click()
-  await expect(page.getByText('تم تأكيد طلبك!')).toBeVisible({ timeout: 30000 })
+  await expect(page.getByText('تم إنشاء طلبك بنجاح')).toBeVisible({ timeout: 30000 })
 
   const orderSnap = await db.collection('orders').where('storeId', '==', store.id).orderBy('createdAt', 'desc').limit(1).get()
   expect(orderSnap.empty).toBe(false)
@@ -428,7 +440,7 @@ test('sales link: /s/:code redirects to the storefront and DELIVERED orders coun
   await page.locator('.field', { hasText: 'المدينة' }).locator('input').fill('مدينة نصر')
   await page.locator('.field', { hasText: 'العنوان بالتفصيل' }).locator('textarea').fill('شارع 8')
   await page.getByRole('button', { name: 'تأكيد الطلب' }).click()
-  await expect(page.getByText('تم تأكيد طلبك!')).toBeVisible({ timeout: 30000 })
+  await expect(page.getByText('تم إنشاء طلبك بنجاح')).toBeVisible({ timeout: 30000 })
 
   const orderSnap = await db.collection('orders').where('storeId', '==', store.id).orderBy('createdAt', 'desc').limit(1).get()
   const order = orderSnap.docs[0].data() as any
@@ -511,7 +523,7 @@ test('landing page: /landing/:slug renders, records a view, QuickBuy orders attr
   await page.locator('.field', { hasText: 'المدينة' }).locator('input').fill('مدينة نصر')
   await page.locator('.field', { hasText: 'العنوان بالتفصيل' }).locator('textarea').fill('شارع 9')
   await page.getByRole('button', { name: 'تأكيد الطلب' }).click()
-  await expect(page.getByText('تم تأكيد طلبك!')).toBeVisible({ timeout: 30000 })
+  await expect(page.getByText('تم إنشاء طلبك بنجاح')).toBeVisible({ timeout: 30000 })
 
   const orderSnap = await db.collection('orders').where('storeId', '==', store.id).orderBy('createdAt', 'desc').limit(1).get()
   const order = orderSnap.docs[0].data() as any

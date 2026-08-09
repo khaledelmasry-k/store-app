@@ -76,13 +76,13 @@ export const StoreAccount: FunctionalComponent = () => {
             <p className="muted">لا توجد طلبات بعد.</p>
           ) : (
             myOrders.map((o) => (
-              <div key={o.id} className="list-row">
+              <Link key={o.id} href={`/store/${store?.slug}/orders/${o.id}`} className="list-row list-row--link">
                 <div>
                   <span className="monospace">{o.orderNumber}</span>
-                  <p className="muted small">{formatDateTime(o.createdAt)} • {formatCurrency(o.totalPrice)}</p>
+                  <p className="muted small">{formatDateTime(o.createdAt)} • {formatCurrency(o.totalPrice)} • {o.items.length} منتج</p>
                 </div>
                 <Badge tone={STATUS_COLORS[o.status as keyof typeof STATUS_COLORS]}>{STATUS_LABELS[o.status as keyof typeof STATUS_LABELS] || o.status}</Badge>
-              </div>
+              </Link>
             ))
           )}
         </Card>

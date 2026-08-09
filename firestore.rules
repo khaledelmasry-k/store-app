@@ -123,7 +123,10 @@ function inStore(resource) {
     match /stores/{id} {
       allow read: if true;
       allow create: if isPlatformAdmin(); // merchants create stores via registerMerchant callable
-      allow update: if isStoreOwner(id) || isPlatformAdmin();
+      // Merchants can edit store settings directly, but publishing is managed
+      // by the setStorePublished callable (which enforces the subscription
+      // grant) — a direct published change by a merchant is blocked.
+      allow update: if isPlatformAdmin() || (isStoreOwner(id) && request.resource.data.published == resource.data.published);
       allow delete: if isPlatformAdmin();
     }
 
@@ -178,6 +181,13 @@ match /orders/{id} {
     // writes are platform-admin only (lifecycle managed by callables/admin)
     // ─────────────────────────────────────────────────────────────
     match /subscriptions/{id} {
+      allow read: if isAdminOrStore(resource.data.storeId);
+      allow write: if isPlatformAdmin();
+    }
+
+    // subscriptionPayments — merchant reads own store's payment requests;
+    // writes are platform-admin only (merchants submit via submitPaymentRequest).
+    match /subscriptionPayments/{id} {
       allow read: if isAdminOrStore(resource.data.storeId);
       allow write: if isPlatformAdmin();
     }

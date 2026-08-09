@@ -14,7 +14,7 @@ import { Loading } from '../../shared/components/ui/Loading'
 import { SmartImage } from '../../shared/components/ui/SmartImage'
 import { getTemplate } from '../../shared/utils/themes'
 import { formatCurrency } from '../../shared/utils/format'
-import { productUnitPrice, tierForQuantity } from '../../shared/utils/pricing'
+import { productUnitPrice, tierForQuantity, nextTierQuantity, piecesLabel } from '../../shared/utils/pricing'
 import { availableSizes, findVariant, variantStock } from '../../shared/utils/product-variants'
 import { themeStyleFor } from '../../shared/components/layout/StoreLayout'
 import type { LandingPage, LandingSection, Product, Store } from '../../shared/types'
@@ -170,11 +170,20 @@ export const StoreLanding: FunctionalComponent<Props> = ({ slug }) => {
     return () => unsub()
   }, [slug])
 
+  // In quantity mode the QuickBuy must start on a configured tier quantity.
+  useEffect(() => {
+    if (product?.pricingMode !== 'quantity') return
+    const first = [...(product.quantityTiers || [])]
+      .filter((t) => typeof t.quantity === 'number')
+      .sort((a, b) => a.quantity - b.quantity)[0]
+    if (first && qty !== first.quantity) setQty(first.quantity)
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [product?.id, product?.pricingMode, product?.quantityTiers?.length])
+
   // Attribution + analytics once the landing and its store are resolved.
   useEffect(() => {
     if (!landing || !store?.id) return
-    sessionStorage.setItem(`mk_landing_${store.id}`, landing.id)
-    // Pin the cart to this store so QuickBuy items reach the storefront cart.
+    sessionStorage.setItem(`mk_landing_${store.id}`, landing.id)    // Pin the cart to this store so QuickBuy items reach the storefront cart.
     cart.setScopeSlug(store.slug || null)
 
     const params = new URLSearchParams(window.location.search)
@@ -213,6 +222,7 @@ export const StoreLanding: FunctionalComponent<Props> = ({ slug }) => {
   }
 
   const templateClass = getTemplate(store?.theme?.template).cssClass
+  const storeDark = store?.theme?.darkMode ? ' store-dark' : ''
   const sections = Array.isArray(landing.sections) ? landing.sections : []
   const hero = landing.hero || { title: landing.title }
   const heroImage = hero.image || ''
@@ -225,6 +235,20 @@ export const StoreLanding: FunctionalComponent<Props> = ({ slug }) => {
   const displayPrice = hasVariants && selectionComplete && variant ? variant.price ?? product!.price : product?.price
   const unitPrice = product ? productUnitPrice(product, variant, qty) : 0
   const activeTier = tierForQuantity(product?.quantityTiers, qty)
+  const isQuantity = product?.pricingMode === 'quantity'
+  const tiers = isQuantity
+    ? [...(product?.quantityTiers || [])].filter((t) => typeof t.quantity === 'number').sort((a, b) => a.quantity - b.quantity)
+    : []
+  const minQty = tiers.length > 0 ? tiers[0].quantity : 1
+
+  const stepQty = (dir: -1 | 1) => {
+    if (isQuantity) {
+      const next = nextTierQuantity(tiers, qty, dir)
+      if (next != null) setQty(next)
+    } else {
+      setQty(Math.max(1, qty + dir))
+    }
+  }
   const outOfStock = product ? variantStock(product, color, size) <= 0 : true
   // Gate on the cart being pinned to this store: `setScopeSlug` is applied in an
   // effect, so until it flushes the add would land in the unscoped `mk-cart` key.
@@ -244,12 +268,13 @@ export const StoreLanding: FunctionalComponent<Props> = ({ slug }) => {
       variantId: variant?.id,
       pricingMode: product.pricingMode,
       quantityTiers: product.quantityTiers,
+      lineTotal: unitPrice,
     })
     toast.push('تمت إضافة المنتج إلى السلة')
   }
 
   return (
-    <div className={`lp-shell ${templateClass}`} style={themeStyleFor(store?.theme?.primary, store?.theme?.secondary)}>
+    <div className={`lp-shell ${templateClass}${storeDark}`} style={themeStyleFor(store?.theme?.primary, store?.theme?.secondary)}>
       <header className="lp-header">
         <div className="lp-container lp-header-inner">
           <Link href={`/store/${store?.slug}`} className="lp-brand">
@@ -305,18 +330,21 @@ export const StoreLanding: FunctionalComponent<Props> = ({ slug }) => {
                     {formatCurrency(unitPrice)}
                     {product.oldPrice && Number(product.oldPrice) > Number(displayPrice) && <span className="store-card-old">{formatCurrency(product.oldPrice)}</span>}
                   </p>
-                  {product.pricingMode === 'quantity' && product.quantityTiers && product.quantityTiers.length > 0 && (
+                  {isQuantity && tiers.length > 0 && (
                     <div className="qty-tier-table mb-2">
-                      <span className="field-label">السعر حسب الكمية</span>
+                      <span className="field-label">اختر الباقة</span>
                       <div className="qty-tier-list">
-                        {[...product.quantityTiers]
-                          .sort((a, b) => a.minQuantity - b.minQuantity)
-                          .map((t) => (
-                            <div key={t.minQuantity} className={`qty-tier-row${activeTier && activeTier.minQuantity === t.minQuantity ? ' qty-tier-row--active' : ''}`}>
-                              <span>{t.minQuantity} {t.minQuantity === 1 ? 'قطعة' : t.minQuantity === 2 ? 'قطعتان' : t.minQuantity <= 10 ? 'قطع' : 'قطعة'}</span>
-                              <span>{formatCurrency(t.price)}</span>
-                            </div>
-                          ))}
+                        {tiers.map((t) => (
+                          <button
+                            key={t.quantity}
+                            type="button"
+                            className={`qty-tier-row qty-tier-btn${activeTier && activeTier.quantity === t.quantity ? ' qty-tier-row--active' : ''}`}
+                            onClick={() => setQty(t.quantity)}
+                          >
+                            <span>{t.quantity} {piecesLabel(t.quantity)}</span>
+                            <span>{formatCurrency(t.price)}</span>
+                          </button>
+                        ))}
                       </div>
                     </div>
                   )}
@@ -326,7 +354,7 @@ export const StoreLanding: FunctionalComponent<Props> = ({ slug }) => {
                       <span className="field-label">اللون:</span>
                       <div className="flex flex-wrap mt-1">
                         {(product.colors || []).map((c) => (
-                          <button key={c} type="button" className={`btn color-btn${color === c ? ' color-btn--active' : ''}`} onClick={() => { setColor(c); setQty(1) }}>
+                          <button key={c} type="button" className={`btn color-btn${color === c ? ' color-btn--active' : ''}`} onClick={() => { setColor(c); setQty(minQty) }}>
                             {c}
                           </button>
                         ))}
@@ -341,7 +369,7 @@ export const StoreLanding: FunctionalComponent<Props> = ({ slug }) => {
                         {(product.sizes || []).map((s) => {
                           const disabled = hasVariants && !availableSizes(product, color).includes(s)
                           return (
-                            <button key={s} type="button" className={`btn size-btn${size === s ? ' size-btn--active' : ''}${disabled ? ' size-btn--disabled' : ''}`} disabled={disabled} onClick={() => setSize(s)}>
+                            <button key={s} type="button" className={`btn size-btn${size === s ? ' size-btn--active' : ''}${disabled ? ' size-btn--disabled' : ''}`} disabled={disabled} onClick={() => { setSize(s); setQty(minQty) }}>
                               {s}
                             </button>
                           )
@@ -352,9 +380,9 @@ export const StoreLanding: FunctionalComponent<Props> = ({ slug }) => {
 
                   <div className="flex mb-2">
                     <div className="qty-stepper">
-                      <button type="button" className="qty-btn" onClick={() => setQty(Math.max(1, qty - 1))}>−</button>
+                      <button type="button" className="qty-btn" onClick={() => stepQty(-1)}>−</button>
                       <strong>{qty}</strong>
-                      <button type="button" className="qty-btn" onClick={() => setQty(qty + 1)}>+</button>
+                      <button type="button" className="qty-btn" onClick={() => stepQty(1)}>+</button>
                     </div>
                   </div>
 

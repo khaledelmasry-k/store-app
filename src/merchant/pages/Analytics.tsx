@@ -23,7 +23,7 @@ export const MerchantAnalytics: FunctionalComponent = () => {
   const { store } = useStore()
   const { user } = useAuth()
   const storeId = store?.id || ''
-  const canCustomers = user?.role === 'merchant' || (user?.permissions || []).includes('customers:manage')
+  const canCustomers = user?.role === 'merchant' || (user?.permissions || []).includes('customers:view')
   const ordersRes = useCollection<Order>('orders', { storeId })
   const orders = ordersRes.data
   const customersRes = useCollection('customers', { storeId }, canCustomers)

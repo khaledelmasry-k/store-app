@@ -30,13 +30,13 @@ export const Register:FunctionalComponent = () => {
 
   const toast = useToast()
   const [step, setStep] = useState(0)
-  const [form, setForm] = useState({ email: '', password: '', name: '', storeName: '', storeRef: '' })
+  const [form, setForm] = useState({ email: '', password: '', name: '', phone: '', storeName: '', storeRef: '' })
   const [error, setError] = useState('')
   const [loading, setLoading] = useState(false)
   const [done, setDone] = useState(false)
 
   const canProceed = () => {
-    if (step === 0) return isEmailValid(form.email) && form.password.length >= 6 && form.name.trim()
+    if (step === 0) return isEmailValid(form.email) && form.password.length >= 6 && form.name.trim() && form.phone.trim().length >= 8
     if (step === 2) return form.storeName.trim()
     return true
   }
@@ -58,13 +58,14 @@ export const Register:FunctionalComponent = () => {
     setError('')
     if (!isEmailValid(form.email)) return setError('بريد إلكتروني غير صالح')
     if (form.password.length < 6) return setError('كلمة المرور 6 أحرف على الأقل')
-    if (!form.name.trim() || !form.storeName.trim()) return setError('أدخل الاسم واسم المتجر')
+    if (!form.name.trim() || !form.phone.trim() || !form.storeName.trim()) return setError('أدخل الاسم ورقم الهاتف واسم المتجر')
     setLoading(true)
     try {
       await registerMerchant({
         email: form.email,
         password: form.password,
         name: form.name.trim(),
+        phone: form.phone.trim(),
         storeName: form.storeName.trim(),
         storeRef: form.storeRef.trim() || form.storeName.trim(),
         planId,
@@ -84,9 +85,9 @@ export const Register:FunctionalComponent = () => {
         <div className="auth-card">
           <div className="order-confirmed">
             <div className="big-check"><Icon name="check" /></div>
-            <h1 className="auth-title">تم تقديم طلب التسجيل</h1>
-            <p className="auth-subtitle">طلبك قيد المراجعة من إدارة المنصة. ستتلقى بيانات الدخول بعد الموافقة على اشتراكك.</p>
-            <Link href="/login?role=merchant"><Button variant="outline">العودة لتسجيل الدخول</Button></Link>
+            <h1 className="auth-title">تم إنشاء حسابك بنجاح</h1>
+            <p className="auth-subtitle">يمكنك الآن الدخول مباشرة وتجربة {selectedPlan?.name || 'باقتك'} مجاناً، والبدء في إعداد متجرك فوراً.</p>
+            <Link href="/login?role=merchant"><Button variant="outline">تسجيل الدخول</Button></Link>
           </div>
         </div>
       </AuthShell>
@@ -123,6 +124,7 @@ export const Register:FunctionalComponent = () => {
             <p className="auth-subtitle">أدخل بياناتك للبدء</p>
             <form onSubmit={submit}>
               <Input label="الاسم الكامل" value={form.name} onChange={(v) => setForm({ ...form, name: v })} required />
+              <Input label="رقم الهاتف" type="tel" value={form.phone} onChange={(v) => setForm({ ...form, phone: v })} required placeholder="01xxxxxxxxx" autoComplete="tel" />
               <Input label="البريد الإلكتروني" type="email" value={form.email} onChange={(v) => setForm({ ...form, email: v })} required placeholder="you@example.com" autoComplete="email" />
               <Input label="كلمة المرور" type="password" value={form.password} onChange={(v) => setForm({ ...form, password: v })} required placeholder="••••••••" autoComplete="new-password" />
               {error && <p className="field-error">{error}</p>}
@@ -134,14 +136,16 @@ export const Register:FunctionalComponent = () => {
         {step === 1 && (
           <>
             <h1 className="auth-title">اختيار الباقة</h1>
-            <p className="auth-subtitle">اختر الباقة المناسبة لمتجرك</p>
+            <p className="auth-subtitle">اختر باقتك — جربها مجاناً لـ {Number(selectedPlan?.trialDays || 3)} أيام</p>
             {selectedPlan && (
               <div className="plan-selected">
                 <Icon name="workspace_premium" />
                 <div>
                   <strong>{selectedPlan.name}</strong>
                   <span className="muted small">
-                    {selectedPlan.priceMonthly === 0 ? 'مجاناً' : `${formatCurrency(selectedPlan.priceMonthly)} / شهرياً`}
+                    {selectedPlan.launchEnabled && Number(selectedPlan.launchPrice) > 0
+                      ? `أول شهر ${formatCurrency(selectedPlan.launchPrice)} ثم ${formatCurrency(selectedPlan.priceMonthly)} شهرياً`
+                      : `${formatCurrency(selectedPlan.priceMonthly)} / شهرياً`}
                   </span>
                 </div>
               </div>
@@ -161,6 +165,10 @@ export const Register:FunctionalComponent = () => {
                   <span className="plan-card-price">
                     {formatCurrency(p.priceMonthly)} <span className="muted">/ شهرياً</span>
                   </span>
+                  {p.launchEnabled && Number(p.launchPrice) > 0 && (
+                    <span className="plan-card-launch">أول شهر {formatCurrency(p.launchPrice)}</span>
+                  )}
+                  <span className="plan-card-trial">تجربة مجانية {Number(p.trialDays || 3)} أيام</span>
                 </div>
               ))}
             </div>

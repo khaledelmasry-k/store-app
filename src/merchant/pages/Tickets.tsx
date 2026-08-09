@@ -29,18 +29,22 @@ export const MerchantTickets: FunctionalComponent = () => {
       toast.push('أدخل الموضوع والوصف', undefined, 'error')
       return
     }
-    await ticketsService.create({
-      storeId,
-      createdBy: user?.uid || '',
-      subject,
-      description,
-      status: 'open',
-      priority: 'medium',
-      replies: [],
-    })
-    toast.push('تم إنشاء التذكرة')
-    setSubject('')
-    setDescription('')
+    try {
+      await ticketsService.create({
+        storeId,
+        createdBy: user?.uid || '',
+        subject,
+        description,
+        status: 'open',
+        priority: 'medium',
+        replies: [],
+      })
+      toast.push('تم إنشاء التذكرة')
+      setSubject('')
+      setDescription('')
+    } catch (err: any) {
+      toast.push('تعذر إنشاء التذكرة', err?.message || 'حدث خطأ غير متوقع', 'error')
+    }
   }
 
   return (

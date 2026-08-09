@@ -1,5 +1,5 @@
 import { FunctionalComponent } from 'preact'
-import { useEffect, useRef, useState } from 'preact/hooks'
+import { useEffect, useState } from 'preact/hooks'
 import { Link } from 'wouter'
 import { PageHeader } from '../../shared/components/ui/PageHeader'
 import { Card } from '../../shared/components/ui/Card'
@@ -21,13 +21,11 @@ export const MerchantSettings: FunctionalComponent = () => {
   const [form, setForm] = useState<Partial<Store>>({})
   const [slugField, setSlugField] = useState('')
   const [saving, setSaving] = useState(false)
-  const slugTouched = useRef(false)
 
   useEffect(() => {
     if (!store) return
-    setSlugField((prev) => prev || store.slug || '')
-    slugTouched.current = false
-  }, [store?.id])
+    setSlugField(store.slug || '')
+  }, [store?.id, store?.slug])
 
   const save = async () => {
     if (!store) return
@@ -68,8 +66,12 @@ export const MerchantSettings: FunctionalComponent = () => {
 
   const togglePublish = async (v: boolean) => {
     if (!store) return
-    await storesService.update(store.id, { published: v })
-    toast.push(v ? 'تم نشر متجرك' : 'تم إخفاء متجرك', undefined, 'success')
+    try {
+      await storesService.update(store.id, { published: v })
+      toast.push(v ? 'تم نشر متجرك' : 'تم إخفاء متجرك', undefined, 'success')
+    } catch (err: any) {
+      toast.push('تعذر تحديث حالة النشر', err?.message || 'حدث خطأ غير متوقع', 'error')
+    }
   }
 
   const publicUrl = store ? storePublicUrl(store) : null
@@ -115,7 +117,7 @@ export const MerchantSettings: FunctionalComponent = () => {
             <Input
               label="رابط المتجر (Slug)"
               value={slugField}
-              onChange={(v) => { slugTouched.current = true; setSlugField(v) }}
+              onChange={(v) => setSlugField(v)}
               hint="أحرف إنجليزية وأرقام وشرطات فقط — لا مسافات. مثال: mk-fashion"
             />
           </div>

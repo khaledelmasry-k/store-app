@@ -18,14 +18,16 @@ export const StoreHome:FunctionalComponent = () => {
 
   return (
     <div>
-      <div className="store-hero">
-        <h1>{store?.name}</h1>
-        <p>{store?.description || 'تسوق أحدث المنتجات بأسعار مميزة وتوصيل سريع لجميع المحافظات.'}</p>
-        {products.length > 0 && (
-          <Link href={`/store/${store?.slug}/catalog`} className="btn btn-invert btn-lg mt-1">
-            تسوق الآن
-          </Link>
-        )}
+      <div className="store-hero" style={store?.heroImage ? { backgroundImage: `url("${store.heroImage}")` } : undefined}>
+        <div className="store-hero-overlay">
+          <h1>{store?.name}</h1>
+          <p>{store?.description || 'تسوق أحدث المنتجات بأسعار مميزة وتوصيل سريع لجميع المحافظات.'}</p>
+          {products.length > 0 && (
+            <Link href={`/store/${store?.slug}/catalog`} className="btn btn-invert btn-lg mt-1">
+              تسوق الآن
+            </Link>
+          )}
+        </div>
       </div>
 
       {categories.length > 0 && (

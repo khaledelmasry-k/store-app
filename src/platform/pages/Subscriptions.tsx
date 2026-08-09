@@ -10,8 +10,9 @@ import { FilterBar } from '../../shared/components/ui/FilterBar'
 import { useCollection } from '../../shared/hooks/useCollection'
 import { useToast } from '../../shared/hooks/useToast'
 import { approveSubscriptionCallable, rejectSubscriptionCallable } from '../../shared/services/auth'
-import { formatDate, timeAgo } from '../../shared/utils/format'
-import { SUBSCRIPTION_STATUS_TONES } from '../../shared/utils/constants'
+import { resolveSubscriptionStatus } from '../../shared/services/subscription'
+import { formatDate, formatNumber, timeAgo } from '../../shared/utils/format'
+import { SUBSCRIPTION_STATUS_LABELS, SUBSCRIPTION_STATUS_TONES } from '../../shared/utils/constants'
 import type { Subscription } from '../../shared/types'
 
 export const PlatformSubscriptions: FunctionalComponent = () => {
@@ -23,6 +24,8 @@ export const PlatformSubscriptions: FunctionalComponent = () => {
   const [status, setStatus] = useState('')
   const [approvingId, setApprovingId] = useState<string | null>(null)
   const [rejectingId, setRejectingId] = useState<string | null>(null)
+
+  const resolved = subs.map((s) => ({ ...s, _status: resolveSubscriptionStatus(s) }))
 
   const handleApprove = async (subId: string) => {
     setApprovingId(subId)
@@ -49,18 +52,25 @@ export const PlatformSubscriptions: FunctionalComponent = () => {
   }
 
   const counts = {
-    active: subs.filter((s) => s.status === 'active').length,
-    pending: subs.filter((s) => s.status === 'pending').length,
-    expired: subs.filter((s) => s.status === 'expired').length,
+    active: resolved.filter((s) => s._status === 'active').length,
+    trialing: resolved.filter((s) => s._status === 'trialing').length,
+    pending: resolved.filter((s) => s._status === 'pending').length,
+    expired: resolved.filter((s) => s._status === 'expired').length,
+    suspended: resolved.filter((s) => s._status === 'suspended').length,
+    cancelled: resolved.filter((s) => s._status === 'cancelled').length,
   }
 
-  const filtered = status ? subs.filter((s) => s.status === status) : subs
+  const filtered = status ? resolved.filter((s) => s._status === status) : resolved
+
+  const statusLabel = (st: string) => SUBSCRIPTION_STATUS_LABELS[st as keyof typeof SUBSCRIPTION_STATUS_LABELS] || st
+  const statusTone = (st: string) => SUBSCRIPTION_STATUS_TONES[st as keyof typeof SUBSCRIPTION_STATUS_TONES] || 'slate'
 
   return (
     <div>
       <PageHeader title="الاشتراكات" subtitle={`${subs.length} اشتراك`} />
       <div className="stats-grid">
         <StatsCard title="نشط" value={counts.active} icon="check_circle" tone="green" />
+        <StatsCard title="تجربة مجانية" value={counts.trialing} icon="hourglass_top" tone="blue" />
         <StatsCard title="بانتظار الموافقة" value={counts.pending} icon="hourglass" tone="amber" />
         <StatsCard title="منتهي" value={counts.expired} icon="schedule" tone="slate" />
       </div>
@@ -68,8 +78,10 @@ export const PlatformSubscriptions: FunctionalComponent = () => {
         segments={[
           { label: 'الكل', value: '' },
           { label: 'نشط', value: 'active' },
+          { label: 'تجربة مجانية', value: 'trialing' },
           { label: 'قيد الانتظار', value: 'pending' },
           { label: 'منتهي', value: 'expired' },
+          { label: 'معلق', value: 'suspended' },
           { label: 'ملغي', value: 'cancelled' },
         ]}
         activeSegment={status}
@@ -78,17 +90,17 @@ export const PlatformSubscriptions: FunctionalComponent = () => {
       <Card>
         <Table cardMode
           columns={[
-            { key: 'storeId', header: 'المتجر', render: (s: Subscription) => (stores.find((x: any) => x.id === s.storeId) as any)?.name || '—' },
+            { key: 'storeId', header: 'المتجر', render: (s: Subscription & { _status: string }) => (stores.find((x: any) => x.id === s.storeId) as any)?.name || '—' },
             { key: 'planName', header: 'الباقة' },
-            { key: 'status', header: 'الحالة', render: (s: Subscription) => <Badge tone={(SUBSCRIPTION_STATUS_TONES[s.status] as any) || 'slate'}>{s.status}</Badge> },
-            { key: 'startedAt', header: 'البداية', render: (s: Subscription) => <span className="muted">{formatDate(s.startedAt)}</span> },
-            { key: 'expiresAt', header: 'الانتهاء', render: (s: Subscription) => <span className="muted">{formatDate(s.expiresAt)}</span> },
-            { key: 'createdAt', header: 'التاريخ', render: (s: Subscription) => <span className="muted">{timeAgo(s.createdAt)}</span> },
+            { key: 'status', header: 'الحالة', render: (s: Subscription & { _status: string }) => <Badge tone={statusTone(s._status)}>{statusLabel(s._status)}</Badge> },
+            { key: 'ordersUsed', header: 'الطلبات', render: (s: Subscription & { _status: string }) => <span className="muted">{formatNumber(s.ordersUsed || 0)}</span> },
+            { key: 'periodEnd', header: 'انتهاء الدورة/التجربة', render: (s: Subscription & { _status: string }) => <span className="muted">{formatDate(s.trialEndsAt || s.currentPeriodEnd || s.expiresAt)}</span> },
+            { key: 'createdAt', header: 'التاريخ', render: (s: Subscription & { _status: string }) => <span className="muted">{timeAgo(s.createdAt)}</span> },
             {
               key: 'actions',
               header: 'الإجراءات',
-              render: (s: Subscription) =>
-                s.status === 'pending' ? (
+              render: (s: Subscription & { _status: string }) =>
+                s._status === 'pending' ? (
                   <div className="flex flex-gap-sm">
                     <Button size="sm" icon="check" loading={approvingId === s.id} onClick={() => handleApprove(s.id)}>تفعيل</Button>
                     <Button size="sm" variant="ghost" icon="close" loading={rejectingId === s.id} onClick={() => handleReject(s.id)}>رفض</Button>

@@ -110,8 +110,8 @@ export const OrderDetails: FunctionalComponent<Props> = ({ id }) => {
             { key: 'name', header: 'المنتج' },
             { key: 'options', header: 'الخيارات', render: (item: any) => <span className="muted">{[item.color, item.size].filter(Boolean).join(' • ')}</span> },
             { key: 'quantity', header: 'الكمية' },
-            { key: 'price', header: 'السعر', render: (item: any) => formatCurrency(item.price) },
-            { key: 'total', header: 'الإجمالي', render: (item: any) => formatCurrency(item.price * item.quantity) },
+            { key: 'price', header: 'السعر', render: (item: any) => item.pricingMode === 'quantity' && item.quantityTier ? `${item.quantity} قطع — ${formatCurrency(item.quantityTier.price)}` : formatCurrency(item.price) },
+            { key: 'total', header: 'الإجمالي', render: (item: any) => formatCurrency(item.lineTotal != null ? item.lineTotal : item.price * item.quantity) },
           ]}
           rows={order.items as any}
         />

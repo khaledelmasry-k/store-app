@@ -34,21 +34,29 @@ export const MerchantCategories: FunctionalComponent = () => {
 
   const submit = async () => {
     if (!name) return
-    await categoriesService.create(storeId, {
-      name,
-      slug: slugify(name),
-      order: categories.length,
-      active: true,
-    })
-    toast.push('تم إضافة الفئة')
-    setOpen(false)
-    setName('')
+    try {
+      await categoriesService.create(storeId, {
+        name,
+        slug: slugify(name),
+        order: categories.length,
+        active: true,
+      })
+      toast.push('تم إضافة الفئة')
+      setOpen(false)
+      setName('')
+    } catch (err: any) {
+      toast.push('تعذر إضافة الفئة', err?.message || 'حدث خطأ غير متوقع', 'error')
+    }
   }
 
   const remove = async () => {
     if (!deleteTarget) return
-    await categoriesService.remove(deleteTarget.id)
-    toast.push('تم حذف الفئة')
+    try {
+      await categoriesService.remove(deleteTarget.id)
+      toast.push('تم حذف الفئة')
+    } catch (err: any) {
+      toast.push('تعذر حذف الفئة', err?.message || 'حدث خطأ غير متوقع', 'error')
+    }
     setDeleteTarget(null)
   }
 

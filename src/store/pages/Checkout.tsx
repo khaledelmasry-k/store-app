@@ -4,6 +4,7 @@ import { Link } from 'wouter'
 import { useStore } from '../../shared/hooks/useStore'
 import { useCart } from '../../shared/hooks/useCart'
 import { useToast } from '../../shared/hooks/useToast'
+import { useAuth } from '../../shared/hooks/useAuth'
 import { useCollection } from '../../shared/hooks/useCollection'
 import { Button } from '../../shared/components/ui/Button'
 import { Input } from '../../shared/components/ui/Input'
@@ -12,7 +13,7 @@ import { Textarea } from '../../shared/components/ui/Textarea'
 import { createOrderCallable } from '../../shared/services/auth'
 import { GOVER_EG } from '../../shared/utils/constants'
 import { formatCurrency, todayKey } from '../../shared/utils/format'
-import { cartSubtotal, lineSubtotal } from '../../shared/utils/pricing'
+import { cartSubtotal, lineSubtotal, piecesLabel } from '../../shared/utils/pricing'
 import { calculateShipping } from '../../shared/utils/shipping'
 import type { ShippingZone } from '../../shared/types'
 import { Icon } from '../../shared/components/ui/Icon'
@@ -21,9 +22,10 @@ export const StoreCheckout: FunctionalComponent = () => {
   const { store } = useStore()
   const cart = useCart()
   const toast = useToast()
+  const { user } = useAuth()
   const [form, setForm] = useState({ customerName: '', phone: '', governorate: '', city: '', address: '', notes: '', paymentMethod: 'cod' })
   const [loading, setLoading] = useState(false)
-  const [done, setDone] = useState<{ orderNumber: string } | null>(null)
+  const [done, setDone] = useState<{ orderNumber: string; phone: string } | null>(null)
 
   const zonesRes = useCollection<ShippingZone>('shipping', { storeId: store?.id || '' })
   const zones = zonesRes.data || []
@@ -56,7 +58,7 @@ export const StoreCheckout: FunctionalComponent = () => {
         landingPageId,
       })
       const data = res.data as any
-      setDone({ orderNumber: data.orderNumber })
+      setDone({ orderNumber: data.orderNumber, phone: form.phone })
       cart.clear()
       if (store?.id) {
         sessionStorage.removeItem(`mk_sales_ref_${store.id}`)
@@ -71,12 +73,26 @@ export const StoreCheckout: FunctionalComponent = () => {
   }
 
   if (done) {
+    const isGuest = !user || user.role !== 'customer'
     return (
       <div className="order-confirmed">
         <div className="big-check"><Icon name="check_circle" /></div>
-        <h1 className="auth-title">تم تأكيد طلبك!</h1>
+        <h1 className="auth-title">تم إنشاء طلبك بنجاح</h1>
         <p className="auth-subtitle">رقم طلبك: <strong className="monospace">{done.orderNumber}</strong></p>
-        <p className="auth-subtitle">سنتواصل معك لتأكيد الطلب والتوصيل.</p>
+        <p className="auth-subtitle">يمكنك متابعة طلبك باستخدام رقم الطلب ورقم الهاتف.</p>
+
+        {isGuest && (
+          <div className="mt-2">
+            <h2 className="card-title mb-1">هل تريد إنشاء حساب لمتابعة جميع طلباتك بسهولة؟</h2>
+            <p className="muted small mb-2">أنشئ حساباً الآن وسنربط هذا الطلب بحسابك تلقائياً — التسجيل اختياري.</p>
+            <div className="flex" style={{ justifyContent: 'center' }}>
+              <Link href={`/store/${store?.slug}/login?mode=signup&order=${encodeURIComponent(done.orderNumber)}&phone=${encodeURIComponent(done.phone)}`}>
+                <Button icon="person_add">إنشاء حساب</Button>
+              </Link>
+            </div>
+          </div>
+        )}
+
         <div className="flex" style={{ justifyContent: 'center' }}>
           <Link href={`/store/${store?.slug}/track`}><Button variant="outline">تتبع الطلب</Button></Link>
           <Link href={`/store/${store?.slug}`}><Button>متابعة التسوق</Button></Link>
@@ -113,12 +129,15 @@ export const StoreCheckout: FunctionalComponent = () => {
         </form>
         <div className="order-summary">
           <h3 className="card-title mb-1">ملخص الطلب</h3>
-          {cart.items.map((item, i) => (
-            <div key={i} className="summary-row">
-              <span>{item.name} × {item.quantity}</span>
-              <span>{formatCurrency(lineSubtotal(item))}</span>
-            </div>
-          ))}
+          {cart.items.map((item, i) => {
+            const isQtyMode = item.pricingMode === 'quantity' && item.quantityTiers && item.quantityTiers.length > 0
+            return (
+              <div key={i} className="summary-row">
+                <span>{item.name}{isQtyMode ? ` — باقة ${item.quantity} ${piecesLabel(item.quantity)}` : ` × ${item.quantity}`}</span>
+                <span>{formatCurrency(lineSubtotal(item))}</span>
+              </div>
+            )
+          })}
           <div className="summary-row"><span>الإجمالي الفرعي</span><span>{formatCurrency(subtotal)}</span></div>
           <div className="summary-row">
             <span>الشحن {quote.method ? `(${quote.method})` : ''}</span>

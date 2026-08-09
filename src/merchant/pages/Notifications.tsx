@@ -1,13 +1,9 @@
 import { FunctionalComponent } from 'preact'
 import { PageHeader } from '../../shared/components/ui/PageHeader'
-import { Card } from '../../shared/components/ui/Card'
 import { StatsCard } from '../../shared/components/ui/StatsCard'
-import { Table } from '../../shared/components/ui/Table'
-import { Badge } from '../../shared/components/ui/Badge'
 import { useStore } from '../../shared/hooks/useStore'
 import { useCollection } from '../../shared/hooks/useCollection'
-import { formatDateTime } from '../../shared/utils/format'
-import { NOTIFICATION_TONES } from '../../shared/utils/constants'
+import { NotificationsTable } from '../../shared/components/notification/NotificationsTable'
 import type { Notification } from '../../shared/types'
 
 export const MerchantNotifications: FunctionalComponent = () => {
@@ -26,17 +22,12 @@ export const MerchantNotifications: FunctionalComponent = () => {
         <StatsCard title="غير مقروء" value={unreadCount} icon="mark_email_unread" tone="amber" />
       </div>
 
-      <Card>
-        <Table cardMode
-          columns={[
-            { key: 'title', header: 'العنوان' },
-            { key: 'type', header: 'النوع', render: (n: Notification) => <Badge tone={(NOTIFICATION_TONES[n.type] as any) || 'slate'}>{n.type}</Badge> },
-            { key: 'read', header: 'الحالة', render: (n: Notification) => <Badge tone={n.read ? 'green' : 'amber'}>{n.read ? 'مقروء' : 'جديد'}</Badge> },
-            { key: 'createdAt', header: 'التاريخ', render: (n: Notification) => <span className="muted">{formatDateTime(n.createdAt)}</span> },
-          ]}
-          rows={notifications}
-        />
-      </Card>
+      <NotificationsTable
+        notifications={notifications}
+        loading={notificationsRes.loading}
+        error={notificationsRes.error}
+        unreadCount={unreadCount}
+      />
     </div>
   )
 }

@@ -11,7 +11,7 @@ import { Icon } from '../../shared/components/ui/Icon'
 import { useStore } from '../../shared/hooks/useStore'
 import { useToast } from '../../shared/hooks/useToast'
 import { storesService } from '../../shared/services/stores'
-import { uploadStoreLogo, validateImageFile } from '../../shared/services/uploads'
+import { uploadStoreLogo, uploadStoreHero, validateImageFile } from '../../shared/services/uploads'
 import { STORE_TEMPLATES } from '../../shared/utils/themes'
 import type { StoreTheme } from '../../shared/types'
 
@@ -25,7 +25,9 @@ export const MerchantThemes: FunctionalComponent = () => {
   const [savingTheme, setSavingTheme] = useState(false)
   const [applying, setApplying] = useState<string | null>(null)
   const [logoUploading, setLogoUploading] = useState(false)
+  const [heroUploading, setHeroUploading] = useState(false)
   const logoInputRef = useRef<HTMLInputElement>(null)
+  const heroInputRef = useRef<HTMLInputElement>(null)
   const saveTimer = useRef<ReturnType<typeof setTimeout> | null>(null)
 
   useEffect(() => {
@@ -112,6 +114,41 @@ export const MerchantThemes: FunctionalComponent = () => {
       toast.push('تمت إزالة الشعار')
     } catch (err: any) {
       toast.push('فشل إزالة الشعار', err?.message || 'حدث خطأ غير متوقع', 'error')
+    }
+  }
+
+  const pickHero = () => heroInputRef.current?.click()
+
+  const onHeroChosen = async (e: Event) => {
+    const input = e.target as HTMLInputElement
+    const file = input.files?.[0]
+    input.value = ''
+    if (!file || !store) return
+    const err = validateImageFile(file)
+    if (err) {
+      toast.push(err.message, undefined, 'error')
+      return
+    }
+    setHeroUploading(true)
+    try {
+      const url = await uploadStoreHero(file, store.id)
+      await storesService.update(store.id, { heroImage: url })
+      toast.push('تم تحديث صورة الغلاف', undefined, 'success')
+    } catch (e: any) {
+      console.error('hero upload failed', e)
+      toast.push('فشل رفع الصورة', 'تحقق من اتصالك وحاول مجدداً', 'error')
+    } finally {
+      setHeroUploading(false)
+    }
+  }
+
+  const removeHero = async () => {
+    if (!store) return
+    try {
+      await storesService.update(store.id, { heroImage: null })
+      toast.push('تمت إزالة الصورة')
+    } catch (err: any) {
+      toast.push('فشل إزالة الصورة', err?.message || 'حدث خطأ غير متوقع', 'error')
     }
   }
 
@@ -210,8 +247,8 @@ export const MerchantThemes: FunctionalComponent = () => {
               <strong style={{ color: themeForm.darkMode ? '#f1f5f9' : '#0f172a' }}>معاينة المتجر</strong>
             </div>
             <div className="theme-preview-actions">
-              <button type="button" className="theme-preview-btn" style={{ background: themeForm.primary }}>تسوق الآن</button>
-              <button type="button" className="theme-preview-btn theme-preview-btn--soft" style={{ background: `${themeForm.primary}1f`, color: themeForm.primary }}>عرض المنتجات</button>
+              <span className="theme-preview-btn" style={{ background: themeForm.primary }}>تسوق الآن</span>
+              <span className="theme-preview-btn theme-preview-btn--soft" style={{ background: `${themeForm.primary}1f`, color: themeForm.primary }}>عرض المنتجات</span>
             </div>
             <div className="theme-preview-badges">
               <span className="theme-preview-badge" style={{ color: themeForm.primary }}>قوي — عملي</span>
@@ -223,6 +260,7 @@ export const MerchantThemes: FunctionalComponent = () => {
           </div>
         </Card>
 
+        <div className="grid grid-2" style={{ gridTemplateColumns: '1fr 1.6fr' }}>
         <Card title="شعار المتجر" subtitle="يظهر في رأس صفحة متجرك وتذييلها">
           <div className="logo-field">
             <div className="logo-preview">
@@ -242,6 +280,27 @@ export const MerchantThemes: FunctionalComponent = () => {
             <input ref={logoInputRef} type="file" accept="image/jpeg,image/png,image/webp" hidden onChange={onLogoChosen} />
           </div>
         </Card>
+
+        <Card title="صورة الغلاف (Hero)" subtitle="تظهر أعلى صفحة متجرك الرئيسية — بأبعاد مستعرضة">
+          <div className="logo-field">
+            <div className="hero-preview">
+              {store.heroImage ? (
+                <SmartImage src={store.heroImage} alt={store.name} className="hero-preview-img" placeholderClassName="hero-preview-img" />
+              ) : (
+                <div className="hero-preview-placeholder"><Icon name="image" /><span className="muted small">لا توجد صورة — سيُستخدم تدرّج اللون الافتراضي</span></div>
+              )}
+            </div>
+            <p className="muted small mb-2">JPG، PNG أو WebP — حتى 5 ميجابايت، أبعاد واسعة (مثل 1200×400)</p>
+            <div className="flex flex-gap-sm flex-wrap">
+                  <Button variant="outline" size="sm" icon="add_photo_alternate" onClick={pickHero} loading={heroUploading}>رفع صورة الغلاف</Button>
+              {store.heroImage && (
+                <Button variant="ghost" size="sm" icon="delete" onClick={removeHero}>إزالة</Button>
+              )}
+            </div>
+            <input ref={heroInputRef} type="file" accept="image/jpeg,image/png,image/webp" hidden onChange={onHeroChosen} />
+          </div>
+        </Card>
+      </div>
       </div>
     </div>
   )

@@ -1269,6 +1269,23 @@ textarea.input {
 .order-step--done .order-step-label {
   color: var(--text-secondary);
 }
+.order-step-time {
+  display: block;
+  font-style: normal;
+  font-size: 10px;
+  color: var(--text-muted);
+  margin-top: 2px;
+  font-weight: 400;
+}
+.list-row--link {
+  text-decoration: none;
+  color: inherit;
+  cursor: pointer;
+  transition: background 0.15s;
+}
+.list-row--link:hover {
+  background: var(--surface-2);
+}
 .order-step-line {
   position: absolute;
   top: 14px;
@@ -1382,6 +1399,20 @@ textarea.input {
 .plan-pricing-actions {
   display: flex;
   gap: 8px;
+}
+.plan-pricing-launch {
+  align-self: flex-start;
+  background: var(--success-soft);
+  color: var(--success);
+  border: 1px dashed rgba(22, 163, 74, 0.35);
+  border-radius: 999px;
+  padding: 4px 12px;
+  font-size: 12px;
+  font-weight: 600;
+}
+.plan-pricing-trial {
+  color: var(--info);
+  font-size: 12px;
 }
 
 /* ─────────────────────────── App Shell ─────────────────────────── */
@@ -1984,6 +2015,22 @@ textarea.input {
   font-size: 12px;
   font-weight: 500;
 }
+.plan-card-launch {
+  display: inline-block;
+  margin-top: 6px;
+  background: var(--success-soft);
+  color: var(--success);
+  border-radius: 999px;
+  padding: 2px 10px;
+  font-size: 11px;
+  font-weight: 600;
+}
+.plan-card-trial {
+  display: block;
+  margin-top: 4px;
+  color: var(--info);
+  font-size: 11px;
+}
 
 /* ─────────────── Auth split-screen (landing-matched) ─────────────── */
 .auth-split {
@@ -2379,6 +2426,11 @@ textarea.input {
   border-radius: var(--radius-lg);
   padding: 48px;
   margin-bottom: 32px;
+  background-size: cover;
+  background-position: center;
+}
+.store-hero-overlay {
+  position: relative;
 }
 .store-hero h1 {
   font-size: 30px;
@@ -2594,6 +2646,54 @@ textarea.input {
 }
 .mb-2 {
   margin-bottom: 16px;
+}
+.mb-3 {
+  margin-bottom: 20px;
+}
+.mt-3 {
+  margin-top: 20px;
+}
+.trial-countdown {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+.trial-countdown .mk-icon {
+  font-size: 32px;
+  color: var(--info);
+}
+.trial-countdown strong {
+  font-size: var(--font-lg);
+}
+.payment-instructions {
+  background: var(--info-soft);
+  border: 1px solid rgba(2, 132, 199, 0.25);
+  border-radius: var(--radius);
+  padding: 12px 14px;
+}
+.payment-instructions-head {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-weight: 700;
+  color: var(--info);
+  margin-bottom: 6px;
+}
+.payment-instructions p {
+  margin: 0 0 6px;
+  white-space: pre-line;
+}
+.payment-proof-img {
+  display: block;
+  max-width: 100%;
+  max-height: 260px;
+  border-radius: var(--radius);
+  border: 1px solid var(--border);
+}
+.detail-stack {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
 }
 .flex {
   display: flex;
@@ -3772,7 +3872,7 @@ textarea.input {
 }
 
 .store-shell.theme-fashion .store-hero {
-  background: linear-gradient(135deg, #0f0f0f, #262626);
+  background: linear-gradient(135deg, color-mix(in srgb, var(--secondary) 82%, var(--primary)), color-mix(in srgb, var(--secondary) 62%, #000 38%));
   border-radius: 16px;
   border-bottom: 4px solid var(--primary);
 }
@@ -3829,6 +3929,37 @@ textarea.input {
   border-radius: 12px;
 }
 
+/* ── Merchant dark mode (store.theme.darkMode) ─────────────────
+   Scoped variables let the whole storefront subtree render dark even
+   when the visitor's global app theme is light. These shadow the
+   :root palette for storefront components only. */
+.store-shell.store-dark,
+.lp-shell.store-dark {
+  --bg: #0b1220;
+  --surface: #111a2e;
+  --surface-2: #0f172a;
+  --surface-3: #1e293b;
+  --border: #1e293b;
+  --text: #e2e8f0;
+  --text-secondary: #94a3b8;
+  --text-muted: #64748b;
+  background: var(--bg);
+}
+.store-shell.store-dark .store-hero,
+.store-shell.store-dark .store-card,
+.store-shell.store-dark .lp-buy-card,
+.store-shell.store-dark .product-detail-card {
+  color: var(--text);
+}
+.store-shell.store-dark .store-page-title,
+.store-shell.store-dark .page-title,
+.store-shell.store-dark .section-title {
+  color: var(--text);
+}
+.store-shell.store-dark .store-coming-soon {
+  background: linear-gradient(135deg, var(--primary), var(--primary-hover));
+}
+
 /* ── Logo upload (merchant) ───────────────────────────────────── */
 .logo-field {
   display: flex;
@@ -3862,6 +3993,32 @@ textarea.input {
   width: 100%;
   height: 100%;
   border-radius: 0;
+  font-size: 40px;
+}
+
+/* ── Hero image upload (merchant) ────────────────────────────── */
+.hero-preview {
+  width: 100%;
+  aspect-ratio: 3 / 1;
+  border-radius: 16px;
+  overflow: hidden;
+  border: 1px solid var(--border);
+  background: var(--surface-3);
+}
+.hero-preview-img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+.hero-preview-placeholder {
+  width: 100%;
+  height: 100%;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  color: var(--text-muted);
   font-size: 40px;
 }
 
@@ -3993,6 +4150,16 @@ textarea.input {
   background: var(--primary-soft);
   color: var(--primary);
   font-weight: 600;
+}
+.qty-tier-btn {
+  cursor: pointer;
+  width: 100%;
+  text-align: right;
+  font: inherit;
+  transition: border-color 0.15s ease, background 0.15s ease;
+}
+.qty-tier-btn:hover {
+  border-color: var(--primary);
 }
 
 .qty-tier-editor-list {
@@ -4351,6 +4518,168 @@ textarea.input {
   }
 }
 
+/* ── Landing page template themes (applied on .lp-shell.theme-*) ──
+   Each template differentiates hero, typography, spacing, cards,
+   CTA band, and product presentation. */
+.lp-shell.theme-modern .lp-hero {
+  background:
+    radial-gradient(640px 360px at 88% 0%, var(--primary-soft), transparent 72%),
+    radial-gradient(480px 320px at 6% 100%, color-mix(in srgb, var(--secondary) 26%, transparent), transparent 70%),
+    var(--surface-2);
+}
+.lp-shell.theme-modern .lp-section-title {
+  font-weight: 800;
+  letter-spacing: -0.01em;
+}
+.lp-shell.theme-modern .lp-card {
+  border-radius: 18px;
+  box-shadow: 0 10px 30px -18px rgba(15, 23, 42, 0.35);
+}
+.lp-shell.theme-modern .lp-cta-band {
+  background: linear-gradient(135deg, var(--primary), color-mix(in srgb, var(--secondary) 55%, var(--primary)));
+}
+.lp-shell.theme-modern .lp-step-num {
+  border-radius: 14px;
+}
+
+.lp-shell.theme-minimal .lp-hero {
+  background: var(--surface);
+  border-bottom: 2px solid var(--border);
+}
+.lp-shell.theme-minimal .lp-hero-copy h1 {
+  font-weight: 400;
+  letter-spacing: -0.02em;
+}
+.lp-shell.theme-minimal .lp-hero-copy h1::after {
+  content: '';
+  display: block;
+  width: 56px;
+  height: 3px;
+  margin-top: 18px;
+  background: var(--primary);
+}
+.lp-shell.theme-minimal .lp-section {
+  padding: 72px 0;
+}
+.lp-shell.theme-minimal .lp-card {
+  border-radius: 2px;
+  box-shadow: none;
+}
+.lp-shell.theme-minimal .lp-cta-band {
+  background: var(--surface-2);
+  color: var(--text);
+}
+.lp-shell.theme-minimal .lp-cta-band h2 {
+  color: var(--text);
+}
+.lp-shell.theme-minimal .lp-cta-band p {
+  color: var(--text-muted);
+}
+.lp-shell.theme-minimal .lp-hero-actions .btn-primary {
+  border-radius: 2px;
+}
+
+.lp-shell.theme-fashion .lp-hero {
+  background:
+    linear-gradient(135deg, color-mix(in srgb, var(--secondary) 84%, var(--primary)), color-mix(in srgb, var(--secondary) 60%, #000 40%));
+  color: #fff;
+}
+.lp-shell.theme-fashion .lp-hero-copy h1 {
+  font-weight: 700;
+  letter-spacing: 0.02em;
+  line-height: 1.25;
+}
+.lp-shell.theme-fashion .lp-hero-sub {
+  color: rgba(255, 255, 255, 0.82);
+}
+.lp-shell.theme-fashion .lp-hero-actions .btn-primary {
+  border-radius: 999px;
+  background: var(--primary-contrast);
+  color: var(--primary);
+}
+.lp-shell.theme-fashion .lp-section-title {
+  font-weight: 700;
+}
+.lp-shell.theme-fashion .lp-card {
+  border-radius: 20px;
+  border-width: 2px;
+}
+.lp-shell.theme-fashion .lp-card-icon {
+  border-radius: 50%;
+}
+.lp-shell.theme-fashion .lp-cta-band {
+  background: var(--secondary);
+  color: var(--primary-contrast);
+}
+.lp-shell.theme-fashion .lp-cta-band h2 {
+  color: var(--primary-contrast);
+}
+
+.lp-shell.theme-electronics .lp-hero {
+  background:
+    radial-gradient(500px 300px at 82% 20%, color-mix(in srgb, var(--secondary) 40%, transparent), transparent 70%),
+    linear-gradient(135deg, #0b1220, var(--primary));
+  color: #fff;
+}
+.lp-shell.theme-electronics .lp-hero-copy h1 {
+  font-weight: 900;
+  letter-spacing: -0.01em;
+}
+.lp-shell.theme-electronics .lp-hero-sub {
+  color: rgba(255, 255, 255, 0.78);
+}
+.lp-shell.theme-electronics .lp-hero-actions .btn-primary {
+  border-radius: 2px;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+}
+.lp-shell.theme-electronics .lp-card {
+  border-radius: 2px;
+  border: 1px solid color-mix(in srgb, var(--primary) 30%, var(--border));
+}
+.lp-shell.theme-electronics .lp-step-num {
+  border-radius: 2px;
+}
+.lp-shell.theme-electronics .lp-cta-band {
+  background: linear-gradient(135deg, var(--secondary), var(--primary));
+}
+.lp-shell.theme-electronics .lp-cta-band h2 {
+  color: var(--primary-contrast);
+}
+
+.lp-shell.theme-beauty .lp-hero {
+  background:
+    radial-gradient(520px 320px at 88% 8%, color-mix(in srgb, var(--primary) 32%, transparent), transparent 72%),
+    linear-gradient(180deg, color-mix(in srgb, var(--primary) 14%, var(--surface)), var(--surface));
+}
+.lp-shell.theme-beauty .lp-hero-copy h1 {
+  font-weight: 600;
+}
+.lp-shell.theme-beauty .lp-cta-band {
+  background: linear-gradient(135deg, var(--primary), color-mix(in srgb, var(--primary) 52%, #fff 48%));
+  border-radius: 24px;
+}
+.lp-shell.theme-beauty .lp-card,
+.lp-shell.theme-beauty .lp-buy-card,
+.lp-shell.theme-beauty .lp-faq-item {
+  border-radius: 22px;
+}
+.lp-shell.theme-beauty .lp-card-icon {
+  border-radius: 50%;
+}
+
+.lp-shell.theme-general .lp-hero {
+  background:
+    linear-gradient(rgba(0, 0, 0, 0.35), rgba(0, 0, 0, 0.35)),
+    linear-gradient(135deg, var(--primary), var(--primary-hover));
+}
+.lp-shell.theme-general .lp-card {
+  border-radius: 14px;
+}
+.lp-shell.theme-general .lp-cta-band {
+  background: var(--primary);
+}
+
 /* ── Landing page editor (merchant) ────────────────────────── */
 .section-heading {
   font-size: 13px;
@@ -4388,5 +4717,184 @@ textarea.input {
 }
 .lp-editor-item .field {
   margin-bottom: 0;
+}
+
+/* ── Subscription Banner ── */
+.sub-banner {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 10px 16px;
+  border-radius: var(--radius);
+  border: 1px solid var(--border);
+  background: var(--surface);
+  font-size: var(--font-sm);
+  margin-bottom: var(--space-4);
+}
+.sub-banner .mk-icon {
+  font-size: 20px;
+  flex-shrink: 0;
+}
+.sub-banner-text {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  flex: 1;
+  min-width: 0;
+}
+.sub-banner-text span {
+  color: var(--text-secondary);
+  font-size: var(--font-xs);
+}
+.sub-banner .btn {
+  flex-shrink: 0;
+}
+.sub-banner--info {
+  background: var(--info-soft);
+  border-color: rgba(2, 132, 199, 0.25);
+}
+.sub-banner--info .mk-icon,
+.sub-banner--info strong {
+  color: var(--info);
+}
+.sub-banner--ok {
+  background: var(--success-soft);
+  border-color: rgba(22, 163, 74, 0.25);
+}
+.sub-banner--ok .mk-icon,
+.sub-banner--ok strong {
+  color: var(--success);
+}
+.sub-banner--warn {
+  background: var(--warning-soft);
+  border-color: rgba(217, 119, 6, 0.25);
+}
+.sub-banner--warn .mk-icon,
+.sub-banner--warn strong {
+  color: var(--warning);
+}
+.sub-banner--danger {
+  background: var(--danger-soft);
+  border-color: rgba(220, 38, 38, 0.25);
+}
+.sub-banner--danger .mk-icon,
+.sub-banner--danger strong {
+  color: var(--danger);
+}
+
+/* ── Pricing Card (shared) ── */
+.mk-pricing-card {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  padding: var(--space-6);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-lg);
+  background: var(--surface);
+  box-shadow: var(--shadow-sm);
+  transition: border-color var(--transition), box-shadow var(--transition);
+}
+.mk-pricing-card--featured {
+  border-color: var(--primary);
+  box-shadow: var(--shadow-md);
+}
+.mk-pricing-card--selected {
+  outline: 2px solid var(--primary);
+  border-color: var(--primary);
+}
+.mk-pricing-badge {
+  position: absolute;
+  top: -10px;
+  right: 16px;
+  background: var(--primary);
+  color: var(--primary-contrast);
+  font-size: var(--font-xs);
+  font-weight: 600;
+  padding: 3px 12px;
+  border-radius: 999px;
+}
+.mk-pricing-name {
+  margin: 0;
+  font-size: var(--font-xl);
+  font-weight: 700;
+}
+.mk-pricing-desc {
+  margin: 0;
+  color: var(--text-secondary);
+  font-size: var(--font-sm);
+}
+.mk-pricing-price {
+  display: flex;
+  align-items: baseline;
+  gap: 6px;
+}
+.mk-pricing-price strong {
+  font-size: var(--font-3xl);
+  color: var(--text);
+}
+.mk-pricing-price span {
+  color: var(--text-secondary);
+  font-size: var(--font-sm);
+}
+.mk-pricing-launch {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+  background: var(--success-soft);
+  border: 1px dashed rgba(22, 163, 74, 0.35);
+  border-radius: var(--radius);
+  padding: 8px 12px;
+  font-size: var(--font-sm);
+}
+.mk-pricing-launch-label {
+  color: var(--text-secondary);
+}
+.mk-pricing-launch-price {
+  font-weight: 700;
+  color: var(--success);
+}
+.mk-pricing-launch-old {
+  text-decoration: line-through;
+  color: var(--text-muted);
+}
+.mk-pricing-trial {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: var(--font-sm);
+  color: var(--text-secondary);
+}
+.mk-pricing-trial .mk-icon {
+  color: var(--info);
+}
+.mk-pricing-features {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  font-size: var(--font-sm);
+}
+.mk-pricing-features li {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+.mk-pricing-features .mk-icon {
+  color: var(--success);
+  flex-shrink: 0;
+}
+.mk-pricing-cta {
+  margin-top: auto;
+}
+
+/* ── Store Unavailable (storefront) ── */
+.store-unavailable-title {
+  font-size: var(--font-lg);
+  font-weight: 700;
+  margin: var(--space-4) 0 var(--space-2);
 }
 

@@ -4,6 +4,7 @@ import { PageHeader } from '../../shared/components/ui/PageHeader'
 import { Card } from '../../shared/components/ui/Card'
 import { Button } from '../../shared/components/ui/Button'
 import { Input } from '../../shared/components/ui/Input'
+import { Textarea } from '../../shared/components/ui/Textarea'
 import { Toggle } from '../../shared/components/ui/Toggle'
 import { useDocument } from '../../shared/hooks/useDocument'
 import { useToast } from '../../shared/hooks/useToast'
@@ -36,6 +37,17 @@ export const PlatformSettings: FunctionalComponent = () => {
           <Input label="بريد الدعم" type="email" value={form.contactEmail ?? data?.contactEmail ?? ''} onChange={(v) => setForm({ ...form, contactEmail: v })} />
           <Input label="هاتف الدعم" value={form.supportPhone ?? data?.supportPhone ?? ''} onChange={(v) => setForm({ ...form, supportPhone: v })} />
         </div>
+      </Card>
+
+      <Card title="الدفع اليدوي للاشتراكات" subtitle="تظهر هذه التعليمات للتاجر عند تفعيل اشتراكه" className="mb-2">
+        <Textarea
+          label="تعليمات الدفع"
+          value={form.paymentInstructions ?? data?.paymentInstructions ?? ''}
+          onChange={(v) => setForm({ ...form, paymentInstructions: v })}
+          rows={4}
+          placeholder={'مثال:\nفودافون كاش: 0100xxxxxxx\nمحفظة إنستاباي: 0100xxxxxxx\nبعد التحويل أرسل رقم العملية في النموذج.'}
+        />
+        <Input label="وسيلة تواصل الدفع (اختياري)" value={form.paymentContact ?? data?.paymentContact ?? ''} onChange={(v) => setForm({ ...form, paymentContact: v })} placeholder="رقم واتساب / بريد لاستفسارات الدفع" />
       </Card>
 
       <Card title="السياسات" subtitle="تفعيل أو إيقاف الخدمات">

@@ -4,11 +4,13 @@ import { useLocation, useSearch } from 'wouter'
 import { collection, query, where, onSnapshot, limit as limitQuery, type QuerySnapshot } from 'firebase/firestore'
 import { db } from '../../firebase'
 import { StoreContext } from '../../contexts/store-context'
+import { useAuth } from '../../hooks/useAuth'
 import { Loading } from '../ui/Loading'
 import { EmptyState } from '../ui/EmptyState'
-import { recordStoreLinkVisitCallable } from '../../services/auth'
+import { recordStoreLinkVisitCallable, getPublicStoreStatusCallable } from '../../services/auth'
 import { parseStoreLocation } from '../../utils/store-route'
-import type { Store } from '../../types'
+import { StoreUnavailable } from '../../../store/components/StoreUnavailable'
+import type { Store, PublicStoreStatus } from '../../types'
 
 interface Props {
   children?: any
@@ -18,9 +20,11 @@ export const StoreSlugLoader: FunctionalComponent<Props> = ({ children }) => {
   const [loc] = useLocation()
   const search = useSearch()
   const { slug, ref } = parseStoreLocation(loc + (search ? `?${search}` : ''))
+  const { user } = useAuth()
   const [store, setStore] = useState<Store | null>(null)
   const [loading, setLoading] = useState(!!slug)
   const [error, setError] = useState<string | null>(null)
+  const [pubStatus, setPubStatus] = useState<PublicStoreStatus | null>(null)
 
   useEffect(() => {
     if (!slug || !ref || !store?.id) return
@@ -85,6 +89,23 @@ export const StoreSlugLoader: FunctionalComponent<Props> = ({ children }) => {
     return () => unsub()
   }, [slug])
 
+  useEffect(() => {
+    if (!slug) return
+    let cancelled = false
+    setPubStatus(null)
+    getPublicStoreStatusCallable({ slug })
+      .then((res) => {
+        if (!cancelled) setPubStatus((res.data as PublicStoreStatus) || { purchasable: true })
+      })
+      .catch(() => {
+        // Never gate the storefront because of a status-check failure.
+        if (!cancelled) setPubStatus({ purchasable: true })
+      })
+    return () => {
+      cancelled = true
+    }
+  }, [slug, store?.id])
+
   if (loading) return <Loading />
 
   if (error === 'store_not_found') {
@@ -114,6 +135,16 @@ export const StoreSlugLoader: FunctionalComponent<Props> = ({ children }) => {
         />
       </div>
     )
+  }
+
+  const canPreview =
+    !!user && (user.role === 'superAdmin' || ((user.role === 'merchant' || user.role === 'staff') && (user.storeIds || []).includes(store.id)))
+
+  // A store with no active subscription is not purchasable. Data is never
+  // deleted — only purchases, publishing and creation are suspended. Owners
+  // and admins can still preview the storefront.
+  if (pubStatus && !pubStatus.purchasable && !canPreview) {
+    return <StoreUnavailable storeName={store.name} reason={pubStatus.reason} />
   }
 
   const ctx = { store, loading: false, setStoreId: () => {} }

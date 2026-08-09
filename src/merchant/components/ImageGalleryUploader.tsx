@@ -72,7 +72,7 @@ export const ImageGalleryUploader: FunctionalComponent<Props> = ({ storeId, imag
           // Replace mode: swap the old image at this index for the new one.
           const replaced = next[targetIndex]
           next.splice(targetIndex, 1, url)
-          void deleteProductImage(replaced).catch(() => {})
+          void deleteProductImage(replaced).catch(() => toast.push('تعذر حذف الصورة القديمة من التخزين', undefined, 'error'))
         } else {
           next.splice(index, 0, url)
         }
@@ -100,7 +100,7 @@ export const ImageGalleryUploader: FunctionalComponent<Props> = ({ storeId, imag
   const removeAt = (index: number) => {
     const removed = images[index]
     onChange(images.filter((_, i) => i !== index))
-    if (removed) void deleteProductImage(removed).catch(() => {})
+    if (removed) void deleteProductImage(removed).catch(() => toast.push('تعذر حذف الصورة من التخزين', undefined, 'error'))
   }
 
   return (

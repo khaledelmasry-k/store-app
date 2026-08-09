@@ -232,7 +232,7 @@ test('checkout writes variantId to the order and decrements that variant stock',
   await page.locator('.field', { hasText: 'المدينة' }).locator('input').fill('المعادي')
   await page.locator('.field', { hasText: 'العنوان بالتفصيل' }).locator('textarea').fill('شارع 1')
   await page.getByRole('button', { name: 'تأكيد الطلب' }).click()
-  await expect(page.getByText('تم تأكيد طلبك!')).toBeVisible({ timeout: 30000 })
+  await expect(page.getByText('تم إنشاء طلبك بنجاح')).toBeVisible({ timeout: 30000 })
 
   const order = (await pollValue(() => latestOrder(store.id), (o) => o != null && o.items.length > 0))!
   const item = order!.items[0]
@@ -301,4 +301,277 @@ test('oversized image upload is rejected with an error', async ({ page }) => {
   })
   await expect(page.getByText(/حجم الصورة كبير جداً/)).toBeVisible({ timeout: 15000 })
   await expect(page.locator('.image-tile-img')).toHaveCount(0)
+})
+
+// ─────────────────────────────────────────────────────────────
+// Bundle (quantity) pricing — total price per tier, never unit × qty
+//
+// NOTE: these tests reuse the store already created by ensureProductsStore
+// (products-<uniq>). Creating dedicated stores here would add extra merchant
+// rows and overflow the paginated platform merchants table asserted on in
+// emulator.spec.ts (see its "reuse this project's flow store" comment).
+// ─────────────────────────────────────────────────────────────
+
+function qtyCtx() {
+  const p = test.info().project.name
+  const uniq = p === 'desktop' ? 'desktop' : `m${p.replace('mobile-', '')}`
+  return { uniq, name: `علبة شاي بالباقات ${uniq}`, slug: `products-${uniq}`, email: `products-${uniq}@mk.test` }
+}
+
+test('merchant creates a bundle-priced product (1→500 / 2→900 / 3→1200 / 4→1400)', async ({ page }) => {
+  const { uniq, name } = qtyCtx()
+  const { email } = await ensureProductsStore(uniq)
+
+  await login(page, 'merchant', email, 'Products12345')
+  await page.waitForURL(/\/dashboard/, { timeout: 15000 })
+  await page.goto('/dashboard/products', { waitUntil: 'domcontentloaded' })
+  await page.getByRole('button', { name: 'منتج جديد' }).click()
+
+  await page.locator('.drawer .field', { hasText: 'اسم المنتج' }).locator('input').fill(name)
+  await page.locator('.drawer .field', { hasText: 'الوصف' }).locator('textarea').fill('باقات شاي')
+  await page.locator('.drawer input[type="number"]').nth(0).fill('500')
+  await page.locator('.drawer .field', { hasText: 'المخزون' }).locator('input').fill('50')
+
+  // Switch to quantity pricing.
+  await page.locator('.drawer .field', { hasText: 'طريقة التسعير' }).locator('select').selectOption({ label: 'سعر حسب الكمية (أسعار متدرجة)' })
+
+  // Add four tiers: quantity → total price.
+  await page.getByRole('button', { name: 'إضافة مستوى سعري' }).click()
+  await page.getByRole('button', { name: 'إضافة مستوى سعري' }).click()
+  await page.getByRole('button', { name: 'إضافة مستوى سعري' }).click()
+  await page.getByRole('button', { name: 'إضافة مستوى سعري' }).click()
+  const tierRows = page.locator('.qty-tier-editor-row')
+  await expect(tierRows).toHaveCount(4)
+  // Each row: [up][down][qty input][total price input][delete]
+  const setTier = async (i: number, qty: string, price: string) => {
+    const inputs = tierRows.nth(i).locator('input[type="number"]')
+    await inputs.nth(0).fill(qty)
+    await inputs.nth(1).fill(price)
+  }
+  await setTier(0, '1', '500')
+  await setTier(1, '2', '900')
+  await setTier(2, '3', '1200')
+  await setTier(3, '4', '1400')
+
+  // Duplicate quantity rejected on save.
+  await setTier(3, '2', '1400')
+  await page.getByRole('button', { name: 'حفظ ونشر' }).click()
+  await expect(page.getByText('لا يمكن تكرار نفس عدد القطع')).toBeVisible({ timeout: 15000 })
+  await setTier(3, '4', '1400')
+
+  // Invalid price (< 0) rejected.
+  await setTier(3, '4', '-5')
+  await page.getByRole('button', { name: 'حفظ ونشر' }).click()
+  await expect(page.getByText('السعر الإجمالي يجب أن يكون أكبر من أو يساوي صفر')).toBeVisible()
+  await setTier(3, '4', '1400')
+
+  // Save & publish.
+  await page.getByRole('button', { name: 'حفظ ونشر' }).click()
+  await expect(page.locator('.drawer')).toHaveCount(0, { timeout: 15000 })
+
+  const saved = (await pollValue(() => productByName(name), (p) => p != null))!
+  expect(saved.pricingMode).toBe('quantity')
+  const tiers = (saved.quantityTiers || []).map((t: any) => ({ quantity: t.quantity, price: t.price }))
+  expect(tiers).toEqual([
+    { quantity: 1, price: 500 },
+    { quantity: 2, price: 900 },
+    { quantity: 3, price: 1200 },
+    { quantity: 4, price: 1400 },
+  ])
+  await page.screenshot({ path: `e2e/shots/qty-created-${uniq}.png` })
+})
+
+test('editing and deleting a bundle tier persists', async ({ page }) => {
+  const { name } = qtyCtx()
+  const { email } = qtyCtx()
+  await pollValue(() => productByName(name), (p) => p != null)
+
+  await login(page, 'merchant', email, 'Products12345')
+  await page.waitForURL(/\/dashboard/, { timeout: 15000 })
+  await page.goto('/dashboard/products', { waitUntil: 'domcontentloaded' })
+
+  // Open the edit drawer for the qty product row (table row on desktop, card on mobile).
+  const row = page.locator('.table tbody tr, .card-table-card').filter({ hasText: name }).first()
+  await row.getByTitle('تعديل').click()
+  await expect(page.locator('.drawer')).toBeVisible()
+  await expect(page.locator('.qty-tier-editor-row')).toHaveCount(4)
+
+  // Change tier 4 (1400) → 5 (1600), delete tier 1 (500).
+  const lastInputs = page.locator('.qty-tier-editor-row').nth(3).locator('input[type="number"]')
+  await lastInputs.nth(0).fill('5')
+  await lastInputs.nth(1).fill('1600')
+  await page.locator('.qty-tier-editor-row').nth(0).getByTitle('حذف المستوى').click()
+  await expect(page.locator('.qty-tier-editor-row')).toHaveCount(3)
+
+  await page.getByRole('button', { name: 'حفظ المنتج' }).click()
+  await expect(page.locator('.drawer')).toHaveCount(0, { timeout: 15000 })
+
+  const updated = (await pollValue(() => productByName(name), (p) => p != null))!
+  const tiers = (updated.quantityTiers || []).map((t: any) => ({ quantity: t.quantity, price: t.price }))
+  expect(tiers).toEqual([
+    { quantity: 2, price: 900 },
+    { quantity: 3, price: 1200 },
+    { quantity: 5, price: 1600 },
+  ])
+})
+
+test('storefront: selecting bundle 3 → cart lineTotal 1200 (no multiplication), order snapshot matches', async ({ page }) => {
+  const { uniq, name, slug } = qtyCtx()
+  const store = (await storeBySlug(slug))!
+  const product = (await pollValue(() => productByName(name), (p) => p != null))!
+
+  // The edit test removed tier 1 (500). Restore the canonical 4-tier product for
+  // the storefront flow so tiers are 1→500/2→900/3→1200/4→1400.
+  await db.collection('products').doc(product.id).update({
+    quantityTiers: [
+      { quantity: 1, price: 500 },
+      { quantity: 2, price: 900 },
+      { quantity: 3, price: 1200 },
+      { quantity: 4, price: 1400 },
+    ],
+  })
+
+  await page.goto(`/store/${slug}/product/` + product.id, { waitUntil: 'domcontentloaded' })
+
+  // Tier selector shows the four bundles with TOTAL prices.
+  await expect(page.locator('.qty-tier-btn')).toHaveCount(4)
+  await expect(page.locator('.qty-tier-btn').nth(2)).toContainText('3')
+  await expect(page.locator('.qty-tier-btn').nth(2)).toContainText(/١٬٢٠٠|1,200/)
+
+  // Default selection is the first tier (1 piece → 500 total).
+  await expect(page.locator('.stat-value')).toContainText(/٥٠٠|500/)
+
+  // Select bundle 3 → price shows 1200 (the bundle total, NOT 3× something).
+  await page.locator('.qty-tier-btn').nth(2).click()
+  await expect(page.locator('.stat-value')).toContainText(/١٬٢٠٠|1,200/)
+  await page.getByRole('button', { name: 'أضف إلى السلة' }).click()
+
+  await page.goto(`/store/${slug}/cart`, { waitUntil: 'domcontentloaded' })
+  await expect(page.locator('.cart-line')).toHaveCount(1)
+  await expect(page.locator('.cart-line')).toContainText('3 قطع')
+  await expect(page.locator('.cart-line')).toContainText(/١٬٢٠٠|1,200/)
+  // The cart line total is the bundle total — never 3 × 1200 = 3600.
+  await expect(page.locator('.cart-line')).not.toContainText(/٣٬٦٠٠|3,600/)
+
+  await page.getByRole('button', { name: 'إتمام الطلب' }).click()
+  await page.locator('.field', { hasText: 'الاسم الكامل' }).locator('input').fill('عميل الباقات')
+  await page.locator('.field', { hasText: 'رقم الهاتف' }).locator('input').fill('01022223333')
+  await page.locator('.field', { hasText: 'المحافظة' }).locator('select').selectOption({ label: 'القاهرة' })
+  await page.locator('.field', { hasText: 'المدينة' }).locator('input').fill('مدينة نصر')
+  await page.locator('.field', { hasText: 'العنوان بالتفصيل' }).locator('textarea').fill('شارع الباقات')
+  await page.getByRole('button', { name: 'تأكيد الطلب' }).click()
+  await expect(page.getByText('تم إنشاء طلبك بنجاح')).toBeVisible({ timeout: 30000 })
+
+  const order = (await pollValue(() => latestOrder(store.id), (o) => o != null && o.items.length > 0 && o.items[0].productId === product.id))!
+  const item = order.items[0]
+  expect(item.quantity).toBe(3)
+  expect(item.lineTotal).toBe(1200)
+  expect(item.price).toBe(400) // effective unit = 1200 / 3
+  expect(item.quantityTier).toEqual({ quantity: 3, price: 1200 })
+  expect(order.subtotal).toBe(1200)
+  // No accidental multiplication anywhere.
+  expect(order.subtotal).not.toBe(3600)
+  await page.screenshot({ path: `e2e/shots/qty-order-${uniq}.png` })
+})
+
+test('bundle + variants: color/size selection keeps the tier total; variant stock decrements by the tier qty', async ({ page }) => {
+  const { uniq, slug } = qtyCtx()
+  const store = (await storeBySlug(slug))!
+
+  // A quantity-priced product WITH color/size variants (variants control stock,
+  // the tier total is authoritative for price).
+  const vname = `حقيبة هدايا بمتغيرات ${uniq}`
+  const variantId = `v-${uniq}`
+  await db.collection('products').add({
+    storeId: store.id,
+    name: vname,
+    sku: null,
+    description: 'باقات مع متغيرات',
+    categoryId: null,
+    price: 500,
+    oldPrice: null,
+    images: [],
+    colorOptions: [{ id: 'c-black', name: 'أسود', hex: '#111111' }, { id: 'c-gold', name: 'ذهبي', hex: '#d4a017' }],
+    colors: ['أسود', 'ذهبي'],
+    sizes: ['M'],
+    variants: [{ id: variantId, color: 'أسود', size: 'M', price: 500, stock: 7 }],
+    pricingMode: 'quantity',
+    quantityTiers: [
+      { quantity: 1, price: 500 },
+      { quantity: 2, price: 900 },
+      { quantity: 3, price: 1200 },
+    ],
+    stock: 7,
+    lowStockThreshold: 2,
+    active: true,
+    createdAt: admin.firestore.FieldValue.serverTimestamp(),
+    updatedAt: admin.firestore.FieldValue.serverTimestamp(),
+  })
+
+  const vproduct = (await pollValue(async () => {
+    const snap = await db.collection('products').where('storeId', '==', store.id).where('name', '==', vname).limit(1).get()
+    return snap.empty ? null : { id: snap.docs[0].id, ...(snap.docs[0].data() as any) }
+  }, (p) => p != null))!
+
+  await page.goto(`/store/${slug}/product/` + vproduct.id, { waitUntil: 'domcontentloaded' })
+  await page.getByRole('button', { name: /أسود/ }).click()
+  await page.getByRole('button', { name: 'M', exact: true }).click()
+  // Select bundle 3 → price stays 1200 (bundle total), never variant price × 3.
+  await page.locator('.qty-tier-btn').nth(2).click()
+  await expect(page.locator('.stat-value')).toContainText(/١٬٢٠٠|1,200/)
+  await page.getByRole('button', { name: 'أضف إلى السلة' }).click()
+
+  await page.goto(`/store/${slug}/cart`, { waitUntil: 'domcontentloaded' })
+  await expect(page.locator('.cart-line')).toHaveCount(1)
+  await expect(page.locator('.cart-line')).toContainText('أسود • M')
+  await expect(page.locator('.cart-line')).toContainText('3 قطع')
+  await expect(page.locator('.cart-line')).toContainText(/١٬٢٠٠|1,200/)
+
+  await page.getByRole('button', { name: 'إتمام الطلب' }).click()
+  await page.locator('.field', { hasText: 'الاسم الكامل' }).locator('input').fill('عميل المتغيرات والباقات')
+  await page.locator('.field', { hasText: 'رقم الهاتف' }).locator('input').fill('01033334444')
+  await page.locator('.field', { hasText: 'المحافظة' }).locator('select').selectOption({ label: 'الإسكندرية' })
+  await page.locator('.field', { hasText: 'المدينة' }).locator('input').fill('سيدي جابر')
+  await page.locator('.field', { hasText: 'العنوان بالتفصيل' }).locator('textarea').fill('شارع المتغيرات')
+  await page.getByRole('button', { name: 'تأكيد الطلب' }).click()
+  await expect(page.getByText('تم إنشاء طلبك بنجاح')).toBeVisible({ timeout: 30000 })
+
+  const order = (await pollValue(() => latestOrder(store.id), (o) => o != null && o.items.length > 0 && o.items[0].productId === vproduct.id))!
+  const item = order.items[0]
+  expect(item.productId).toBe(vproduct.id)
+  expect(item.variantId).toBe(variantId)
+  expect(item.color).toBe('أسود')
+  expect(item.size).toBe('M')
+  expect(item.quantity).toBe(3)
+  expect(item.lineTotal).toBe(1200)
+  expect(item.quantityTier).toEqual({ quantity: 3, price: 1200 })
+
+  // Variant stock decremented by the TIER quantity (7 − 3 = 4).
+  const after = (await productByName(vname))!
+  expect(after.variants[0].stock).toBe(4)
+  expect(after.stock).toBe(4)
+})
+
+test('cart stepper for a bundle line snaps between configured tiers', async ({ page }) => {
+  const { name, slug } = qtyCtx()
+  const product = (await pollValue(() => productByName(name), (p) => p != null))!
+
+  await page.goto(`/store/${slug}/product/` + product.id, { waitUntil: 'domcontentloaded' })
+  await page.locator('.qty-tier-btn').nth(1).click() // bundle 2 → 900
+  await page.getByRole('button', { name: 'أضف إلى السلة' }).click()
+
+  await page.goto(`/store/${slug}/cart`, { waitUntil: 'domcontentloaded' })
+  await expect(page.locator('.cart-line')).toHaveCount(1)
+  await expect(page.locator('.cart-line')).toContainText(/٩٠٠|900/)
+
+  // The + button must move 2 → 3 (next tier), recomputing the total to 1200.
+  await page.locator('.cart-line .qty-stepper .qty-btn').nth(1).click()
+  await expect(page.locator('.cart-line')).toContainText('3')
+  await expect(page.locator('.cart-line')).toContainText(/١٬٢٠٠|1,200/)
+  await expect(page.locator('.cart-line')).not.toContainText(/٣٬٦٠٠|3,600/)
+
+  // And the − button moves back 3 → 2 → 900.
+  await page.locator('.cart-line .qty-stepper .qty-btn').nth(0).click()
+  await expect(page.locator('.cart-line')).toContainText('2')
+  await expect(page.locator('.cart-line')).toContainText(/٩٠٠|900/)
 })

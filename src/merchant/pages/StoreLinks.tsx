@@ -15,6 +15,7 @@ import { useStore } from '../../shared/hooks/useStore'
 import { useCollection } from '../../shared/hooks/useCollection'
 import { useToast } from '../../shared/hooks/useToast'
 import { storeLinksService } from '../../shared/services/system'
+import { createSalesLinkCallable } from '../../shared/services/auth'
 import { formatCurrency } from '../../shared/utils/format'
 import { storeBaseUrl } from '../../shared/utils/store-url'
 import type { StoreLink, StoreLinkDestinationType } from '../../shared/types'
@@ -92,7 +93,7 @@ export const MerchantStoreLinks: FunctionalComponent = () => {
         await storeLinksService.update(form.id, data)
         toast.push('تم تحديث الرابط')
       } else {
-        await storeLinksService.create(storeId, data)
+        await createSalesLinkCallable({ storeId, data })
         toast.push('تم إنشاء رابط البيع')
       }
       setOpen(false)
@@ -146,7 +147,7 @@ export const MerchantStoreLinks: FunctionalComponent = () => {
             { key: 'active', header: 'الحالة', render: (l: StoreLink) => <Badge tone={l.active ? 'green' : 'slate'}>{l.active ? 'نشط' : 'موقوف'}</Badge> },
             { key: 'actions', header: '', render: (l: StoreLink) => (
               <div className="flex gap-1">
-                <button className="icon-btn" onClick={() => setForm({ id: l.id, name: l.name, code: l.code, sellerName: l.sellerName || '', destinationType: l.destinationType, destinationId: l.destinationId || '', source: l.source || '', campaign: l.campaign || '', content: l.content || '', active: l.active ?? true, archived: false })}><Icon name="edit" /></button>
+                <button className="icon-btn" onClick={() => { setForm({ id: l.id, name: l.name, code: l.code, sellerName: l.sellerName || '', destinationType: l.destinationType, destinationId: l.destinationId || '', source: l.source || '', campaign: l.campaign || '', content: l.content || '', active: l.active ?? true, archived: false }); setOpen(true) }} title="تعديل"><Icon name="edit" /></button>
                 <button className="icon-btn" onClick={() => archive(l)} title="أرشفة"><Icon name="archive" /></button>
                 <button className="icon-btn icon-btn-danger" onClick={() => setDeleteTarget(l)}><Icon name="delete" /></button>
               </div>

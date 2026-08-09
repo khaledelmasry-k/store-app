@@ -84,6 +84,20 @@ export const MerchantShipping: FunctionalComponent = () => {
     }
   }
 
+  // Auto-save for the inline settings controls. Guards against an unloaded
+  // store (would otherwise write to an empty document id) and surfaces errors.
+  const persistShipping = async (next: any) => {
+    if (!store?.id) {
+      toast.push('بيانات المتجر لم تُحمّل بعد', 'حاول مرة أخرى', 'error')
+      return
+    }
+    try {
+      await storesService.update(store.id, { shipping: { ...cfg, ...next } })
+    } catch (err: any) {
+      toast.push('تعذر حفظ إعدادات الشحن', err?.message || 'حدث خطأ غير متوقع', 'error')
+    }
+  }
+
   const submitZone = async () => {
     if (!storeId) return
     if (!zoneForm.name) {
@@ -128,21 +142,29 @@ export const MerchantShipping: FunctionalComponent = () => {
       active: provForm.active ?? true,
     }
     const others = (cfg.providers || []).filter((p) => p.id !== provider.id)
-    await storesService.update(store.id, { shipping: { ...cfg, providers: [...others, provider] } })
-    toast.push('تم حفظ شركة الشحن')
+    try {
+      await storesService.update(store.id, { shipping: { ...cfg, providers: [...others, provider] } })
+      toast.push('تم حفظ شركة الشحن')
+    } catch (err: any) {
+      toast.push('تعذر حفظ شركة الشحن', err?.message || 'حدث خطأ غير متوقع', 'error')
+    }
     setProvOpen(false)
     setProvForm({ name: '', fee: '', estimatedDays: '', active: true })
   }
 
   const removeTarget = async () => {
     if (!deleteTarget) return
-    if (deleteTarget.kind === 'zone') {
-      await shippingService.remove(deleteTarget.id)
-      toast.push('تم حذف المنطقة')
-    } else {
-      if (!store) return
-      await storesService.update(store.id, { shipping: { ...cfg, providers: (cfg.providers || []).filter((p) => p.id !== deleteTarget.id) } })
-      toast.push('تم حذف شركة الشحن')
+    try {
+      if (deleteTarget.kind === 'zone') {
+        await shippingService.remove(deleteTarget.id)
+        toast.push('تم حذف المنطقة')
+      } else {
+        if (!store) return
+        await storesService.update(store.id, { shipping: { ...cfg, providers: (cfg.providers || []).filter((p) => p.id !== deleteTarget.id) } })
+        toast.push('تم حذف شركة الشحن')
+      }
+    } catch (err: any) {
+      toast.push('تعذر الحذف', err?.message || 'حدث خطأ غير متوقع', 'error')
     }
     setDeleteTarget(null)
   }
@@ -177,22 +199,22 @@ export const MerchantShipping: FunctionalComponent = () => {
 
           <Card title="إعدادات الشحن العامة" className="mt-2">
             <div className="field">
-              <Toggle checked={!!cfg.enabled} onChange={(v) => storesService.update(store?.id || '', { shipping: { ...cfg, enabled: v } })} label="تفعيل الشحن والتوصيل" />
+              <Toggle checked={!!cfg.enabled} onChange={(v) => persistShipping({ enabled: v })} label="تفعيل الشحن والتوصيل" />
             </div>
             <div className="field mt-1">
               <span className="field-label">نموذج الشحن</span>
               <div className="flex">
-                <button type="button" className={`btn ${cfg.model === 'flat' ? 'btn-primary' : 'btn-outline'}`} onClick={() => storesService.update(store?.id || '', { shipping: { ...cfg, model: 'flat' } })}>سعر موحد</button>
-                <button type="button" className={`btn ${cfg.model === 'zones' ? 'btn-primary' : 'btn-outline'}`} onClick={() => storesService.update(store?.id || '', { shipping: { ...cfg, model: 'zones' } })}>حسب المنطقة</button>
+                <button type="button" className={`btn ${cfg.model === 'flat' ? 'btn-primary' : 'btn-outline'}`} onClick={() => persistShipping({ model: 'flat' })}>سعر موحد</button>
+                <button type="button" className={`btn ${cfg.model === 'zones' ? 'btn-primary' : 'btn-outline'}`} onClick={() => persistShipping({ model: 'zones' })}>حسب المنطقة</button>
               </div>
             </div>
             {cfg.model === 'flat' && (
-              <Input label="سعر الشحن الموحد" type="number" value={String(cfg.flatFee ?? '')} onChange={(v) => storesService.update(store?.id || '', { shipping: { ...cfg, flatFee: Number(v) } })} />
+              <Input label="سعر الشحن الموحد" type="number" value={String(cfg.flatFee ?? '')} onChange={(v) => persistShipping({ flatFee: Number(v) })} />
             )}
-            <Input label="شحن مجاني عند الطلب بقيمة (اختياري)" type="number" value={cfg.freeAbove ? String(cfg.freeAbove) : ''} onChange={(v) => storesService.update(store?.id || '', { shipping: { ...cfg, freeAbove: v === '' ? undefined : Number(v) } })} />
+            <Input label="شحن مجاني عند الطلب بقيمة (اختياري)" type="number" value={cfg.freeAbove ? String(cfg.freeAbove) : ''} onChange={(v) => persistShipping({ freeAbove: v === '' ? undefined : Number(v) })} />
             <div className="field">
               <span className="field-label">سياسة الرفض والاسترجاع</span>
-              <textarea className="input" rows={2} value={cfg.refusedPolicy || ''} onChange={(e) => storesService.update(store?.id || '', { shipping: { ...cfg, refusedPolicy: (e.target as HTMLTextAreaElement).value } })} placeholder="رسوم الرفض أو شروط الاسترجاع تظهر للعميل عند إتمام الطلب" />
+              <textarea className="input" rows={2} value={cfg.refusedPolicy || ''} onChange={(e) => persistShipping({ refusedPolicy: (e.target as HTMLTextAreaElement).value })} placeholder="رسوم الرفض أو شروط الاسترجاع تظهر للعميل عند إتمام الطلب" />
             </div>
             <div className="flex flex-end mt-1">
               <Button icon="save" loading={savingCfg} onClick={saveConfig}>حفظ الإعدادات</Button>

@@ -17,6 +17,7 @@ import { useStore } from '../../shared/hooks/useStore'
 import { useCollection } from '../../shared/hooks/useCollection'
 import { useToast } from '../../shared/hooks/useToast'
 import { landingPagesService } from '../../shared/services/system'
+import { createLandingPageCallable } from '../../shared/services/auth'
 import { slugify, formatCurrency } from '../../shared/utils/format'
 import { storeBaseUrl } from '../../shared/utils/store-url'
 import { STORE_TEMPLATES } from '../../shared/utils/themes'
@@ -176,7 +177,7 @@ export const MerchantLandingPages: FunctionalComponent = () => {
         await landingPagesService.update(form.id, payload)
         toast.push('تم تحديث الصفحة')
       } else {
-        await landingPagesService.create(storeId, payload as Omit<LandingPage, 'id' | 'storeId'>)
+        await createLandingPageCallable({ storeId, data: payload })
         toast.push('تم إنشاء صفحة الهبوط')
       }
       setOpen(false)
@@ -192,31 +193,31 @@ export const MerchantLandingPages: FunctionalComponent = () => {
     payload.title = `${p.title} (نسخة)`
     payload.status = 'draft'
     try {
-      await landingPagesService.create(storeId, {
-        slug: payload.slug,
-        title: payload.title,
-        template: payload.template,
-        status: 'draft',
-        active: true,
-        productId: payload.productId || undefined,
-        hero: {
-          title: payload.heroTitle || payload.title,
-          subtitle: payload.heroSubtitle || undefined,
-          image: payload.heroImage || undefined,
-          ctaText: payload.ctaText || 'اطلب الآن',
+      await createLandingPageCallable({
+        storeId,
+        data: {
+          slug: payload.slug,
+          title: payload.title,
+          template: payload.template,
+          status: 'draft',
+          active: true,
+          productId: payload.productId || undefined,
+          hero: {
+            title: payload.heroTitle || payload.title,
+            subtitle: payload.heroSubtitle || undefined,
+            image: payload.heroImage || undefined,
+            ctaText: payload.ctaText || 'اطلب الآن',
+          },
+          seo: payload.seoTitle || payload.seoDescription
+            ? { title: payload.seoTitle || undefined, description: payload.seoDescription || undefined }
+            : undefined,
+          sections: (p.sections || []).map((s) => ({
+            type: s.type || 'features',
+            title: s.title || undefined,
+            body: s.body || undefined,
+            items: (s.items || []).map((it) => ({ title: it.title || undefined, body: it.body || undefined })),
+          })),
         },
-        seo: payload.seoTitle || payload.seoDescription
-          ? { title: payload.seoTitle || undefined, description: payload.seoDescription || undefined }
-          : undefined,
-        sections: (p.sections || []).map((s) => ({
-          type: s.type || 'features',
-          title: s.title || undefined,
-          body: s.body || undefined,
-          items: (s.items || []).map((it) => ({ title: it.title || undefined, body: it.body || undefined })),
-        })),
-        views: 0,
-        ordersCount: 0,
-        totalRevenue: 0,
       })
       toast.push('تم إنشاء نسخة من الصفحة')
     } catch (err: any) {
@@ -245,8 +246,12 @@ export const MerchantLandingPages: FunctionalComponent = () => {
 
   const remove = async () => {
     if (!deleteTarget) return
-    await landingPagesService.remove(deleteTarget.id)
-    toast.push('تم حذف الصفحة')
+    try {
+      await landingPagesService.remove(deleteTarget.id)
+      toast.push('تم حذف الصفحة')
+    } catch (err: any) {
+      toast.push('تعذر حذف الصفحة', err?.message || 'حدث خطأ غير متوقع', 'error')
+    }
     setDeleteTarget(null)
   }
 

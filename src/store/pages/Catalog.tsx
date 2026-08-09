@@ -28,7 +28,7 @@ export const StoreCatalog:FunctionalComponent = () => {
 
   const selectCat = (value: string) => {
     setCat(value)
-    setLocation(value ? `/store/${store?.slug}?cat=${value}` : `/store/${store?.slug}`, { replace: true })
+    setLocation(value ? `/store/${store?.slug}/catalog?cat=${value}` : `/store/${store?.slug}/catalog`, { replace: true })
   }
 
   const filtered = products.filter(

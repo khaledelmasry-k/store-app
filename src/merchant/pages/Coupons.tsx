@@ -14,7 +14,7 @@ import { useStore } from '../../shared/hooks/useStore'
 import { useCollection } from '../../shared/hooks/useCollection'
 import { useToast } from '../../shared/hooks/useToast'
 import { couponsService } from '../../shared/services/billing'
-import { formatCurrency, formatDate } from '../../shared/utils/format'
+import { formatCurrency } from '../../shared/utils/format'
 import type { Coupon } from '../../shared/types'
 import { Icon } from '../../shared/components/ui/Icon'
 
@@ -33,24 +33,40 @@ export const MerchantCoupons: FunctionalComponent = () => {
       toast.push('أدخل الكود والقيمة', undefined, 'error')
       return
     }
-    await couponsService.create(storeId, {
-      code: form.code.toUpperCase(),
-      type: form.type === 'fixed' ? 'fixed' : 'percent',
-      value: Number(form.value),
-      minOrder: Number(form.minOrder || 0),
-      maxUses: Number(form.maxUses || 0),
-      usedCount: 0,
-      active: form.active ?? true,
-    })
-    toast.push('تم إنشاء الكوبون')
-    setOpen(false)
-    setForm({ type: 'percent', active: true })
+    try {
+      await couponsService.create(storeId, {
+        code: form.code.toUpperCase(),
+        type: form.type === 'fixed' ? 'fixed' : 'percent',
+        value: Number(form.value),
+        minOrder: Number(form.minOrder || 0),
+        maxUses: Number(form.maxUses || 0),
+        usedCount: 0,
+        active: form.active ?? true,
+      })
+      toast.push('تم إنشاء الكوبون')
+      setOpen(false)
+      setForm({ type: 'percent', active: true })
+    } catch (err: any) {
+      toast.push('تعذر إنشاء الكوبون', err?.message || 'حدث خطأ غير متوقع', 'error')
+    }
+  }
+
+  const toggleActive = async (c: Coupon, v: boolean) => {
+    try {
+      await couponsService.update(c.id, { active: v })
+    } catch (err: any) {
+      toast.push('تعذر تحديث حالة الكوبون', err?.message || 'حدث خطأ غير متوقع', 'error')
+    }
   }
 
   const remove = async () => {
     if (!deleteTarget) return
-    await couponsService.remove(deleteTarget.id)
-    toast.push('تم حذف الكوبون')
+    try {
+      await couponsService.remove(deleteTarget.id)
+      toast.push('تم حذف الكوبون')
+    } catch (err: any) {
+      toast.push('تعذر حذف الكوبون', err?.message || 'حدث خطأ غير متوقع', 'error')
+    }
     setDeleteTarget(null)
   }
 
@@ -64,8 +80,7 @@ export const MerchantCoupons: FunctionalComponent = () => {
             { key: 'type', header: 'النوع', render: (c: Coupon) => <Badge tone={c.type === 'percent' ? 'violet' : 'blue'}>{c.type === 'percent' ? 'نسبة' : 'مبلغ'}</Badge> },
             { key: 'value', header: 'القيمة', render: (c: Coupon) => c.type === 'percent' ? `${c.value}%` : formatCurrency(c.value) },
             { key: 'usedCount', header: 'الاستخدام', render: (c: Coupon) => `${c.usedCount}${c.maxUses ? ` / ${c.maxUses}` : ''}` },
-            { key: 'active', header: 'الحالة', render: (c: Coupon) => <Toggle checked={c.active} onChange={(v) => couponsService.update(c.id, { active: v })} /> },
-            { key: 'expiresAt', header: 'الانتهاء', render: (c: Coupon) => <span className="muted">{formatDate(c.expiresAt)}</span> },
+            { key: 'active', header: 'الحالة', render: (c: Coupon) => <Toggle checked={c.active} onChange={(v) => toggleActive(c, v)} /> },
             { key: 'actions', header: '', render: (c: Coupon) => <button className="icon-btn" onClick={() => setDeleteTarget(c)}><Icon name="delete" /></button> },
           ]}
           rows={coupons}

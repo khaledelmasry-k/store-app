@@ -68,6 +68,9 @@ async function main() {
     supportPhone: '01000000000',
     maxStoresPerMerchant: 1,
     allowCustomerAccounts: true,
+    paymentInstructions:
+      'فودافون كاش: 0100 000 0000\nإنستاباي: 0100 000 0000\n\nبعد إتمام التحويل املأ النموذج أدناه برقم العملية وسيتم تفعيل باقتك خلال ساعات عمل قليلة.',
+    paymentContact: email,
     updatedAt: admin.firestore.FieldValue.serverTimestamp(),
   }, { merge: true })
 

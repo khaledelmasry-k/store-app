@@ -1,5 +1,5 @@
 import { FunctionalComponent } from 'preact'
-import { useState } from 'preact/hooks'
+import { useEffect, useState } from 'preact/hooks'
 import { Link } from 'wouter'
 import { useStore } from '../../shared/hooks/useStore'
 import { useDocument } from '../../shared/hooks/useDocument'
@@ -11,7 +11,7 @@ import { EmptyState } from '../../shared/components/ui/EmptyState'
 import { SmartImage } from '../../shared/components/ui/SmartImage'
 import { formatCurrency } from '../../shared/utils/format'
 import { availableSizes, findVariant, imageIndexForColor, variantPrice, variantStock } from '../../shared/utils/product-variants'
-import { productUnitPrice, tierForQuantity } from '../../shared/utils/pricing'
+import { productUnitPrice, nextTierQuantity, tierForQuantity, piecesLabel } from '../../shared/utils/pricing'
 import type { Product } from '../../shared/types'
 import { Icon } from '../../shared/components/ui/Icon'
 
@@ -29,6 +29,15 @@ export const StoreProduct: FunctionalComponent<Props> = ({ id }) => {
   const [size, setSize] = useState('')
   const [displayIndex, setDisplayIndex] = useState(0)
 
+  useEffect(() => {
+    if (product?.pricingMode !== 'quantity') return
+    const first = [...(product.quantityTiers || [])]
+      .filter((t) => typeof t.quantity === 'number')
+      .sort((a, b) => a.quantity - b.quantity)[0]
+    if (first && qty !== first.quantity) setQty(first.quantity)
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [product?.id, product?.pricingMode, product?.quantityTiers?.length])
+
   if (loading) return <div className="loading-screen"><span className="spinner spinner-lg" /></div>
 
   if (!product || product.storeId !== store?.id) {
@@ -40,6 +49,12 @@ export const StoreProduct: FunctionalComponent<Props> = ({ id }) => {
   const requiresColor = hasVariants && (product.colors || []).length > 0
   const requiresSize = hasVariants && (product.sizes || []).length > 0
   const selectionComplete = (!requiresColor || !!color) && (!requiresSize || !!size)
+
+  const isQuantity = product.pricingMode === 'quantity'
+  const tiers = isQuantity
+    ? [...(product.quantityTiers || [])].filter((t) => typeof t.quantity === 'number').sort((a, b) => a.quantity - b.quantity)
+    : []
+  const minQty = tiers.length > 0 ? tiers[0].quantity : 1
 
   const availSizes = availableSizes(product, color)
   const totalStock = hasVariants ? (product.variants || []).reduce((s, v) => s + (v.stock || 0), 0) : product.stock
@@ -57,7 +72,16 @@ export const StoreProduct: FunctionalComponent<Props> = ({ id }) => {
     const idx = imageIndexForColor(product, c)
     if (idx != null && images[idx]) setDisplayIndex(idx)
     setSize('')
-    setQty(1)
+    setQty(minQty)
+  }
+
+  const stepQty = (dir: -1 | 1) => {
+    if (isQuantity) {
+      const next = nextTierQuantity(tiers, qty, dir)
+      if (next != null) setQty(next)
+    } else {
+      setQty((q) => (dir === 1 ? Math.min(Math.max(selectedStock, 1), q + 1) : Math.max(1, q - 1)))
+    }
   }
 
   const addToCart = () => {
@@ -73,6 +97,7 @@ export const StoreProduct: FunctionalComponent<Props> = ({ id }) => {
       variantId: variant?.id,
       pricingMode: product.pricingMode,
       quantityTiers: product.quantityTiers,
+      lineTotal: unitPrice,
     })
     toast.push('تمت إضافة المنتج إلى السلة')
   }
@@ -108,21 +133,21 @@ export const StoreProduct: FunctionalComponent<Props> = ({ id }) => {
             {formatCurrency(unitPrice)}
             {product.oldPrice && Number(product.oldPrice) > displayPrice && <span className="store-card-old">{formatCurrency(product.oldPrice)}</span>}
           </p>
-          {product.pricingMode === 'quantity' && product.quantityTiers && product.quantityTiers.length > 0 && (
+          {isQuantity && tiers.length > 0 && (
             <div className="qty-tier-table mb-2">
-              <span className="field-label">السعر حسب الكمية</span>
+              <span className="field-label">اختر الباقة</span>
               <div className="qty-tier-list">
-                {[...product.quantityTiers]
-                  .sort((a, b) => a.minQuantity - b.minQuantity)
-                  .map((t) => (
-                    <div key={t.minQuantity} className={`qty-tier-row${activeTier && activeTier.minQuantity === t.minQuantity ? ' qty-tier-row--active' : ''}`}>
-                      <span>
-                        {t.minQuantity} {t.minQuantity === 1 ? 'قطعة' : t.minQuantity === 2 ? 'قطعتان' : t.minQuantity <= 10 ? 'قطع' : 'قطعة'}
-                        {t.maxQuantity != null ? ` – ${t.maxQuantity}` : '+'}
-                      </span>
-                      <span>{formatCurrency(t.price)}</span>
-                    </div>
-                  ))}
+                {tiers.map((t) => (
+                  <button
+                    key={t.quantity}
+                    type="button"
+                    className={`qty-tier-row qty-tier-btn${activeTier && activeTier.quantity === t.quantity ? ' qty-tier-row--active' : ''}`}
+                    onClick={() => setQty(t.quantity)}
+                  >
+                    <span>{t.quantity} {piecesLabel(t.quantity)}</span>
+                    <span>{formatCurrency(t.price)}</span>
+                  </button>
+                ))}
               </div>
             </div>
           )}
@@ -162,7 +187,7 @@ export const StoreProduct: FunctionalComponent<Props> = ({ id }) => {
                       type="button"
                       className={`btn size-btn${size === s ? ' size-btn--active' : ''}${disabled ? ' size-btn--disabled' : ''}`}
                       disabled={disabled}
-                      onClick={() => { setSize(s); setQty(1) }}
+                      onClick={() => { setSize(s); setQty(minQty) }}
                     >
                       {s}
                       {disabled && <span className="size-btn-soldout">نفد</span>}
@@ -182,9 +207,9 @@ export const StoreProduct: FunctionalComponent<Props> = ({ id }) => {
 
           <div className="flex mb-2">
             <div className="qty-stepper">
-              <button type="button" className="qty-btn" onClick={() => setQty(Math.max(1, qty - 1))}>−</button>
+              <button type="button" className="qty-btn" onClick={() => stepQty(-1)}>−</button>
               <strong>{qty}</strong>
-              <button type="button" className="qty-btn" onClick={() => setQty(Math.min(Math.max(selectedStock, 1), qty + 1))}>+</button>
+              <button type="button" className="qty-btn" onClick={() => stepQty(1)}>+</button>
             </div>
             <span className="muted small" style={{ alignSelf: 'center' }}>{selectedStock > 0 ? `متوفر: ${selectedStock}` : 'غير متوفر حالياً'}</span>
           </div>

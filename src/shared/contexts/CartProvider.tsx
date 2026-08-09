@@ -43,6 +43,9 @@ export const CartProvider: FunctionalComponent = ({ children }) => {
 
   const add = (line: CartLine) =>
     setItems((prev) => {
+      // Bundle (quantity) pricing lines never merge — each add is a distinct
+      // bundle selection (merging would sum quantities and break the tier).
+      if (line.pricingMode === 'quantity') return [...prev, line]
       const idx = prev.findIndex(
         (i) =>
           i.productId === line.productId &&

@@ -42,17 +42,26 @@ export const RolesTab: FunctionalComponent = () => {
       return
     }
     setSaving(true)
-    await rolesService.create(storeId, { name: form.name, permissions: form.permissions })
-    toast.push('تم إضافة الدور')
-    setOpen(false)
-    setForm({ name: '', permissions: [] })
-    setSaving(false)
+    try {
+      await rolesService.create(storeId, { name: form.name, permissions: form.permissions })
+      toast.push('تم إضافة الدور')
+      setOpen(false)
+      setForm({ name: '', permissions: [] })
+    } catch (err: any) {
+      toast.push('تعذر إضافة الدور', err?.message || 'حدث خطأ غير متوقع', 'error')
+    } finally {
+      setSaving(false)
+    }
   }
 
   const remove = async () => {
     if (!deleteTarget) return
-    await rolesService.remove(deleteTarget.id)
-    toast.push('تم حذف الدور')
+    try {
+      await rolesService.remove(deleteTarget.id)
+      toast.push('تم حذف الدور')
+    } catch (err: any) {
+      toast.push('تعذر حذف الدور', err?.message || 'حدث خطأ غير متوقع', 'error')
+    }
     setDeleteTarget(null)
   }
 

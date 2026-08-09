@@ -20,14 +20,36 @@ function tsFromDate(d: Date) {
 // Mirrors src/shared/utils/pricing.ts (client). Functions is a separate
 // package, so tier resolution is duplicated here on purpose and must stay in
 // sync. Never accept a client-supplied price.
+//
+// Model: a tier is a BUNDLE of exactly `quantity` pieces priced at a TOTAL
+// `price`. The line total is the tier's total price — it is NEVER multiplied
+// by the quantity again. Legacy tiers with `minQuantity`/`maxQuantity` keep
+// their old unit-price semantics and are detected automatically.
+function isBundleTier(t: any): boolean {
+  return typeof t?.quantity === 'number' && Number.isFinite(t.quantity)
+}
+
 function tierForQuantity(tiers: any[] | null | undefined, qty: number): any | null {
   if (!tiers || tiers.length === 0 || qty < 1) return null
-  const sorted = [...tiers].sort((a, b) => Number(a.minQuantity) - Number(b.minQuantity))
+  const sorted = [...tiers].sort((a, b) => Number(isBundleTier(a) ? a.quantity : a.minQuantity || 0) - Number(isBundleTier(b) ? b.quantity : b.minQuantity || 0))
   for (const t of sorted) {
-    if (qty >= Number(t.minQuantity) && (t.maxQuantity == null || qty <= Number(t.maxQuantity))) return t
+    if (isBundleTier(t)) {
+      if (qty === Number(t.quantity)) return t
+    } else if (qty >= Number(t.minQuantity) && (t.maxQuantity == null || qty <= Number(t.maxQuantity))) {
+      return t
+    }
   }
   const last = sorted[sorted.length - 1]
-  if (last && last.maxQuantity != null && qty > Number(last.maxQuantity)) return last
+  if (last && !isBundleTier(last) && last.maxQuantity != null && qty > Number(last.maxQuantity)) return last
+  return null
+}
+
+/** Total price for a quantity under bundle pricing, else null. */
+function tierTotalForQuantity(tiers: any[] | null | undefined, qty: number): number | null {
+  if (tiers && tiers.length > 0 && tiers.every(isBundleTier)) {
+    const tier = tierForQuantity(tiers, qty)
+    return tier && typeof tier.price === 'number' ? tier.price : null
+  }
   return null
 }
 
@@ -179,6 +201,148 @@ async function auditLog(storeId: string | null, userId: string, action: string, 
 }
 
 // ─────────────────────────────────────────────────────────────
+// Subscription lifecycle helpers
+// ─────────────────────────────────────────────────────────────
+
+const DAY_MS = 86400000
+const PERIOD_DAYS = 30
+
+// Mirrors src/shared/services/subscription.ts (client). Functions is a
+// separate package, so status resolution is duplicated here on purpose and
+// must stay in sync with the client helper.
+function tsMs(t?: { seconds?: number } | null): number | null {
+  if (!t || typeof t.seconds !== 'number') return null
+  return t.seconds * 1000
+}
+
+function resolveSubscriptionStatus(sub: any, nowMs = Date.now()): string {
+  const explicit = sub?.status
+  if (explicit === 'cancelled' || explicit === 'suspended') return explicit
+  if (explicit === 'trialing') {
+    const ends = tsMs(sub?.trialEndsAt)
+    if (ends != null && nowMs >= ends) return 'expired'
+    return 'trialing'
+  }
+  if (explicit === 'active') {
+    const ends = tsMs(sub?.currentPeriodEnd) ?? tsMs(sub?.expiresAt)
+    if (ends != null && nowMs >= ends) return 'expired'
+    return 'active'
+  }
+  return explicit || 'pending'
+}
+
+async function latestSubscriptionForStore(storeId: string): Promise<{ id: string; data: any } | null> {
+  const snap = await db.collection('subscriptions').where('storeId', '==', storeId).orderBy('createdAt', 'desc').limit(1).get()
+  if (snap.empty) return null
+  return { id: snap.docs[0].id, data: snap.docs[0].data() }
+}
+
+// Lazily persist an expiry flip (deduped) with a notification + audit trail.
+// No background jobs on the Spark plan, so expiry is enforced on access.
+async function expireSubscriptionLazily(storeId: string, subId: string, sub: any, userId?: string | null) {
+  if (sub?.status === 'expired') return
+  await db.doc(`subscriptions/${subId}`).update({ status: 'expired', updatedAt: now() })
+  await db.collection('notifications').add({
+    storeId,
+    userId: null,
+    title: 'انتهت تجربتك المجانية',
+    body: 'بيانات متجرك محفوظة بالكامل. فعّل باقتك لاستكمال البيع.',
+    type: 'billing',
+    read: false,
+    createdAt: now(),
+    createdBy: 'system',
+  }).catch(() => {})
+  await auditLog(storeId, userId || 'system', 'subscription_expired', 'subscriptions', subId, { storeId }).catch(() => {})
+}
+
+// Returns the subscription that grants store operations (trial or paid active),
+// resolving + lazily expiring when the window has passed. Null when the store
+// has no granting subscription. Never trusts a client-supplied status.
+async function grantForStore(storeId: string, userId?: string | null): Promise<{ sub: any; subId: string; plan: any } | null> {
+  const entry = await latestSubscriptionForStore(storeId)
+  if (!entry) return null
+  const status = resolveSubscriptionStatus(entry.data)
+  if (status === 'trialing' || status === 'active') {
+    const planSnap = await db.doc(`plans/${entry.data.planId}`).get()
+    if (!planSnap.exists) return null
+    return { sub: entry.data, subId: entry.id, plan: planSnap.data() }
+  }
+  if (status === 'expired' && entry.data.status !== 'expired') {
+    await expireSubscriptionLazily(storeId, entry.id, entry.data, userId).catch(() => {})
+  }
+  return null
+}
+
+async function createBillingNotification(storeId: string, userId: string | null, title: string, body: string) {
+  await db.collection('notifications').add({
+    storeId,
+    userId,
+    title,
+    body,
+    type: 'billing',
+    read: false,
+    createdAt: now(),
+    createdBy: 'system',
+  })
+}
+
+// Activates a subscription into a paid period. Shared by the legacy
+// approveSubscription path and the new manual-payment approval path so the
+// activation logic (price snapshots, period windows, counters) never forks.
+async function activateSubscription(
+  subId: string,
+  sub: any,
+  actorUid: string,
+  opts: { periodNumber?: number; reference?: string; launchUsed?: boolean; paymentRequestId?: string } = {},
+): Promise<{ store: any; user: any; normalPriceSnapshot: number; launchPriceSnapshot: number; periodNumber: number }> {
+  const storeSnap = await db.doc(`stores/${sub.storeId}`).get()
+  if (!storeSnap.exists) throw new HttpsError('not-found', 'المتجر غير موجود')
+  const store = storeSnap.data()!
+
+  const userSnap = await db.doc(`users/${store.ownerId}`).get()
+  const user = userSnap.exists ? userSnap.data()! : null
+
+  let plan: any = null
+  try {
+    const planSnap = await db.doc(`plans/${sub.planId}`).get()
+    plan = planSnap.exists ? planSnap.data() : null
+  } catch {
+    plan = null
+  }
+
+  const normalPriceSnapshot = Number(sub.normalPriceSnapshot ?? plan?.priceMonthly ?? 0)
+  const launchPriceSnapshot = Number(sub.launchPriceSnapshot ?? (plan?.launchEnabled && Number(plan.launchPrice) > 0 ? plan.launchPrice : normalPriceSnapshot) ?? normalPriceSnapshot)
+
+  if (user) {
+    await auth.updateUser(store.ownerId, { disabled: false }).catch(() => {})
+    await db.doc(`users/${store.ownerId}`).update({ active: true }).catch(() => {})
+  }
+
+  const nowMs = Date.now()
+  const periodNumber = opts.periodNumber != null ? opts.periodNumber : Number(sub.periodNumber || 0) + 1
+
+  await db.doc(`subscriptions/${subId}`).update({
+    status: 'active',
+    approvedBy: actorUid,
+    adminEmail: user?.email || null,
+    activatedAt: tsFromDate(new Date(nowMs)),
+    currentPeriodStart: tsFromDate(new Date(nowMs)),
+    currentPeriodEnd: tsFromDate(new Date(nowMs + PERIOD_DAYS * DAY_MS)),
+    ordersUsed: 0,
+    periodNumber,
+    normalPriceSnapshot,
+    launchPriceSnapshot,
+    launchUsed: opts.launchUsed ?? (launchPriceSnapshot < normalPriceSnapshot && periodNumber <= 1),
+    trialStartedAt: FieldValue.delete(),
+    trialEndsAt: FieldValue.delete(),
+    ...(opts.paymentRequestId ? { lastPaymentRequestId: opts.paymentRequestId } : {}),
+    updatedAt: now(),
+  })
+
+  return { store, user, normalPriceSnapshot, launchPriceSnapshot, periodNumber }
+}
+
+// ─────────────────────────────────────────────────────────────
 // 1. generateOrderNumber — unique ORD-NNNNN under concurrency
 // ─────────────────────────────────────────────────────────────
 export const generateOrderNumber = onCall(async (request: CallableRequest<{ storeId?: string }>) => {
@@ -223,24 +387,19 @@ export const createOrder = onCall(async (request: CallableRequest<any>) => {
     throw new HttpsError('failed-precondition', 'المتجر غير منشور بعد')
   }
 
-  // Check subscription limit before creating the order. The ordersUsed counter
-  // on the active subscription tracks orders created in the current period and
-  // is reset when a new subscription period starts (approveSubscription).
-  const subQuery = db.collection('subscriptions').where('storeId', '==', storeId).where('status', '==', 'active').limit(1)
-  const subSnap = await subQuery.get()
-  if (subSnap.empty) {
-    throw new HttpsError('failed-precondition', 'لا يوجد اشتراك نشط لهذا المتجر')
+  // Check subscription grant before creating the order. The ordersUsed counter
+  // on the granting subscription tracks orders created in the current period
+  // (trial OR paid) and resets when a new paid period starts (activation).
+  const grant = await grantForStore(storeId, request.auth?.uid)
+  if (!grant) {
+    throw new HttpsError('failed-precondition', 'الاشتراك غير نشط — المتجر لا يقبل الطلبات حالياً')
   }
-  const subRef = subSnap.docs[0].ref
-  const sub = subSnap.docs[0].data()!
-  const planSnap = await db.doc(`plans/${sub.planId}`).get()
-  if (!planSnap.exists) {
-    throw new HttpsError('not-found', 'الباقة غير موجودة')
-  }
-  const plan = planSnap.data() as any
-  const orderLimit = plan.orderLimitPerMonth
+  const subRef = db.doc(`subscriptions/${grant.subId}`)
+  const sub = grant.sub
+  const plan = grant.plan
+  const orderLimit = Number(plan?.orderLimitPerMonth || 0)
   const ordersUsed = Number(sub.ordersUsed || 0)
-  if (orderLimit && orderLimit > 0 && ordersUsed >= orderLimit) {
+  if (orderLimit > 0 && ordersUsed >= orderLimit) {
     throw new HttpsError('resource-exhausted', `تم تجاوز حد الطلبات الشهري (${orderLimit})`)
   }
 
@@ -255,6 +414,16 @@ export const createOrder = onCall(async (request: CallableRequest<any>) => {
     ? await db.collection('shipping').where('storeId', '==', storeId).where('active', '==', true).get()
     : null
   const zones = zonesSnap ? zonesSnap.docs.map((d) => ({ ...d.data(), id: d.id })) : []
+
+  // Upsert, never duplicate: reuse an existing customer for the same store when
+  // the phone already exists. This keeps one Customer doc per (storeId, phone).
+  const existingCustomer = await db.collection('customers')
+    .where('storeId', '==', storeId)
+    .where('phone', '==', String(customer.phone))
+    .limit(1)
+    .get()
+  const existingCustomerDoc = existingCustomer.empty ? null : existingCustomer.docs[0]
+  const customerType = request.auth?.uid ? 'registered' : 'guest'
 
   const result = await db.runTransaction(async (tx) => {
     const lineItems: any[] = []
@@ -317,20 +486,41 @@ export const createOrder = onCall(async (request: CallableRequest<any>) => {
       if ((product.stock || 0) < qty) throw new HttpsError('failed-precondition', `الكمية غير متوفرة لـ ${product.name}`)
       tx.update(db.doc(`products/${item.productId}`), { stock: FieldValue.increment(-qty) })
 
-      // Resolve unit price server-side. Quantity-tier pricing is recomputed
+      // Resolve pricing server-side. Quantity-tier pricing is recomputed
       // from the stored product, never trusted from the client.
+      // Bundle tiers: the tier's TOTAL price is the line total (no multiply).
+      // Standard/legacy: unit price × quantity.
       const basePrice = typeof matchedVariant?.price === 'number' ? matchedVariant.price : (Number(product.price) || 0)
-      const price = unitPriceForQty(basePrice, qty, product.pricingMode, product.quantityTiers)
-      subtotal += price * qty
+      const pricingMode: string = product.pricingMode === 'quantity' ? 'quantity' : 'standard'
+      let unit = basePrice
+      let lineTotal = 0
+      let quantityTier: { quantity: number; price: number } | null = null
+      if (pricingMode === 'quantity') {
+        const bundleTotal = tierTotalForQuantity(product.quantityTiers, qty)
+        if (bundleTotal != null) {
+          unit = bundleTotal / qty
+          lineTotal = bundleTotal
+          quantityTier = { quantity: qty, price: bundleTotal }
+        } else {
+          unit = unitPriceForQty(basePrice, qty, pricingMode, product.quantityTiers)
+          lineTotal = unit * qty
+        }
+      } else {
+        unit = unitPriceForQty(basePrice, qty, pricingMode, product.quantityTiers)
+        lineTotal = unit * qty
+      }
+      subtotal += lineTotal
       const variantId = matchedVariant?.id || item.variantId
       lineItems.push({
         id: `${item.productId}-${variantId || `${item.color || ''}-${item.size || ''}`}`,
         productId: item.productId,
         name: product.name,
-        price,
-        unitPrice: price,
+        price: unit,
+        unitPrice: unit,
         quantity: qty,
-        pricingMode: product.pricingMode || 'standard',
+        pricingMode,
+        lineTotal,
+        ...(quantityTier ? { quantityTier } : {}),
         color: (matchedVariant?.color ?? item.color) || '',
         size: (matchedVariant?.size ?? item.size) || '',
         ...(variantId ? { variantId } : {}),
@@ -384,6 +574,46 @@ export const createOrder = onCall(async (request: CallableRequest<any>) => {
     const shipping = computeShippingFee(shippingCfg, zones, subtotal, customer.governorate || '')
     shippingSnapshot = shipping.snapshot
 
+    // Customer upsert — one Customer doc per (storeId, phone). Reuse the
+    // existing doc when present, otherwise create. Never duplicates.
+    let customerDocId: string
+    if (existingCustomerDoc) {
+      customerDocId = existingCustomerDoc.id
+      tx.update(db.doc(`customers/${customerDocId}`), {
+        name: customer.name,
+        phone: customer.phone,
+        governorate: customer.governorate || '',
+        city: customer.city || '',
+        address: customer.address || '',
+        note: customer.notes || null,
+        ...(customerType === 'registered' ? { type: 'registered', userId: request.auth?.uid || null } : {}),
+        totalOrders: FieldValue.increment(1),
+        totalSpent: FieldValue.increment(subtotal),
+        lastOrderAt: now(),
+        updatedAt: now(),
+      })
+    } else {
+      customerDocId = db.collection('customers').doc().id
+      tx.set(db.doc(`customers/${customerDocId}`), {
+        storeId,
+        name: customer.name,
+        phone: customer.phone,
+        governorate: customer.governorate || '',
+        city: customer.city || '',
+        address: customer.address || '',
+        segment: null,
+        note: customer.notes || null,
+        type: customerType,
+        userId: request.auth?.uid || null,
+        totalOrders: FieldValue.increment(1),
+        totalSpent: FieldValue.increment(subtotal),
+        lastOrderAt: now(),
+        createdAt: now(),
+        updatedAt: now(),
+        createdBy: 'system',
+      })
+    }
+
     tx.set(db.doc(`orders/${orderId}`), {
       storeId,
       orderNumber,
@@ -394,6 +624,8 @@ export const createOrder = onCall(async (request: CallableRequest<any>) => {
       address: customer.address || '',
       notes: customer.notes || null,
       customerId: request.auth?.uid || null,
+      customerType,
+      customerDocId,
       items: lineItems,
       subtotal,
       shippingFee: shipping.fee,
@@ -402,6 +634,7 @@ export const createOrder = onCall(async (request: CallableRequest<any>) => {
       discount: 0,
       totalPrice: subtotal + shipping.fee,
       status: 'NEW',
+      statusHistory: [{ status: 'NEW', at: Timestamp.now(), by: request.auth?.uid || 'guest' }],
       paymentMethod: paymentMethod || 'cod',
       couponCode: null,
       trackingCode: null,
@@ -416,30 +649,12 @@ export const createOrder = onCall(async (request: CallableRequest<any>) => {
       createdBy: request.auth?.uid || 'guest',
     })
 
-    const customerId = db.collection('customers').doc().id
-    tx.set(db.doc(`customers/${customerId}`), {
-      storeId,
-      name: customer.name,
-      phone: customer.phone,
-      governorate: customer.governorate || '',
-      city: customer.city || '',
-      address: customer.address || '',
-      segment: null,
-      note: customer.notes || null,
-      totalOrders: FieldValue.increment(1),
-      totalSpent: FieldValue.increment(subtotal),
-      lastOrderAt: now(),
-      createdAt: now(),
-      updatedAt: now(),
-      createdBy: 'system',
-    })
-
     // Atomically consume one order slot from the active subscription. The
     // enforcement check above read the same counter, so concurrent orders can
     // never overshoot the plan limit.
     tx.update(subRef, { ordersUsed: FieldValue.increment(1), updatedAt: now() })
 
-    return { orderId, orderNumber, totalPrice: subtotal + shipping.fee, shippingFee: shipping.fee }
+    return { orderId, orderNumber, totalPrice: subtotal + shipping.fee, shippingFee: shipping.fee, customerId: customerDocId }
   })
 
   await bumpAnalytics(storeId, { totalPrice: result.totalPrice, status: 'NEW', countOrder: true }).catch(() => {})
@@ -463,20 +678,17 @@ export const createProduct = onCall(async (request: CallableRequest<any>) => {
     throw new HttpsError('not-found', 'المتجر غير موجود أو غير مفعل')
   }
 
-  // Check product limit from subscription plan
-  const subSnap = await db.collection('subscriptions').where('storeId', '==', storeId).where('status', '==', 'active').limit(1).get()
-  if (!subSnap.empty) {
-    const sub = subSnap.docs[0].data() as any
-    const planSnap = await db.doc(`plans/${sub.planId}`).get()
-    if (planSnap.exists) {
-      const plan = planSnap.data() as any
-      const productLimit = plan.productLimit
-      if (productLimit && productLimit > 0) {
-        const existingProducts = await db.collection('products').where('storeId', '==', storeId).get()
-        if (existingProducts.size >= productLimit) {
-          throw new HttpsError('resource-exhausted', `تم تجاوز حد المنتجات (${productLimit})`)
-        }
-      }
+  // Check subscription grant + product limit from the plan. Trial and active
+  // subscriptions both grant the full features of the selected plan.
+  const grant = await grantForStore(storeId, request.auth?.uid)
+  if (!grant) {
+    throw new HttpsError('failed-precondition', 'الاشتراك غير نشط — لا يمكن إضافة منتجات حالياً. فعّل باقتك أولاً.')
+  }
+  const productLimit = Number(grant.plan?.productLimit || 0)
+  if (productLimit > 0) {
+    const existingProducts = await db.collection('products').where('storeId', '==', storeId).get()
+    if (existingProducts.size >= productLimit) {
+      throw new HttpsError('resource-exhausted', `تم تجاوز حد المنتجات (${productLimit})`)
     }
   }
 
@@ -502,18 +714,31 @@ export const createProduct = onCall(async (request: CallableRequest<any>) => {
 })
 
 // ─────────────────────────────────────────────────────────────
-// 4. registerMerchant — atomic tenant + store + owner creation
+// 4. registerMerchant — atomic tenant + store + owner creation.
+//     Self-serve: the merchant picks a plan and a 3-day TRIAL starts
+//     immediately — no platform approval required at signup.
 // ─────────────────────────────────────────────────────────────
 export const registerMerchant = onCall(async (request: CallableRequest<any>) => {
-  const { email, password, name, storeName, storeRef, planId } = request.data || {}
+  const { email, password, name, phone, storeName, storeRef, planId } = request.data || {}
   if (!email || !password || !name || !storeName) throw new HttpsError('invalid-argument', 'بيانات التسجيل غير مكتملة')
 
   const uid = db.collection('users').doc().id
   const storeId = db.collection('stores').doc().id
   const baseSlug = (storeRef || storeName).toLowerCase().replace(/[^\w\s-]/g, '').replace(/[\s_-]+/g, '-').replace(/^-+|-+$/g, '') || 'store'
 
-  const emailQuery = await db.collection('users').where('email', '==', email).get()
+  const normalizedEmail = String(email).trim().toLowerCase()
+  const emailQuery = await db.collection('users').where('email', '==', normalizedEmail).get()
   if (!emailQuery.empty) throw new HttpsError('already-exists', 'البريد مسجل مسبقاً')
+
+  // Reasonable trial-abuse prevention: one trial per identity. A phone number
+  // already tied to a merchant/tenant blocks a second account. (Verified phone
+  // OTP is Phase 2; this is not an aggressive fingerprinting system.)
+  const normalizedPhone = phone ? String(phone).replace(/[^0-9]/g, '') : ''
+  if (normalizedPhone && normalizedPhone.length >= 9) {
+    const phoneQuery = await db.collection('users').where('phone', '==', normalizedPhone).limit(5).get()
+    const conflicting = phoneQuery.docs.some((d) => d.data()?.role === 'merchant' || (d.data()?.storeIds || []).length > 0)
+    if (conflicting) throw new HttpsError('already-exists', 'رقم الهاتف مستخدم مسبقاً')
+  }
 
   // Ensure the storefront slug is unique — append a numeric suffix when a
   // store already claims the candidate slug.
@@ -526,25 +751,45 @@ export const registerMerchant = onCall(async (request: CallableRequest<any>) => 
     slug = `${baseSlug}-${attempt}`
   }
 
-  let planName = 'بانتظار الاختيار'
-  if (planId && planId !== 'pending') {
-    try {
-      const planSnap = await db.doc(`plans/${planId}`).get()
-      if (planSnap.exists) {
-        planName = planSnap.data()?.name || planName
-      }
-    } catch {
-      // fallback if plan doc query fails
+  // Resolve the plan: explicit planId → settings.defaultPlanId → first active plan.
+  let resolvedPlanId = planId && planId !== 'pending' ? String(planId) : ''
+  let planSnap: admin.firestore.DocumentSnapshot | admin.firestore.QueryDocumentSnapshot | null = null
+  if (resolvedPlanId) {
+    planSnap = await db.doc(`plans/${resolvedPlanId}`).get()
+    if (!planSnap.exists || !planSnap.data()?.active) planSnap = null
+  }
+  if (!planSnap) {
+    const settingsSnap = await db.doc('settings/platform').get().catch(() => null)
+    const defaultPlanId = settingsSnap?.exists ? settingsSnap.data()?.defaultPlanId : ''
+    if (defaultPlanId) {
+      planSnap = await db.doc(`plans/${defaultPlanId}`).get()
+      if (!planSnap.exists || !planSnap.data()?.active) planSnap = null
     }
   }
+  if (!planSnap) {
+    const activePlanQuery = await db.collection('plans').where('active', '==', true).limit(1).get()
+    if (activePlanQuery.empty) throw new HttpsError('failed-precondition', 'لا توجد باقات متاحة حالياً')
+    planSnap = activePlanQuery.docs[0]
+  }
+  const plan = planSnap.data() as any
+  resolvedPlanId = planSnap.id
+  const planName = plan?.name || resolvedPlanId
+
+  const trialDays = Number(plan?.trialDays || 3)
+  const trialStarted = new Date()
+  const trialEnds = new Date(trialStarted.getTime() + trialDays * DAY_MS)
+  const normalPriceSnapshot = Number(plan?.priceMonthly || 0)
+  const launchEnabled = !!plan?.launchEnabled
+  const launchPriceSnapshot = launchEnabled && Number(plan?.launchPrice) > 0 ? Number(plan.launchPrice) : normalPriceSnapshot
 
   await db.doc(`users/${uid}`).set({
     uid,
-    email,
+    email: normalizedEmail,
     name,
     role: 'merchant',
     storeIds: [storeId],
-    active: false,
+    phone: normalizedPhone || null,
+    active: true,
     createdAt: now(),
     updatedAt: now(),
     createdBy: uid,
@@ -565,20 +810,28 @@ export const registerMerchant = onCall(async (request: CallableRequest<any>) => 
   })
   await db.collection('subscriptions').add({
     storeId,
-    planId: planId || 'pending',
+    planId: resolvedPlanId,
     planName,
-    status: 'pending',
-    requestNote: 'طلب تسجيل جديد',
+    status: 'trialing',
+    requestNote: 'تجربة مجانية',
+    trialStartedAt: tsFromDate(trialStarted),
+    trialEndsAt: tsFromDate(trialEnds),
+    trialDays,
+    periodNumber: 0,
+    normalPriceSnapshot,
+    launchPriceSnapshot,
+    ordersUsed: 0,
     createdAt: now(),
     updatedAt: now(),
     createdBy: uid,
   })
 
-  await auth.createUser({ uid, email, password, displayName: name, disabled: true })
-  // Account stays disabled until Platform Admin approves the subscription.
-  // users.active stays false; both enforce the pending-approval gate.
+  await auth.createUser({ uid, email: normalizedEmail, password, displayName: name, disabled: false })
 
-  return { uid, storeId, status: 'pending_review' }
+  await createBillingNotification(storeId, uid, 'بدأت تجربتك المجانية', `مرحباً ${name}! تجربتك المجانية لمدة ${trialDays} أيام بدأت الآن بباقة ${planName} — بكامل المزايا.`)
+  await auditLog(storeId, uid, 'trial_started', 'subscriptions', storeId, { planId: resolvedPlanId, trialDays })
+
+  return { uid, storeId, status: 'trial_started' }
 })
 
 // ─────────────────────────────────────────────────────────────
@@ -594,39 +847,10 @@ export const approveSubscription = onCall(async (request: CallableRequest<{ subs
   if (!subSnap.exists) throw new HttpsError('not-found', 'الاشتراك غير موجود')
   const sub = subSnap.data()!
 
-  const storeSnap = await db.doc(`stores/${sub.storeId}`).get()
-  const store = storeSnap.data()!
-  if (!store) throw new HttpsError('not-found', 'المتجر غير موجود')
+  const { store, user, periodNumber } = await activateSubscription(subscriptionId, sub, request.auth!.uid)
 
-  const userSnap = await db.doc(`users/${store.ownerId}`).get()
-  const user = userSnap.data()!
-  if (!user) throw new HttpsError('not-found', 'المستخدم غير موجود')
-
-  await auth.updateUser(store.ownerId, { disabled: false })
-  await db.doc(`users/${store.ownerId}`).update({ active: true })
-
-  await subRef.update({
-    status: 'active',
-    approvedBy: request.auth!.uid,
-    adminEmail: user.email,
-    startedAt: now(),
-    expiresAt: tsFromDate(new Date(Date.now() + 30 * 86400000)),
-    ordersUsed: 0,
-    updatedAt: now(),
-  })
-
-  await db.collection('notifications').add({
-    storeId: sub.storeId,
-    userId: store.ownerId,
-    title: 'تمت الموافقة على اشتراكك',
-    body: `مرحباً ${user.name || user.email}. حسابك الآن نشط. يمكنك تسجيل الدخول إلى لوحة التحكم.`,
-    type: 'billing',
-    read: false,
-    createdAt: now(),
-    createdBy: 'system',
-  })
-
-  await auditLog(sub.storeId, request.auth!.uid, 'approve_subscription', 'subscriptions', subscriptionId, { storeId: sub.storeId, ownerId: store.ownerId })
+  await createBillingNotification(sub.storeId, store.ownerId, 'تم تفعيل اشتراكك', `مرحباً ${user?.name || user?.email || 'بك'}. اشتراكك أصبح نشطاً. يمكنك تسجيل الدخول إلى لوحة التحكم.`)
+  await auditLog(sub.storeId, request.auth!.uid, 'approve_subscription', 'subscriptions', subscriptionId, { storeId: sub.storeId, ownerId: store.ownerId, periodNumber })
 
   return { ok: true }
 })
@@ -667,6 +891,387 @@ export const rejectSubscription = onCall(async (request: CallableRequest<{ subsc
 })
 
 // ─────────────────────────────────────────────────────────────
+// 4d. getMerchantSubscription — merchant resolves the live status of their
+//     store's subscription (with plan + payment history) for the dashboard
+//     and subscription page. Server-computed status, never the raw doc.
+// ─────────────────────────────────────────────────────────────
+export const getMerchantSubscription = onCall(async (request: CallableRequest<{ storeId?: string }>) => {
+  if (!request.auth) throw new HttpsError('unauthenticated', 'يجب تسجيل الدخول')
+  const { storeId } = request.data || {}
+  if (!storeId) throw new HttpsError('invalid-argument', 'storeId مطلوب')
+  await assertStoreAccess(request, storeId)
+
+  const userSnap = await db.doc(`users/${request.auth.uid}`).get()
+  const user = userSnap.data()
+  if (user?.role !== 'merchant' && user?.role !== 'superAdmin') {
+    throw new HttpsError('permission-denied', 'صلاحيات غير كافية')
+  }
+
+  const entry = await latestSubscriptionForStore(storeId)
+  if (!entry) return { subscription: null, plan: null, paymentRequests: [], status: 'none' }
+
+  let status = resolveSubscriptionStatus(entry.data)
+  if (status === 'expired' && entry.data.status !== 'expired') {
+    await expireSubscriptionLazily(storeId, entry.id, entry.data, request.auth.uid).catch(() => {})
+    status = 'expired'
+  }
+
+  let plan: any = null
+  try {
+    const planSnap = await db.doc(`plans/${entry.data.planId}`).get()
+    plan = planSnap.exists ? { id: planSnap.id, ...planSnap.data() } : null
+  } catch {
+    plan = null
+  }
+
+  const paySnap = await db.collection('subscriptionPayments')
+    .where('subscriptionId', '==', entry.id)
+    .orderBy('createdAt', 'desc')
+    .limit(20)
+    .get()
+  const paymentRequests = paySnap.docs.map((d) => ({ id: d.id, ...d.data() }))
+
+  return { subscription: { id: entry.id, ...entry.data }, plan, paymentRequests, status }
+})
+
+// ─────────────────────────────────────────────────────────────
+// 4d2. getMerchantPaymentInfo — payments instructions/currency for merchants.
+//      The `settings/platform` doc is admin-only in Firestore rules; this
+//      callable exposes ONLY the safe, publicly-visible payment fields to any
+//      signed-in user (merchants need them to activate a subscription). It can
+//      never modify settings — writes remain platform-admin only.
+// ─────────────────────────────────────────────────────────────
+export const getMerchantPaymentInfo = onCall(async (request: CallableRequest) => {
+  if (!request.auth) throw new HttpsError('unauthenticated', 'يجب تسجيل الدخول')
+
+  const snap = await db.doc('settings/platform').get().catch(() => null)
+  const data = snap?.exists ? snap.data() : {}
+  return {
+    paymentInstructions: typeof data?.paymentInstructions === 'string' ? data.paymentInstructions : '',
+    paymentContact: typeof data?.paymentContact === 'string' ? data.paymentContact : '',
+    currency: typeof data?.currency === 'string' ? data.currency : 'EGP',
+  }
+})
+
+// ─────────────────────────────────────────────────────────────
+// 4e. submitPaymentRequest — merchant submits a manual payment/activation
+//     request. The amount is computed server-side from price snapshots:
+//     first paid month = launch price, renewals = normal price. Never trust
+//     a client-supplied amount or plan.
+// ─────────────────────────────────────────────────────────────
+export const submitPaymentRequest = onCall(async (request: CallableRequest<{ subscriptionId?: string; paymentMethod?: string; reference?: string; note?: string; screenshotUrl?: string }>) => {
+  if (!request.auth) throw new HttpsError('unauthenticated', 'يجب تسجيل الدخول')
+  const { subscriptionId, paymentMethod, reference, note, screenshotUrl } = request.data || {}
+  if (!subscriptionId || !paymentMethod || !reference) throw new HttpsError('invalid-argument', 'بيانات الدفع غير مكتملة')
+  if (!/^[0-9]{6,24}$/.test(String(reference).trim())) throw new HttpsError('invalid-argument', 'رقم العملية غير صالح')
+
+  const subSnap = await db.doc(`subscriptions/${subscriptionId}`).get()
+  if (!subSnap.exists) throw new HttpsError('not-found', 'الاشتراك غير موجود')
+  const sub = subSnap.data()!
+
+  const userSnap = await db.doc(`users/${request.auth.uid}`).get()
+  const user = userSnap.data()
+  if (!user || user.role !== 'merchant' || !(user.storeIds || []).includes(sub.storeId)) {
+    throw new HttpsError('permission-denied', 'لا تملك هذا الاشتراك')
+  }
+
+  const status = resolveSubscriptionStatus(sub)
+  if (status !== 'expired' && status !== 'trialing') {
+    throw new HttpsError('failed-precondition', 'الاشتراك الحالي لا يحتاج إلى تفعيل')
+  }
+
+  const pendingSnap = await db.collection('subscriptionPayments')
+    .where('subscriptionId', '==', subscriptionId)
+    .where('status', '==', 'pending')
+    .limit(1)
+    .get()
+  if (!pendingSnap.empty) throw new HttpsError('already-exists', 'يوجد طلب تفعيل قيد المراجعة بالفعل')
+
+  const periodNumber = Number(sub.periodNumber || 0) + 1
+  const normalPriceSnapshot = Number(sub.normalPriceSnapshot || 0)
+  const launchPriceSnapshot = Number(sub.launchPriceSnapshot || normalPriceSnapshot)
+  const amount = periodNumber <= 1 ? launchPriceSnapshot : normalPriceSnapshot
+  if (amount <= 0) throw new HttpsError('failed-precondition', 'تعذر تحديد مبلغ الاشتراك')
+
+  const payRef = db.collection('subscriptionPayments').doc()
+  await payRef.set({
+    id: payRef.id,
+    subscriptionId,
+    storeId: sub.storeId,
+    planId: sub.planId,
+    planName: sub.planName || sub.planId,
+    amount,
+    paymentMethod: String(paymentMethod),
+    reference: String(reference).trim(),
+    note: note || '',
+    screenshotUrl: screenshotUrl || null,
+    status: 'pending',
+    periodNumber,
+    createdAt: now(),
+    updatedAt: now(),
+    createdBy: request.auth.uid,
+  })
+
+  await createBillingNotification(sub.storeId, request.auth.uid, 'تم إرسال طلب التفعيل', `تم استلام طلب تفعيل اشتراكك بمبلغ ${amount} ج.م. وهو قيد المراجعة من إدارة المنصة.`)
+  await auditLog(sub.storeId, request.auth.uid, 'payment_submitted', 'subscriptionPayments', payRef.id, { amount, periodNumber })
+
+  return { id: payRef.id, amount, status: 'pending' }
+})
+
+// ─────────────────────────────────────────────────────────────
+// 4f. approvePaymentRequest — platform admin approves a manual payment.
+//     Only an authorized super admin can activate a subscription. The first
+//     paid month uses the launch price; renewals use the normal price.
+// ─────────────────────────────────────────────────────────────
+export const approvePaymentRequest = onCall(async (request: CallableRequest<{ paymentRequestId?: string; note?: string }>) => {
+  await assertPlatformAdmin(request)
+  const { paymentRequestId, note } = request.data || {}
+  if (!paymentRequestId) throw new HttpsError('invalid-argument', 'paymentRequestId مطلوب')
+
+  const payRef = db.doc(`subscriptionPayments/${paymentRequestId}`)
+  const paySnap = await payRef.get()
+  if (!paySnap.exists) throw new HttpsError('not-found', 'طلب الدفع غير موجود')
+  const pay = paySnap.data()!
+  if (pay.status === 'approved') return { ok: true }
+
+  const subSnap = await db.doc(`subscriptions/${pay.subscriptionId}`).get()
+  if (!subSnap.exists) throw new HttpsError('not-found', 'الاشتراك غير موجود')
+  const sub = subSnap.data()!
+
+  await payRef.update({ status: 'approved', reviewedBy: request.auth!.uid, reviewedAt: now(), reviewNote: note || pay.reviewNote || null, updatedAt: now() })
+
+  const launchUsed = pay.periodNumber <= 1 && Number(sub.launchPriceSnapshot || 0) < Number(sub.normalPriceSnapshot || 0)
+  const { store } = await activateSubscription(pay.subscriptionId, sub, request.auth!.uid, {
+    periodNumber: pay.periodNumber,
+    reference: pay.reference,
+    launchUsed,
+    paymentRequestId: pay.id,
+  })
+
+  await db.collection('transactions').add({
+    storeId: pay.storeId,
+    type: 'subscription',
+    amount: pay.amount,
+    status: 'completed',
+    description: `تفعيل الباقة ${pay.planName || ''} — الدورة ${pay.periodNumber}`,
+    reference: pay.reference,
+    subscriptionId: pay.subscriptionId,
+    createdAt: now(),
+    updatedAt: now(),
+    createdBy: request.auth!.uid,
+  })
+
+  await createBillingNotification(pay.storeId, store.ownerId, 'تم تفعيل اشتراكك', `اشتراك ${pay.planName || ''} أصبح نشطاً. شكراً لثقتك — استمتع بالباقة!`)
+  await auditLog(pay.storeId, request.auth!.uid, 'payment_approved', 'subscriptionPayments', pay.id, { amount: pay.amount, periodNumber: pay.periodNumber })
+
+  return { ok: true }
+})
+
+// ─────────────────────────────────────────────────────────────
+// 4g. rejectPaymentRequest — platform admin rejects a manual payment.
+//     The subscription stays EXPIRED; the merchant may submit again.
+// ─────────────────────────────────────────────────────────────
+export const rejectPaymentRequest = onCall(async (request: CallableRequest<{ paymentRequestId?: string; reason?: string }>) => {
+  await assertPlatformAdmin(request)
+  const { paymentRequestId, reason } = request.data || {}
+  if (!paymentRequestId) throw new HttpsError('invalid-argument', 'paymentRequestId مطلوب')
+
+  const payRef = db.doc(`subscriptionPayments/${paymentRequestId}`)
+  const paySnap = await payRef.get()
+  if (!paySnap.exists) throw new HttpsError('not-found', 'طلب الدفع غير موجود')
+  const pay = paySnap.data()!
+  if (pay.status === 'rejected') return { ok: true }
+
+  await payRef.update({ status: 'rejected', reviewedBy: request.auth!.uid, reviewedAt: now(), reviewNote: reason || pay.reviewNote || null, updatedAt: now() })
+
+  await createBillingNotification(pay.storeId, null, 'تعذر تأكيد عملية الدفع', reason ? `لم يتم تأكيد عملية الدفع: ${reason}. يمكنك إرسال طلب آخر.` : 'تعذر تأكيد عملية الدفع. يمكنك إرسال طلب آخر بعد التحقق من البيانات.')
+  await auditLog(pay.storeId, request.auth!.uid, 'payment_rejected', 'subscriptionPayments', pay.id, { reason: reason || '' })
+
+  return { ok: true }
+})
+
+// ─────────────────────────────────────────────────────────────
+// 4h. getPublicStoreStatus — safe public status for the storefront.
+//     Returns ONLY { purchasable, reason }. Never leaks plan/price/limits or
+//     any internal field. Used to show a professional "اشتراك مطلوب" page.
+// ─────────────────────────────────────────────────────────────
+export const getPublicStoreStatus = onCall(async (request: CallableRequest<{ slug?: string }>) => {
+  const { slug } = request.data || {}
+  if (!slug) throw new HttpsError('invalid-argument', 'slug مطلوب')
+
+  const storeSnap = await db.collection('stores').where('slug', '==', String(slug)).limit(1).get()
+  if (storeSnap.empty) return { purchasable: false, reason: 'not_found' }
+  const storeId = storeSnap.docs[0].id
+  const store = storeSnap.docs[0].data()!
+  if (!store.active) return { purchasable: false, reason: 'inactive' }
+  if (!store.published) return { purchasable: false, reason: 'unpublished' }
+
+  const entry = await latestSubscriptionForStore(storeId)
+  if (!entry) return { purchasable: false, reason: 'no_subscription' }
+  const status = resolveSubscriptionStatus(entry.data)
+  if (status === 'expired' && entry.data.status !== 'expired') {
+    await expireSubscriptionLazily(storeId, entry.id, entry.data).catch(() => {})
+  }
+  const purchasable = status === 'trialing' || status === 'active'
+  return { purchasable, reason: purchasable ? 'ok' : 'subscription_required' }
+})
+
+// ─────────────────────────────────────────────────────────────
+// 4i. setStorePublished — publish/unpublish a store through a callable so the
+//     EXPIRED restriction can be enforced server-side (rules cannot query the
+//     latest subscription). Publishing requires an active or trialing sub.
+// ─────────────────────────────────────────────────────────────
+export const setStorePublished = onCall(async (request: CallableRequest<{ storeId?: string; published?: boolean }>) => {
+  if (!request.auth) throw new HttpsError('unauthenticated', 'يجب تسجيل الدخول')
+  const { storeId, published } = request.data || {}
+  if (!storeId || typeof published !== 'boolean') throw new HttpsError('invalid-argument', 'بيانات غير صالحة')
+  await assertStoreAccess(request, storeId)
+
+  const storeSnap = await db.doc(`stores/${storeId}`).get()
+  if (!storeSnap.exists) throw new HttpsError('not-found', 'المتجر غير موجود')
+
+  if (published) {
+    const grant = await grantForStore(storeId, request.auth.uid)
+    if (!grant) throw new HttpsError('failed-precondition', 'لا يمكن نشر المتجر — الاشتراك غير نشط. فعّل باقتك أولاً.')
+  }
+
+  await db.doc(`stores/${storeId}`).update({ published, updatedAt: now() })
+  await auditLog(storeId, request.auth.uid, published ? 'store_published' : 'store_unpublished', 'stores', storeId)
+
+  return { ok: true }
+})
+
+// ─────────────────────────────────────────────────────────────
+// 4j. createLandingPage / createSalesLink — create-through-callable so the
+//     EXPIRED restriction and plan limits (landingPagesLimit / salesLinksLimit)
+//     are enforced server-side. Updates/deletes remain direct writes.
+// ─────────────────────────────────────────────────────────────
+export const createLandingPage = onCall(async (request: CallableRequest<any>) => {
+  await assertStoreAccess(request, request.data?.storeId, 'landing:manage')
+  const { storeId, data } = request.data || {}
+  if (!storeId || !data || !data.slug || !data.title) throw new HttpsError('invalid-argument', 'بيانات صفحة الهبوط غير مكتملة')
+
+  const grant = await grantForStore(storeId, request.auth?.uid)
+  if (!grant) throw new HttpsError('failed-precondition', 'الاشتراك غير نشط — لا يمكن إنشاء صفحات هبوط الآن')
+
+  const limit = Number(grant.plan?.landingPagesLimit || 0)
+  if (limit > 0) {
+    const count = await db.collection('landingPages').where('storeId', '==', storeId).get()
+    if (count.size >= limit) throw new HttpsError('resource-exhausted', `تم تجاوز حد صفحات الهبوط (${limit})`)
+  }
+
+  const ref = await db.collection('landingPages').add({
+    storeId,
+    slug: data.slug,
+    title: data.title,
+    status: data.status || 'draft',
+    active: data.active ?? true,
+    template: data.template || 'default',
+    hero: data.hero || { title: data.title },
+    sections: data.sections || [],
+    seo: data.seo || null,
+    productId: data.productId || null,
+    views: 0,
+    ordersCount: 0,
+    totalRevenue: 0,
+    createdAt: now(),
+    updatedAt: now(),
+    createdBy: request.auth?.uid || 'guest',
+  })
+
+  await auditLog(storeId, request.auth?.uid || 'guest', 'create_landing_page', 'landingPages', ref.id, { title: data.title })
+  return { id: ref.id }
+})
+
+export const createSalesLink = onCall(async (request: CallableRequest<any>) => {
+  await assertStoreAccess(request, request.data?.storeId, 'sales_links:create')
+  const { storeId, data } = request.data || {}
+  if (!storeId || !data || !data.code) throw new HttpsError('invalid-argument', 'بيانات رابط البيع غير مكتملة')
+
+  const grant = await grantForStore(storeId, request.auth?.uid)
+  if (!grant) throw new HttpsError('failed-precondition', 'الاشتراك غير نشط — لا يمكن إنشاء روابط بيع الآن')
+
+  const limit = Number(grant.plan?.salesLinksLimit || 0)
+  if (limit > 0) {
+    const count = await db.collection('storeLinks').where('storeId', '==', storeId).where('archived', '==', false).get()
+    if (count.size >= limit) throw new HttpsError('resource-exhausted', `تم تجاوز حد روابط البيع (${limit})`)
+  }
+
+  const linkQuery = await db.collection('storeLinks').where('storeId', '==', storeId).where('code', '==', data.code).limit(1).get()
+  if (!linkQuery.empty) throw new HttpsError('already-exists', 'كود الرابط مستخدم مسبقاً')
+
+  const ref = await db.collection('storeLinks').add({
+    storeId,
+    code: data.code,
+    name: data.name || data.code,
+    title: data.title || data.name || data.code,
+    sellerName: data.sellerName || null,
+    destinationType: data.destinationType || 'home',
+    destinationId: data.destinationId || null,
+    source: data.source || null,
+    campaign: data.campaign || null,
+    content: data.content || null,
+    staffId: data.staffId || null,
+    active: data.active ?? true,
+    archived: false,
+    visits: 0,
+    ordersCount: 0,
+    totalRevenue: 0,
+    createdAt: now(),
+    updatedAt: now(),
+    createdBy: request.auth?.uid || 'guest',
+  })
+
+  await auditLog(storeId, request.auth?.uid || 'guest', 'create_sales_link', 'storeLinks', ref.id, { code: data.code })
+  return { id: ref.id }
+})
+
+// ─────────────────────────────────────────────────────────────
+// 4k. savePlan — platform admin creates/updates/deactivates a plan. Writes go
+//     through a callable so plan changes are audited and plans attached to
+//     active subscriptions are never hard-deleted (deactivate instead).
+// ─────────────────────────────────────────────────────────────
+export const savePlan = onCall(async (request: CallableRequest<any>) => {
+  await assertPlatformAdmin(request)
+  const { planId, plan } = request.data || {}
+  if (!plan || !plan.name || !(Number(plan.priceMonthly) >= 0)) throw new HttpsError('invalid-argument', 'بيانات الباقة غير مكتملة')
+
+  const payload: Record<string, any> = {
+    name: String(plan.name),
+    description: plan.description || '',
+    priceMonthly: Number(plan.priceMonthly),
+    priceYearly: Number(plan.priceYearly || 0),
+    trialDays: Number(plan.trialDays || 3),
+    launchPrice: Number(plan.launchPrice || 0),
+    launchEnabled: !!plan.launchEnabled,
+    productLimit: Number(plan.productLimit || 0),
+    orderLimitPerMonth: Number(plan.orderLimitPerMonth || 0),
+    landingPagesLimit: Number(plan.landingPagesLimit || 0),
+    salesLinksLimit: Number(plan.salesLinksLimit || 0),
+    staffLimit: Number(plan.staffLimit || 0),
+    storageLimit: Number(plan.storageLimit || 0),
+    features: Array.isArray(plan.features) ? plan.features : [],
+    active: plan.active !== false,
+    updatedAt: now(),
+  }
+
+  let action: string
+  let savedId = planId
+  if (planId) {
+    await db.doc(`plans/${planId}`).update(payload)
+    action = plan.active === false ? 'plan_deactivated' : 'plan_changed'
+  } else {
+    const ref = await db.collection('plans').add(payload)
+    savedId = ref.id
+    action = 'plan_created'
+  }
+
+  await auditLog(null, request.auth!.uid, action, 'plans', savedId, { name: payload.name, priceMonthly: payload.priceMonthly })
+
+  return { ok: true, planId: savedId }
+})
+
+// ─────────────────────────────────────────────────────────────
 // 4c. getPlatformOverview — platform admin operational snapshot.
 //     Returns every store joined with its latest subscription, plan and
 //     owner, plus the live order-usage metrics used by the Super Admin UI.
@@ -700,11 +1305,16 @@ export const getPlatformOverview = onCall(async (request: CallableRequest) => {
     }
   }
 
+  // Payment requests for the "pending payment" + payments metrics.
+  const paySnap = await db.collection('subscriptionPayments').get()
+  const pendingPayments = paySnap.docs.filter((d) => d.data()?.status === 'pending').map((d) => ({ id: d.id, ...d.data() }))
+
   const rows = storesSnap.docs.map((d) => {
     const store = d.data()
     const storeId = d.id
     const subEntry = latestSub.get(storeId)
     const sub = subEntry?.data || null
+    const resolvedStatus = sub ? resolveSubscriptionStatus(sub) : null
     const plan = sub ? plans.get(sub.planId) : null
     const orderLimit = Number(plan?.orderLimitPerMonth || 0)
     const ordersUsed = Number(sub?.ordersUsed || 0)
@@ -721,6 +1331,7 @@ export const getPlatformOverview = onCall(async (request: CallableRequest) => {
     }
 
     const owner = store.ownerId ? users.get(store.ownerId) : null
+    const pendingPayment = pendingPayments.some((p: any) => p.subscriptionId === subEntry?.id)
 
     return {
       storeId,
@@ -738,9 +1349,19 @@ export const getPlatformOverview = onCall(async (request: CallableRequest) => {
       planName: plan?.name || sub?.planName || null,
       planPriceMonthly: Number(plan?.priceMonthly || 0),
       productLimit: Number(plan?.productLimit || 0),
-      subStatus: sub?.status || null,
+      subStatus: resolvedStatus,
       subStartedAt: sub?.startedAt || null,
       subExpiresAt: sub?.expiresAt || null,
+      trialStartedAt: sub?.trialStartedAt || null,
+      trialEndsAt: sub?.trialEndsAt || null,
+      activatedAt: sub?.activatedAt || null,
+      currentPeriodStart: sub?.currentPeriodStart || null,
+      currentPeriodEnd: sub?.currentPeriodEnd || null,
+      firstMonthPrice: Number(sub?.launchPriceSnapshot || 0),
+      normalPriceSnapshot: Number(sub?.normalPriceSnapshot || 0),
+      launchUsed: !!sub?.launchUsed,
+      periodNumber: Number(sub?.periodNumber || 0),
+      pendingPayment,
       orderLimit,
       ordersUsed,
       remaining,
@@ -749,7 +1370,24 @@ export const getPlatformOverview = onCall(async (request: CallableRequest) => {
     }
   })
 
-  return { rows }
+  const activeSubs = rows.filter((r) => r.subStatus === 'active')
+  const mrr = activeSubs.reduce((s, r) => s + (r.normalPriceSnapshot || r.planPriceMonthly || 0), 0)
+  const metrics = {
+    totalMerchants: rows.length,
+    activeStores: rows.filter((r) => r.active).length,
+    trialing: rows.filter((r) => r.subStatus === 'trialing').length,
+    activeSubscriptions: activeSubs.length,
+    expired: rows.filter((r) => r.subStatus === 'expired').length,
+    suspended: rows.filter((r) => r.subStatus === 'suspended').length,
+    cancelled: rows.filter((r) => r.subStatus === 'cancelled').length,
+    pendingPaymentRequests: pendingPayments.length,
+    launchActivations: rows.filter((r) => r.launchUsed).length,
+    nearLimit: rows.filter((r) => r.usageLevel === 'near' || r.usageLevel === 'approaching').length,
+    reachedLimit: rows.filter((r) => r.usageLevel === 'reached').length,
+    mrr,
+  }
+
+  return { rows, metrics }
 })
 
 // ─────────────────────────────────────────────────────────────
@@ -809,7 +1447,11 @@ export const updateOrderStatus = onCall(async (request: CallableRequest<{ orderI
         tx.update(productRef, { stock: FieldValue.increment(item.quantity) })
       }
     }
-    tx.update(orderRef, { status, updatedAt: now() })
+    tx.update(orderRef, {
+      status,
+      statusHistory: FieldValue.arrayUnion({ status, at: Timestamp.now(), by: request.auth!.uid }),
+      updatedAt: now(),
+    })
   })
 
   // Revenue is counted only for DELIVERED orders (canonical rule). Entering
@@ -931,13 +1573,14 @@ export const exitImpersonation = onCall(async (request: CallableRequest) => {
 })
 
 // ─────────────────────────────────────────────────────────────
-// 8. trackOrder — public order tracking by phone (+ optional number)
-//    Returns only a safe subset of order fields. Never leaks
-//    full customer data or other stores' orders.
+// 8. trackOrder — public order tracking. Requires BOTH storeId + phone +
+//    orderNumber so a caller must know both the order identifier and the
+//    customer phone. Returns only a safe subset (no address/PII). Never leaks
+//    other stores' orders (scoped by storeId) or another phone's orders.
 // ─────────────────────────────────────────────────────────────
 export const trackOrder = onCall(async (request: CallableRequest<{ storeId?: string; phone?: string; orderNumber?: string }>) => {
   const { storeId, phone, orderNumber } = request.data || {}
-  if (!storeId || !phone) throw new HttpsError('invalid-argument', 'storeId و phone مطلوبان')
+  if (!storeId || !phone || !orderNumber) throw new HttpsError('invalid-argument', 'storeId و phone و orderNumber مطلوبة')
   if (!/^\d{9,15}$/.test(String(phone))) throw new HttpsError('invalid-argument', 'رقم هاتف غير صالح')
 
   const storeSnap = await db.doc(`stores/${storeId}`).get()
@@ -945,18 +1588,15 @@ export const trackOrder = onCall(async (request: CallableRequest<{ storeId?: str
     throw new HttpsError('not-found', 'المتجر غير موجود')
   }
 
-  let query = db
-    .collection('orders')
+  const normalized = String(orderNumber).trim().toUpperCase()
+  if (!normalized.startsWith('ORD-')) throw new HttpsError('invalid-argument', 'رقم طلب غير صالح')
+
+  const snap = await db.collection('orders')
     .where('storeId', '==', storeId)
+    .where('orderNumber', '==', normalized)
     .where('phone', '==', String(phone))
-
-  if (orderNumber) {
-    const normalized = String(orderNumber).trim().toLowerCase()
-    if (!normalized.startsWith('ord-')) throw new HttpsError('invalid-argument', 'رقم طلب غير صالح')
-    query = query.where('orderNumber', '==', normalized.toUpperCase())
-  }
-
-  const snap = await query.orderBy('createdAt', 'desc').limit(10).get()
+    .limit(10)
+    .get()
 
   const orders = snap.docs.map((d) => {
     const o = d.data()
@@ -964,14 +1604,99 @@ export const trackOrder = onCall(async (request: CallableRequest<{ storeId?: str
       id: d.id,
       orderNumber: o.orderNumber,
       status: o.status,
-      items: Array.isArray(o.items) ? o.items.map((i: any) => ({ name: i.name, quantity: i.quantity })) : [],
+      statusHistory: Array.isArray(o.statusHistory) ? o.statusHistory : null,
+      items: Array.isArray(o.items) ? o.items.map((i: any) => ({ name: i.name, quantity: i.quantity, color: i.color || '', size: i.size || '' })) : [],
+      subtotal: o.subtotal || 0,
+      shippingFee: o.shippingFee || 0,
       totalPrice: o.totalPrice || 0,
       paymentMethod: o.paymentMethod || 'cod',
+      customerType: o.customerType || 'guest',
       createdAt: o.createdAt,
+      updatedAt: o.updatedAt,
     }
   })
 
   return { orders }
+})
+
+// ─────────────────────────────────────────────────────────────
+// 8b. claimOrder — link a guest order to a newly-registered customer account.
+//     Requires auth + the same (storeId, orderNumber, phone) identity used at
+//     checkout. Marks the order as registered without creating a duplicate.
+// ─────────────────────────────────────────────────────────────
+export const claimOrder = onCall(async (request: CallableRequest<{ storeId?: string; orderNumber?: string; phone?: string }>) => {
+  if (!request.auth) throw new HttpsError('unauthenticated', 'يجب تسجيل الدخول')
+  const { storeId, orderNumber, phone } = request.data || {}
+  if (!storeId || !phone || !orderNumber) throw new HttpsError('invalid-argument', 'storeId و phone و orderNumber مطلوبة')
+  if (!/^\d{9,15}$/.test(String(phone))) throw new HttpsError('invalid-argument', 'رقم هاتف غير صالح')
+
+  const normalized = String(orderNumber).trim().toUpperCase()
+  if (!normalized.startsWith('ORD-')) throw new HttpsError('invalid-argument', 'رقم طلب غير صالح')
+
+  const storeSnap = await db.doc(`stores/${storeId}`).get()
+  if (!storeSnap.exists || !storeSnap.data()?.active) {
+    throw new HttpsError('not-found', 'المتجر غير موجود')
+  }
+
+  // Only allow claiming orders scoped by storeId + phone so a customer can
+  // never claim another store's or another phone's order.
+  const snap = await db.collection('orders')
+    .where('storeId', '==', storeId)
+    .where('orderNumber', '==', normalized)
+    .where('phone', '==', String(phone))
+    .limit(1)
+    .get()
+  if (snap.empty) throw new HttpsError('not-found', 'لا يوجد طلب مطابق لهذه البيانات')
+
+  const orderRef = snap.docs[0].ref
+  const order = snap.docs[0].data()
+
+  // Guard against claiming an order that already belongs to another account.
+  if (order.customerId && order.customerId !== request.auth.uid) {
+    throw new HttpsError('permission-denied', 'هذا الطلب مرتبط بحساب آخر')
+  }
+
+  // If already claimed by this user, idempotently succeed — never duplicate.
+  if (order.customerId === request.auth.uid && order.customerType === 'registered') {
+    return { ok: true, orderId: orderRef.id, already: true }
+  }
+
+  await db.runTransaction(async (tx) => {
+    const fresh = await tx.get(orderRef)
+    if (!fresh.exists) throw new HttpsError('not-found', 'الطلب غير موجود')
+    const current = fresh.data()!
+    if (current.customerId && current.customerId !== request.auth!.uid) {
+      throw new HttpsError('permission-denied', 'هذا الطلب مرتبط بحساب آخر')
+    }
+
+    // All reads must happen before any writes within the transaction. Look up
+    // the matching customer doc (same storeId + phone identity used at checkout)
+    // before issuing any tx.update.
+    const custSnap = await tx.get(db.collection('customers')
+      .where('storeId', '==', storeId)
+      .where('phone', '==', String(phone))
+      .limit(1))
+
+    tx.update(orderRef, {
+      customerId: request.auth!.uid,
+      customerType: 'registered',
+      updatedAt: now(),
+    })
+
+    // Mark the matching customer doc as registered + link the account uid. The
+    // same (storeId, phone) identity used at checkout, so no cross-store match.
+    if (!custSnap.empty) {
+      tx.update(custSnap.docs[0].ref, {
+        type: 'registered',
+        userId: request.auth!.uid,
+        updatedAt: now(),
+      })
+    }
+  })
+
+  await auditLog(storeId, request.auth.uid, 'claim_order', 'orders', orderRef.id, { orderNumber: normalized, phone: String(phone) })
+
+  return { ok: true, orderId: orderRef.id, already: false }
 })
 
 // ─────────────────────────────────────────────────────────────
@@ -1098,6 +1823,17 @@ export const inviteStaff = onCall(async (request: CallableRequest<{ storeId?: st
     throw new HttpsError('not-found', 'الدور غير موجود')
   }
   const permissions = roleSnap.data()?.permissions || []
+
+  // Enforce the plan's staffLimit server-side.
+  const grant = await grantForStore(storeId, request.auth.uid)
+  if (!grant) throw new HttpsError('failed-precondition', 'الاشتراك غير نشط — لا يمكن إضافة أعضاء فريق الآن')
+  const staffLimit = Number(grant.plan?.staffLimit || 0)
+  if (staffLimit > 0) {
+    const teamCount = await db.collection('team').where('storeId', '==', storeId).where('active', '==', true).get()
+    if (teamCount.size >= staffLimit) {
+      throw new HttpsError('resource-exhausted', `تم تجاوز حد أعضاء الفريق (${staffLimit})`)
+    }
+  }
 
   // No account may already exist with this email.
   const existing = await db.collection('users').where('email', '==', String(email).toLowerCase()).get()

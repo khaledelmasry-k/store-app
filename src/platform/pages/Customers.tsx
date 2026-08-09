@@ -11,6 +11,7 @@ import { EmptyState } from '../../shared/components/ui/EmptyState'
 import { Loading } from '../../shared/components/ui/Loading'
 import { useCollection } from '../../shared/hooks/useCollection'
 import { formatCurrency, formatDate } from '../../shared/utils/format'
+import { normalizeSegment, segmentLabel } from '../../shared/utils/segments'
 import type { Customer } from '../../shared/types'
 
 export const PlatformCustomers: FunctionalComponent = () => {
@@ -25,7 +26,7 @@ export const PlatformCustomers: FunctionalComponent = () => {
 
   const filtered = customers.filter((c) => {
     const matchSearch = c.name.includes(query) || c.phone.includes(query)
-    const matchSegment = segment === 'all' || c.segment === segment
+    const matchSegment = segment === 'all' || normalizeSegment(c.segment) === segment
     return matchSearch && matchSegment
   })
   const totalPages = Math.max(1, Math.ceil(filtered.length / PAGE_SIZE))
@@ -52,7 +53,7 @@ export const PlatformCustomers: FunctionalComponent = () => {
           search={query}
           onSearch={(q) => { setQuery(q); setPage(1) }}
           searchPlaceholder="بحث بالاسم أو الهاتف..."
-          segments={[{ label: 'كل', value: 'all' }, { label: 'VIP', value: 'vip' }, { label: 'عادي', value: 'normal' }]}
+          segments={[{ label: 'كل', value: 'all' }, { label: 'VIP', value: 'vip' }, { label: 'عادي', value: 'repeat' }, { label: 'جديد', value: 'new' }, { label: 'منتهي', value: 'inactive' }]}
           activeSegment={segment}
           onSegmentChange={(s) => { setSegment(s); setPage(1) }}
         />
@@ -64,7 +65,7 @@ export const PlatformCustomers: FunctionalComponent = () => {
               { key: 'name', header: 'الاسم' },
               { key: 'phone', header: 'الهاتف' },
               { key: 'storeId', header: 'المتجر', render: (c: Customer) => (stores.find((s: any) => s.id === c.storeId) as any)?.name || '—' },
-              { key: 'segment', header: 'الشريحة', render: (c: Customer) => c.segment ? <Badge tone="violet">{c.segment}</Badge> : '—' },
+              { key: 'segment', header: 'الشريحة', render: (c: Customer) => c.segment ? <Badge tone="violet">{segmentLabel(c.segment)}</Badge> : '—' },
               { key: 'totalOrders', header: 'الطلبات', render: (c: Customer) => <Badge>{c.totalOrders}</Badge> },
               { key: 'totalSpent', header: 'المبلغ', render: (c: Customer) => formatCurrency(c.totalSpent) },
               { key: 'lastOrderAt', header: 'آخر طلب', render: (c: Customer) => <span className="muted">{formatDate(c.lastOrderAt)}</span> },

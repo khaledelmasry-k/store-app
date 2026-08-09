@@ -64,6 +64,7 @@ const StoreCart = lazy(() => import('./store/pages/Cart'))
 const StoreCheckout = lazy(() => import('./store/pages/Checkout'))
 const StoreTrack = lazy(() => import('./store/pages/Track'))
 const StoreAccount = lazy(() => import('./store/pages/Account'))
+const StoreOrderDetails = lazy(() => import('./store/pages/OrderDetails'))
 const StoreLogin = lazy(() => import('./store/pages/Login'))
 const StoreLanding = lazy(() => import('./store/pages/Landing'))
 
@@ -174,6 +175,10 @@ function MerchantRoutes() {
   )
 }
 
+function StoreOrderRoute({ params }: { params: Record<string, string> }) {
+  return <StoreOrderDetails id={params.id} />
+}
+
 function StoreRoutes() {
   const [loc] = useLocation()
   const { slug, innerPath } = parseStoreLocation(loc)
@@ -191,6 +196,8 @@ function StoreRoutes() {
           <Route path="/checkout" component={() => <StoreCheckout />} />
           <Route path="/track" component={() => <StoreTrack />} />
           <Route path="/account" component={() => <StoreAccount />} />
+          <Route path="/account/orders/:id" component={StoreOrderRoute} />
+          <Route path="/orders/:id" component={StoreOrderRoute} />
           <Route path="/login" component={() => <StoreLogin />} />
           <Route component={() => <StoreHome />} />
         </Switch>

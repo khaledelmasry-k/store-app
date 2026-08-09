@@ -52,6 +52,8 @@ export const PlatformCoupons: FunctionalComponent = () => {
 
   if (storesRes.loading) return <Loading />
 
+  const selectableStores = (stores as any[]).map((s: any) => ({ value: s.id, label: s.name }))
+
   return (
     <div>
       <PageHeader title="الكوبونات" subtitle={`${coupons.length} كوبون`} actions={<Button icon="add" onClick={() => setOpen(true)}>كوبون جديد</Button>} />
@@ -85,7 +87,8 @@ export const PlatformCoupons: FunctionalComponent = () => {
         )}
       </Card>
 
-      <Modal open={open} onClose={() => setOpen(false)} title="إنشاء كوبون" footer={<Fragment><Button variant="ghost" onClick={() => setOpen(false)}>إلغاء</Button><Button onClick={submit}>حفظ</Button></Fragment>}>
+      <Modal open={open} onClose={() => setOpen(false)} title="إنشاء كوبون" footer={<Fragment><Button variant="ghost" onClick={() => setOpen(false)}>إلغاء</Button><Button onClick={submit} disabled={!storeId || !form.code}>حفظ</Button></Fragment>}>
+        <Select label="المتجر" value={storeId} onChange={setStoreId} placeholder="اختر المتجر" options={selectableStores} />
         <div className="grid grid-2">
           <Input label="الكود" value={form.code || ''} onChange={(v) => setForm({ ...form, code: v })} placeholder="SAVE10" />
           <Select label="النوع" value={form.type || 'percent'} onChange={(v) => setForm({ ...form, type: v as any })} options={[{ value: 'percent', label: 'نسبة مئوية' }, { value: 'fixed', label: 'مبلغ ثابت' }]} />

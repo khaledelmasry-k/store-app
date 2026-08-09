@@ -68,6 +68,8 @@ export interface Store extends Partial<FirestoreMeta> {
   ownerId: string
   currency: string
   logo?: string
+  /** Hero banner image shown at the top of the storefront home page. */
+  heroImage?: string
   description?: string
   phone?: string
   address?: string
@@ -112,11 +114,19 @@ export interface ProductVariant {
   imageIndex?: number
 }
 
-/** One quantity-pricing tier. `maxQuantity: null` means "from minQuantity upward". */
+/**
+ * One quantity-pricing tier: a bundle of exactly `quantity` pieces priced at a
+ * TOTAL `price`. The price is the full package price, never a per-piece price.
+ * Legacy tiers may carry `minQuantity`/`maxQuantity` (unit-price semantics) —
+ * the pricing engine detects that shape for backward compatibility.
+ */
 export interface QuantityTier {
-  minQuantity: number
-  maxQuantity: number | null
+  quantity: number
   price: number
+  /** Legacy range field — ignored for new products. */
+  minQuantity?: number
+  /** Legacy range field — ignored for new products. */
+  maxQuantity?: number | null
 }
 
 export type PricingMode = 'standard' | 'quantity'
@@ -179,6 +189,10 @@ export interface OrderItem {
   unitPrice?: number
   /** Pricing snapshot — 'standard' or 'quantity'. */
   pricingMode?: PricingMode
+  /** Authoritative charged amount for this line (bundle total under quantity pricing). */
+  lineTotal?: number
+  /** Snapshot of the selected quantity tier (quantity pricing only). */
+  quantityTier?: { quantity: number; price: number }
 }
 
 /** Snapshot of the shipping calculation at order time. */
@@ -201,6 +215,12 @@ export interface Order extends Partial<FirestoreMeta> {
   address: string
   notes?: string | null
   customerId?: string | null
+  /** 'guest' when the order was placed without an account, 'registered' after claim/sign-in. */
+  customerType?: 'guest' | 'registered'
+  /** Firestore id of the linked customers/{id} doc (upserted by storeId+phone). */
+  customerDocId?: string | null
+  /** Ordered list of status transitions captured from the backend. */
+  statusHistory?: { status: OrderStatus; at: { seconds: number; nanoseconds: number }; by?: string }[]
   items: OrderItem[]
   subtotal: number
   shippingFee: number
@@ -231,6 +251,10 @@ export interface Customer extends Partial<FirestoreMeta> {
   address?: string
   segment?: string
   note?: string
+  /** GUEST (checkout without account) or REGISTERED (claimed/account). */
+  type?: 'guest' | 'registered'
+  /** Auth uid of the linked account when registered. */
+  userId?: string | null
   totalOrders: number
   totalSpent: number
   lastOrderAt?: { seconds: number; nanoseconds: number }
@@ -247,9 +271,19 @@ export interface SubscriptionPlan extends Partial<FirestoreMeta> {
   orderLimitPerMonth: number
   features: string[]
   active: boolean
+  /** Free-trial length in days (default 3). */
+  trialDays?: number
+  /** First-paid-month discounted price (0/undefined = no launch offer). */
+  launchPrice?: number
+  /** Whether the launch offer is currently active for new subscribers. */
+  launchEnabled?: boolean
+  landingPagesLimit?: number
+  salesLinksLimit?: number
+  staffLimit?: number
+  storageLimit?: number
 }
 
-export type SubscriptionStatus = 'pending' | 'active' | 'expired' | 'cancelled' | 'rejected'
+export type SubscriptionStatus = 'pending' | 'trialing' | 'active' | 'expired' | 'suspended' | 'cancelled' | 'rejected'
 
 export type OrderUsageLevel = 'none' | 'normal' | 'moderate' | 'approaching' | 'near' | 'reached'
 
@@ -273,11 +307,36 @@ export interface PlatformMerchantRow {
   subStatus: SubscriptionStatus | null
   subStartedAt?: { seconds: number; nanoseconds: number } | null
   subExpiresAt?: { seconds: number; nanoseconds: number } | null
+  trialStartedAt?: { seconds: number; nanoseconds: number } | null
+  trialEndsAt?: { seconds: number; nanoseconds: number } | null
+  activatedAt?: { seconds: number; nanoseconds: number } | null
+  currentPeriodStart?: { seconds: number; nanoseconds: number } | null
+  currentPeriodEnd?: { seconds: number; nanoseconds: number } | null
+  firstMonthPrice: number
+  normalPriceSnapshot: number
+  launchUsed: boolean
+  periodNumber: number
+  pendingPayment: boolean
   orderLimit: number
   ordersUsed: number
   remaining: number | null
   usagePercent: number
   usageLevel: OrderUsageLevel
+}
+
+export interface PlatformMetrics {
+  totalMerchants: number
+  activeStores: number
+  trialing: number
+  activeSubscriptions: number
+  expired: number
+  suspended: number
+  cancelled: number
+  pendingPaymentRequests: number
+  launchActivations: number
+  nearLimit: number
+  reachedLimit: number
+  mrr: number
 }
 
 export interface Subscription extends Partial<FirestoreMeta> {
@@ -293,6 +352,51 @@ export interface Subscription extends Partial<FirestoreMeta> {
   requestNote?: string
   /** Live counter of orders created during the current subscription period. */
   ordersUsed?: number
+  /** Trial window (server timestamps). */
+  trialStartedAt?: { seconds: number; nanoseconds: number }
+  trialEndsAt?: { seconds: number; nanoseconds: number }
+  /** Paid-period window. */
+  currentPeriodStart?: { seconds: number; nanoseconds: number }
+  currentPeriodEnd?: { seconds: number; nanoseconds: number }
+  activatedAt?: { seconds: number; nanoseconds: number }
+  /** Price snapshots captured at trial start (never mutate after). */
+  normalPriceSnapshot?: number
+  launchPriceSnapshot?: number
+  /** True when the first paid month used the launch (discounted) price. */
+  launchUsed?: boolean
+  /** Paid billing cycle number (0 = trial, 1 = first paid month). */
+  periodNumber?: number
+  suspendedReason?: string
+  /** Dedupe flag for lazy "trial ending soon" notifications. */
+  trialEndingNotified?: boolean
+}
+
+export type SubscriptionPaymentStatus = 'pending' | 'approved' | 'rejected'
+
+export interface SubscriptionPayment extends Partial<FirestoreMeta> {
+  id: string
+  subscriptionId: string
+  storeId: string
+  planId: string
+  planName: string
+  /** Amount computed server-side from the subscription's price snapshots. */
+  amount: number
+  paymentMethod: string
+  reference: string
+  note?: string
+  screenshotUrl?: string
+  status: SubscriptionPaymentStatus
+  /** Billing cycle this payment pays for (1 = first paid month). */
+  periodNumber: number
+  reviewedBy?: string
+  reviewedAt?: { seconds: number; nanoseconds: number }
+  reviewNote?: string
+}
+
+/** Safe, public storefront status exposed by getPublicStoreStatus. */
+export interface PublicStoreStatus {
+  purchasable: boolean
+  reason?: string
 }
 
 export type TransactionType = 'subscription' | 'payment' | 'refund' | 'adjustment'
@@ -391,6 +495,9 @@ export interface PlatformSettings {
   supportPhone: string
   maxStoresPerMerchant: number
   allowCustomerAccounts: boolean
+  /** Manual payment instructions shown to merchants during activation. */
+  paymentInstructions?: string
+  paymentContact?: string
 }
 
 export interface DailyAnalytics extends Partial<FirestoreMeta> {
@@ -543,6 +650,12 @@ export interface CartLine {
   pricingMode?: PricingMode
   /** Quantity tiers snapshot at add-time. */
   quantityTiers?: QuantityTier[]
+  /**
+   * Authoritative charged amount for the line. For quantity pricing this is
+   * the bundle's TOTAL tier price (never unit × qty); for standard pricing it
+   * is price × quantity. Recomputed from the tier snapshot when qty changes.
+   */
+  lineTotal?: number
 }
 
 export interface ApiResult<T> {

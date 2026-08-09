@@ -18,6 +18,7 @@ export interface RegisterInput {
   email: string
   password: string
   name: string
+  phone: string
   storeName: string
   storeRef: string
   planId?: string
@@ -35,11 +36,12 @@ export function resetPassword(email: string) {
   return sendPasswordResetEmail(auth, email)
 }
 
-export function signupCustomer(email: string, password: string, name: string) {
+export function signupCustomer(email: string, password: string, name: string, phone?: string) {
   return createUserWithEmailAndPassword(auth, email, password).then((cred) =>
     setDoc(doc(db, 'users', cred.user.uid), {
       email,
       name,
+      ...(phone ? { phone } : {}),
       role: 'customer' as Role,
       storeIds: [],
       active: true,
@@ -104,6 +106,12 @@ export function trackOrderCallable(input: Record<string, unknown>) {
   return fn(input)
 }
 
+export function claimOrderCallable(input: Record<string, unknown>) {
+  const functions = getFunctions()
+  const fn = httpsCallable(functions, 'claimOrder')
+  return fn(input)
+}
+
 export function recordStoreLinkVisitCallable(input: Record<string, unknown>) {
   const functions = getFunctions()
   const fn = httpsCallable(functions, 'recordStoreLinkVisit')
@@ -132,4 +140,64 @@ export function getPlatformOverviewCallable() {
   const functions = getFunctions()
   const fn = httpsCallable(functions, 'getPlatformOverview')
   return fn({})
+}
+
+export function getMerchantSubscriptionCallable(input: { storeId: string }) {
+  const functions = getFunctions()
+  const fn = httpsCallable(functions, 'getMerchantSubscription')
+  return fn(input)
+}
+
+export function getMerchantPaymentInfoCallable() {
+  const functions = getFunctions()
+  const fn = httpsCallable(functions, 'getMerchantPaymentInfo')
+  return fn({})
+}
+
+export function submitPaymentRequestCallable(input: Record<string, unknown>) {
+  const functions = getFunctions()
+  const fn = httpsCallable(functions, 'submitPaymentRequest')
+  return fn(input)
+}
+
+export function approvePaymentRequestCallable(input: Record<string, unknown>) {
+  const functions = getFunctions()
+  const fn = httpsCallable(functions, 'approvePaymentRequest')
+  return fn(input)
+}
+
+export function rejectPaymentRequestCallable(input: Record<string, unknown>) {
+  const functions = getFunctions()
+  const fn = httpsCallable(functions, 'rejectPaymentRequest')
+  return fn(input)
+}
+
+export function getPublicStoreStatusCallable(input: { slug: string }) {
+  const functions = getFunctions()
+  const fn = httpsCallable(functions, 'getPublicStoreStatus')
+  return fn(input)
+}
+
+export function setStorePublishedCallable(input: { storeId: string; published: boolean }) {
+  const functions = getFunctions()
+  const fn = httpsCallable(functions, 'setStorePublished')
+  return fn(input)
+}
+
+export function createLandingPageCallable(input: Record<string, unknown>) {
+  const functions = getFunctions()
+  const fn = httpsCallable(functions, 'createLandingPage')
+  return fn(input)
+}
+
+export function createSalesLinkCallable(input: Record<string, unknown>) {
+  const functions = getFunctions()
+  const fn = httpsCallable(functions, 'createSalesLink')
+  return fn(input)
+}
+
+export function savePlanCallable(input: Record<string, unknown>) {
+  const functions = getFunctions()
+  const fn = httpsCallable(functions, 'savePlan')
+  return fn(input)
 }

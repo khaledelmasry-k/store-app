@@ -8,19 +8,20 @@ import { Badge } from '../../shared/components/ui/Badge'
 import { Button } from '../../shared/components/ui/Button'
 import { Table } from '../../shared/components/ui/Table'
 import { Toggle } from '../../shared/components/ui/Toggle'
-import { Progress } from '../../shared/components/ui/Progress'
 import { LineChart } from '../../shared/components/charts/LineChart'
 import { useStore } from '../../shared/hooks/useStore'
 import { useAuth } from '../../shared/hooks/useAuth'
 import { useCollection } from '../../shared/hooks/useCollection'
+import { useSubscription } from '../../shared/hooks/useSubscription'
 import { useToast } from '../../shared/hooks/useToast'
 import { Loading } from '../../shared/components/ui/Loading'
 import { EmptyState } from '../../shared/components/ui/EmptyState'
-import { formatCurrency, formatNumber, timeAgo } from '../../shared/utils/format'
+import { UsageCard } from '../../shared/components/subscription/UsageCard'
+import { formatCurrency, timeAgo } from '../../shared/utils/format'
 import { storePublicUrl } from '../../shared/utils/store-url'
 import { STATUS_LABELS, STATUS_COLORS } from '../../shared/utils/constants'
-import { storesService } from '../../shared/services/stores'
-import type { Order, Product, StoreLink, Subscription, SubscriptionPlan } from '../../shared/types'
+import { setStorePublishedCallable } from '../../shared/services/auth'
+import type { Order, Product, StoreLink } from '../../shared/types'
 import { Icon } from '../../shared/components/ui/Icon'
 
 interface ChecklistStep {
@@ -39,9 +40,9 @@ export const MerchantDashboard: FunctionalComponent = () => {
 
   const isOwner = user?.role === 'merchant'
   const perms = user?.permissions || []
-  const canOrders = isOwner || perms.includes('orders:manage')
-  const canProducts = isOwner || perms.includes('products:manage')
-  const canCustomers = isOwner || perms.includes('customers:manage')
+  const canOrders = isOwner || perms.includes('orders:view')
+  const canProducts = isOwner || perms.includes('products:view')
+  const canCustomers = isOwner || perms.includes('customers:view')
   const canAnalytics = isOwner || perms.includes('reports:view')
   const canLinks = isOwner || perms.includes('sales_links:view')
 
@@ -49,29 +50,34 @@ export const MerchantDashboard: FunctionalComponent = () => {
   const productsRes = useCollection<Product>('products', { storeId }, canProducts)
   const customersRes = useCollection('customers', { storeId }, canCustomers)
   const analyticsRes = useCollection<any>('analytics', { storeId }, canAnalytics)
-  const linksRes = useCollection<StoreLink>('storeLinks', { storeId }, canOrders)
-  const subsRes = useCollection<Subscription>('subscriptions', { storeId }, isOwner)
-  const plansRes = useCollection<SubscriptionPlan>('plans', {}, isOwner)
+  const linksRes = useCollection<StoreLink>('storeLinks', { storeId }, canLinks)
 
   const orders = ordersRes.data
   const products = productsRes.data
   const customers = customersRes.data
   const analytics = analyticsRes.data
   const links = linksRes.data
-  const subs = subsRes.data
-  const plans = plansRes.data
+
+  const subState = useSubscription(isOwner ? storeId : '')
+  const subscription = subState.subscription
+  const plan = subState.plan
+  const subStatus = subState.status
+  const trialRemaining = subState.trialRemaining
 
   if (ordersRes.loading || productsRes.loading || customersRes.loading || analyticsRes.loading || linksRes.loading) {
     return <Loading />
   }
 
-  const latestSub = [...subs].sort((a, b) => (b.createdAt?.seconds || 0) - (a.createdAt?.seconds || 0))[0]
-  const plan = latestSub ? plans.find((p) => p.id === latestSub.planId) : null
-  const orderLimit = plan?.orderLimitPerMonth || 0
-  const ordersUsed = latestSub?.ordersUsed || 0
-  const usagePercent = orderLimit > 0 ? Math.min(100, Math.round((ordersUsed / orderLimit) * 100)) : 0
-
-  const todayOrders = orders.filter((o) => o.createdAt?.seconds)
+  const dayStart = new Date()
+  dayStart.setHours(0, 0, 0, 0)
+  const dayEnd = new Date()
+  dayEnd.setHours(23, 59, 59, 999)
+  const todayOrders = orders.filter((o) => {
+    const ts = o.createdAt?.seconds
+    if (!ts) return false
+    const d = new Date(ts * 1000)
+    return d >= dayStart && d <= dayEnd
+  })
   const todayRevenue = todayOrders.filter((o) => o.status === 'DELIVERED').reduce((s, o) => s + o.totalPrice, 0)
   const pendingOrders = orders.filter((o) => ['NEW', 'CONTACTED', 'PROCESSING', 'SHIPPED'].includes(o.status))
   const activeProducts = products.filter((p) => p.active).length
@@ -104,7 +110,7 @@ export const MerchantDashboard: FunctionalComponent = () => {
     if (!store) return
     setPublishing(true)
     try {
-      await storesService.update(store.id, { published: v })
+      await setStorePublishedCallable({ storeId: store.id, published: v })
       toast.push(v ? 'تم نشر متجرك' : 'تم إخفاء متجرك', undefined, 'success')
     } catch (err: any) {
       toast.push('فشل تحديث حالة النشر', err?.message || 'حدث خطأ غير متوقع', 'error')
@@ -115,9 +121,25 @@ export const MerchantDashboard: FunctionalComponent = () => {
 
   const steps: ChecklistStep[] = [
     {
-      done: latestSub?.status === 'active',
-      label: latestSub?.status === 'active' ? 'اشتراكك مفعل' : 'فعل اشتراكك',
-      hint: latestSub?.status === 'pending' ? 'بانتظار موافقة المنصة' : latestSub?.status === 'active' ? undefined : 'تواصل مع المنصة لتفعيل الباقة',
+      done: !isOwner || subStatus === 'active',
+      label: isOwner
+        ? subStatus === 'active'
+          ? 'اشتراكك مفعل'
+          : subStatus === 'trialing'
+            ? 'جرب باقتك مجاناً'
+            : 'فعل اشتراكك'
+        : 'اشتراكك مفعل',
+      hint: !isOwner
+        ? undefined
+        : subStatus === 'active'
+          ? undefined
+          : subStatus === 'trialing'
+            ? trialRemaining ? `تجربتك المجانية نشطة — ${trialRemaining}` : 'تجربتك المجانية نشطة'
+            : subStatus === 'expired'
+              ? 'انتهت تجربتك المجانية — فعّل باقتك لاستئناف البيع'
+              : subStatus === 'pending'
+                ? 'بانتظار مراجعة طلب التفعيل'
+                : 'تواصل مع المنصة لتفعيل الباقة',
       to: '/dashboard/subscription',
     },
     { done: activeProducts > 0, label: 'أضف أول منتج', hint: activeProducts === 0 ? 'لا توجد منتجات بعد' : `${activeProducts} منتج`, to: '/dashboard/products' },
@@ -196,15 +218,21 @@ export const MerchantDashboard: FunctionalComponent = () => {
         )}
       </Card>
 
-      {latestSub?.status === 'active' && orderLimit > 0 && (
-        <Card title="استهلاك طلبات الدورة" className="mb-2" actions={<Link href="/dashboard/subscription"><Button variant="ghost" size="sm" icon="arrow_forward">تفاصيل</Button></Link>}>
-          <div className="flex-between small mb-1">
-            <span className="font-semibold">{formatNumber(ordersUsed)} / {formatNumber(orderLimit)} طلب</span>
-            <span className="muted">{usagePercent}%</span>
-          </div>
-          <Progress value={ordersUsed} max={orderLimit} tone={usagePercent >= 100 ? 'red' : usagePercent >= 80 ? 'amber' : 'primary'} />
-          <div className="muted small mt-1">{usagePercent >= 100 ? 'استنفدت حد الطلبات لهذه الدورة.' : `لديك ${formatNumber(Math.max(0, orderLimit - ordersUsed))} طلب متبقي.`}</div>
-        </Card>
+      {(subStatus === 'active' || subStatus === 'trialing') && (
+        <div className="grid grid-2 mb-2">
+          {subStatus === 'trialing' && subscription && (
+            <Card title="تجربتك المجانية" actions={<Link href="/dashboard/subscription"><Button variant="ghost" size="sm" icon="arrow_forward">فعّل باقتك</Button></Link>}>
+              <div className="trial-countdown">
+                <Icon name="hourglass_top" />
+                <div>
+                  <strong>{trialRemaining || 'قاربت على الانتهاء'}</strong>
+                  <p className="muted small">تظل باقتك فعالة بكامل المزايا طوال الفترة التجريبية.</p>
+                </div>
+              </div>
+            </Card>
+          )}
+          <UsageCard subscription={subscription} plan={plan} title="استهلاك طلبات الدورة" compact />
+        </div>
       )}
 
       <div className="stats-grid">

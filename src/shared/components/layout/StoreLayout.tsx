@@ -25,6 +25,7 @@ export function themeStyleFor(primary?: string, secondary?: string): CSSProperti
     '--primary-hover': shadeHex(primary, -12),
     '--primary-soft': hexToRgba(primary, 0.12),
     '--primary-contrast': contrastFor(primary),
+    '--secondary': secondary || primary,
     '--store-accent': secondary || primary,
   } as CSSProperties
 }
@@ -41,6 +42,7 @@ export const StoreLayout: FunctionalComponent<Props> = ({ children }) => {
   const slug = store?.slug
   const base = `/store/${slug}`
   const templateClass = getTemplate(store?.theme?.template).cssClass
+  const storeDark = !!store?.theme?.darkMode ? ' store-dark' : ''
 
   // SEO: title + meta description for the storefront.
   useEffect(() => {
@@ -62,7 +64,7 @@ export const StoreLayout: FunctionalComponent<Props> = ({ children }) => {
   // store staff, and platform admins. Purchases are rejected server-side too.
   if (store && !store.published && !canPreview) {
     return (
-      <div className={`store-shell ${templateClass}`} style={themeStyleFor(store.theme?.primary, store.theme?.secondary)}>
+      <div className={`store-shell ${templateClass}${storeDark}`} style={themeStyleFor(store.theme?.primary, store.theme?.secondary)}>
         <div className="store-coming-soon">
           <Icon name="storefront" className="store-brand-mark" />
           <h1>{store.name}</h1>
@@ -94,7 +96,7 @@ export const StoreLayout: FunctionalComponent<Props> = ({ children }) => {
     ))
 
   return (
-    <div className={`store-shell ${templateClass}`} style={themeStyleFor(store?.theme?.primary, store?.theme?.secondary)}>
+    <div className={`store-shell ${templateClass}${storeDark}`} style={themeStyleFor(store?.theme?.primary, store?.theme?.secondary)}>
       <header className="store-header">
         <button type="button" className="icon-btn store-menu-btn" onClick={() => setMenuOpen(!menuOpen)} title="القائمة">
           <Icon name={menuOpen ? 'close' : 'menu'} />

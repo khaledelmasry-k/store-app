@@ -93,3 +93,44 @@ export async function uploadStoreLogo(file: File, storeId: string): Promise<stri
   })
   return getDownloadURL(storageRef)
 }
+
+/**
+ * Uploads a store hero/banner image to `stores/{storeId}/...` (matches
+ * storage.rules, which require `metadata.storeId == storeId`). Returns the
+ * download URL.
+ */
+export async function uploadStoreHero(file: File, storeId: string, onProgress?: (pct: number) => void): Promise<string> {
+  const ext = extFromType(file.type)
+  const clean = file.name.replace(/[^a-zA-Z0-9._-]/g, '').slice(0, 40) || 'hero'
+  const storageRef = ref(storage, `stores/${storeId}/hero-${Date.now()}-${uid(6)}-${clean}.${ext}`)
+  const task = uploadBytesResumable(storageRef, file, {
+    contentType: file.type,
+    customMetadata: { storeId },
+  })
+  task.on('state_changed', (snap) => {
+    const pct = snap.totalBytes > 0 ? Math.round((snap.bytesTransferred / snap.totalBytes) * 100) : 0
+    onProgress?.(pct)
+  })
+  await task
+  return getDownloadURL(storageRef)
+}
+
+/**
+ * Uploads a payment proof / transfer screenshot to `documents/{storeId}/...`
+ * (matches storage.rules `documents` path for merchant-uploaded evidence).
+ */
+export async function uploadPaymentProof(file: File, storeId: string, onProgress?: (pct: number) => void): Promise<string> {
+  const ext = extFromType(file.type)
+  const clean = file.name.replace(/[^a-zA-Z0-9._-]/g, '').slice(0, 40) || 'proof'
+  const storageRef = ref(storage, `documents/${storeId}/payment-${Date.now()}-${uid(6)}-${clean}.${ext}`)
+  const task = uploadBytesResumable(storageRef, file, {
+    contentType: file.type,
+    customMetadata: { storeId },
+  })
+  task.on('state_changed', (snap) => {
+    const pct = snap.totalBytes > 0 ? Math.round((snap.bytesTransferred / snap.totalBytes) * 100) : 0
+    onProgress?.(pct)
+  })
+  await task
+  return getDownloadURL(storageRef)
+}
