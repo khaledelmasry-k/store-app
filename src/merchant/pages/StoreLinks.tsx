@@ -18,7 +18,7 @@ import { storeLinksService } from '../../shared/services/system'
 import { createSalesLinkCallable } from '../../shared/services/auth'
 import { formatCurrency } from '../../shared/utils/format'
 import { storeBaseUrl } from '../../shared/utils/store-url'
-import type { StoreLink, StoreLinkDestinationType } from '../../shared/types'
+import type { LandingPage, Product, StoreLink, StoreLinkDestinationType } from '../../shared/types'
 import { Icon } from '../../shared/components/ui/Icon'
 
 const DESTINATION_LABELS: Record<StoreLinkDestinationType, string> = {
@@ -52,6 +52,10 @@ export const MerchantStoreLinks: FunctionalComponent = () => {
   const storeId = store?.id || ''
   const linksRes = useCollection<StoreLink>('storeLinks', { storeId })
   const links = linksRes.data.filter((l) => !l.archived)
+  const productsRes = useCollection<Product>('products', { storeId })
+  const landingsRes = useCollection<LandingPage>('landingPages', { storeId })
+  const products = productsRes.data || []
+  const landings = landingsRes.data || []
   const toast = useToast()
   const [open, setOpen] = useState(false)
   const [deleteTarget, setDeleteTarget] = useState<StoreLink | null>(null)
@@ -118,7 +122,25 @@ export const MerchantStoreLinks: FunctionalComponent = () => {
     toast.push('تم أرشفة الرابط')
   }
 
-  if (linksRes.loading) return <Loading />
+  const shareLink = async (l: StoreLink) => {
+    const url = publicUrl(l.code)
+    const text = l.title || l.name
+    try {
+      if (typeof navigator.share === 'function') {
+        await navigator.share({ title: text, text, url })
+      } else {
+        await copyLink(l.code)
+      }
+    } catch (e: any) {
+      if (e?.name !== 'AbortError') {
+        toast.push('تعذر المشاركة', undefined, 'error')
+      }
+    }
+  }
+
+  const conversionRate = (l: StoreLink) => (l.visits && l.visits > 0 ? Math.round(((l.ordersCount || 0) / l.visits) * 1000) / 10 : 0)
+
+  if (linksRes.loading || productsRes.loading || landingsRes.loading) return <Loading />
 
   const totalClicks = links.reduce((s, l) => s + (l.visits || 0), 0)
   const totalOrders = links.reduce((s, l) => s + (l.ordersCount || 0), 0)
@@ -143,10 +165,13 @@ export const MerchantStoreLinks: FunctionalComponent = () => {
             { key: 'destinationType', header: 'الوجهة', render: (l: StoreLink) => DESTINATION_LABELS[l.destinationType] || l.destinationType },
             { key: 'visits', header: 'النقرات', render: (l: StoreLink) => <Badge tone="blue">{l.visits || 0}</Badge> },
             { key: 'ordersCount', header: 'طلبات مسلّمة', render: (l: StoreLink) => <Badge tone="green">{l.ordersCount || 0}</Badge> },
+            { key: 'conversion', header: 'التحويل', render: (l: StoreLink) => <span className="muted small">{conversionRate(l)}%</span> },
             { key: 'totalRevenue', header: 'الإيرادات', render: (l: StoreLink) => formatCurrency(l.totalRevenue || 0) },
             { key: 'active', header: 'الحالة', render: (l: StoreLink) => <Badge tone={l.active ? 'green' : 'slate'}>{l.active ? 'نشط' : 'موقوف'}</Badge> },
             { key: 'actions', header: '', render: (l: StoreLink) => (
               <div className="flex gap-1">
+                <button className="icon-btn" onClick={() => shareLink(l)} title="مشاركة"><Icon name="share" /></button>
+                <button className="icon-btn" onClick={() => window.open(publicUrl(l.code), '_blank')} title="فتح الرابط"><Icon name="open_in_new" /></button>
                 <button className="icon-btn" onClick={() => { setForm({ id: l.id, name: l.name, code: l.code, sellerName: l.sellerName || '', destinationType: l.destinationType, destinationId: l.destinationId || '', source: l.source || '', campaign: l.campaign || '', content: l.content || '', active: l.active ?? true, archived: false }); setOpen(true) }} title="تعديل"><Icon name="edit" /></button>
                 <button className="icon-btn" onClick={() => archive(l)} title="أرشفة"><Icon name="archive" /></button>
                 <button className="icon-btn icon-btn-danger" onClick={() => setDeleteTarget(l)}><Icon name="delete" /></button>
@@ -170,10 +195,22 @@ export const MerchantStoreLinks: FunctionalComponent = () => {
           </select>
         </div>
         {form.destinationType === 'product' && (
-          <Input label="معرف المنتج" value={form.destinationId} onChange={(v) => setForm({ ...form, destinationId: v })} placeholder="ألصق معرف المنتج من صفحة المنتج" />
+          <div className="field">
+            <span className="field-label">اختر المنتج</span>
+            <select className="input" value={form.destinationId} onChange={(e) => setForm({ ...form, destinationId: (e.target as HTMLSelectElement).value })}>
+              <option value="">— اختر منتجاً —</option>
+              {products.map((p) => <option key={p.id} value={p.id}>{p.name}</option>)}
+            </select>
+          </div>
         )}
         {form.destinationType === 'landing' && (
-          <Input label="رابط صفحة الهبوط (slug)" value={form.destinationId} onChange={(v) => setForm({ ...form, destinationId: v })} placeholder="landing-slug" />
+          <div className="field">
+            <span className="field-label">اختر صفحة الهبوط</span>
+            <select className="input" value={form.destinationId} onChange={(e) => setForm({ ...form, destinationId: (e.target as HTMLSelectElement).value })}>
+              <option value="">— اختر صفحة —</option>
+              {landings.map((l) => <option key={l.id} value={l.slug}>{l.title} ({l.slug})</option>)}
+            </select>
+          </div>
         )}
         {form.destinationType === 'custom' && (
           <Input label="المسار المخصص" value={form.destinationId} onChange={(v) => setForm({ ...form, destinationId: v })} placeholder="/catalog أو /product/abc" />

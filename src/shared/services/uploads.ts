@@ -116,6 +116,27 @@ export async function uploadStoreHero(file: File, storeId: string, onProgress?: 
 }
 
 /**
+ * Uploads a landing page asset (hero or section image) to
+ * `landingPages/{storeId}/...` (matches storage.rules, which require
+ * `metadata.storeId == storeId`). Returns the download URL.
+ */
+export async function uploadLandingImage(file: File, storeId: string, onProgress?: (pct: number) => void): Promise<string> {
+  const ext = extFromType(file.type)
+  const clean = file.name.replace(/[^a-zA-Z0-9._-]/g, '').slice(0, 40) || 'landing'
+  const storageRef = ref(storage, `landingPages/${storeId}/${Date.now()}-${uid(6)}-${clean}.${ext}`)
+  const task = uploadBytesResumable(storageRef, file, {
+    contentType: file.type,
+    customMetadata: { storeId },
+  })
+  task.on('state_changed', (snap) => {
+    const pct = snap.totalBytes > 0 ? Math.round((snap.bytesTransferred / snap.totalBytes) * 100) : 0
+    onProgress?.(pct)
+  })
+  await task
+  return getDownloadURL(storageRef)
+}
+
+/**
  * Uploads a payment proof / transfer screenshot to `documents/{storeId}/...`
  * (matches storage.rules `documents` path for merchant-uploaded evidence).
  */

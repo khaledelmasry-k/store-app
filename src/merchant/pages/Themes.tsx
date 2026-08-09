@@ -21,7 +21,7 @@ const SECONDARY_SWATCHES = ['#f59e0b', '#10b981', '#f43f5e', '#8b5cf6', '#0ea5e9
 export const MerchantThemes: FunctionalComponent = () => {
   const { store } = useStore()
   const toast = useToast()
-  const [themeForm, setThemeForm] = useState<StoreTheme>({ primary: '#6366f1', secondary: '#f59e0b', darkMode: false, template: 'modern' })
+  const [themeForm, setThemeForm] = useState<StoreTheme>({ primary: '#6366f1', secondary: '#f59e0b', darkMode: false, template: 'modern', imageFit: 'contain' })
   const [savingTheme, setSavingTheme] = useState(false)
   const [applying, setApplying] = useState<string | null>(null)
   const [logoUploading, setLogoUploading] = useState(false)
@@ -37,8 +37,9 @@ export const MerchantThemes: FunctionalComponent = () => {
       secondary: store.theme?.secondary || '#f59e0b',
       darkMode: !!store.theme?.darkMode,
       template: store.theme?.template || 'modern',
+      imageFit: store.theme?.imageFit || 'contain',
     })
-  }, [store?.id, store?.theme?.primary, store?.theme?.secondary, store?.theme?.darkMode, store?.theme?.template])
+  }, [store?.id, store?.theme?.primary, store?.theme?.secondary, store?.theme?.darkMode, store?.theme?.template, store?.theme?.imageFit])
 
   const persistTheme = async (next: StoreTheme) => {
     if (!store) return
@@ -70,6 +71,7 @@ export const MerchantThemes: FunctionalComponent = () => {
         secondary: tpl.defaultSecondary,
         darkMode: tpl.darkMode,
         template: id,
+        imageFit: themeForm.imageFit || 'contain',
       }
       setThemeForm(next)
       if (saveTimer.current) clearTimeout(saveTimer.current)
@@ -239,6 +241,15 @@ export const MerchantThemes: FunctionalComponent = () => {
               <div className="muted small">يتحكم في مظهر صفحة المتجر للزوار</div>
             </div>
             <Toggle checked={themeForm.darkMode} onChange={(v) => updateTheme({ darkMode: v })} label="داكن" />
+          </div>
+
+          <div className="field mt-2">
+            <span className="field-label">عرض صور المنتجات</span>
+            <div className="flex">
+              <button type="button" className={`btn ${themeForm.imageFit !== 'cover' ? 'btn-primary' : 'btn-outline'}`} onClick={() => updateTheme({ imageFit: 'contain' })}>كما هي (بدون قص)</button>
+              <button type="button" className={`btn ${themeForm.imageFit === 'cover' ? 'btn-primary' : 'btn-outline'}`} onClick={() => updateTheme({ imageFit: 'cover' })}>قص لملء الإطار</button>
+            </div>
+            <div className="muted small mt-1">تؤثر على الصورة الرئيسية في صفحة المنتج — "كما هي" تعرض الصورة كاملة دون قص</div>
           </div>
 
           <div className="theme-preview mt-2" style={{ background: themeForm.darkMode ? '#0f172a' : '#f8fafc' }}>

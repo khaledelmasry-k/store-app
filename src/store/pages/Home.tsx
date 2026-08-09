@@ -20,6 +20,7 @@ export const StoreHome:FunctionalComponent = () => {
     <div>
       <div className="store-hero" style={store?.heroImage ? { backgroundImage: `url("${store.heroImage}")` } : undefined}>
         <div className="store-hero-overlay">
+          <span className="store-hero-badge">تسوق بثقة — توصيل سريع لجميع المحافظات</span>
           <h1>{store?.name}</h1>
           <p>{store?.description || 'تسوق أحدث المنتجات بأسعار مميزة وتوصيل سريع لجميع المحافظات.'}</p>
           {products.length > 0 && (
@@ -31,17 +32,20 @@ export const StoreHome:FunctionalComponent = () => {
       </div>
 
       {categories.length > 0 && (
-        <div className="flex mb-2" style={{ flexWrap: 'wrap', gap: 8 }}>
-          {categories.map((c) => (
-            <Link key={c.id} href={`/store/${store?.slug}/catalog?cat=${c.id}`} className="btn btn-outline btn-sm">
-              {c.name}
-            </Link>
-          ))}
-        </div>
+        <section className="mt-2">
+          <h2 className="section-title">تسوق حسب الفئة</h2>
+          <div className="flex" style={{ flexWrap: 'wrap', gap: 8 }}>
+            {categories.map((c) => (
+              <Link key={c.id} href={`/store/${store?.slug}/catalog?cat=${c.id}`} className="btn btn-outline btn-sm">
+                {c.name}
+              </Link>
+            ))}
+          </div>
+        </section>
       )}
 
       {featured.length > 0 && (
-        <section className="mb-2">
+        <section className="mt-2">
           <h2 className="section-title">مميزات</h2>
           <div className="store-grid">
             {featured.map((p) => (
@@ -52,7 +56,17 @@ export const StoreHome:FunctionalComponent = () => {
       )}
 
       {latest.length > 0 && (
-        <section>
+        <section className="store-promo-band mt-2">
+          <div className="store-promo-content">
+            <h2>عروض جديدة لا تفوّت</h2>
+            <p>اكتشف أحدث المنتجات في متجر {store?.name} — بجودة موثوقة ودفع عند الاستلام.</p>
+            <Link href={`/store/${store?.slug}/catalog`} className="btn btn-invert btn-lg">تصفح الكتالوج</Link>
+          </div>
+        </section>
+      )}
+
+      {latest.length > 0 && (
+        <section className="mt-2">
           <h2 className="section-title">أحدث المنتجات</h2>
           <div className="store-grid">
             {latest.map((p) => (

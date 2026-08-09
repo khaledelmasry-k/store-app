@@ -120,7 +120,7 @@ export const StoreProduct: FunctionalComponent<Props> = ({ id }) => {
               <span className="muted">لا توجد صورة لهذا المنتج</span>
             </div>
           ) : (
-            <FragmentGallery images={images} displayIndex={displayIndex} setDisplayIndex={setDisplayIndex} name={product.name} />
+            <FragmentGallery images={images} displayIndex={displayIndex} setDisplayIndex={setDisplayIndex} name={product.name} imageFit={store?.theme?.imageFit || 'contain'} />
           )}
         </div>
 
@@ -224,15 +224,22 @@ export const StoreProduct: FunctionalComponent<Props> = ({ id }) => {
   )
 }
 
-function FragmentGallery({ images, displayIndex, setDisplayIndex, name }: {
+function FragmentGallery({ images, displayIndex, setDisplayIndex, name, imageFit }: {
   images: string[]
   displayIndex: number
   setDisplayIndex: (i: number) => void
   name: string
+  imageFit: 'contain' | 'cover'
 }) {
   return (
     <div>
-      <SmartImage src={images[displayIndex] || images[0]} alt={name} className="product-detail-img" placeholderClassName="product-detail-img" loading="eager" />
+      <SmartImage
+        src={images[displayIndex] || images[0]}
+        alt={name}
+        className={`product-detail-img${imageFit === 'cover' ? ' product-detail-img--cover' : ''}`}
+        placeholderClassName="product-detail-img"
+        loading="eager"
+      />
       {images.length > 1 && (
         <div className="product-gallery-thumbs">
           {images.map((src, i) => (

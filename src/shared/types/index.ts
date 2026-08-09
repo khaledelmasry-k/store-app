@@ -27,6 +27,8 @@ export interface StoreTheme {
   darkMode: boolean
   /** Selected storefront template id (see shared/utils/themes.ts). */
   template?: string
+  /** How product images are framed on the storefront: as uploaded (contain) or cropped to fill (cover). */
+  imageFit?: 'contain' | 'cover'
 }
 
 /** Shipping provider a store works with (e.g. Aramex, Bosta, local courier). */
@@ -53,6 +55,10 @@ export interface StoreShipping {
   freeAbove?: number
   /** Policy shown at checkout for refused deliveries. */
   refusedPolicy?: string
+  /** When false (or unset), the refused-policy text is hidden at checkout. */
+  refusedPolicyEnabled?: boolean
+  /** Preferred provider used for the flat model when there are several. */
+  defaultProviderId?: string
   /** Preferred shipping providers used by this store. */
   providers?: ShippingProvider[]
 }
@@ -565,6 +571,8 @@ export interface LandingSection {
   type: 'features' | 'steps' | 'testimonials' | 'faq' | 'cta'
   title?: string
   body?: string
+  /** Optional banner/illustration image shown with this section. */
+  image?: string
   items?: LandingSectionItem[]
 }
 

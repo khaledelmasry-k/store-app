@@ -16,11 +16,12 @@ import { Loading } from '../../shared/components/ui/Loading'
 import { useStore } from '../../shared/hooks/useStore'
 import { useCollection } from '../../shared/hooks/useCollection'
 import { useToast } from '../../shared/hooks/useToast'
-import { landingPagesService } from '../../shared/services/system'
+import { landingPagesService, landingSlugTaken, uniqueLandingSlug } from '../../shared/services/system'
 import { createLandingPageCallable } from '../../shared/services/auth'
 import { slugify, formatCurrency } from '../../shared/utils/format'
 import { storeBaseUrl } from '../../shared/utils/store-url'
 import { STORE_TEMPLATES } from '../../shared/utils/themes'
+import { LandingImageUploader } from '../components/LandingImageUploader'
 import type { LandingPage, LandingPageStatus, LandingSection, LandingSectionItem, Product } from '../../shared/types'
 import { Icon } from '../../shared/components/ui/Icon'
 
@@ -37,6 +38,7 @@ type SectionDraft = {
   type: LandingSection['type']
   title: string
   body: string
+  image: string
   items: { title: string; body: string }[]
 }
 
@@ -63,6 +65,7 @@ const newSection = (type: LandingSection['type'] = 'features'): SectionDraft => 
   type,
   title: '',
   body: '',
+  image: '',
   items: [],
 })
 
@@ -102,6 +105,7 @@ function draftFromPage(p: LandingPage): Draft {
       type: s.type || 'features',
       title: s.title || '',
       body: s.body || '',
+      image: s.image || '',
       items: (s.items || []).map((it) => ({ title: it.title || '', body: it.body || '' })),
     })),
   }
@@ -134,6 +138,11 @@ export const MerchantLandingPages: FunctionalComponent = () => {
       return
     }
     const slug = (form.slug.trim() || slugify(form.title) || 'page').toLowerCase()
+    const slugTaken = await landingSlugTaken(slug, form.id)
+    if (slugTaken) {
+      toast.push('رابط الصفحة مستخدم مسبقاً', 'اختر رابطاً آخر أو اتركه فارغاً ليُنشأ تلقائياً', 'error')
+      return
+    }
     const payload: Omit<LandingPage, 'id' | 'storeId'> = {
       slug,
       title: form.title.trim(),
@@ -152,12 +161,13 @@ export const MerchantLandingPages: FunctionalComponent = () => {
           ? { title: form.seoTitle.trim() || undefined, description: form.seoDescription.trim() || undefined }
           : undefined,
       sections: form.sections
-        .filter((s) => s.title.trim() || s.body.trim() || s.items.some((it) => it.title.trim() || it.body.trim()))
+        .filter((s) => s.title.trim() || s.body.trim() || s.image.trim() || s.items.some((it) => it.title.trim() || it.body.trim()))
         .map(
           (s): LandingSection => ({
             type: s.type,
             title: s.title.trim() || undefined,
             body: s.body.trim() || undefined,
+            image: s.image.trim() || undefined,
             items: s.items
               .filter((it) => it.title.trim() || it.body.trim())
               .map(
@@ -189,7 +199,7 @@ export const MerchantLandingPages: FunctionalComponent = () => {
 
   const duplicate = async (p: LandingPage) => {
     const payload = draftFromPage(p)
-    payload.slug = `${p.slug || slugify(p.title) || 'page'}-copy`
+    payload.slug = await uniqueLandingSlug(`${p.slug || slugify(p.title) || 'page'}-copy`, p.id)
     payload.title = `${p.title} (نسخة)`
     payload.status = 'draft'
     try {
@@ -215,6 +225,7 @@ export const MerchantLandingPages: FunctionalComponent = () => {
             type: s.type || 'features',
             title: s.title || undefined,
             body: s.body || undefined,
+            image: s.image || undefined,
             items: (s.items || []).map((it) => ({ title: it.title || undefined, body: it.body || undefined })),
           })),
         },
@@ -318,7 +329,11 @@ export const MerchantLandingPages: FunctionalComponent = () => {
         <Input label="العنوان الرئيسي" value={form.heroTitle} onChange={(v) => setForm({ ...form, heroTitle: v })} />
         <Textarea label="الوصف المختصر" value={form.heroSubtitle} onChange={(v) => setForm({ ...form, heroSubtitle: v })} rows={2} />
         <div className="grid grid-2">
-          <Input label="رابط الصورة الرئيسية" value={form.heroImage} onChange={(v) => setForm({ ...form, heroImage: v })} />
+          <div className="field">
+            <span className="field-label">صورة القسم الرئيسي</span>
+            <LandingImageUploader storeId={storeId} value={form.heroImage} onChange={(v) => setForm({ ...form, heroImage: v })} label="إضافة صورة رئيسية" />
+            <Input label="أو ألصق رابط صورة مباشر" value={form.heroImage} onChange={(v) => setForm({ ...form, heroImage: v })} />
+          </div>
           <Input label="نص الزر" value={form.ctaText} onChange={(v) => setForm({ ...form, ctaText: v })} />
         </div>
 
@@ -342,6 +357,10 @@ export const MerchantLandingPages: FunctionalComponent = () => {
             </div>
             <Input label="العنوان" value={s.title} onChange={(v) => setForm({ ...form, sections: form.sections.map((x, xi) => (xi === si ? { ...x, title: v } : x)) })} />
             <Textarea label="الوصف" value={s.body} onChange={(v) => setForm({ ...form, sections: form.sections.map((x, xi) => (xi === si ? { ...x, body: v } : x)) })} rows={2} />
+            <div className="field">
+              <span className="field-label">صورة مرفقة (اختياري)</span>
+              <LandingImageUploader storeId={storeId} value={s.image} onChange={(v) => setForm({ ...form, sections: form.sections.map((x, xi) => (xi === si ? { ...x, image: v } : x)) })} label="إضافة صورة" />
+            </div>
             <div className="lp-editor-items">
               <span className="field-label">العناصر (اختياري)</span>
               {s.items.map((it, ii) => (

@@ -2442,6 +2442,48 @@ textarea.input {
   font-size: 15px;
   max-width: 480px;
 }
+.store-hero-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  background: rgba(255, 255, 255, 0.16);
+  border: 1px solid rgba(255, 255, 255, 0.35);
+  color: #fff;
+  font-size: 12px;
+  font-weight: 700;
+  padding: 5px 12px;
+  border-radius: 999px;
+  margin-bottom: 14px;
+}
+.store-hero-badge::before {
+  content: '';
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  background: currentColor;
+}
+.store-promo-band {
+  background: linear-gradient(120deg, var(--primary), var(--secondary, var(--primary-hover)));
+  color: #fff;
+  border-radius: var(--radius-lg);
+  padding: 36px 40px;
+  margin-bottom: 32px;
+}
+.store-promo-content h2 {
+  font-size: 24px;
+  font-weight: 800;
+  margin-bottom: 6px;
+}
+.store-promo-content p {
+  opacity: 0.92;
+  margin-bottom: 16px;
+  font-size: 14px;
+  max-width: 520px;
+}
+.store-promo-content .btn-invert {
+  background: #fff;
+  color: var(--primary);
+}
 .btn-invert {
   background: #fff;
   color: var(--primary);
@@ -2530,6 +2572,10 @@ textarea.input {
   width: 100%;
   border-radius: var(--radius);
   aspect-ratio: 1;
+  object-fit: contain;
+  background: var(--surface-3);
+}
+.product-detail-img--cover {
   object-fit: cover;
 }
 .qty-stepper {
@@ -3319,6 +3365,28 @@ textarea.input {
   gap: 8px;
   padding: 10px;
 }
+.landing-image-uploader {
+  min-width: 0;
+}
+.landing-image-preview {
+  position: relative;
+  border-radius: var(--radius);
+  overflow: hidden;
+  border: 1px solid var(--border);
+  background: var(--surface-2);
+}
+.landing-image-preview .image-tile-img {
+  aspect-ratio: 16 / 9;
+}
+.landing-image-preview .image-tile-actions {
+  opacity: 1;
+}
+.shipping-preview {
+  padding: 10px 12px;
+  border: 1px dashed var(--border-strong);
+  border-radius: var(--radius);
+  background: var(--surface-2);
+}
 .upload-progress {
   display: flex;
   flex-direction: column;
@@ -3929,6 +3997,221 @@ textarea.input {
   border-radius: 12px;
 }
 
+/* ── Distinct template LAYOUT compositions (storefront home) ──────────
+   Each template gets a recognizably different hero composition, grid,
+   section heading and promo band — not just colors. */
+
+/* modern — centered hero, pill badge, rounded bands */
+.store-shell.theme-modern .store-hero {
+  text-align: center;
+}
+.store-shell.theme-modern .store-hero-overlay {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+}
+.store-shell.theme-modern .store-hero p {
+  margin-left: auto;
+  margin-right: auto;
+}
+.store-shell.theme-modern .store-promo-band {
+  border-radius: var(--radius-lg);
+  text-align: center;
+}
+.store-shell.theme-modern .store-promo-content {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+}
+
+/* minimal — light bordered panel, square corners, thin rules */
+.store-shell.theme-minimal .store-hero {
+  text-align: right;
+  border-radius: 4px;
+  padding: 40px 44px;
+}
+.store-shell.theme-minimal .store-hero-badge {
+  background: transparent;
+  border: 0;
+  color: var(--primary);
+  padding: 0;
+  letter-spacing: 0.6px;
+}
+.store-shell.theme-minimal .store-hero-badge::before {
+  display: none;
+}
+.store-shell.theme-minimal .section-title {
+  margin-bottom: 18px;
+}
+.store-shell.theme-minimal .store-grid {
+  gap: 26px 18px;
+}
+.store-shell.theme-minimal .store-promo-band {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  color: var(--text);
+  border-radius: 4px;
+  flex-direction: row;
+  justify-content: space-between;
+  align-items: center;
+  display: flex;
+  gap: 24px;
+}
+.store-shell.theme-minimal .store-promo-content p {
+  color: var(--text-secondary);
+}
+.store-shell.theme-minimal .store-promo-band h2 {
+  color: var(--text);
+}
+.store-shell.theme-minimal .store-promo-band .btn-invert {
+  background: var(--primary);
+  color: var(--primary-contrast);
+  border-radius: 2px;
+}
+
+/* fashion — centered hero with accent rule + underlined heading */
+.store-shell.theme-fashion .store-hero {
+  text-align: center;
+  padding: 52px 40px 44px;
+}
+.store-shell.theme-fashion .store-hero-overlay {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+}
+.store-shell.theme-fashion .store-hero h1 {
+  font-size: 34px;
+  color: #fff;
+}
+.store-shell.theme-fashion .store-hero-badge {
+  background: color-mix(in srgb, #fff 14%, transparent);
+  border: 1px solid rgba(255, 255, 255, 0.4);
+}
+.store-shell.theme-fashion .store-hero-badge::before {
+  width: 26px;
+  height: 2px;
+  border-radius: 0;
+  background: #fff;
+}
+.store-shell.theme-fashion .section-title {
+  font-size: 24px;
+  padding-bottom: 10px;
+  border-bottom: 2px solid color-mix(in srgb, var(--primary) 30%, var(--border));
+}
+.store-shell.theme-fashion .store-grid {
+  grid-template-columns: repeat(auto-fill, minmax(230px, 1fr));
+  gap: 24px;
+}
+.store-shell.theme-fashion .store-promo-band {
+  text-align: center;
+  border-radius: 16px;
+}
+
+/* electronics — angular, tech accent bar, uppercase headings */
+.store-shell.theme-electronics .store-hero {
+  border-radius: 4px;
+  border-top: 5px solid var(--secondary, var(--primary));
+}
+.store-shell.theme-electronics .store-hero h1 {
+  text-transform: uppercase;
+  letter-spacing: 1px;
+}
+.store-shell.theme-electronics .store-hero-badge {
+  border-radius: 2px;
+  background: rgba(255, 255, 255, 0.1);
+  letter-spacing: 1px;
+}
+.store-shell.theme-electronics .store-hero-badge::before {
+  display: none;
+}
+.store-shell.theme-electronics .section-title {
+  text-transform: uppercase;
+  letter-spacing: 0.8px;
+  border-right: 4px solid var(--primary);
+  padding-right: 12px;
+}
+.store-shell.theme-electronics .store-grid {
+  grid-template-columns: repeat(auto-fill, minmax(200px, 1fr));
+  gap: 16px;
+}
+.store-shell.theme-electronics .store-card {
+  transition: transform 0.15s ease, border-color 0.15s ease;
+}
+.store-shell.theme-electronics .store-card:hover {
+  transform: translateY(-2px);
+  border-color: var(--primary);
+}
+.store-shell.theme-electronics .store-promo-band {
+  border-radius: 4px;
+  background: linear-gradient(110deg, var(--secondary, #0b1220), var(--primary));
+}
+
+/* beauty — soft, pill corners, dot accent */
+.store-shell.theme-beauty .store-hero {
+  border-radius: 28px;
+  padding: 48px 44px;
+}
+.store-shell.theme-beauty .store-hero-badge {
+  background: rgba(255, 255, 255, 0.22);
+  border-radius: 999px;
+}
+.store-shell.theme-beauty .store-hero-badge::before {
+  background: #fff;
+}
+.store-shell.theme-beauty .section-title {
+  font-size: 22px;
+}
+.store-shell.theme-beauty .store-grid {
+  grid-template-columns: repeat(auto-fill, minmax(210px, 1fr));
+  gap: 22px;
+}
+.store-shell.theme-beauty .store-promo-band {
+  border-radius: 28px;
+  background: linear-gradient(120deg, var(--primary), color-mix(in srgb, var(--secondary, var(--primary)) 70%, #fff 30%));
+}
+
+/* general — classic centered hero, approachable bands */
+.store-shell.theme-general .store-hero {
+  text-align: center;
+}
+.store-shell.theme-general .store-hero-overlay {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+}
+.store-shell.theme-general .store-hero p {
+  margin-left: auto;
+  margin-right: auto;
+}
+.store-shell.theme-general .store-promo-band {
+  border-radius: 12px;
+  background: linear-gradient(120deg, var(--primary), color-mix(in srgb, var(--secondary, var(--primary)) 80%, var(--primary)));
+}
+
+/* Storefront home responsiveness (360/390/430) — keep hero and promo
+   bands from overflowing on narrow phones. */
+@media (max-width: 480px) {
+  .store-hero {
+    padding: 28px 22px;
+    margin-bottom: 24px;
+  }
+  .store-hero h1 {
+    font-size: 24px;
+  }
+  .store-hero-badge {
+    max-width: 100%;
+    flex-wrap: wrap;
+  }
+  .store-promo-band {
+    padding: 26px 20px;
+  }
+  .store-shell.theme-minimal .store-promo-band {
+    flex-direction: column;
+    align-items: flex-start;
+    text-align: right;
+  }
+}
+
 /* ── Merchant dark mode (store.theme.darkMode) ─────────────────
    Scoped variables let the whole storefront subtree render dark even
    when the visitor's global app theme is light. These shadow the
@@ -4367,6 +4650,31 @@ textarea.input {
   text-align: center;
   color: var(--text-muted);
   margin: 0 0 28px;
+}
+.lp-section-img {
+  display: block;
+  width: 100%;
+  max-height: 340px;
+  object-fit: contain;
+  border-radius: var(--radius);
+  margin: 8px 0 24px;
+  background: var(--surface-2);
+}
+.lp-cta-band--img {
+  position: relative;
+  overflow: hidden;
+  padding: 0;
+}
+.lp-cta-band-img {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  opacity: 0.25;
+}
+.lp-cta-band--img .lp-container {
+  position: relative;
 }
 .lp-grid {
   display: grid;

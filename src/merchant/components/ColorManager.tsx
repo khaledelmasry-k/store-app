@@ -63,6 +63,14 @@ export const ColorManager: FunctionalComponent<Props> = ({ storeId, colors, imag
 
   const remove = (index: number) => onChange(colors.filter((_, i) => i !== index))
 
+  const move = (from: number, dir: -1 | 1) => {
+    const to = from + dir
+    if (to < 0 || to >= colors.length) return
+    const next = [...colors]
+    ;[next[from], next[to]] = [next[to], next[from]]
+    onChange(next)
+  }
+
   const pickColorImage = (colorId: string) => imageInputsRef.current[colorId]?.click()
 
   const onColorImageChosen = async (e: Event, colorId: string) => {
@@ -135,6 +143,12 @@ export const ColorManager: FunctionalComponent<Props> = ({ storeId, colors, imag
           {c.imageIndex != null && images[c.imageIndex] && (
             <SmartImage src={images[c.imageIndex]} alt="" className="color-row-thumb" placeholderClassName="color-row-thumb" />
           )}
+          <button type="button" className="icon-btn" title="تحريك للأعلى" disabled={i === 0} onClick={() => move(i, -1)}>
+            <Icon name="arrow_upward" />
+          </button>
+          <button type="button" className="icon-btn" title="تحريك للأسفل" disabled={i === colors.length - 1} onClick={() => move(i, 1)}>
+            <Icon name="arrow_downward" />
+          </button>
           <button type="button" className="icon-btn icon-btn-danger" title="حذف اللون" onClick={() => remove(i)}>
             <Icon name="delete" />
           </button>

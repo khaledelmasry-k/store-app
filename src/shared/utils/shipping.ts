@@ -31,22 +31,37 @@ function isFreeShipping(threshold: number | undefined | null, subtotal: number):
   return !!threshold && threshold > 0 && subtotal >= threshold
 }
 
+function showRefusedPolicy(cfg: { refusedPolicy?: string; refusedPolicyEnabled?: boolean }): string {
+  return cfg?.refusedPolicyEnabled !== false ? cfg?.refusedPolicy || '' : ''
+}
+
+/** Prefers the store default provider, then falls back to the first active one. */
+function effectiveProvider(cfg: { providers?: ShippingProvider[]; defaultProviderId?: string }): ShippingProvider | undefined {
+  const providers = cfg?.providers || []
+  if (cfg?.defaultProviderId) {
+    const chosen = providers.find((p) => p.id === cfg.defaultProviderId)
+    if (chosen && chosen.active) return chosen
+  }
+  return providers.find((p) => p.active)
+}
+
 export function calculateShipping(ctx: ShippingContext): ShippingQuote {
   const cfg = ctx.store?.shipping
-  const empty: ShippingQuote = { fee: 0, method: '', freeDelivery: false, policy: cfg?.refusedPolicy || '' }
+  const policy = showRefusedPolicy(cfg || {})
+  const empty: ShippingQuote = { fee: 0, method: '', freeDelivery: false, policy }
 
   if (!cfg?.enabled) return empty
   if (isFreeShipping(cfg.freeAbove, ctx.subtotal)) {
-    return { fee: 0, method: 'توصيل مجاني', freeDelivery: true, policy: cfg.refusedPolicy || '' }
+    return { fee: 0, method: 'توصيل مجاني', freeDelivery: true, policy: showRefusedPolicy(cfg) }
   }
 
   if (cfg.model === 'flat') {
-    const provider = firstActiveProvider(cfg.providers)
+    const provider = effectiveProvider(cfg)
     return {
       fee: provider?.fee ?? cfg.flatFee ?? 0,
       method: provider?.name || 'شحن',
       freeDelivery: false,
-      policy: cfg.refusedPolicy || '',
+      policy: showRefusedPolicy(cfg),
     }
   }
 
@@ -60,23 +75,18 @@ export function calculateShipping(ctx: ShippingContext): ShippingQuote {
       fee: 0,
       method: 'الشحن غير متوفر لهذه المنطقة',
       freeDelivery: false,
-      policy: cfg.refusedPolicy || '',
+      policy: showRefusedPolicy(cfg),
     }
   }
 
   if (isFreeShipping(zone.freeAbove, ctx.subtotal)) {
-    return { fee: 0, method: `${zone.name} — توصيل مجاني`, freeDelivery: true, policy: cfg.refusedPolicy || '' }
+    return { fee: 0, method: `${zone.name} — توصيل مجاني`, freeDelivery: true, policy: showRefusedPolicy(cfg) }
   }
 
   return {
     fee: zone.fee || 0,
     method: zone.name || 'شحن',
     freeDelivery: false,
-    policy: cfg.refusedPolicy || '',
+    policy: showRefusedPolicy(cfg),
   }
-}
-
-function firstActiveProvider(providers?: ShippingProvider[]): ShippingProvider | undefined {
-  if (!providers || providers.length === 0) return undefined
-  return providers.find((p) => p.active)
 }

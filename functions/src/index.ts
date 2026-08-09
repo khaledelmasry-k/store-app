@@ -77,33 +77,36 @@ function isFreeShipping(threshold: number | undefined | null, subtotal: number) 
 }
 
 function computeShippingFee(cfg: any, zones: any[], subtotal: number, governorate: string): { fee: number; method: string; policy: string; snapshot: any } {
-  if (!cfg?.enabled) return { fee: 0, method: '', policy: cfg?.refusedPolicy || '', snapshot: { enabled: false } }
+  const showPolicy = () => (cfg?.refusedPolicyEnabled !== false ? cfg?.refusedPolicy || '' : '')
+  if (!cfg?.enabled) return { fee: 0, method: '', policy: showPolicy(), snapshot: { enabled: false } }
   if (isFreeShipping(cfg.freeAbove, subtotal)) {
-    return { fee: 0, method: 'توصيل مجاني', policy: cfg.refusedPolicy || '', snapshot: { enabled: true, model: cfg.model, freeDelivery: true } }
+    return { fee: 0, method: 'توصيل مجاني', policy: showPolicy(), snapshot: { enabled: true, model: cfg.model, freeDelivery: true } }
   }
   if (cfg.model === 'flat') {
-    const provider = Array.isArray(cfg.providers) ? cfg.providers.find((p: any) => p.active) : null
+    const providers = Array.isArray(cfg.providers) ? cfg.providers : []
+    let provider = cfg.defaultProviderId ? providers.find((p: any) => p.id === cfg.defaultProviderId && p.active) : null
+    if (!provider) provider = providers.find((p: any) => p.active) || null
     const fee = provider?.fee ?? cfg.flatFee ?? 0
     return {
       fee,
       method: provider?.name || 'شحن',
-      policy: cfg.refusedPolicy || '',
+      policy: showPolicy(),
       snapshot: { enabled: true, model: 'flat', providerId: provider?.id || null },
     }
   }
   // zones model
   const zone = (zones || []).find((z: any) => z.active && Array.isArray(z.governorates) && z.governorates.includes(governorate))
   if (!zone) {
-    return { fee: 0, method: 'الشحن غير متوفر لهذه المنطقة', policy: cfg.refusedPolicy || '', snapshot: { enabled: true, model: 'zones', zoneId: null } }
+    return { fee: 0, method: 'الشحن غير متوفر لهذه المنطقة', policy: showPolicy(), snapshot: { enabled: true, model: 'zones', zoneId: null } }
   }
   if (isFreeShipping(zone.freeAbove, subtotal)) {
-    return { fee: 0, method: `${zone.name} — توصيل مجاني`, policy: cfg.refusedPolicy || '', snapshot: { enabled: true, model: 'zones', zoneId: zone.id, freeDelivery: true } }
+    return { fee: 0, method: `${zone.name} — توصيل مجاني`, policy: showPolicy(), snapshot: { enabled: true, model: 'zones', zoneId: zone.id, providerId: zone.providerId || null, freeDelivery: true } }
   }
   return {
     fee: zone.fee || 0,
     method: zone.name || 'شحن',
-    policy: cfg.refusedPolicy || '',
-    snapshot: { enabled: true, model: 'zones', zoneId: zone.id },
+    policy: showPolicy(),
+    snapshot: { enabled: true, model: 'zones', zoneId: zone.id, providerId: zone.providerId || null },
   }
 }
 
@@ -1159,6 +1162,11 @@ export const createLandingPage = onCall(async (request: CallableRequest<any>) =>
     const count = await db.collection('landingPages').where('storeId', '==', storeId).get()
     if (count.size >= limit) throw new HttpsError('resource-exhausted', `تم تجاوز حد صفحات الهبوط (${limit})`)
   }
+
+  // Landing pages share the global `/landing/:slug` route, so the slug must be
+  // unique across ALL stores — not just this one.
+  const slugQuery = await db.collection('landingPages').where('slug', '==', data.slug).limit(1).get()
+  if (!slugQuery.empty) throw new HttpsError('already-exists', 'رابط الصفحة (slug) مستخدم مسبقاً — اختر رابطاً آخر')
 
   const ref = await db.collection('landingPages').add({
     storeId,

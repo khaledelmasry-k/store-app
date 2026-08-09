@@ -26,13 +26,20 @@ interface Props {
 
 function LandingSectionView({ section, storeSlug }: { section: LandingSection; storeSlug: string }) {
   const items = section.items || []
+  const sectionImg = (section.image || '').trim()
+  const heading = (
+    <div>
+      {section.title && <h2 className="lp-section-title">{section.title}</h2>}
+      {section.body && <p className="lp-section-desc">{section.body}</p>}
+      {sectionImg && <SmartImage src={sectionImg} alt={section.title || ''} className="lp-section-img" placeholderClassName="lp-section-img" loading="lazy" />}
+    </div>
+  )
   switch (section.type) {
     case 'features':
       return (
         <section className="lp-section">
           <div className="lp-container">
-            {section.title && <h2 className="lp-section-title">{section.title}</h2>}
-            {section.body && <p className="lp-section-desc">{section.body}</p>}
+            {heading}
             {items.length > 0 && (
               <div className="lp-grid lp-grid-3">
                 {items.map((it, i) => (
@@ -51,7 +58,7 @@ function LandingSectionView({ section, storeSlug }: { section: LandingSection; s
       return (
         <section className="lp-section lp-section-soft">
           <div className="lp-container">
-            {section.title && <h2 className="lp-section-title">{section.title}</h2>}
+            {heading}
             {items.length > 0 && (
               <div className="lp-steps">
                 {items.map((it, i) => (
@@ -72,7 +79,7 @@ function LandingSectionView({ section, storeSlug }: { section: LandingSection; s
       return (
         <section className="lp-section">
           <div className="lp-container">
-            {section.title && <h2 className="lp-section-title">{section.title}</h2>}
+            {heading}
             {items.length > 0 && (
               <div className="lp-grid lp-grid-3">
                 {items.map((it, i) => (
@@ -91,7 +98,7 @@ function LandingSectionView({ section, storeSlug }: { section: LandingSection; s
       return (
         <section className="lp-section lp-section-soft">
           <div className="lp-container lp-narrow">
-            {section.title && <h2 className="lp-section-title">{section.title}</h2>}
+            {heading}
             {items.length > 0 && (
               <div className="lp-faq">
                 {items.map((it, i) => (
@@ -107,10 +114,10 @@ function LandingSectionView({ section, storeSlug }: { section: LandingSection; s
       )
     case 'cta':
       return (
-        <section className="lp-section lp-cta-band">
+        <section className={`lp-section lp-cta-band${sectionImg ? ' lp-cta-band--img' : ''}`}>
+          {sectionImg && <SmartImage src={sectionImg} alt="" className="lp-cta-band-img" placeholderClassName="lp-cta-band-img" loading="lazy" />}
           <div className="lp-container lp-narrow">
-            <h2>{section.title}</h2>
-            {section.body && <p>{section.body}</p>}
+            {heading}
             <Link href={`/store/${storeSlug}`}><Button icon="storefront">زيارة المتجر</Button></Link>
           </div>
         </section>

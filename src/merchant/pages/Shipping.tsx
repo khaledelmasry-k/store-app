@@ -213,8 +213,22 @@ export const MerchantShipping: FunctionalComponent = () => {
             )}
             <Input label="شحن مجاني عند الطلب بقيمة (اختياري)" type="number" value={cfg.freeAbove ? String(cfg.freeAbove) : ''} onChange={(v) => persistShipping({ freeAbove: v === '' ? undefined : Number(v) })} />
             <div className="field">
-              <span className="field-label">سياسة الرفض والاسترجاع</span>
-              <textarea className="input" rows={2} value={cfg.refusedPolicy || ''} onChange={(e) => persistShipping({ refusedPolicy: (e.target as HTMLTextAreaElement).value })} placeholder="رسوم الرفض أو شروط الاسترجاع تظهر للعميل عند إتمام الطلب" />
+              <div className="flex-between">
+                <div>
+                  <span className="field-label">سياسة الرفض والاسترجاع</span>
+                  <div className="muted small">تُعرض للعميل عند إتمام الطلب في حال تفعيلها</div>
+                </div>
+                <Toggle checked={cfg.refusedPolicyEnabled !== false} onChange={(v) => persistShipping({ refusedPolicyEnabled: v })} label="تفعيل" />
+              </div>
+              {cfg.refusedPolicyEnabled !== false && (
+                <>
+                  <textarea className="input" rows={2} value={cfg.refusedPolicy || ''} onChange={(e) => persistShipping({ refusedPolicy: (e.target as HTMLTextAreaElement).value })} placeholder="رسوم الرفض أو شروط الاسترجاع تظهر للعميل عند إتمام الطلب" />
+                  <div className="shipping-preview mt-1">
+                    <span className="field-label small">معاينة للعميل</span>
+                    <p className="muted small">{cfg.refusedPolicy ? cfg.refusedPolicy : 'سيتم إخفاء السياسة — اكتب نصاً إلزامياً أو فعّل السياسة'}</p>
+                  </div>
+                </>
+              )}
             </div>
             <div className="flex flex-end mt-1">
               <Button icon="save" loading={savingCfg} onClick={saveConfig}>حفظ الإعدادات</Button>
@@ -255,9 +269,15 @@ export const MerchantShipping: FunctionalComponent = () => {
                 { key: 'name', header: 'الاسم' },
                 { key: 'fee', header: 'السعر', render: (p: ShippingProvider) => formatCurrency(p.fee || 0) },
                 { key: 'estimatedDays', header: 'المدة', render: (p: ShippingProvider) => p.estimatedDays || '—' },
-                { key: 'active', header: 'الحالة', render: (p: ShippingProvider) => <Badge tone={p.active ? 'green' : 'slate'}>{p.active ? 'نشطة' : 'موقوفة'}</Badge> },
+                { key: 'active', header: 'الحالة', render: (p: ShippingProvider) => (
+                  <div className="flex gap-1">
+                    <Badge tone={p.active ? 'green' : 'slate'}>{p.active ? 'نشطة' : 'موقوفة'}</Badge>
+                    {cfg.defaultProviderId === p.id && p.active && <Badge tone="amber">افتراضي</Badge>}
+                  </div>
+                ) },
                 { key: 'actions', header: '', render: (p: ShippingProvider) => (
                   <div className="flex gap-1">
+                    <button className="icon-btn" title={cfg.defaultProviderId === p.id ? 'الشركة الافتراضية' : 'تعيين كشركة افتراضية'} disabled={cfg.defaultProviderId === p.id} onClick={() => persistShipping({ defaultProviderId: p.id })}><Icon name="star" /></button>
                     <button className="icon-btn" onClick={() => { setProvForm({ id: p.id, name: p.name, fee: String(p.fee || ''), estimatedDays: p.estimatedDays || '', active: p.active ?? true }); setProvOpen(true) }}><Icon name="edit" /></button>
                     <button className="icon-btn icon-btn-danger" onClick={() => setDeleteTarget({ kind: 'provider', id: p.id })}><Icon name="delete" /></button>
                   </div>

@@ -59,6 +59,24 @@ export const landingPagesService = {
   remove: (id: string) => deleteDocById(landing, id),
 }
 
+/** True when any landing page (any store) already claims the slug. Landing
+ * pages render on the shared `/landing/:slug` route, so slugs must be unique
+ * globally — not just per store. */
+export async function landingSlugTaken(slug: string, excludeId?: string): Promise<boolean> {
+  const matches = await listDocs<LandingPage>(landing, { where: { slug: { value: slug } } })
+  return matches.some((m) => m.id !== excludeId)
+}
+
+/** Derives a globally-unique slug by appending `-2`, `-3`, ... as needed. */
+export async function uniqueLandingSlug(base: string, excludeId?: string): Promise<string> {
+  let slug = base
+  let i = 2
+  while (await landingSlugTaken(slug, excludeId)) {
+    slug = `${base}-${i++}`
+  }
+  return slug
+}
+
 export const teamService = {
   list: (storeId: string) => listDocs<TeamMember>(team, { storeId, orderBy: { field: 'name' } }),
   create: (storeId: string, data: Omit<TeamMember, 'id' | 'storeId'>) => createDoc<TeamMember>(team, { ...data, storeId }),

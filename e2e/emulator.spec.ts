@@ -120,6 +120,12 @@ test.describe.configure({ mode: 'serial' })
 // Namespace each run by Playwright project so desktop + mobile runs can share
 // the same emulator data store without colliding.
 const PASSWORD = 'Flow12345'
+
+// 1x1 transparent PNG (same fixture as products.spec).
+const PNG = Buffer.from(
+  'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNkYPhfDwAChwGA60e6kgAAAABJRU5ErkJggg==',
+  'base64',
+)
 function ctx() {
   const p = test.info().project.name
   const uniq = p === 'desktop' ? 'desktop' : `m${p.replace('mobile-', '')}`
@@ -663,4 +669,165 @@ test('copy-link is gated on a real slug: disabled + "غير متاح" without on
   expect(urlText).not.toContain('mystore')
   await page.goto('/dashboard', { waitUntil: 'domcontentloaded' })
   await expect(copyBtn).toBeEnabled({ timeout: 15000 })
+})
+
+// ─────────────────────────────────────────────────────────────
+// Regression suite for the production-blocker fixes:
+// 1. Firestore safe-writes (underscored optional payloads no longer break saves).
+// 2. Globally-unique landing slug (client create/update + duplicate derive).
+// 3. Landing hero image upload persists + renders on the public page.
+// 4. Shipping: refused-policy toggle gates the checkout message; store default
+//    provider is honored by the client + server mirror.
+// ─────────────────────────────────────────────────────────────
+test('landing save with empty optional fields works; duplicate slug rejected; duplicate copies get unique slug', async ({ page }) => {
+  const { uniq, ref } = ctx()
+  const store = (await storeBySlug(ref))!
+  const slug = `flow-reg-${uniq}`
+
+  // The trialing flow store is on plan-starter, whose default landingPagesLimit
+  // is 1 — and the earlier landing test already consumed that quota via a direct
+  // admin write. Raise the seeded plan's limit so these regressions exercises the
+  // callable without tripping the (already-covered separately) page-count gate.
+  await db.collection('plans').doc('plan-starter').update({ landingPagesLimit: 50 })
+
+  await login(page, 'merchant', ctx().email, PASSWORD)
+  await page.goto('/dashboard/landing-pages', { waitUntil: 'domcontentloaded' })
+
+  // Create a page with ONLY a title — productId, hero image, seo all empty/undefined.
+  await page.getByRole('button', { name: 'صفحة جديدة' }).click()
+  await page.locator('.drawer .field', { hasText: 'عنوان الصفحة' }).locator('input').fill('صفحة تسجيل')
+  await page.locator('.drawer .field', { hasText: 'الرابط (slug)' }).locator('input').fill(slug)
+  await page.locator('.drawer').getByRole('button', { name: 'حفظ', exact: true }).click()
+  await expect(page.locator('.drawer')).toHaveCount(0, { timeout: 15000 })
+  await expect(page.getByText('فشل حفظ الصفحة')).toHaveCount(0)
+
+  const saved = (await pollValue(
+    () => db.collection('landingPages').where('slug', '==', slug).limit(1).get().then((s) => (s.empty ? null : s.docs[0].data() as any)),
+    (d) => d != null,
+  ))!
+  expect(saved).not.toBeNull()
+  expect(saved.title).toBe('صفحة تسجيل')
+  // The undefined productId/hero fields must have been dropped without error.
+  expect(saved.productId ?? null).toBeNull()
+
+  // Creating another page with the SAME slug must be rejected client-side.
+  await page.getByRole('button', { name: 'صفحة جديدة' }).click()
+  await page.locator('.drawer .field', { hasText: 'عنوان الصفحة' }).locator('input').fill('صفحة موازية')
+  await page.locator('.drawer .field', { hasText: 'الرابط (slug)' }).locator('input').fill(slug)
+  await page.locator('.drawer').getByRole('button', { name: 'حفظ', exact: true }).click()
+  await expect(page.getByText('رابط الصفحة مستخدم مسبقاً')).toBeVisible({ timeout: 15000 })
+  await expect(page.locator('.drawer')).toHaveCount(1)
+
+  // Close the drawer, then duplicate the first page → a unique `-copy` slug.
+  await page.locator('.drawer').getByRole('button', { name: 'إلغاء', exact: true }).click()
+  // Desktop renders a <table>; mobile renders the same rows as `.card-table-card`
+// cards — target both.
+  const row = page.locator('tr, .card-table-card', { hasText: slug }).first()
+  await row.getByTitle('نسخ', { exact: true }).click()
+  await expect(page.getByText('تم إنشاء نسخة من الصفحة')).toBeVisible({ timeout: 15000 })
+  const copySlug = `${slug}-copy`
+  const copyDoc = await pollValue(
+    () => db.collection('landingPages').where('slug', '==', copySlug).limit(1).get().then((s) => (s.empty ? null : s.docs[0])),
+    (d) => d != null,
+  )
+  expect(copyDoc).not.toBeNull()
+})
+
+test('landing hero image upload persists to storage + renders on /landing/:slug', async ({ page }) => {
+  const { uniq, ref } = ctx()
+  const store = (await storeBySlug(ref))!
+  const slug = `flow-hero-${uniq}`
+
+  await login(page, 'merchant', ctx().email, PASSWORD)
+  await page.goto('/dashboard/landing-pages', { waitUntil: 'domcontentloaded' })
+  await page.getByRole('button', { name: 'صفحة جديدة' }).click()
+  await page.locator('.drawer .field', { hasText: 'عنوان الصفحة' }).locator('input').fill('صفحة بصورة')
+  await page.locator('.drawer .field', { hasText: 'الرابط (slug)' }).locator('input').fill(slug)
+
+  // Upload a hero image through the landing-upload path (storage.rules landingPages/).
+  await page.locator('.landing-image-uploader input[type="file"]').first().setInputFiles([
+    { name: 'hero.png', mimeType: 'image/png', buffer: PNG },
+  ])
+  await expect(page.locator('.landing-image-preview img').first()).toBeVisible({ timeout: 15000 })
+
+  await page.locator('.drawer').getByRole('button', { name: 'حفظ', exact: true }).click()
+  await expect(page.locator('.drawer')).toHaveCount(0, { timeout: 15000 })
+
+  // The image URL is persisted (would previously be dropped → undefined write error).
+  const lp = (await pollValue(
+    () => db.collection('landingPages').where('slug', '==', slug).limit(1).get().then((s) => (s.empty ? null : s.docs[0].data() as any)),
+    (d) => d != null,
+  ))!
+  expect(lp.hero?.image).toMatch(/^https?:\/\//)
+
+  // The public route only serves published+active pages — this editor draft was
+  // saved as a draft, so publish it before visiting the storefront.
+  const savedRef = await db.collection('landingPages').where('slug', '==', slug).limit(1).get()
+  await savedRef.docs[0].ref.update({ status: 'published' })
+
+  // The public landing page shows the uploaded hero image.
+  await page.goto(`/landing/${slug}`, { waitUntil: 'domcontentloaded' })
+  await expect(page.locator('.lp-hero-img').first()).toBeVisible({ timeout: 15000 })
+  const src = await page.locator('.lp-hero-img').first().getAttribute('src')
+  expect(src).toBe(lp.hero.image)
+})
+
+test('shipping: default provider honored (client+server) and refused-policy toggle gates checkout', async ({ page }) => {
+  const { uniq, ref } = ctx()
+  const store = (await storeBySlug(ref))!
+  await db.collection('stores').doc(store.id).update({
+    shipping: {
+      enabled: true,
+      model: 'flat',
+      flatFee: 30,
+      freeAbove: 0,
+      refusedPolicy: 'الرفض يتحمل العميل رسوماً قدرها 50 جنيهاً.',
+      refusedPolicyEnabled: true,
+      defaultProviderId: 'reg-p2',
+      providers: [
+        { id: 'reg-p1', name: 'توصيل عادي', fee: 45, estimatedDays: '3-5 أيام', active: true },
+        { id: 'reg-p2', name: 'توصيل سريع', fee: 25, estimatedDays: '1-2 أيام', active: true },
+      ],
+    },
+  })
+
+  await page.goto(`/store/${ref}`, { waitUntil: 'domcontentloaded' })
+  await page.locator('.store-card').first().click()
+  await page.getByRole('button', { name: 'أضف إلى السلة' }).click()
+  await page.goto(`/store/${ref}/cart`, { waitUntil: 'domcontentloaded' })
+  await page.getByRole('button', { name: 'إتمام الطلب' }).click()
+
+  await page.locator('.field', { hasText: 'الاسم الكامل' }).locator('input').fill('عميل الشحن التلقائي')
+  await page.locator('.field', { hasText: 'رقم الهاتف' }).locator('input').fill('01099990011')
+  await page.locator('.field', { hasText: 'المحافظة' }).locator('select').selectOption({ label: 'القاهرة' })
+  await page.locator('.field', { hasText: 'المدينة' }).locator('input').fill('مدينة نصر')
+  await page.locator('.field', { hasText: 'العنوان بالتفصيل' }).locator('textarea').fill('شارع 11')
+
+  // Default provider (توصيل سريع) is selected → its name + fee 25 show, and the
+  // refused-policy message is visible because refusedPolicyEnabled=true.
+  await expect(page.getByText('الشحن (توصيل سريع)')).toBeVisible({ timeout: 15000 })
+  await expect(page.getByText('الرفض يتحمل العميل رسوماً قدرها 50 جنيهاً.')).toBeVisible()
+
+  // Server recomputes the same default provider fee + policy.
+  await page.getByRole('button', { name: 'تأكيد الطلب' }).click()
+  await expect(page.getByText('تم إنشاء طلبك بنجاح')).toBeVisible({ timeout: 30000 })
+  const orderSnap = await db.collection('orders').where('storeId', '==', store.id).orderBy('createdAt', 'desc').limit(1).get()
+  const order = orderSnap.docs[0].data() as any
+  expect(order.shippingFee).toBe(25)
+  expect(order.shippingMethod).toBe('توصيل سريع')
+  expect(order.shippingSnapshot?.model).toBe('flat')
+  expect(order.shippingSnapshot?.providerId).toBe('reg-p2')
+
+  // Disabling the refused-policy hides the message at checkout (config change);
+  // the server still resolves the same default provider for the next order.
+  await db.collection('stores').doc(store.id).update({ 'shipping.refusedPolicyEnabled': false })
+  await page.goto(`/store/${ref}`, { waitUntil: 'domcontentloaded' })
+  await page.locator('.store-card').first().click()
+  await page.getByRole('button', { name: 'أضف إلى السلة' }).click()
+  await page.goto(`/store/${ref}/cart`, { waitUntil: 'domcontentloaded' })
+  await page.getByRole('button', { name: 'إتمام الطلب' }).click()
+  await page.locator('.field', { hasText: 'المحافظة' }).locator('select').selectOption({ label: 'القاهرة' })
+  await expect(page.getByText('الرفض يتحمل العميل رسوماً قدرها 50 جنيهاً.')).toHaveCount(0, { timeout: 15000 })
+  const again = await db.collection('orders').where('storeId', '==', store.id).orderBy('createdAt', 'desc').limit(1).get()
+  expect((again.docs[0].data() as any).shippingFee).toBe(25)
 })

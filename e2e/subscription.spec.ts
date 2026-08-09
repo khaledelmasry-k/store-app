@@ -28,9 +28,19 @@ async function login(page: Page, role: 'platform' | 'merchant', email: string, p
     await page.waitForURL(/\/login/, { timeout: 15000 })
     await page.waitForLoadState('domcontentloaded')
     // Reset to a blank document to cancel any in-flight SPA navigation (e.g.
-    // the default role redirect after logout) before a clean navigation.
-    await page.goto('about:blank')
-    await page.goto(`/login?role=${role}`, { waitUntil: 'domcontentloaded' })
+    // the default role redirect after logout) before a clean navigation. The
+    // guard may still fire its redirect while we navigate, interrupting the
+    // about:blank goto — treat that as expected and retry the real navigation.
+    await page.goto('about:blank').catch(() => {})
+    for (let attempt = 0; attempt < 3; attempt++) {
+      try {
+        await page.goto(`/login?role=${role}`, { waitUntil: 'domcontentloaded' })
+        break
+      } catch (err) {
+        if (attempt === 2) throw err
+        await page.waitForTimeout(200)
+      }
+    }
   }
   await page.locator('input[type="email"]').fill(email)
   await page.locator('input[type="password"]').fill(password)
