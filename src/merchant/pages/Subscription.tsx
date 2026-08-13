@@ -1,9 +1,11 @@
-import { FunctionalComponent } from 'preact'
+import { FunctionalComponent, Fragment } from 'preact'
 import { useEffect, useState } from 'preact/hooks'
 import { useStore } from '../../shared/hooks/useStore'
 import { useSubscription } from '../../shared/hooks/useSubscription'
+import { useCollection } from '../../shared/hooks/useCollection'
 import { getMerchantPaymentInfoCallable } from '../../shared/services/auth'
 import { submitPaymentRequestCallable } from '../../shared/services/auth'
+import { changeSubscriptionPlanCallable } from '../../shared/services/auth'
 import { uploadPaymentProof, validateImageFile } from '../../shared/services/uploads'
 import { PageHeader } from '../../shared/components/ui/PageHeader'
 import { Card } from '../../shared/components/ui/Card'
@@ -12,19 +14,65 @@ import { Button } from '../../shared/components/ui/Button'
 import { Input } from '../../shared/components/ui/Input'
 import { Textarea } from '../../shared/components/ui/Textarea'
 import { EmptyState } from '../../shared/components/ui/EmptyState'
+import { Modal } from '../../shared/components/ui/Modal'
+import { SegmentedControl } from '../../shared/components/ui/SegmentedControl'
 import { Icon } from '../../shared/components/ui/Icon'
 import { PricingCard } from '../../shared/components/subscription/PricingCard'
 import { UsageCard } from '../../shared/components/subscription/UsageCard'
-import { formatCurrency, formatDate, formatDateTime } from '../../shared/utils/format'
-import { SUBSCRIPTION_STATUS_LABELS, SUBSCRIPTION_STATUS_TONES } from '../../shared/utils/constants'
+import { Progress } from '../../shared/components/ui/Progress'
+import { LimitRaiser } from '../components/LimitRaiser'
+import { formatCurrency, formatDate, formatDateTime, formatNumber } from '../../shared/utils/format'
+import { SUBSCRIPTION_STATUS_LABELS, SUBSCRIPTION_STATUS_TONES, ORDER_USAGE_LABELS, usageLevelFor } from '../../shared/utils/constants'
+import { PLAN_FEATURE_KEYS, PLAN_FEATURE_LABELS, canUseFeature, isPlanLimitUnlimited } from '../../shared/services/subscription'
 import { useToast } from '../../shared/hooks/useToast'
-import type { PlatformSettings, SubscriptionPayment } from '../../shared/types'
+import type { PlatformSettings, Product, SubscriptionPayment, SubscriptionPlan } from '../../shared/types'
+import { getBillingSnapshotsCallable } from '../../shared/services/auth'
+
+interface StorageQuota {
+  usedBytes: number
+  limitBytes: number
+  limitReached: boolean
+  remainingBytes: number | null
+  usedPercent: number
+}
+
+const MB = 1024 * 1024
+
+const BILLING_TYPE_LABELS: Record<string, string> = {
+  activation: 'تفعيل الاشتراك',
+  plan_change: 'تغيير الباقة',
+  renewal: 'تجديد الاشتراك',
+  manual: 'تعديل يدوي',
+}
 
 export const MerchantSubscription: FunctionalComponent = () => {
   const { store } = useStore()
   const storeId = store?.id || ''
   const toast = useToast()
   const { subscription, plan, paymentRequests, status, nextAmount, launchOffer, trialRemaining, loading, refresh } = useSubscription(storeId)
+
+  const plansRes = useCollection<SubscriptionPlan>('plans', { orderBy: { field: 'priceMonthly' } })
+  const allPlans = plansRes.data.filter((p) => p.active !== false)
+
+  const productsRes = useCollection<Product>('products', { storeId, orderBy: { field: 'createdAt' } })
+  const productCount = productsRes.data.length
+  const isProductsUnlimited = isPlanLimitUnlimited('products', plan)
+  const productLimit = isProductsUnlimited ? 0 : Number(plan?.productLimit || 0)
+  const productPct = productLimit > 0 ? Math.min(100, Math.round((productCount / productLimit) * 100)) : 0
+  const productLevel = productLimit > 0 ? usageLevelFor(productPct, true) : 'none'
+  const productRemaining = productLimit > 0 ? Math.max(0, productLimit - productCount) : null
+  const productTone = productLevel === 'reached' ? 'red' : productLevel === 'near' || productLevel === 'approaching' ? 'amber' : productLevel === 'moderate' ? 'primary' : 'green'
+  const enabledFeatures = PLAN_FEATURE_KEYS.filter((k) => canUseFeature(k, plan))
+
+  const [snapshots, setSnapshots] = useState<any[]>([])
+  useEffect(() => {
+    if (!storeId) return
+    let active = true
+    getBillingSnapshotsCallable({ storeId })
+      .then((r) => { if (active) setSnapshots((r.data as any)?.snapshots || []) })
+      .catch(() => { if (active) setSnapshots([]) })
+    return () => { active = false }
+  }, [storeId])
 
   const [settings, setSettings] = useState<PlatformSettings | null>(null)
   const [method, setMethod] = useState('')
@@ -34,6 +82,24 @@ export const MerchantSubscription: FunctionalComponent = () => {
   const [uploading, setUploading] = useState(false)
   const [submitting, setSubmitting] = useState(false)
   const [error, setError] = useState('')
+  const [upgradeOpen, setUpgradeOpen] = useState(false)
+  const [changeBilling, setChangeBilling] = useState<'monthly' | 'yearly'>('monthly')
+  const [targetPlanId, setTargetPlanId] = useState<string>('')
+  const [changing, setChanging] = useState(false)
+  // Derive the storage meter reactively from the live store document (real-time
+  // via StoreProvider's onSnapshot, which picks up Storage-trigger increments the
+  // instant they commit) + the plan's limit. This is equivalent to the
+  // checkStorageQuota callable but stays current after an upload, so the meter
+  // reflects post-upload usage without a reload.
+  const limitBytes = plan ? Number(plan.storageLimit || 0) * MB : 0
+  const usedBytes = Number(store?.storageUsed || 0)
+  const storage: StorageQuota | null = limitBytes > 0 ? {
+    usedBytes,
+    limitBytes,
+    limitReached: usedBytes >= limitBytes,
+    remainingBytes: Math.max(0, limitBytes - usedBytes),
+    usedPercent: Math.min(100, Math.round((usedBytes / limitBytes) * 100)),
+  } : null
 
   useEffect(() => {
     getMerchantPaymentInfoCallable()
@@ -61,8 +127,8 @@ export const MerchantSubscription: FunctionalComponent = () => {
   const pendingRequest = paymentRequests.find((p) => p.status === 'pending')
   const paymentHistory = [...paymentRequests].sort((a, b) => (b.createdAt?.seconds || 0) - (a.createdAt?.seconds || 0))
   const currency = settings?.currency || 'EGP'
-  const canSubmit = status === 'trialing' || status === 'expired'
-  const needsPayment = !pendingRequest && (status === 'trialing' || status === 'expired')
+  const canSubmit = status === 'trialing' || status === 'expired' || status === 'suspended'
+  const needsPayment = !pendingRequest && (status === 'trialing' || status === 'expired' || status === 'suspended')
 
   const handleProof = (file: File | null) => {
     setError('')
@@ -70,6 +136,31 @@ export const MerchantSubscription: FunctionalComponent = () => {
     const err = validateImageFile(file)
     if (err) return setError(err.message)
     setProof(file)
+  }
+
+  const openChangePlan = () => {
+    setTargetPlanId(subscription?.planId || '')
+    setChangeBilling('monthly')
+    setUpgradeOpen(true)
+  }
+
+  const confirmChangePlan = async () => {
+    if (!targetPlanId || targetPlanId === subscription?.planId) {
+      setUpgradeOpen(false)
+      return
+    }
+    setChanging(true)
+    try {
+      const res = await changeSubscriptionPlanCallable({ storeId, planId: targetPlanId })
+      const changed = (res.data as { changed?: boolean })?.changed
+      toast.push(changed ? 'تم تغيير باقتك بنجاح' : 'أنت بالفعل على هذه الباقة', undefined, 'success')
+      setUpgradeOpen(false)
+      refresh()
+    } catch (err: any) {
+      toast.push('فشل تغيير الباقة', err?.message || 'حدث خطأ غير متوقع', 'error')
+    } finally {
+      setChanging(false)
+    }
   }
 
   const submitPayment = async (e: Event) => {
@@ -143,6 +234,68 @@ export const MerchantSubscription: FunctionalComponent = () => {
         <UsageCard subscription={subscription} plan={plan} />
       </div>
 
+      <div className="grid grid-2 mt-2">
+        <Card title="استهلاك المنتجات">
+          {productLimit <= 0 ? (
+            <p className="muted small">باقتك الحالية لا تفرض حداً على عدد المنتجات.</p>
+          ) : (
+            <>
+              <div className="flex-between mb-1">
+                <span className="font-semibold">{formatNumber(productCount)} من {formatNumber(productLimit)} منتج</span>
+                <Badge tone={productTone as any}>{ORDER_USAGE_LABELS[productLevel] || 'طبيعي'}</Badge>
+              </div>
+              <Progress value={productCount} max={productLimit} tone={productTone as any} />
+              <div className="summary-row mt-2">
+                <span>المنتجات المتبقية</span>
+                <strong>{formatNumber(productRemaining ?? 0)}</strong>
+              </div>
+              {productLevel === 'reached' && (
+                <div className="mt-2">
+                  <LimitRaiser label="المنتجات" detail="لا يمكنك إضافة منتجات جديدة حتى ترفع باقتك." compact />
+                </div>
+              )}
+              {productLevel === 'near' || productLevel === 'approaching' ? (
+                <p className="field-hint mt-2">اقتربت من حد المنتجات لهذه الدورة.</p>
+              ) : null}
+            </>
+          )}
+        </Card>
+
+        <Card title="المزايا المفعّلة في باقتك">
+          {enabledFeatures.length === 0 ? (
+            <p className="muted small">لا توجد مزايا إضافية مفعّلة في باقتك الحالية.</p>
+          ) : (
+            <ul className="feature-list">
+              {enabledFeatures.map((k) => (
+                <li key={k}><Icon name="check_circle" className="feature-list-icon" ariaHidden />{PLAN_FEATURE_LABELS[k]}</li>
+              ))}
+            </ul>
+          )}
+        </Card>
+      </div>
+
+      <Card title="سجل الفوترة" className="mt-2">
+        {snapshots.length === 0 ? (
+          <p className="muted small">لا يوجد سجل فوترة بعد — سيُسجَّل تفعيل اشتراكك وتغييرات باقتك تلقائياً هنا.</p>
+        ) : (
+          <div className="billing-history">
+            {snapshots.map((s) => (
+              <div key={s.id} className="billing-history-row">
+                <div>
+                  <strong>{BILLING_TYPE_LABELS[s.type] || s.type}</strong>
+                  <span className="muted small"> — {s.planName || s.planId}</span>
+                  {s.note && <p className="muted small mt-1">{s.note}</p>}
+                </div>
+                <div className="billing-history-meta">
+                  <span>{formatCurrency(Number(s.priceMonthly || 0), currency)} / شهر</span>
+                  <span className="muted small">{formatDate(s.at)}</span>
+                </div>
+              </div>
+            ))}
+          </div>
+        )}
+      </Card>
+
       {status === 'trialing' && (
         <Card title="تجربتك المجانية" className="mt-2">
           <div className="trial-countdown">
@@ -156,6 +309,73 @@ export const MerchantSubscription: FunctionalComponent = () => {
       )}
 
       {plan && <div className="mt-2"><PricingCard plan={plan} featured /></div>}
+
+      <Card title="تغيير الباقة" className="mt-2">
+        <div className="flex-between">
+          <div>
+            <p className="muted small mb-1">
+              بدّل باقتك الحالية ({plan?.name || subscription.planName || '—'}) إلى باقة أعلى أو أدنى بما يناسب نمو متجرك.
+              الحدود والمزايا تُطبَّق فوراً من النظام.
+            </p>
+            {storage && storage.limitBytes > 0 && (
+              <div className="storage-meter mt-1">
+                <div className="flex-between small mb-1">
+                  <span className="font-semibold">تخزين الملفات: {formatNumber(Math.round(storage.usedBytes / MB))} من {formatNumber(Math.round(storage.limitBytes / MB))} ميجابايت</span>
+                  {storage.limitReached && <Badge tone="red">الحد ممتلئ</Badge>}
+                </div>
+                <Progress value={storage.usedBytes} max={storage.limitBytes} tone={storage.limitReached ? 'red' : storage.usedPercent > 80 ? 'amber' : 'primary'} />
+                <p className="muted small mt-1">
+                  {storage.limitReached
+                    ? 'استنفدت مساحة التخزين المتاحة. رقِّ باقتك أو احذف بعض الملفات للمتابعة.'
+                    : storage.remainingBytes != null
+                      ? `مساحة متبقية ${formatNumber(Math.round(storage.remainingBytes / MB))} ميجابايت (${storage.usedPercent}%).`
+                      : ''}
+                </p>
+              </div>
+            )}
+          </div>
+          <Button variant="outline" icon="swap_vert" onClick={openChangePlan}>تغيير الباقة</Button>
+        </div>
+      </Card>
+
+      <Modal
+        open={upgradeOpen}
+        onClose={() => setUpgradeOpen(false)}
+        title="تغيير الباقة"
+        footer={
+          <Fragment>
+            <Button variant="ghost" onClick={() => setUpgradeOpen(false)}>إلغاء</Button>
+            <Button loading={changing} disabled={!targetPlanId || targetPlanId === subscription?.planId} onClick={confirmChangePlan}>
+              تأكيد التغيير
+            </Button>
+          </Fragment>
+        }
+      >
+        <div className="flex-between mb-2">
+          <SegmentedControl
+            value={changeBilling}
+            onChange={(v) => setChangeBilling(v as 'monthly' | 'yearly')}
+            options={[{ value: 'monthly', label: 'شهري' }, { value: 'yearly', label: 'سنوي' }]}
+          />
+        </div>
+        {allPlans.length === 0 ? (
+          <EmptyState title="لا توجد باقات" description="لم تُضف الباقات بعد — تواصل مع مدير المنصة." icon="workspace_premium" />
+        ) : (
+          <div className="grid grid-2">
+            {allPlans.map((p) => (
+              <PricingCard
+                key={p.id}
+                plan={p}
+                yearly={changeBilling === 'yearly'}
+                featured={p.id === subscription?.planId}
+                selected={targetPlanId === p.id}
+                onSelect={() => setTargetPlanId(p.id)}
+                ctaLabel={p.id === subscription?.planId ? 'الباقة الحالية' : targetPlanId === p.id ? 'محددة' : 'اختيار'}
+              />
+            ))}
+          </div>
+        )}
+      </Modal>
 
       <Card title={pendingRequest ? 'طلب التفعيل' : 'تفعيل الاشتراك'} className="mt-2">
         {pendingRequest ? (

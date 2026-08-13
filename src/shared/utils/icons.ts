@@ -1,6 +1,7 @@
 import {
   Archive,
   ArrowDown,
+  ArrowDownUp,
   ArrowRight,
   ArrowUp,
   BadgeCheck,
@@ -103,6 +104,7 @@ export const ICONS = {
   arrow_downward: ArrowDown,
   bar_chart: ChartBar,
   block: Ban,
+  swap_vert: ArrowDownUp,
   campaign: Megaphone,
   cancel: X,
   card_membership: CreditCard,
@@ -124,6 +126,7 @@ export const ICONS = {
   fact_check: CheckCheck,
   format_quote: Quote,
   grid_view: LayoutGrid,
+  gem: Gem,
   group_add: UserPlus,
   groups: Users,
   groups_2: UsersRound,

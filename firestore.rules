@@ -70,6 +70,16 @@ function canManage(storeId, perm) {
   );
 }
 
+// True when the authenticated user holds ANY of the given permission strings.
+// Staff permissions are granular (products:view/create/edit/delete, ...), so
+// write gates accept the whole group of applicable granular perms instead of a
+// single non-assignable `X:manage` umbrella.
+function hasAnyPermission(perms) {
+  return isSignedIn() && (
+    get(/databases/$(database)/documents/users/$(request.auth.uid)).data.permissions.hasAny(perms)
+  );
+}
+
 function isStoreStaff(storeId) {
   return isAdminOrStore(storeId) || isStaff();
 }
@@ -78,16 +88,48 @@ function inStore(resource) {
   return resource.data.storeId != null;
 }
 
-    // L1 fix — read gates are permission-aware, not merely "belongs to the store".
+    // True when a users `permissions` array is preserved by a self-update.
+    function permissionsUnchanged() {
+      return !('permissions' in request.resource.data) || (
+        'permissions' in resource.data
+        && request.resource.data.permissions.size() == resource.data.permissions.size()
+        && request.resource.data.permissions.hasAll(resource.data.permissions)
+      );
+    }
+
+    // Read gates are permission-aware, not merely "belongs to the store".
     // Being a store member is NOT enough to read Orders or Customers; a staff
-    // member must hold the specific permission (orders:manage / customers:manage).
-    // Merchants (owners) and platform admins always pass for their own tenant.
+    // member must hold the specific granular permission. Merchants (owners) and
+    // platform admins always pass for their own tenant.
     function canReadOrders(storeId) {
-      return isPlatformAdmin() || (canAccessStore(storeId) && (isMerchant() || hasPermission('orders:manage')));
+      return isPlatformAdmin() || (canAccessStore(storeId) && (isMerchant() || hasAnyPermission(['orders:manage', 'orders:view'])));
     }
 
     function canReadCustomers(storeId) {
-      return isPlatformAdmin() || (canAccessStore(storeId) && (isMerchant() || hasPermission('customers:manage')));
+      return isPlatformAdmin() || (canAccessStore(storeId) && (isMerchant() || hasAnyPermission(['customers:manage', 'customers:view'])));
+    }
+
+    // Write gates for each resource: merchant-owner or staff holding any of the
+    // granular perms that apply to that operation group (`X:manage` kept for
+    // backward compatibility with the old umbrella strings).
+    function canWriteProducts(storeId) {
+      return isPlatformAdmin() || (canAccessStore(storeId) && (isMerchant() || hasAnyPermission(['products:manage', 'products:create', 'products:edit', 'products:delete'])));
+    }
+
+    function canWriteOrders(storeId) {
+      return isPlatformAdmin() || (canAccessStore(storeId) && (isMerchant() || hasAnyPermission(['orders:manage', 'orders:edit', 'orders:status', 'orders:cancel'])));
+    }
+
+    function canWriteCustomers(storeId) {
+      return isPlatformAdmin() || (canAccessStore(storeId) && (isMerchant() || hasAnyPermission(['customers:manage', 'customers:create', 'customers:edit', 'customers:delete'])));
+    }
+
+    function canWriteSettings(storeId) {
+      return isPlatformAdmin() || (canAccessStore(storeId) && (isMerchant() || hasAnyPermission(['settings:manage', 'settings:edit'])));
+    }
+
+    function canWriteTeam(storeId) {
+      return isPlatformAdmin() || (canAccessStore(storeId) && (isMerchant() || hasAnyPermission(['team:manage', 'team:invite', 'team:manage_roles', 'team:delete'])));
     }
 
     function validTimestamps() {
@@ -112,7 +154,8 @@ function inStore(resource) {
             && request.resource.data.active == resource.data.active
             && 'storeIds' in request.resource.data
             && request.resource.data.storeIds.size() == resource.data.storeIds.size()
-            && request.resource.data.storeIds.hasOnly(resource.data.storeIds));
+            && request.resource.data.storeIds.hasOnly(resource.data.storeIds)
+            && permissionsUnchanged());
       allow delete: if isPlatformAdmin();
     }
 
@@ -123,33 +166,35 @@ function inStore(resource) {
     match /stores/{id} {
       allow read: if true;
       allow create: if isPlatformAdmin(); // merchants create stores via registerMerchant callable
-      // Merchants can edit store settings directly, but publishing is managed
+      // Merchants (owners) can edit store settings directly, but publishing is managed
       // by the setStorePublished callable (which enforces the subscription
-      // grant) — a direct published change by a merchant is blocked.
-      allow update: if isPlatformAdmin() || (isStoreOwner(id) && request.resource.data.published == resource.data.published);
+      // grant) — a direct published change by a merchant is blocked. Staff are
+      // NOT allowed to rewrite the store tenant document (only their owner can).
+      allow update: if isPlatformAdmin() || (isMerchant() && canAccessStore(id) && request.resource.data.published == resource.data.published);
       allow delete: if isPlatformAdmin();
     }
 
     // ─────────────────────────────────────────────────────────────
     // products / categories — public read (active only enforced in code),
-    // write by the owning merchant, platform admin, or staff with products:manage.
+    // write by the owning merchant, platform admin, or staff with a product-write
+    // granular perm (products:create/edit/delete).
     // The storeId equality guard only applies to updates (on create, `resource`
-    // is null, and canManage already scopes writes to the caller's own store).
+    // is null, and canWriteProducts already scopes writes to the caller's own store).
     // ─────────────────────────────────────────────────────────────
 match /products/{id} {
        allow read: if true;
-       allow create: if canManage(request.resource.data.storeId, 'products:manage');
-       allow update: if canManage(request.resource.data.storeId, 'products:manage')
+       allow create: if canWriteProducts(request.resource.data.storeId);
+       allow update: if canWriteProducts(request.resource.data.storeId)
          && request.resource.data.storeId == resource.data.storeId;
-       allow delete: if canManage(request.resource.data.storeId, 'products:manage');
+       allow delete: if canWriteProducts(resource.data.storeId);
      }
 
      match /categories/{id} {
        allow read: if true;
-       allow create: if canManage(request.resource.data.storeId, 'products:manage');
-       allow update: if canManage(request.resource.data.storeId, 'products:manage')
+       allow create: if canWriteProducts(request.resource.data.storeId);
+       allow update: if canWriteProducts(request.resource.data.storeId)
          && request.resource.data.storeId == resource.data.storeId;
-       allow delete: if canManage(request.resource.data.storeId, 'products:manage');
+       allow delete: if canWriteProducts(resource.data.storeId);
      }
 
     // ─────────────────────────────────────────────────────────────
@@ -160,20 +205,20 @@ match /products/{id} {
 match /orders/{id} {
        allow read: if canReadOrders(resource.data.storeId) || isSameUser(resource.data.customerId);
        allow create: if false; // only via createOrder callable
-       allow update: if canManage(resource.data.storeId, 'orders:manage')
+       allow update: if canWriteOrders(resource.data.storeId)
          && request.resource.data.storeId == resource.data.storeId;
        allow delete: if isPlatformAdmin();
      }
 
      // ─────────────────────────────────────────────────────────────
-     // customers — merchant/admin read; write requires customers:manage for staff
+     // customers — merchant/admin read; write requires a customer-write granular perm
      // ─────────────────────────────────────────────────────────────
      match /customers/{id} {
        allow read: if canReadCustomers(resource.data.storeId);
-       allow create: if canManage(request.resource.data.storeId, 'customers:manage');
-       allow update: if canManage(request.resource.data.storeId, 'customers:manage')
+       allow create: if canWriteCustomers(request.resource.data.storeId);
+       allow update: if canWriteCustomers(request.resource.data.storeId)
          && request.resource.data.storeId == resource.data.storeId;
-       allow delete: if canManage(request.resource.data.storeId, 'customers:manage');
+       allow delete: if canWriteCustomers(resource.data.storeId);
      }
 
     // ─────────────────────────────────────────────────────────────
@@ -207,12 +252,18 @@ match /orders/{id} {
       // customer must never enumerate another merchant's codes. Storefront
       // coupon validation is not read-based (coupon codes are applied server-side).
       allow read: if isAdminOrStore(resource.data.storeId) || isPlatformAdmin();
-      allow write: if canManage(request.resource.data.storeId, 'coupons:manage');
+      allow create: if canManage(request.resource.data.storeId, 'coupons:manage');
+      allow update: if canManage(request.resource.data.storeId, 'coupons:manage')
+        && request.resource.data.storeId == resource.data.storeId;
+      allow delete: if canManage(resource.data.storeId, 'coupons:manage');
     }
 
     match /shipping/{id} {
       allow read: if true;
-      allow write: if canManage(request.resource.data.storeId, 'settings:manage');
+      allow create: if canWriteSettings(request.resource.data.storeId);
+      allow update: if canWriteSettings(request.resource.data.storeId)
+        && request.resource.data.storeId == resource.data.storeId;
+      allow delete: if canWriteSettings(resource.data.storeId);
     }
 
     // ─────────────────────────────────────────────────────────────
@@ -291,25 +342,37 @@ match /orders/{id} {
     // ─────────────────────────────────────────────────────────────
     match /team/{id} {
       allow read: if isAdminOrStore(resource.data.storeId);
-      allow write: if canManage(request.resource.data.storeId, 'team:manage');
+      allow create: if canWriteTeam(request.resource.data.storeId);
+      allow update: if canWriteTeam(request.resource.data.storeId)
+        && request.resource.data.storeId == resource.data.storeId;
+      allow delete: if canWriteTeam(resource.data.storeId);
     }
 
     match /roles/{id} {
       allow read: if isAdminOrStore(resource.data.storeId);
-      allow write: if canManage(request.resource.data.storeId, 'team:manage');
+      allow create: if canWriteTeam(request.resource.data.storeId);
+      allow update: if canWriteTeam(request.resource.data.storeId)
+        && request.resource.data.storeId == resource.data.storeId;
+      allow delete: if canWriteTeam(resource.data.storeId);
     }
 
     match /invitations/{id} {
       allow read: if isAdminOrStore(resource.data.storeId);
-      allow write: if canManage(request.resource.data.storeId, 'team:manage');
+      allow create: if canWriteTeam(request.resource.data.storeId);
+      allow update: if canWriteTeam(request.resource.data.storeId)
+        && request.resource.data.storeId == resource.data.storeId;
+      allow delete: if canWriteTeam(resource.data.storeId);
     }
 
     // ─────────────────────────────────────────────────────────────
-    // addresses (customer) — own read/write
+    // addresses (customer) — own read/write; a store's merchant owner (never any
+    // staff member) or the platform admin may access customer addresses (PII).
     // wishlist (customer) — own read/write
     // ─────────────────────────────────────────────────────────────
     match /addresses/{id} {
-      allow read, write: if isSameUser(resource.data.userId) || isAdminOrStore(resource.data.storeId);
+      allow read, write: if isSameUser(resource.data.userId)
+        || isPlatformAdmin()
+        || (isMerchant() && canAccessStore(resource.data.storeId));
     }
 
     match /wishlist/{id} {

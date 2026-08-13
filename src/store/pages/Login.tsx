@@ -42,6 +42,14 @@ export const StoreLogin: FunctionalComponent = () => {
         }
       } else {
         await login({ email: form.email, password: form.password })
+        // Link any guest order left from checkout to this existing account too.
+        if (claimOrder && claimPhone && store?.id) {
+          try {
+            await claimOrderCallable({ storeId: store.id, orderNumber: claimOrder, phone: claimPhone })
+          } catch {
+            // Non-critical — the customer can still track the order manually.
+          }
+        }
         toast.push('تم تسجيل الدخول')
       }
       window.location.href = `/store/${store?.slug}/account`

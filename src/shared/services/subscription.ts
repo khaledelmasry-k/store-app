@@ -51,6 +51,107 @@ export function planEntitlements(plan?: SubscriptionPlan | null): PlanEntitlemen
   }
 }
 
+/** Canonical feature keys gated per-plan (Phase 6 model). */
+export const PLAN_FEATURE_KEYS = [
+  'quantityPricing',
+  'variantInventory',
+  'coupons',
+  'abandonedCart',
+  'analytics',
+  'advancedReports',
+  'customDomain',
+  'apiAccess',
+  'removeBranding',
+  'prioritySupport',
+] as const
+export type PlanFeatureKey = (typeof PLAN_FEATURE_KEYS)[number]
+
+export const PLAN_FEATURE_LABELS: Record<PlanFeatureKey, string> = {
+  quantityPricing: 'تسعير بالكمية',
+  variantInventory: 'مخزون حسب المقاس/اللون',
+  coupons: 'كوبونات خصم',
+  abandonedCart: 'استعادة سلة غير مكتملة',
+  analytics: 'تحليلات أساسية',
+  advancedReports: 'تقارير متقدمة',
+  customDomain: 'نطاق مخصص',
+  apiAccess: 'واجهة برمجية (API/Webhooks)',
+  removeBranding: 'إزالة علامة M&K',
+  prioritySupport: 'دعم أولوية',
+}
+
+/** True when `plan` explicitly grants the feature (structured flag). Falls back
+ * to the legacy free-text `features` list so old plans keep working. */
+export function canUseFeature(feature: PlanFeatureKey, plan?: SubscriptionPlan | null): boolean {
+  if (!plan) return false
+  const flag = (plan as any)[feature]
+  if (typeof flag === 'boolean') return flag
+  // Legacy plans store features as an Arabic label list — match by label too.
+  const label = (PLAN_FEATURE_LABELS as any)[feature]
+  if (Array.isArray(plan.features)) {
+    return plan.features.some((f) => typeof f === 'string' && (f === feature || f === label || f.toLowerCase() === String(label).toLowerCase()))
+  }
+  return false
+}
+
+/** Numeric limit accessor keyed by entitlement name.
+ *  Returns the raw plan cap. When a resource is uncapped, returns 0 — callers
+ *  that need to distinguish "unlimited" from a real zero cap should pair this
+ *  with `isPlanLimitUnlimited` (a numeric zero is ambiguous on its own). */
+export function getPlanLimit(key: 'products' | 'orders' | 'landingPages' | 'salesLinks' | 'staff' | 'storage' | 'stores', plan?: SubscriptionPlan | null): number {
+  if (!plan) return 0
+  switch (key) {
+    case 'products':
+      return Number(plan.productLimit || 0)
+    case 'orders':
+      return Number(plan.orderLimitPerMonth || 0)
+    case 'landingPages':
+      return Number(plan.landingPagesLimit || 0)
+    case 'salesLinks':
+      return Number(plan.salesLinksLimit || 0)
+    case 'staff':
+      return Number(plan.staffLimit || 0)
+    case 'storage':
+      return Number(plan.storageLimit || 0)
+    case 'stores':
+      return Number(plan.storeLimit || 1)
+    default:
+      return 0
+  }
+}
+
+// Whether a plan grants a resource without a numeric ceiling. Mirrors the
+// server-side `isResourceUnlimited` (functions/src/index.ts) — keep in sync.
+// An explicit boolean always wins; legacy plans (boolean absent) keep the
+// historic 0-or-null == unlimited semantics.
+export function isPlanLimitUnlimited(
+  key: 'products' | 'salesLinks' | 'staff',
+  plan?: SubscriptionPlan | null,
+): boolean {
+  if (!plan) return false
+  if (key === 'products') {
+    if (plan.unlimitedProducts === true) return true
+    if (plan.unlimitedProducts === false) return false
+    return Number(plan.productLimit || 0) === 0
+  }
+  if (key === 'salesLinks') {
+    if (plan.unlimitedSalesLinks === true) return true
+    if (plan.unlimitedSalesLinks === false) return false
+    return Number(plan.salesLinksLimit || 0) === 0
+  }
+  // staff (future-proofed for an unlimitedStaff flag)
+  if (key === 'staff') return false
+  return false
+}
+
+export function remainingQuota(used: number, limit: number): number | null {
+  if (limit <= 0) return null
+  return Math.max(0, limit - used)
+}
+
+export function isLimitReached(used: number, limit: number): boolean {
+  return limit > 0 && used >= limit
+}
+
 export interface SubscriptionUsage {
   used: number
   limit: number
@@ -75,10 +176,15 @@ export function usageFrom(sub?: Subscription | null, plan?: SubscriptionPlan | n
 /** Price that pays for the NEXT period (first paid month = launch price). */
 export function nextPaymentAmount(sub?: Subscription | null): number {
   if (!sub) return 0
-  const periodNumber = Number(sub.periodNumber || 0)
   const normal = Number(sub.normalPriceSnapshot || 0)
+  if (sub.billingCycle === 'yearly') {
+    return Number(sub.yearlyPriceSnapshot || normal)
+  }
+  // Monthly: the next payment is periodNumber+1. First paid month (1) uses launch.
+  const periodNumber = Number(sub.periodNumber || 0)
+  const nextPeriod = periodNumber + 1
   const launch = Number(sub.launchPriceSnapshot || normal)
-  return periodNumber <= 0 ? launch : normal
+  return nextPeriod <= 1 ? launch : normal
 }
 
 export function hasLaunchOffer(sub?: Subscription | null): boolean {

@@ -1,13 +1,17 @@
 import { FunctionalComponent } from 'preact'
+import { useEffect, useState } from 'preact/hooks'
 import { Link } from 'wouter'
 import { useStore } from '../../shared/hooks/useStore'
 import { useCollection } from '../../shared/hooks/useCollection'
 import { EmptyState } from '../../shared/components/ui/EmptyState'
+import { SmartImage } from '../../shared/components/ui/SmartImage'
 import { StoreProductCard } from '../components/StoreProductCard'
 import type { Product, Category } from '../../shared/types'
 
 export const StoreHome:FunctionalComponent = () => {
   const { store } = useStore()
+  const [heroFailed, setHeroFailed] = useState(false)
+  useEffect(() => setHeroFailed(false), [store?.id, store?.heroImage])
   const productsRes = useCollection<Product>('products', { storeId: store?.id || '', where: { active: { value: true } } })
   const products = productsRes.data
   const categoriesRes = useCollection<Category>('categories', { storeId: store?.id || '' })
@@ -16,20 +20,28 @@ export const StoreHome:FunctionalComponent = () => {
   const featured = products.filter((p) => p.featured).slice(0, 4)
   const latest = products.filter((p) => !p.featured).slice(0, 8)
 
+  const hasHeroImage = Boolean(store?.heroImage) && !heroFailed
+
   return (
     <div>
-      <div className="store-hero" style={store?.heroImage ? { backgroundImage: `url("${store.heroImage}")` } : undefined}>
-        <div className="store-hero-overlay">
-          <span className="store-hero-badge">تسوق بثقة — توصيل سريع لجميع المحافظات</span>
-          <h1>{store?.name}</h1>
-          <p>{store?.description || 'تسوق أحدث المنتجات بأسعار مميزة وتوصيل سريع لجميع المحافظات.'}</p>
-          {products.length > 0 && (
-            <Link href={`/store/${store?.slug}/catalog`} className="btn btn-invert btn-lg mt-1">
-              تسوق الآن
-            </Link>
-          )}
+      {hasHeroImage ? (
+        <div className="store-hero store-hero--image">
+          <SmartImage key={store.heroImage} src={store.heroImage} alt="" className="store-hero-img" placeholderClassName="store-hero-img" loading="eager" onError={() => setHeroFailed(true)} />
         </div>
-      </div>
+      ) : (
+        <div className="store-hero">
+          <div className="store-hero-overlay">
+            <span className="store-hero-badge">تسوق بثقة — توصيل سريع لجميع المحافظات</span>
+            <h1>{store?.name}</h1>
+            <p>{store?.description || 'تسوق أحدث المنتجات بأسعار مميزة وتوصيل سريع لجميع المحافظات.'}</p>
+            {products.length > 0 && (
+              <Link href={`/store/${store?.slug}/catalog`} className="btn btn-invert btn-lg mt-1">
+                تسوق الآن
+              </Link>
+            )}
+          </div>
+        </div>
+      )}
 
       {categories.length > 0 && (
         <section className="mt-2">

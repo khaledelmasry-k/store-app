@@ -11,6 +11,7 @@ import { Badge } from '../../shared/components/ui/Badge'
 import { useStore } from '../../shared/hooks/useStore'
 import { useToast } from '../../shared/hooks/useToast'
 import { storesService } from '../../shared/services/stores'
+import { setStorePublishedCallable } from '../../shared/services/auth'
 import { storePublicUrl, normalizeSlug, ensureUniqueSlug } from '../../shared/utils/store-url'
 import { slugify } from '../../shared/utils/format'
 import type { Store } from '../../shared/types'
@@ -67,7 +68,7 @@ export const MerchantSettings: FunctionalComponent = () => {
   const togglePublish = async (v: boolean) => {
     if (!store) return
     try {
-      await storesService.update(store.id, { published: v })
+      await setStorePublishedCallable({ storeId: store.id, published: v })
       toast.push(v ? 'تم نشر متجرك' : 'تم إخفاء متجرك', undefined, 'success')
     } catch (err: any) {
       toast.push('تعذر تحديث حالة النشر', err?.message || 'حدث خطأ غير متوقع', 'error')

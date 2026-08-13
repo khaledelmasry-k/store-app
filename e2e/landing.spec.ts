@@ -49,26 +49,39 @@ test('renders hero, nav anchors, features, steps, sales, faq', async ({ page }) 
 
 test('pricing shows real seeded plans with limits and plan-scoped CTAs', async ({ page }) => {
   await page.goto('/', { waitUntil: 'domcontentloaded' })
-  await expect(page.locator('.pricing-card')).toHaveCount(3)
+  // Free + Starter + Growth + Pro  — rendered by the shared PricingCard.
+  await expect(page.locator('.mk-pricing-card')).toHaveCount(4)
 
+  // Each plan renders as a `.pricing-grid-col` wrapping the PricingCard plus the
+  // plan-scoped `.pricing-cta` link (the href lives on the column's link, not inside the card).
   const cardByName = (name: string) =>
-    page.locator('.pricing-card').filter({ has: page.locator('h3', { hasText: name }) })
+    page.locator('.mk-pricing-card').filter({ has: page.locator('.mk-pricing-name', { hasText: name }) })
+  const colByName = (name: string) =>
+    page.locator('.pricing-grid-col').filter({ has: page.locator('.mk-pricing-name', { hasText: name }) })
 
-  await expect(cardByName('البداية')).toContainText('حتى 20 منتج')
-  await expect(cardByName('البداية')).toContainText('حتى 50 طلب شهرياً')
-  await expect(cardByName('البداية').locator('.pricing-cta')).toHaveAttribute('href', '/register?plan=plan-starter')
+  // Free tier: flat product/order limits and a "مجاناً" price.
+  await expect(cardByName('الأساسية')).toContainText('مجاناً')
+  await expect(cardByName('الأساسية')).toContainText('حتى 5 منتج')
+  await expect(cardByName('الأساسية')).toContainText('حتى 30 طلب شهرياً')
+  await expect(colByName('الأساسية').locator('.pricing-cta')).toHaveAttribute('href', '/register?plan=plan-free')
+
+  await expect(cardByName('البداية')).toContainText('حتى 50 منتج')
+  await expect(cardByName('البداية')).toContainText('حتى 100 طلب شهرياً')
+  await expect(colByName('البداية').locator('.pricing-cta')).toHaveAttribute('href', '/register?plan=plan-starter')
 
   const growth = cardByName('النمو')
-  await expect(growth).toContainText('حتى 100 منتج')
-  await expect(growth).toContainText('حتى 200 طلب شهرياً')
-  await expect(growth.locator('.pricing-cta')).toHaveAttribute('href', '/register?plan=plan-growth')
+  await expect(growth).toContainText('حتى 250 منتج')
+  await expect(growth).toContainText('حتى 500 طلب شهرياً')
+  await expect(colByName('النمو').locator('.pricing-cta')).toHaveAttribute('href', '/register?plan=plan-growth')
 
-  await expect(cardByName('الاحتراف')).toContainText('حتى 500 منتج')
-  await expect(cardByName('الاحتراف').locator('.pricing-cta')).toHaveAttribute('href', '/register?plan=plan-pro')
+  // Pro: orders are large; products/storage amounts are shown from the plan doc.
+  await expect(cardByName('الاحتراف')).toContainText('حتى 2000 طلب شهرياً')
+  await expect(cardByName('الاحتراف')).toContainText('تخزين 20480 ميجابايت')
+  await expect(colByName('الاحتراف').locator('.pricing-cta')).toHaveAttribute('href', '/register?plan=plan-pro')
 
-  // Featured plan is the middle one (النمو)
-  await expect(page.locator('.pricing-badge')).toHaveCount(1)
-  await expect(growth.locator('.pricing-badge')).toContainText('الأكثر شيوعاً')
+  // Featured plan is النمو (isPopular), rendered as a single badge.
+  await expect(page.locator('.mk-pricing-badge')).toHaveCount(1)
+  await expect(growth.locator('.mk-pricing-badge')).toContainText('الأكثر شيوعاً')
 })
 
 test('faq toggles expand/collapse with aria state', async ({ page }) => {
@@ -147,8 +160,8 @@ test('visual & style sanity: fonts, mockup, equal-height cards, reveal', async (
     expect(Math.max(...featureRows!) - Math.min(...featureRows!)).toBeLessThanOrEqual(1)
   }
 
-  // Pricing cards align: same height and CTAs pinned to the same baseline.
-  const pricingBoxes = await page.locator('.pricing-card').evaluateAll((els) =>
+  // Pricing columns align: same height and CTAs pinned to the same baseline.
+  const pricingBoxes = await page.locator('.pricing-grid-col').evaluateAll((els) =>
     els.map((el) => {
       const r = el.getBoundingClientRect()
       const cta = el.querySelector('.pricing-cta')

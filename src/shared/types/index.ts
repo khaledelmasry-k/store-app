@@ -83,6 +83,10 @@ export interface Store extends Partial<FirestoreMeta> {
   seoDescription?: string
   theme: StoreTheme
   shipping?: StoreShipping
+  /** Bytes of uploaded assets currently used by this store (maintained server-side). */
+  storageUsed?: number
+  /** Bytes of storage quota granted by the active plan (0/missing = unlimited). */
+  storageLimitBytes?: number
 }
 
 export interface Category extends Partial<FirestoreMeta> {
@@ -137,6 +141,15 @@ export interface QuantityTier {
 
 export type PricingMode = 'standard' | 'quantity'
 
+/**
+ * How quantity pricing behaves when the requested quantity exceeds the highest
+ * configured bundle tier.
+ * - 'cap'    (default, safest): highest bundle total + remaining units at base price.
+ * - 'repeat' : repeat the highest bundle as many times as it fits, remainder at base price.
+ * - 'last'   : always charge the highest bundle total once, regardless of overflow.
+ */
+export type QuantityPricingStrategy = 'cap' | 'repeat' | 'last'
+
 export interface Product extends Partial<FirestoreMeta> {
   id: string
   storeId: string
@@ -157,6 +170,8 @@ export interface Product extends Partial<FirestoreMeta> {
   pricingMode?: PricingMode
   /** Quantity tiers, used when `pricingMode === 'quantity'`. */
   quantityTiers?: QuantityTier[]
+  /** Behavior when quantity exceeds the highest tier (default 'cap'). */
+  quantityPricingStrategy?: QuantityPricingStrategy
   active: boolean
   featured?: boolean
   lowStockThreshold?: number
@@ -199,6 +214,8 @@ export interface OrderItem {
   lineTotal?: number
   /** Snapshot of the selected quantity tier (quantity pricing only). */
   quantityTier?: { quantity: number; price: number }
+  /** Pricing strategy snapshot at order time (quantity pricing only). */
+  quantityPricingStrategy?: QuantityPricingStrategy
 }
 
 /** Snapshot of the shipping calculation at order time. */
@@ -243,7 +260,9 @@ export interface Order extends Partial<FirestoreMeta> {
   salesLinkRef?: string | null
   salesLinkId?: string | null
   salesLinkStaffId?: string | null
-  salesLinkSnapshot?: SalesLinkSnapshot | null
+   salesLinkSnapshot?: SalesLinkSnapshot | null
+   /** True once stock has been restored for a cancelled/returned order (idempotency). */
+   stockRestored?: boolean
 }
 
 export interface Customer extends Partial<FirestoreMeta> {
@@ -270,6 +289,8 @@ export interface Customer extends Partial<FirestoreMeta> {
 export interface SubscriptionPlan extends Partial<FirestoreMeta> {
   id: string
   name: string
+  /** URL-friendly plan slug (e.g. "starter"). Defaults to id if unset. */
+  slug?: string
   description?: string
   priceMonthly: number
   priceYearly: number
@@ -283,13 +304,51 @@ export interface SubscriptionPlan extends Partial<FirestoreMeta> {
   launchPrice?: number
   /** Whether the launch offer is currently active for new subscribers. */
   launchEnabled?: boolean
+  /** Optional hard expiry for the launch offer (server-scheduler disables it). */
+  launchExpiresAt?: { seconds: number; nanoseconds: number } | null
   landingPagesLimit?: number
   salesLinksLimit?: number
   staffLimit?: number
-  storageLimit?: number
+   /** Storage quota in megabytes (0/missing = unlimited). */
+   storageLimit?: number
+   /** Whether this is the recommended/popular plan (shows "الأكثر طلباً"). */
+   isPopular?: boolean
+   /** --- Explicit unlimited resource flags --- */
+   /** When true, product creation is not capped by `productLimit` (supersedes it). */
+   unlimitedProducts?: boolean
+   /** When true, sales-link creation is not capped by `salesLinksLimit` (supersedes it). */
+   unlimitedSalesLinks?: boolean
+  /** Display order for plan sorting (lower first). */
+  sortOrder?: number
+  /** --- Structured feature gates (Phase 6 model) --- */
+  /** Single store per merchant (always true here), reserved for future tiers. */
+  storeLimit?: number
+  /** Tiered/bulk quantity pricing for product lines. */
+  quantityPricing?: boolean
+  /** Multi-option products with independent per-variant stock keeping. */
+  variantInventory?: boolean
+  /** Discount codes applied at checkout. */
+  coupons?: boolean
+  /** Recover visitors who added to cart but didn't order. */
+  abandonedCart?: boolean
+  /** Basic analytics dashboard + daily analytics snapshots. */
+  analytics?: boolean
+  /** Advanced reports (revenue/export-grade). */
+  advancedReports?: boolean
+  /** Connect a custom domain to the storefront. */
+  customDomain?: boolean
+  /** Programmatic API access + webhooks. */
+  apiAccess?: boolean
+  /** Remove the platform "Powered by M&K" branding. */
+  removeBranding?: boolean
+  /** Priority support queue. */
+  prioritySupport?: boolean
 }
 
 export type SubscriptionStatus = 'pending' | 'trialing' | 'active' | 'expired' | 'suspended' | 'cancelled' | 'rejected'
+
+/** Billing cycle charged for a subscription. Monthly renews every 30 days; yearly every 365. */
+export type BillingCycle = 'monthly' | 'yearly'
 
 export type OrderUsageLevel = 'none' | 'normal' | 'moderate' | 'approaching' | 'near' | 'reached'
 
@@ -368,8 +427,12 @@ export interface Subscription extends Partial<FirestoreMeta> {
   /** Price snapshots captured at trial start (never mutate after). */
   normalPriceSnapshot?: number
   launchPriceSnapshot?: number
-  /** True when the first paid month used the launch (discounted) price. */
+  /** Yearly price snapshot (when billingCycle === 'yearly'). */
+  yearlyPriceSnapshot?: number
+  /** True when the first paid month/year used the launch (discounted) price. */
   launchUsed?: boolean
+  /** Billing cycle (monthly = 30 days, yearly = 365 days). */
+  billingCycle?: BillingCycle
   /** Paid billing cycle number (0 = trial, 1 = first paid month). */
   periodNumber?: number
   suspendedReason?: string
@@ -658,12 +721,20 @@ export interface CartLine {
   pricingMode?: PricingMode
   /** Quantity tiers snapshot at add-time. */
   quantityTiers?: QuantityTier[]
+  /** Quantity pricing strategy snapshot at add-time. */
+  quantityPricingStrategy?: QuantityPricingStrategy
   /**
    * Authoritative charged amount for the line. For quantity pricing this is
    * the bundle's TOTAL tier price (never unit × qty); for standard pricing it
    * is price × quantity. Recomputed from the tier snapshot when qty changes.
    */
   lineTotal?: number
+  /**
+   * Max purchasable quantity snapshot at add-time (in-stock units for the
+   * selected variant/selection). The cart stepper clamps against it; the
+   * backend re-validates against live stock so this is only a UX ceiling.
+   */
+  maxQty?: number
 }
 
 export interface ApiResult<T> {

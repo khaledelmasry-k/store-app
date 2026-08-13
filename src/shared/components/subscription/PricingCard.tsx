@@ -1,6 +1,6 @@
 import { FunctionalComponent } from 'preact'
 import { formatCurrency } from '../../utils/format'
-import { planEntitlements } from '../../services/subscription'
+import { planEntitlements, canUseFeature, PLAN_FEATURE_KEYS, PLAN_FEATURE_LABELS, type PlanFeatureKey, isPlanLimitUnlimited } from '../../services/subscription'
 import type { SubscriptionPlan } from '../../types'
 import { Icon } from '../ui/Icon'
 
@@ -8,6 +8,7 @@ interface Props {
   plan: SubscriptionPlan
   selected?: boolean
   featured?: boolean
+  yearly?: boolean
   onSelect?: () => void
   ctaLabel?: string
 }
@@ -18,32 +19,50 @@ const LIMIT_ICONS: Record<string, string> = {
   landingPages: 'web',
   salesLinks: 'link',
   staff: 'group_add',
+  storage: 'storage',
 }
 
 /**
- * Professional Arabic RTL pricing card (reused by the public landing page,
+ * Professional Arabic RTL pricing card (reused by the public pricing page,
  * the registration wizard and the merchant activation panel).
- * Prices/trial/limits come from the plan document — never hardcoded.
+ * Prices/trial/limits/feature-flags come from the plan document — never
+ * hardcoded. The Free plan (price 0) renders as "مجاناً للأبد" without
+ * trial/launch banners.
  */
-export const PricingCard: FunctionalComponent<Props> = ({ plan, selected, featured, onSelect, ctaLabel }) => {
-  const hasLaunch = !!plan.launchEnabled && Number(plan.launchPrice) > 0
+export const PricingCard: FunctionalComponent<Props> = ({ plan, selected, featured, yearly, onSelect, ctaLabel }) => {
+  const isFree = Number(plan.priceMonthly || 0) <= 0
+  const hasLaunch = !isFree && !!plan.launchEnabled && Number(plan.launchPrice) > 0
   const trialDays = Number(plan.trialDays || 3)
   const limits = planEntitlements(plan)
-  const limitRows = (['products', 'orders', 'landingPages', 'salesLinks', 'staff'] as const)
-    .filter((k) => limits[k] > 0)
-    .map((k) => ({
-      icon: LIMIT_ICONS[k],
-      label:
-        k === 'products'
-          ? `حتى ${limits.products} منتج`
-          : k === 'orders'
-            ? `حتى ${limits.orders} طلب شهرياً`
-            : k === 'landingPages'
-              ? `حتى ${limits.landingPages} صفحة هبوط`
-              : k === 'salesLinks'
-                ? `حتى ${limits.salesLinks} رابط بيع`
-                : `حتى ${limits.staff} عضو فريق`,
-    }))
+  const isProductsUnlimited = isPlanLimitUnlimited('products', plan)
+  const isSalesLinksUnlimited = isPlanLimitUnlimited('salesLinks', plan)
+  const isStorageUnlimited = Number(plan.storageLimit || 0) === 0
+  const limitRows = (['products', 'orders', 'landingPages', 'salesLinks', 'staff', 'storage'] as const)
+    .filter((k) => k === 'storage' || limits[k] > 0 || (k === 'products' && isProductsUnlimited) || (k === 'salesLinks' && isSalesLinksUnlimited))
+    .map((k) => {
+      if (k === 'products' && isProductsUnlimited) return { icon: LIMIT_ICONS[k], label: 'منتجات غير محدودة' }
+      if (k === 'salesLinks' && isSalesLinksUnlimited) return { icon: LIMIT_ICONS[k], label: 'روابط بيع غير محدودة' }
+      if (k === 'storage' && isStorageUnlimited) return { icon: LIMIT_ICONS[k], label: 'تخزين غير محدود' }
+      return {
+        icon: LIMIT_ICONS[k],
+        label:
+          k === 'products'
+            ? `حتى ${limits.products} منتج`
+            : k === 'orders'
+              ? `حتى ${limits.orders} طلب شهرياً`
+              : k === 'landingPages'
+                ? `حتى ${limits.landingPages} صفحة هبوط`
+                : k === 'salesLinks'
+                  ? `حتى ${limits.salesLinks} رابط بيع`
+                  : k === 'staff'
+                    ? `حتى ${limits.staff} عضو فريق`
+                    : limits.storage > 0
+                      ? `تخزين ${limits.storage} ميجابايت`
+                      : 'تخزين غير محدود',
+      }
+    })
+  const featureFlags = PLAN_FEATURE_KEYS.filter((k) => canUseFeature(k, plan))
+  const price = yearly && Number(plan.priceYearly || 0) > 0 ? plan.priceYearly : plan.priceMonthly
 
   return (
     <div className={`mk-pricing-card${selected ? ' mk-pricing-card--selected' : ''}${featured ? ' mk-pricing-card--featured' : ''}`}>
@@ -52,8 +71,8 @@ export const PricingCard: FunctionalComponent<Props> = ({ plan, selected, featur
       {plan.description && <p className="mk-pricing-desc">{plan.description}</p>}
 
       <div className="mk-pricing-price">
-        <strong>{formatCurrency(plan.priceMonthly)}</strong>
-        <span>/ شهرياً</span>
+        {isFree ? <strong>مجاناً</strong> : <strong>{formatCurrency(price)}</strong>}
+        <span>{isFree ? 'للأبد' : yearly ? '/ سنوياً' : '/ شهرياً'}</span>
       </div>
 
       {hasLaunch && (
@@ -64,10 +83,12 @@ export const PricingCard: FunctionalComponent<Props> = ({ plan, selected, featur
         </div>
       )}
 
-      <div className="mk-pricing-trial">
-        <Icon name="local_offer" />
-        تجربة مجانية لمدة {trialDays} يوم — بكامل المزايا
-      </div>
+      {!isFree && (
+        <div className="mk-pricing-trial">
+          <Icon name="local_offer" />
+          تجربة مجانية لمدة {trialDays} يوم — بكامل المزايا
+        </div>
+      )}
 
       <ul className="mk-pricing-features">
         {limitRows.map((r) => (
@@ -76,12 +97,24 @@ export const PricingCard: FunctionalComponent<Props> = ({ plan, selected, featur
             {r.label}
           </li>
         ))}
-        {(plan.features || []).slice(0, 6).map((f, i) => (
+        {featureFlags.map((k: PlanFeatureKey) => (
+          <li key={k}>
+            <Icon name="check_circle" />
+            {PLAN_FEATURE_LABELS[k]}
+          </li>
+        ))}
+        {(plan.features || []).slice(0, 4).map((f, i) => (
           <li key={`f${i}`}>
             <Icon name="check_circle" />
             {f}
           </li>
         ))}
+        {isFree && !limits.storage && (
+          <li>
+            <Icon name="check_circle" />
+            يناسب التجربة والبدايات
+          </li>
+        )}
       </ul>
 
       {onSelect && (

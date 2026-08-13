@@ -1,9 +1,13 @@
 import { FunctionalComponent, Fragment } from 'preact'
-import { useState } from 'preact/hooks'
-import type { Category, ColorOption, Product, ProductVariant, QuantityTier } from '../../shared/types'
+import { useRef, useState } from 'preact/hooks'
+import { Link } from 'wouter'
+import type { Category, ColorOption, Product, ProductVariant, QuantityPricingStrategy, QuantityTier } from '../../shared/types'
 import { legacyVariantId } from '../../shared/types'
 import { productsService } from '../../shared/services/products'
+import { createProductCallable } from '../../shared/services/auth'
 import { useToast } from '../../shared/hooks/useToast'
+import { useSubscription } from '../../shared/hooks/useSubscription'
+import { canUseFeature } from '../../shared/services/subscription'
 import { uid } from '../../shared/utils/validators'
 import { Input } from '../../shared/components/ui/Input'
 import { Textarea } from '../../shared/components/ui/Textarea'
@@ -15,6 +19,7 @@ import { ColorManager } from './ColorManager'
 import { VariantMatrix } from './VariantMatrix'
 import { QuantityTiersEditor } from './QuantityTiersEditor'
 import { validateQuantityTiers } from '../../shared/utils/pricing'
+import { Icon } from '../../shared/components/ui/Icon'
 
 interface Props {
   storeId: string
@@ -35,6 +40,7 @@ interface Draft {
   lowStockThreshold: string
   pricingMode: 'standard' | 'quantity'
   quantityTiers: QuantityTier[]
+  quantityPricingStrategy: QuantityPricingStrategy
   images: string[]
   colorOptions: ColorOption[]
   sizes: string[]
@@ -46,7 +52,7 @@ function draftFrom(initial?: Product | null): Draft {
   if (!initial) {
     return {
       name: '', sku: '', description: '', categoryId: '', price: '', oldPrice: '', stock: '0',
-      lowStockThreshold: '5', pricingMode: 'standard', quantityTiers: [], images: [], colorOptions: [], sizes: [], variants: [], active: true,
+      lowStockThreshold: '5', pricingMode: 'standard', quantityTiers: [], quantityPricingStrategy: 'cap', images: [], colorOptions: [], sizes: [], variants: [], active: true,
     }
   }
   const colorOptions: ColorOption[] =
@@ -63,6 +69,7 @@ function draftFrom(initial?: Product | null): Draft {
     stock: String(initial.stock ?? 0),
     lowStockThreshold: String(initial.lowStockThreshold ?? 5),
     pricingMode: initial.pricingMode === 'quantity' ? 'quantity' : 'standard',
+    quantityPricingStrategy: initial.quantityPricingStrategy || 'cap',
     quantityTiers: (initial.quantityTiers || []).map((t) =>
       typeof t.quantity === 'number' ? { ...t } : { quantity: t.minQuantity || 1, price: t.price || 0 },
     ),
@@ -76,11 +83,31 @@ function draftFrom(initial?: Product | null): Draft {
 
 export const ProductForm: FunctionalComponent<Props> = ({ storeId, initial, categories, onClose, onSaved }) => {
   const toast = useToast()
+  const { plan } = useSubscription(storeId)
+  const isNew = !initial
+  const qtyAllowed = canUseFeature('quantityPricing', plan)
+  const variantAllowed = canUseFeature('variantInventory', plan)
+  // Defer the client-side feature lock until the store's plan has actually
+  // resolved. While `plan` is still null (async load), the server remains the
+  // authoritative gate (createProduct rejects variant/quantity products on
+  // ineligible plans), so the client must not false-deny and show a stale
+  // "upgrade required" error before the plan is even known.
+  const qtyLocked = isNew && plan !== null && !qtyAllowed
+  const variantLocked = isNew && plan !== null && !variantAllowed
   const [draft, setDraft] = useState<Draft>(() => draftFrom(initial))
   const [savingAction, setSavingAction] = useState<'draft' | 'save' | 'publish' | null>(null)
   const [error, setError] = useState('')
 
   const set = (patch: Partial<Draft>) => setDraft((prev) => ({ ...prev, ...patch }))
+
+  // For a NEW product the id is generated once, before any image upload, so every
+  // image lands in `stores/{storeId}/products/{productId}/...` and the product is
+  // later CREATED with that same id. For edits the id already exists.
+  const productIdRef = useRef<string | null>(initial?.id ?? null)
+  const getProductId = (): string => {
+    if (!productIdRef.current) productIdRef.current = uid(20)
+    return productIdRef.current
+  }
 
   const buildData = (): Omit<Product, 'id' | 'storeId'> => {
     const colorOptions = draft.colorOptions.map((c) => ({ ...c }))
@@ -110,6 +137,7 @@ export const ProductForm: FunctionalComponent<Props> = ({ storeId, initial, cate
       variants,
       pricingMode,
       quantityTiers: pricingMode === 'quantity' ? draft.quantityTiers.map((t) => ({ ...t })) : [],
+      quantityPricingStrategy: pricingMode === 'quantity' ? draft.quantityPricingStrategy : undefined,
       stock: variants.length > 0 ? variantTotal : Number(draft.stock || 0),
       lowStockThreshold: Number(draft.lowStockThreshold || 5),
       active: draft.active,
@@ -140,7 +168,8 @@ export const ProductForm: FunctionalComponent<Props> = ({ storeId, initial, cate
         await productsService.update(initial.id, data)
         toast.push('تم تحديث المنتج')
       } else {
-        await productsService.create(storeId, data)
+        const productId = getProductId()
+        await createProductCallable({ storeId, productId, data })
         toast.push('تم إضافة المنتج')
       }
       onSaved()
@@ -155,9 +184,26 @@ export const ProductForm: FunctionalComponent<Props> = ({ storeId, initial, cate
 
   const section = (title: string) => <h4 className="product-form-section">{title}</h4>
 
+  const lockedFeatures: string[] = []
+  if (qtyLocked) lockedFeatures.push('التسعير حسب الكمية')
+  if (variantLocked) lockedFeatures.push('المخزون حسب المقاس/اللون')
+
   return (
     <div className="product-form">
       {error && <div className="form-error-banner">{error}</div>}
+
+      {lockedFeatures.length > 0 && (
+        <div className="feature-lock-banner">
+          <span className="feature-lock-icon"><Icon name="lock" /></span>
+          <div>
+            <strong>هذه المزايا غير متوفرة في باقتك الحالية</strong>
+            <p className="muted small m-0">
+              {lockedFeatures.join(' و ')} متوفرة في باقات أعلى. رقِّ باقتك لفتحها.
+            </p>
+            <Link to="/dashboard/subscription" className="feature-lock-cta">ترقية الباقة</Link>
+          </div>
+        </div>
+      )}
 
       {section('معلومات المنتج')}
       <div className="grid grid-2">
@@ -181,16 +227,38 @@ export const ProductForm: FunctionalComponent<Props> = ({ storeId, initial, cate
         <Select
           label="طريقة التسعير"
           value={draft.pricingMode}
-          onChange={(v) => set({ pricingMode: v === 'quantity' ? 'quantity' : 'standard' })}
+          onChange={(v) => {
+            const mode = v === 'quantity' ? 'quantity' : 'standard'
+            if (mode === 'quantity' && qtyLocked) {
+              setError('ميزة التسعير حسب الكمية تتطلب ترقية الباقة')
+              return
+            }
+            set({ pricingMode: mode })
+          }}
           options={[
             { value: 'standard', label: 'سعر موحد (ثابت)' },
             { value: 'quantity', label: 'سعر حسب الكمية (أسعار متدرجة)' },
           ]}
-          hint={draft.pricingMode === 'quantity' ? 'العميل يختار باقة محددة بعدد قطع معين بسعر إجمالي ثابت' : undefined}
+          hint={draft.pricingMode === 'quantity' ? 'العميل يختار باقة محددة بعدد قطع معين بسعر إجمالي ثابت' : qtyLocked ? 'التسعير حسب الكمية يتطلب ترقية الباقة' : undefined}
         />
       </div>
       {draft.pricingMode === 'quantity' && (
-        <QuantityTiersEditor tiers={draft.quantityTiers} onChange={(quantityTiers) => set({ quantityTiers })} />
+        <>
+          <QuantityTiersEditor tiers={draft.quantityTiers} onChange={(quantityTiers) => set({ quantityTiers })} />
+          <div className="field mt-1">
+            <Select
+              label="سياسة السعر عند تجاوز أعلى باقة"
+              value={draft.quantityPricingStrategy}
+              onChange={(v) => set({ quantityPricingStrategy: (v === 'repeat' || v === 'last' ? v : 'cap') as QuantityPricingStrategy })}
+              options={[
+                { value: 'cap', label: 'أعلى باقة + المتبقي بالسعر الأساسي (الأكثر أماناً)' },
+                { value: 'repeat', label: 'تكرار أعلى باقة للمتبقي' },
+                { value: 'last', label: 'دائماً سعر أعلى باقة (تجاهل الزيادة)' },
+              ]}
+              hint="ماذا يحدث لو طلب العميل عدداً أكبر من أكبر باقة معروضة؟"
+            />
+          </div>
+        </>
       )}
 
       {section('المخزون')}
@@ -206,11 +274,12 @@ export const ProductForm: FunctionalComponent<Props> = ({ storeId, initial, cate
       </div>
 
       {section('صور المنتج')}
-      <ImageGalleryUploader storeId={storeId} images={draft.images} onChange={(images) => set({ images })} />
+      <ImageGalleryUploader storeId={storeId} productId={getProductId()} images={draft.images} onChange={(images) => set({ images })} />
 
       {section('الألوان')}
       <ColorManager
         storeId={storeId}
+        productId={getProductId()}
         colors={draft.colorOptions}
         images={draft.images}
         onChange={(colorOptions) => set({ colorOptions })}
@@ -227,6 +296,11 @@ export const ProductForm: FunctionalComponent<Props> = ({ storeId, initial, cate
       />
 
       {section('المقاسات والمتغيرات')}
+      {variantLocked && draft.variants.length > 0 && (
+        <div className="form-error-banner mb-1">
+          المخزون حسب المقاس/اللون غير متوفر في باقتك الحالية — رقِّ باقتك لحفظ المتغيرات.
+        </div>
+      )}
       <VariantMatrix
         colors={draft.colorOptions}
         sizes={draft.sizes}

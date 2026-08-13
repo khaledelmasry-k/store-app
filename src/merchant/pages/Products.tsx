@@ -16,14 +16,51 @@ import { Tabs } from '../../shared/components/ui/Tabs'
 import { Drawer } from '../../shared/components/ui/Drawer'
 import { useStore } from '../../shared/hooks/useStore'
 import { useCollection } from '../../shared/hooks/useCollection'
+import { useSubscription } from '../../shared/hooks/useSubscription'
 import { useToast } from '../../shared/hooks/useToast'
 import { productsService } from '../../shared/services/products'
+import { deleteProductImage } from '../../shared/services/uploads'
 import { formatCurrency } from '../../shared/utils/format'
 import { stockTone } from '../../shared/utils/format'
-import type { Product, Category, ProductVariant } from '../../shared/types'
+import { variantStock } from '../../shared/utils/product-variants'
+import { variantLabel } from '../../shared/types'
+import type { Product, Category } from '../../shared/types'
+import { LimitRaiser } from '../components/LimitRaiser'
 import { Icon } from '../../shared/components/ui/Icon'
 import { ProductForm } from '../components/ProductForm'
 import { SmartImage } from '../../shared/components/ui/SmartImage'
+
+interface VariantStockCellProps {
+  product: Product
+}
+
+/**
+ * Per-variant (per-size) stock breakdown for a product. Replaces the previous
+ * single total, so the merchant can see exactly which size is low/out while
+ * others are fine.
+ */
+function VariantStockCell({ product }: VariantStockCellProps) {
+  const variants = (product.variants || []).filter((v) => (v.color || '') === '' || (product.colors || []).includes(v.color || ''))
+  if (variants.length === 0) {
+    return <span className="muted">—</span>
+  }
+  const threshold = product.lowStockThreshold ?? 5
+  return (
+    <div className="variant-stock-cell">
+      {variants.map((v) => {
+        const label = variantLabel(v.color, v.size)
+        const tone = stockTone({ stock: v.stock, lowStockThreshold: threshold })
+        return (
+          <span key={v.id || label} className="variant-stock-row" title={`${label}: ${v.stock ?? 0}`}>
+            <span className="muted small">{label || v.size || '—'}</span>
+            <Badge tone={tone}>{v.stock ?? 0}</Badge>
+          </span>
+        )
+      })}
+      <span className="muted small" style={{ marginTop: 2 }}>المجموع: {variantStock(product)}</span>
+    </div>
+  )
+}
 
 export const MerchantProducts: FunctionalComponent = () => {
   const { store } = useStore()
@@ -33,6 +70,9 @@ export const MerchantProducts: FunctionalComponent = () => {
   const categoriesRes = useCollection<Category>('categories', { storeId })
   const categories = categoriesRes.data
   const toast = useToast()
+  const sub = useSubscription(storeId)
+  const productLimit = Number(sub.plan?.productLimit || 0)
+  const atProductLimit = productLimit > 0 && products.length >= productLimit
 
   const [tab, setTab] = useState<'products' | 'inventory'>('products')
 
@@ -64,28 +104,64 @@ export const MerchantProducts: FunctionalComponent = () => {
     return matchesQuery && matchesStatus && matchesCategory
   })
 
-  const isLow = (p: Product) => (p.stock ?? 0) <= (p.lowStockThreshold ?? 5)
+  const isLow = (p: Product) => {
+    const threshold = p.lowStockThreshold ?? 5
+    const vs = (p.variants || []).map((v) => v.stock || 0)
+    // Variant products: low if ANY size is at/below the threshold (amber or out).
+    if (vs.length > 0) return vs.some((s) => s <= threshold)
+    return (p.stock ?? 0) <= threshold
+  }
+
+  const isOutOfStock = (p: Product) => {
+    const vs = (p.variants || []).map((v) => v.stock || 0)
+    if (vs.length > 0) return vs.every((s) => s === 0)
+    return (p.stock ?? 0) === 0
+  }
 
   const inventoryFiltered = products.filter((p) => {
     const matchesQuery = p.name.includes(stockQuery) || (p.sku || '').includes(stockQuery)
-    const matchesStock = stockFilter === 'all' || (stockFilter === 'low' ? isLow(p) : (p.stock ?? 0) === 0)
+    const matchesStock = stockFilter === 'all' || (stockFilter === 'low' ? isLow(p) : isOutOfStock(p))
     return matchesQuery && matchesStock
   })
 
   const lowCount = products.filter(isLow).length
-  const outCount = products.filter((p) => (p.stock ?? 0) === 0).length
-
-  const variantStock = (p: Product): number => (p.variants || []).reduce((s, v: ProductVariant) => s + (v.stock || 0), 0)
+  const outCount = products.filter(isOutOfStock).length
 
   const remove = async () => {
     if (!deleteTarget) return
+    const target = deleteTarget
     try {
-      await productsService.remove(deleteTarget.id)
+      await productsService.remove(target.id)
+      // Best-effort storage cleanup: delete this product's images ONLY if no
+      // other product still references them (shared URLs are kept alive).
+      await cleanupOrphanedImages(target)
       toast.push('تم حذف المنتج')
     } catch (err: any) {
       toast.push('تعذر حذف المنتج', err?.message || 'حدث خطأ غير متوقع', 'error')
     }
     setDeleteTarget(null)
+  }
+
+  const cleanupOrphanedImages = async (target: Product): Promise<void> => {
+    const urls = target.images || []
+    if (urls.length === 0) return
+    try {
+      const others = await productsService.all()
+      const referenced = new Set<string>()
+      for (const p of others) {
+        for (const img of p.images || []) referenced.add(img)
+      }
+      for (const url of urls) {
+        if (referenced.has(url)) continue
+        try {
+          await deleteProductImage(url)
+        } catch (err) {
+          console.error('storage delete failed', url, err)
+        }
+      }
+    } catch (err) {
+      console.error('storage cleanup scan failed', err)
+    }
   }
 
   const toggleActive = async (p: Product) => {
@@ -98,6 +174,16 @@ export const MerchantProducts: FunctionalComponent = () => {
 
   const applyAdjustment = async () => {
     if (!adjusting || !delta) return
+    // Variant products split their source-of-truth stock per combo; a flat
+    // quick-adjust would silently desync variants and flat stock. Route to the
+    // product form where each color/size stock is edited in place.
+    if ((adjusting.variants || []).length > 0) {
+      setAdjusting(null)
+      setDelta(0)
+      toast.push('منتج بمتغيرات', 'عدّل مخزون كل مقاس/لون من صفحة تعديل المنتج.', 'info')
+      openEdit(adjusting)
+      return
+    }
     const newStock = Math.max(0, (adjusting.stock ?? 0) + delta)
     try {
       await productsService.update(adjusting.id, { stock: newStock })
@@ -126,6 +212,15 @@ export const MerchantProducts: FunctionalComponent = () => {
         subtitle={tab === 'products' ? `${products.length} منتج` : `${lowCount} منخفض • ${outCount} نفد المخزون`}
         actions={<Button icon="add" onClick={openCreate}>منتج جديد</Button>}
       />
+
+      {atProductLimit && (
+        <div className="mt-2 mb-2">
+          <LimitRaiser
+            label="المنتجات"
+            detail={`باقتك الحالية تسمح بـ ${productLimit} منتج كحد أقصى. ارفع باقتك لإضافة المزيد.`}
+          />
+        </div>
+      )}
 
       <Tabs
         tabs={[
@@ -212,9 +307,13 @@ export const MerchantProducts: FunctionalComponent = () => {
                   { key: 'name', header: 'المنتج', render: productCell },
                   { key: 'sku', header: 'SKU', render: (p: Product) => <span className="monospace muted">{p.sku || '—'}</span> },
                   { key: 'stock', header: 'المخزون', render: (p: Product) => <Badge tone={stockTone(p)}>{p.stock}</Badge> },
-                  { key: 'variants', header: 'مخزون المتغيرات', render: (p: Product) => (p.variants || []).length > 0 ? <span className="muted">{variantStock(p)}</span> : <span className="muted">—</span> },
+                   { key: 'variants', header: 'المخزون لكل مقاس', render: (p: Product) => <VariantStockCell product={p} /> },
                   { key: 'threshold', header: 'حد التنبيه', render: (p: Product) => <span className="muted">{p.lowStockThreshold ?? 5}</span> },
-                  { key: 'actions', header: '', render: (p: Product) => <Button variant="ghost" size="sm" icon="add" onClick={() => { setAdjusting(p); setDelta(0) }}>تعديل</Button> },
+                  { key: 'actions', header: '', render: (p: Product) =>
+                    (p.variants || []).length > 0
+                      ? <Button variant="ghost" size="sm" icon="edit" onClick={() => openEdit(p)}>تعديل</Button>
+                      : <Button variant="ghost" size="sm" icon="add" onClick={() => { setAdjusting(p); setDelta(0) }}>تعديل</Button>
+                  },
                 ]}
                 rows={inventoryFiltered}
               />

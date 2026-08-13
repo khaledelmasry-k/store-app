@@ -1,4 +1,4 @@
-import type { CartLine, Product, ProductVariant, QuantityTier } from '../types'
+import type { CartLine, Product, ProductVariant, QuantityPricingStrategy, QuantityTier } from '../types'
 
 /**
  * Shared quantity-pricing engine.
@@ -24,6 +24,68 @@ function sortedTiers(tiers: QuantityTier[] | undefined | null): QuantityTier[] {
   return [...tiers].sort((a, b) => (isBundleTier(a) ? a.quantity : a.minQuantity || 0) - (isBundleTier(b) ? b.quantity : b.minQuantity || 0))
 }
 
+/** The per-unit base price used for remainder units: the qty:1 tier, else `fallback`. */
+function baseUnitPrice(tiers: QuantityTier[] | undefined | null, fallback: number): number {
+  const t1 = (tiers || []).find((t) => isBundleTier(t) && t.quantity === 1)
+  if (t1 && typeof t1.price === 'number') return t1.price
+  return fallback || 0
+}
+
+/**
+ * Total price for `qty` pieces under quantity (bundle) pricing.
+ *
+ * For a request larger than the highest configured tier, the behavior depends
+ * on `strategy` (default 'cap' — the safest commercial option):
+ *   - 'cap'    : highest bundle total + (qty - highestQty) × base unit price.
+ *   - 'repeat' : repeat the highest bundle as many times as it fits, then the
+ *                remainder at base unit price.
+ *   - 'last'   : always the highest bundle total once (overflow ignored).
+ *
+ * Returns null when there are no bundle tiers (caller falls back to standard).
+ */
+export function quantityTotalPrice(
+  tiers: QuantityTier[] | undefined | null,
+  qty: number,
+  strategy: QuantityPricingStrategy = 'cap',
+  fallbackBase = 0,
+): number | null {
+  const sorted = sortedTiers(tiers).filter(isBundleTier)
+  if (sorted.length === 0 || qty < 1) return null
+  const base = baseUnitPrice(tiers, fallbackBase)
+  const highest = sorted[sorted.length - 1]
+  const exact = sorted.find((t) => t.quantity === qty)
+  const largestBelow = [...sorted].reverse().find((t) => t.quantity < qty) || null
+
+  if (strategy === 'last') {
+    if (exact) return exact.price
+    if (qty >= (highest.quantity || 0)) return highest.price
+    if (largestBelow) return largestBelow.price + (qty - (largestBelow.quantity || 0)) * base
+    return qty * base
+  }
+
+  if (strategy === 'repeat') {
+    let remaining = qty
+    let total = 0
+    while (remaining > 0) {
+      const t = [...sorted].reverse().find((x) => (x.quantity || 0) <= remaining) || null
+      if (t) {
+        total += t.price
+        remaining -= t.quantity || 0
+      } else {
+        total += base * remaining
+        remaining = 0
+      }
+    }
+    return total
+  }
+
+  // 'cap' (default)
+  if (exact) return exact.price
+  if (qty > (highest.quantity || 0)) return (highest.price || 0) + (qty - (highest.quantity || 0)) * base
+  if (largestBelow) return largestBelow.price + (qty - (largestBelow.quantity || 0)) * base
+  return qty * base
+}
+
 /**
  * Returns the tier that applies for a given quantity, or null.
  * - bundle tiers: exact match on `quantity`.
@@ -46,14 +108,17 @@ export function tierForQuantity(tiers: QuantityTier[] | undefined | null, qty: n
 
 /**
  * Total price for a quantity under quantity pricing.
- * - bundle tiers: the tier's TOTAL `price`.
+ * - bundle tiers: the tier's TOTAL `price` (handles overflow via `strategy`).
  * - legacy tiers: unit price (callers multiply by qty for compat).
- * Returns null when no tier applies.
+ * Returns null when no bundle tier applies.
  */
-export function tierTotalForQuantity(tiers: QuantityTier[] | undefined | null, qty: number): number | null {
+export function tierTotalForQuantity(
+  tiers: QuantityTier[] | undefined | null,
+  qty: number,
+  strategy: QuantityPricingStrategy = 'cap',
+): number | null {
   if (tiers && tiers.length > 0 && tiers.every(isBundleTier)) {
-    const tier = tierForQuantity(tiers, qty)
-    return tier && typeof tier.price === 'number' ? tier.price : null
+    return quantityTotalPrice(tiers, qty, strategy, 0)
   }
   return null
 }
@@ -64,10 +129,16 @@ export function tierTotalForQuantity(tiers: QuantityTier[] | undefined | null, q
  * - quantity pricing: the matching tier price (or falls back to `basePrice`).
  * - standard pricing: `basePrice`.
  */
-export function unitPriceForQty(basePrice: number, qty: number, pricingMode?: string | null, tiers?: QuantityTier[] | null): number {
+export function unitPriceForQty(
+  basePrice: number,
+  qty: number,
+  pricingMode?: string | null,
+  tiers?: QuantityTier[] | null,
+  strategy: QuantityPricingStrategy = 'cap',
+): number {
   if (pricingMode === 'quantity') {
-    const tier = tierForQuantity(tiers, qty)
-    if (tier && typeof tier.price === 'number') return tier.price
+    const total = quantityTotalPrice(tiers, qty, strategy, basePrice)
+    if (total != null) return total
   }
   return basePrice || 0
 }
@@ -75,21 +146,23 @@ export function unitPriceForQty(basePrice: number, qty: number, pricingMode?: st
 /**
  * Line total using the line's price snapshot + quantity pricing if present.
  *
- * Bundle tiers: returns the tier's TOTAL price (no multiplication).
+ * Bundle tiers: returns the tier's TOTAL price (no multiplication), including
+ * the overflow strategy when quantity exceeds the highest configured tier.
  * Standard pricing / legacy tiers: returns unit price × quantity.
  */
 export function lineSubtotal(line: CartLine): number {
   const qty = Math.max(1, line.quantity || 1)
   if (line.pricingMode === 'quantity' && line.quantityTiers && line.quantityTiers.length > 0) {
-    const bundleTotal = tierTotalForQuantity(line.quantityTiers, qty)
-    if (bundleTotal != null) return bundleTotal
-    // Bundle tier snapshot lost the qty's tier → fall back to the charged total.
-    if (typeof line.lineTotal === 'number') return line.lineTotal
-    // Legacy unit-price tiers: unit × qty.
-    const unit = unitPriceForQty(line.price, qty, line.pricingMode, line.quantityTiers)
+    const strategy = line.quantityPricingStrategy || 'cap'
+    const total = quantityTotalPrice(line.quantityTiers, qty, strategy, line.price)
+    if (total != null) return total
+    // Bundle tier snapshot lost — fall back to the computed total.
+    const unit = unitPriceForQty(line.price, qty, line.pricingMode, line.quantityTiers, strategy)
     return unit * qty
   }
-  if (typeof line.lineTotal === 'number') return line.lineTotal
+  // Standard pricing: always recompute unit × qty. The stored `lineTotal`
+  // snapshot would go stale when the quantity changes in the cart (only
+  // `quantity` is mutated), so it must never be trusted here.
   return (line.price || 0) * qty
 }
 
@@ -103,13 +176,18 @@ export function cartSubtotal(items: CartLine[]): number {
  * - quantity pricing with a bundle tier: returns the tier's TOTAL price.
  * - otherwise: the effective unit price (variant override → base).
  */
-export function productUnitPrice(product: Pick<Product, 'price' | 'variants' | 'pricingMode' | 'quantityTiers'>, variant: ProductVariant | undefined, qty: number): number {
+export function productUnitPrice(
+  product: Pick<Product, 'price' | 'variants' | 'pricingMode' | 'quantityTiers' | 'quantityPricingStrategy'>,
+  variant: ProductVariant | undefined,
+  qty: number,
+): number {
   if (product.pricingMode === 'quantity') {
-    const bundleTotal = tierTotalForQuantity(product.quantityTiers, qty)
-    if (bundleTotal != null) return bundleTotal
+    const strategy = product.quantityPricingStrategy || 'cap'
+    const total = quantityTotalPrice(product.quantityTiers, qty, strategy, product.price)
+    if (total != null) return total
   }
   const base = variant && typeof variant.price === 'number' ? variant.price : product.price
-  return unitPriceForQty(base, qty, product.pricingMode, product.quantityTiers)
+  return unitPriceForQty(base, qty, product.pricingMode, product.quantityTiers, product.quantityPricingStrategy || 'cap')
 }
 
 /**
@@ -123,6 +201,43 @@ export function nextTierQuantity(tiers: QuantityTier[] | undefined | null, qty: 
   const idx = qtys.indexOf(qty)
   const target = idx === -1 ? (dir === 1 ? 0 : qtys.length - 1) : idx + dir
   return qtys[target] ?? null
+}
+
+/**
+ * Computes the savings breakdown for a quantity selection so the UI can show an
+ * understandable offer to a normal customer.
+ *
+ * - `originalTotal` = unit base price × quantity (what it would cost without the offer).
+ * - `offerTotal` = the bundle tier's TOTAL price (null when no tier applies).
+ * - `savings` / `savingsPct` = how much the customer saves vs. the original total.
+ *
+ * Returns `hasOffer: false` for standard pricing or when no bundle tier matches,
+ * in which case `offerTotal`/`savings`/`savingsPct` are null.
+ */
+export interface OfferSavings {
+  originalTotal: number
+  offerTotal: number | null
+  savings: number | null
+  savingsPct: number | null
+  hasOffer: boolean
+}
+export function offerSavings(
+  baseUnitPrice: number,
+  qty: number,
+  pricingMode?: string | null,
+  tiers?: QuantityTier[] | null,
+  strategy: QuantityPricingStrategy = 'cap',
+): OfferSavings {
+  const originalTotal = (baseUnitPrice || 0) * Math.max(1, qty)
+  if (pricingMode === 'quantity' && tiers && tiers.length > 0 && tiers.every(isBundleTier)) {
+    const offer = quantityTotalPrice(tiers, qty, strategy, baseUnitPrice)
+    if (offer != null) {
+      const savings = Math.max(0, originalTotal - offer)
+      const savingsPct = originalTotal > 0 ? Math.round((savings / originalTotal) * 100) : 0
+      return { originalTotal, offerTotal: offer, savings, savingsPct, hasOffer: true }
+    }
+  }
+  return { originalTotal, offerTotal: null, savings: null, savingsPct: null, hasOffer: false }
 }
 
 /** Arabic label for a piece count, e.g. 1 قطعة / 2 قطعتان / 3 قطع. */

@@ -12,10 +12,11 @@ import { Badge } from '../../shared/components/ui/Badge'
 import { EmptyState } from '../../shared/components/ui/EmptyState'
 import { Loading } from '../../shared/components/ui/Loading'
 import { SmartImage } from '../../shared/components/ui/SmartImage'
+import { MerchantLogo } from '../../shared/components/brand/MerchantLogo'
 import { getTemplate } from '../../shared/utils/themes'
 import { formatCurrency } from '../../shared/utils/format'
-import { productUnitPrice, tierForQuantity, nextTierQuantity, piecesLabel } from '../../shared/utils/pricing'
-import { availableSizes, findVariant, variantStock } from '../../shared/utils/product-variants'
+import { productUnitPrice, tierForQuantity, nextTierQuantity, offerSavings, piecesLabel } from '../../shared/utils/pricing'
+import { findVariant, sizeInStock, variantStock } from '../../shared/utils/product-variants'
 import { themeStyleFor } from '../../shared/components/layout/StoreLayout'
 import type { LandingPage, LandingSection, Product, Store } from '../../shared/types'
 import { Icon } from '../../shared/components/ui/Icon'
@@ -239,7 +240,7 @@ export const StoreLanding: FunctionalComponent<Props> = ({ slug }) => {
   const requiresSize = hasVariants && (product.sizes || []).length > 0
   const selectionComplete = (!requiresColor || !!color) && (!requiresSize || !!size)
   const variant = hasVariants && selectionComplete ? findVariant(product!, { color, size }) : undefined
-  const displayPrice = hasVariants && selectionComplete && variant ? variant.price ?? product!.price : product?.price
+  const displayPrice = hasVariants && selectionComplete ? (variant?.price ?? product!.price) : product?.price
   const unitPrice = product ? productUnitPrice(product, variant, qty) : 0
   const activeTier = tierForQuantity(product?.quantityTiers, qty)
   const isQuantity = product?.pricingMode === 'quantity'
@@ -256,7 +257,7 @@ export const StoreLanding: FunctionalComponent<Props> = ({ slug }) => {
       setQty(Math.max(1, qty + dir))
     }
   }
-  const outOfStock = product ? variantStock(product, color, size) <= 0 : true
+  const outOfStock = product ? variantStock(product, color, size, variant?.id) <= 0 : true
   // Gate on the cart being pinned to this store: `setScopeSlug` is applied in an
   // effect, so until it flushes the add would land in the unscoped `mk-cart` key.
   const scopePinned = !!store?.slug && cart.scopeSlug === store.slug
@@ -264,6 +265,14 @@ export const StoreLanding: FunctionalComponent<Props> = ({ slug }) => {
 
   const addToCart = () => {
     if (!canAdd || !product) return
+    // Never add more than the in-stock units for the current selection.
+    // For quantity (bundle) pricing a configured tier may legally exceed the
+    // available stock — surface that instead of silently overselling.
+    const availStock = hasVariants ? variantStock(product!, color, size, variant?.id) : product.stock ?? 0
+    if (qty > Math.max(availStock, 0)) {
+      toast.push('الكمية غير متوفرة', 'الكمية المطلوبة غير متوفرة لهذه المجموعة.', 'error')
+      return
+    }
     cart.add({
       productId: product.id,
       name: product.name,
@@ -275,7 +284,9 @@ export const StoreLanding: FunctionalComponent<Props> = ({ slug }) => {
       variantId: variant?.id,
       pricingMode: product.pricingMode,
       quantityTiers: product.quantityTiers,
-      lineTotal: unitPrice,
+      quantityPricingStrategy: product.quantityPricingStrategy,
+      lineTotal: product.pricingMode === 'quantity' ? unitPrice : unitPrice * qty,
+      maxQty: Math.max(availStock, 0),
     })
     toast.push('تمت إضافة المنتج إلى السلة')
   }
@@ -285,8 +296,7 @@ export const StoreLanding: FunctionalComponent<Props> = ({ slug }) => {
       <header className="lp-header">
         <div className="lp-container lp-header-inner">
           <Link href={`/store/${store?.slug}`} className="lp-brand">
-            {store?.logo ? <SmartImage src={store.logo} alt={store?.name || ''} className="store-logo" placeholderClassName="store-logo" /> : <Icon name="storefront" className="lp-brand-mark" />}
-            <strong>{store?.name || 'المتجر'}</strong>
+             <MerchantLogo store={store} variant="landing" />
           </Link>
           <Link href={`/store/${store?.slug}`} className="btn btn-outline btn-sm">زيارة المتجر</Link>
         </div>
@@ -341,17 +351,25 @@ export const StoreLanding: FunctionalComponent<Props> = ({ slug }) => {
                     <div className="qty-tier-table mb-2">
                       <span className="field-label">اختر الباقة</span>
                       <div className="qty-tier-list">
-                        {tiers.map((t) => (
-                          <button
-                            key={t.quantity}
-                            type="button"
-                            className={`qty-tier-row qty-tier-btn${activeTier && activeTier.quantity === t.quantity ? ' qty-tier-row--active' : ''}`}
-                            onClick={() => setQty(t.quantity)}
-                          >
-                            <span>{t.quantity} {piecesLabel(t.quantity)}</span>
-                            <span>{formatCurrency(t.price)}</span>
-                          </button>
-                        ))}
+                         {tiers.map((t) => {
+                            const sv = offerSavings(displayPrice, t.quantity, product?.pricingMode, product?.quantityTiers, product?.quantityPricingStrategy)
+                           return (
+                             <button
+                               key={t.quantity}
+                               type="button"
+                               className={`qty-tier-row qty-tier-btn${activeTier && activeTier.quantity === t.quantity ? ' qty-tier-row--active' : ''}`}
+                               onClick={() => setQty(t.quantity)}
+                             >
+                               <span>{t.quantity} {piecesLabel(t.quantity)}</span>
+                               <span className="qty-tier-price">{formatCurrency(t.price)}</span>
+                               {sv.hasOffer && (sv.savings ?? 0) > 0 && (
+                                 <span className="qty-tier-save">
+                                   <s>{formatCurrency(sv.originalTotal)}</s> وفر {formatCurrency(sv.savings!)} ({sv.savingsPct}%)
+                                 </span>
+                               )}
+                             </button>
+                           )
+                         })}
                       </div>
                     </div>
                   )}
@@ -374,7 +392,7 @@ export const StoreLanding: FunctionalComponent<Props> = ({ slug }) => {
                       <span className="field-label">المقاس:</span>
                       <div className="flex flex-wrap mt-1">
                         {(product.sizes || []).map((s) => {
-                          const disabled = hasVariants && !availableSizes(product, color).includes(s)
+                          const disabled = hasVariants && !sizeInStock(product, color, s)
                           return (
                             <button key={s} type="button" className={`btn size-btn${size === s ? ' size-btn--active' : ''}${disabled ? ' size-btn--disabled' : ''}`} disabled={disabled} onClick={() => { setSize(s); setQty(minQty) }}>
                               {s}

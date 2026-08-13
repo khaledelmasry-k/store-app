@@ -30,6 +30,7 @@ const PlatformOrders = lazy(() => import('./platform/pages/Orders'))
 const PlatformOrderDetails = lazy(() => import('./platform/pages/OrderDetails'))
 const PlatformCustomers = lazy(() => import('./platform/pages/Customers'))
 const PlatformSubscriptions = lazy(() => import('./platform/pages/Subscriptions'))
+const PlatformSubscriptionDetail = lazy(() => import('./platform/pages/Subscription'))
 const PlatformPlans = lazy(() => import('./platform/pages/Plans'))
 const PlatformPayments = lazy(() => import('./platform/pages/Payments'))
 const PlatformCoupons = lazy(() => import('./platform/pages/Coupons'))
@@ -101,6 +102,10 @@ function PlatformOrderRoute({ params }: { params: Record<string, string> }) {
   return <PlatformOrderDetails id={params.id} />
 }
 
+function PlatformSubscriptionRoute({ params }: { params: Record<string, string> }) {
+  return <PlatformSubscriptionDetail id={params.id} />
+}
+
 function MerchantOrderRoute({ params }: { params: Record<string, string> }) {
   return <MerchantOrderDetails id={params.id} />
 }
@@ -129,6 +134,7 @@ function PlatformRoutes() {
       <Route path="/orders/:id" component={PlatformOrderRoute} />
       <Route path="/customers" component={() => <PlatformCustomers />} />
       <Route path="/subscriptions" component={() => <PlatformSubscriptions />} />
+      <Route path="/subscriptions/:id" component={PlatformSubscriptionRoute} />
       <Route path="/plans" component={() => <PlatformPlans />} />
       <Route path="/payments" component={() => <PlatformPayments />} />
       <Route path="/transactions" component={() => <Redirect to="/platform/payments" replace />} />

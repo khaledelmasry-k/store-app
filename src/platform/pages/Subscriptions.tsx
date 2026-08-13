@@ -1,5 +1,6 @@
 import { FunctionalComponent } from 'preact'
 import { useState } from 'preact/hooks'
+import { Link } from 'wouter'
 import { PageHeader } from '../../shared/components/ui/PageHeader'
 import { Card } from '../../shared/components/ui/Card'
 import { StatsCard } from '../../shared/components/ui/StatsCard'
@@ -99,15 +100,17 @@ export const PlatformSubscriptions: FunctionalComponent = () => {
             {
               key: 'actions',
               header: 'الإجراءات',
-              render: (s: Subscription & { _status: string }) =>
-                s._status === 'pending' ? (
-                  <div className="flex flex-gap-sm">
-                    <Button size="sm" icon="check" loading={approvingId === s.id} onClick={() => handleApprove(s.id)}>تفعيل</Button>
-                    <Button size="sm" variant="ghost" icon="close" loading={rejectingId === s.id} onClick={() => handleReject(s.id)}>رفض</Button>
-                  </div>
-                ) : (
-                  <span className="muted small">مكتمل</span>
-                ),
+              render: (s: Subscription & { _status: string }) => (
+                <div className="flex flex-gap-sm">
+                  <Link href={`/platform/subscriptions/${s.id}`}><Button size="sm" variant="ghost" icon="visibility">تفاصيل</Button></Link>
+                  {s._status === 'pending' && (
+                    <>
+                      <Button size="sm" icon="check" loading={approvingId === s.id} onClick={() => handleApprove(s.id)}>تفعيل</Button>
+                      <Button size="sm" variant="ghost" icon="close" loading={rejectingId === s.id} onClick={() => handleReject(s.id)}>رفض</Button>
+                    </>
+                  )}
+                </div>
+              ),
             },
           ]}
           rows={filtered}

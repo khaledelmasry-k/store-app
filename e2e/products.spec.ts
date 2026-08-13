@@ -102,6 +102,22 @@ const PNG = Buffer.from(
   'base64',
 )
 
+// ─────────────────────────────────────────────────────────────
+// Emulator Storage helpers (REST over http://localhost:9199).
+// A download URL looks like
+//   http://127.0.0.1:9199/v0/b/<bucket>/o/<url-encoded-object-path>
+function storageUrlParts(url: string): { bucket: string; object: string } {
+  const u = new URL(url)
+  const seg = u.pathname.split('/') // ['', 'v0', 'b', '<bucket>', 'o', '<object>']
+  return { bucket: seg[3], object: decodeURIComponent(seg.slice(5).join('/')) }
+}
+
+async function storageObjectExists(url: string): Promise<boolean> {
+  const { bucket, object } = storageUrlParts(url)
+  const res = await fetch(`http://127.0.0.1:9199/v0/b/${bucket}/o/${encodeURIComponent(object)}`)
+  return res.status === 200
+}
+
 test.describe.configure({ mode: 'serial' })
 
 test('merchant creates a variant product with uploaded images, colors, sizes, stock', async ({ page }) => {
@@ -167,6 +183,11 @@ test('merchant creates a variant product with uploaded images, colors, sizes, st
   expect(saved!.sizes).toEqual(['M', 'L'])
   expect(saved!.images).toHaveLength(4)
   expect(saved!.images[0]).toMatch(/^http/)
+  // 2026 storage layout: every image lives in the product's OWN folder
+  // `stores/{storeId}/products/{productId}/...` (product id pre-generated
+  // before upload). The id embedded in the URL is the product doc id.
+  const decodedFirst = decodeURIComponent(saved!.images[0])
+  expect(decodedFirst).toContain(`/stores/${store.id}/products/${saved!.id}/`)
   expect(saved!.stock).toBe(10)
   expect(saved!.variants[0].price).toBe(179)
   await expect
@@ -247,6 +268,182 @@ test('checkout writes variantId to the order and decrements that variant stock',
   expect(after.variants[0].stock).toBe(4)
   expect(after.variants[1].stock).toBe(0)
   expect(after.stock).toBe(9)
+})
+
+test('checkout of M×2 decrements exactly the matching variant, leaving the other combos untouched', async ({ page }) => {
+  const { name, slug } = ctx()
+  const product = (await pollValue(() => productByName(name), (p) => p != null))!
+  const store = (await storeBySlug(slug))!
+  const before = (await pollValue(() => productByName(name), (p) => p != null))!
+
+  await page.goto(`/store/${slug}/product/` + product.id, { waitUntil: 'domcontentloaded' })
+  await page.getByRole('button', { name: /أسود/ }).click()
+  await page.getByRole('button', { name: 'M', exact: true }).click()
+  // Stepper: qty 1 → 2. The add guard caps qty at the variant's stock, and the
+  // M variant has stock ≥2 here, so the step is allowed.
+  await page.locator('.qty-stepper .qty-btn').nth(1).click()
+  await expect(page.locator('.qty-stepper strong')).toHaveText('2')
+  await page.getByRole('button', { name: 'أضف إلى السلة' }).click()
+  await page.goto(`/store/${slug}/cart`, { waitUntil: 'domcontentloaded' })
+  await expect(page.locator('.cart-line')).toContainText('أسود • M')
+  await expect(page.locator('.cart-line .qty-stepper strong')).toHaveText('2')
+  await page.getByRole('button', { name: 'إتمام الطلب' }).click()
+
+  await page.locator('.field', { hasText: 'الاسم الكامل' }).locator('input').fill('عميل الكمية')
+  await page.locator('.field', { hasText: 'رقم الهاتف' }).locator('input').fill('01011112223')
+  await page.locator('.field', { hasText: 'المحافظة' }).locator('select').selectOption({ label: 'الجيزة' })
+  await page.locator('.field', { hasText: 'المدينة' }).locator('input').fill('المعادي')
+  await page.locator('.field', { hasText: 'العنوان بالتفصيل' }).locator('textarea').fill('شارع 2')
+  await page.getByRole('button', { name: 'تأكيد الطلب' }).click()
+  await expect(page.getByText('تم إنشاء طلبك بنجاح')).toBeVisible({ timeout: 30000 })
+
+  const order = (await pollValue(() => latestOrder(store.id), (o) => o != null && o.items.length > 0))!
+  const item = order!.items[0]
+  expect(item.quantity).toBe(2)
+  expect(item.variantId).toBe(before.variants[0].id)
+
+  // M (أسود/M) dropped 4 → 2; every other combo is untouched; flat stock is sum.
+  const after = (await productByName(name))!
+  expect(after.variants[0].stock).toBe(2) // أسود/M: decremented by exactly 2
+  expect(after.variants[1].stock).toBe(0) // أسود/L: untouched
+  expect(after.variants[2].stock).toBe(3) // أبيض/M: untouched
+  expect(after.variants[3].stock).toBe(2) // أبيض/L: untouched
+  expect(after.stock).toBe(7)
+})
+
+test('concurrent oversell: two checkouts racing for the last unit — exactly one succeeds, stock hits 0', async ({ browser }) => {
+  const { name, slug } = ctx()
+  const store = (await storeBySlug(slug))!
+  const product = (await pollValue(() => productByName(name), (p) => p != null))!
+
+  // Force the أسود/M variant down to a single unit; flat stock = sum of combos.
+  const tightVariants = product.variants.map((v: any, i: number) => (i === 0 ? { ...v, stock: 1 } : v))
+  await db.collection('products').doc(product.id).update({ variants: tightVariants, stock: 6 })
+
+  const ordersBefore = (await db.collection('orders').where('storeId', '==', store.id).get()).size
+
+  const prepareOrder = async (page: Page) => {
+    await page.goto(`/store/${slug}/product/` + product.id, { waitUntil: 'domcontentloaded' })
+    await page.getByRole('button', { name: /أسود/ }).click()
+    await page.getByRole('button', { name: 'M', exact: true }).click()
+    await expect(page.getByText('متوفر: 1')).toBeVisible()
+    await page.getByRole('button', { name: 'أضف إلى السلة' }).click()
+    await page.goto(`/store/${slug}/cart`, { waitUntil: 'domcontentloaded' })
+    await expect(page.locator('.cart-line')).toHaveCount(1)
+    await page.getByRole('button', { name: 'إتمام الطلب' }).click()
+    await page.locator('.field', { hasText: 'الاسم الكامل' }).locator('input').fill('عميل السباق')
+    await page.locator('.field', { hasText: 'رقم الهاتف' }).locator('input').fill('01011112224')
+    await page.locator('.field', { hasText: 'المحافظة' }).locator('select').selectOption({ label: 'الجيزة' })
+    await page.locator('.field', { hasText: 'المدينة' }).locator('input').fill('المعادي')
+    await page.locator('.field', { hasText: 'العنوان بالتفصيل' }).locator('textarea').fill('شارع 3')
+  }
+
+  // Independent storage/contexts so each racer owns its own cart and fires its
+  // own createOrder call. Both hit confirm at the same instant.
+  const ctxA = await browser.newContext()
+  const ctxB = await browser.newContext()
+  const pageA = await ctxA.newPage()
+  const pageB = await ctxB.newPage()
+  await prepareOrder(pageA)
+  await prepareOrder(pageB)
+  await Promise.all([
+    pageA.getByRole('button', { name: /تأكيد الطلب/ }).click(),
+    pageB.getByRole('button', { name: /تأكيد الطلب/ }).click(),
+  ])
+
+  const resultOf = async (p: Page): Promise<'ok' | 'err'> => {
+    const ok = p.getByText('تم إنشاء طلبك بنجاح').first()
+    const err = p.getByText('تعذر إرسال الطلب').first()
+    // Race both outcomes: the loser's error toast auto-dismisses within a few
+    // seconds, so a sequential "wait ok, then err" would miss it.
+    return Promise.race([
+      ok.waitFor({ state: 'visible', timeout: 30000 }).then(() => 'ok' as const),
+      err.waitFor({ state: 'visible', timeout: 30000 }).then(() => 'err' as const),
+    ])
+  }
+  const [rA, rB] = await Promise.all([resultOf(pageA), resultOf(pageB)])
+
+  // Exactly one racer wins the transaction; the other is rejected with
+  // failed-precondition (الكمية غير متوفرة) because the stock was already spent.
+  const outcomes = [rA, rB].sort().join(',')
+  expect(outcomes).toBe('err,ok')
+
+  const ordersAfter = (await db.collection('orders').where('storeId', '==', store.id).get()).size
+  expect(ordersAfter).toBe(ordersBefore + 1)
+
+  await ctxA.close()
+  await ctxB.close()
+
+  const depleted = (await productByName(name))!
+  expect(depleted.variants[0].stock).toBe(0)
+  expect(depleted.stock).toBe(5)
+
+  // Restore the M variant for the downstream cart-persistence test.
+  const restored = depleted.variants.map((v: any, i: number) => (i === 0 ? { ...v, stock: 5 } : v))
+  await db.collection('products').doc(product.id).update({ variants: restored, stock: 10 })
+})
+
+test('cancelling an order restores ONLY the purchased variant stock (other sizes untouched)', async ({ page }) => {
+  const { uniq, name, slug, email } = ctx()
+  const product = (await pollValue(() => productByName(name), (p) => p != null))!
+  const store = (await storeBySlug(slug))!
+
+  // Reset this product to a deterministic per-variant stock map so the assertions
+  // do not depend on ordering of the earlier checkout tests in this serial run.
+  // Layout is أسود/M, أسود/L, أبيض/M, أبيض/L.
+  const resetVariants = product.variants.map((v: any, i: number) => ({
+    ...v,
+    stock: i === 0 ? 5 : i === 1 ? 0 : i === 2 ? 3 : 2,
+  }))
+  await db.collection('products').doc(product.id).update({ variants: resetVariants, stock: 10 })
+  await pollValue(async () => ((await productByName(name))!.variants[0].stock === 5), Boolean)
+
+  // Place an order for أسود/M (the 5-stock variant), qty 2 — only M is decremented.
+  await page.goto(`/store/${slug}/product/` + product.id, { waitUntil: 'domcontentloaded' })
+  await page.getByRole('button', { name: /أسود/ }).click()
+  await page.getByRole('button', { name: 'M', exact: true }).click()
+  await page.locator('.qty-stepper .qty-btn').nth(1).click() // qty 1 -> 2
+  await expect(page.locator('.qty-stepper strong')).toHaveText('2')
+  await page.getByRole('button', { name: 'أضف إلى السلة' }).click()
+  await page.goto(`/store/${slug}/cart`, { waitUntil: 'domcontentloaded' })
+  await page.getByRole('button', { name: 'إتمام الطلب' }).click()
+  await page.locator('.field', { hasText: 'الاسم الكامل' }).locator('input').fill('عميل الإلغاء')
+  await page.locator('.field', { hasText: 'رقم الهاتف' }).locator('input').fill('01099990001')
+  await page.locator('.field', { hasText: 'المحافظة' }).locator('select').selectOption({ label: 'الجيزة' })
+  await page.locator('.field', { hasText: 'المدينة' }).locator('input').fill('المعادي')
+  await page.locator('.field', { hasText: 'العنوان بالتفصيل' }).locator('textarea').fill('شارع الإلغاء')
+  await page.getByRole('button', { name: 'تأكيد الطلب' }).click()
+  await expect(page.getByText('تم إنشاء طلبك بنجاح')).toBeVisible({ timeout: 30000 })
+
+  const order = (await pollValue(() => latestOrder(store.id), (o) => o != null && o.items.length > 0))!
+  const item = order!.items[0]
+  expect(item.variantId).toBe(product.variants[0].id)
+  expect(item.quantity).toBe(2)
+
+  // Checkout decremented ONLY the matched variant; other sizes untouched, aggregate recomputed.
+  const afterOrder = (await productByName(name))!
+  expect(afterOrder.variants[0].stock).toBe(3) // أسود/M: 5 -> 3
+  expect(afterOrder.variants[1].stock).toBe(0) // أسود/L: untouched
+  expect(afterOrder.variants[2].stock).toBe(3) // أبيض/M: untouched
+  expect(afterOrder.variants[3].stock).toBe(2) // أبيض/L: untouched
+  expect(afterOrder.stock).toBe(8) // aggregate = sum of variants
+
+  // Cancel from the merchant dashboard via OrderDetails → Select CANCELLED → Update.
+  await login(page, 'merchant', email, 'Products12345')
+  await page.waitForURL(/\/dashboard/, { timeout: 15000 })
+  await page.goto(`/dashboard/orders/${order.id}`, { waitUntil: 'domcontentloaded' })
+  await page.locator('select').selectOption({ value: 'CANCELLED' })
+  await page.getByRole('button', { name: 'تحديث' }).click()
+  await expect(page.getByText('تم تحديث حالة الطلب')).toBeVisible({ timeout: 15000 })
+
+  // Cancel restored ONLY the same variant by exactly qty; others still untouched.
+  const afterCancel = (await productByName(name))!
+  expect(afterCancel.variants[0].stock).toBe(5) // restored: 3 -> 5
+  expect(afterCancel.variants[1].stock).toBe(0) // untouched
+  expect(afterCancel.variants[2].stock).toBe(3) // untouched
+  expect(afterCancel.variants[3].stock).toBe(2) // untouched
+  expect(afterCancel.stock).toBe(10) // aggregate recomputed
+  await page.screenshot({ path: `e2e/shots/products-cancel-restore-${uniq}.png` })
 })
 
 test('cart persists variant selection across reload and re-login', async ({ page }) => {
@@ -574,4 +771,45 @@ test('cart stepper for a bundle line snaps between configured tiers', async ({ p
   await page.locator('.cart-line .qty-stepper .qty-btn').nth(0).click()
   await expect(page.locator('.cart-line')).toContainText('2')
   await expect(page.locator('.cart-line')).toContainText(/٩٠٠|900/)
+})
+
+test('deleting a product removes its own storage images but keeps shared ones', async ({ page }) => {
+  const { uniq, email, name: vname } = ctx()
+  const variantProduct = (await pollValue(() => productByName(vname), (p) => p != null))!
+  const sharedUrl = variantProduct.images![1] // lives in the variant product's folder
+  const dname = `منتج الحذف ${uniq}`
+
+  await login(page, 'merchant', email, 'Products12345')
+  await page.waitForURL(/\/dashboard/, { timeout: 15000 })
+  await page.goto('/dashboard/products', { waitUntil: 'domcontentloaded' })
+  await page.getByRole('button', { name: 'منتج جديد' }).click()
+  await page.locator('.drawer .field', { hasText: 'اسم المنتج' }).locator('input').fill(dname)
+  await page.locator('.drawer input[type="number"]').nth(0).fill('88')
+  await page.locator('.image-gallery-field input[type="file"]').setInputFiles([
+    { name: 'del.png', mimeType: 'image/png', buffer: PNG },
+  ])
+  await expect(page.locator('.image-tile-img')).toHaveCount(1, { timeout: 15000 })
+  await page.getByRole('button', { name: 'حفظ ونشر' }).click()
+  await expect(page.locator('.drawer')).toHaveCount(0, { timeout: 15000 })
+
+  // The disposable product now references its own uploaded file PLUS a URL
+  // shared with another product. Deleting it must drop only the orphaned file.
+  const created = (await pollValue(() => productByName(dname), (p) => p != null))!
+  const ownUrl = created.images![0]
+  expect(ownUrl).not.toBe(sharedUrl)
+  await db.collection('products').doc(created.id).update({ images: [ownUrl, sharedUrl] })
+
+  // Fresh list so the row carries the admin-updated images, then delete via UI.
+  await page.reload({ waitUntil: 'domcontentloaded' })
+  const row = page.locator('.table tbody tr, .card-table-card').filter({ hasText: dname }).first()
+  await row.getByTitle('حذف').click()
+  await page.getByRole('dialog').getByRole('button', { name: 'حذف' }).click()
+
+  // Product document is gone…
+  await pollValue(() => productByName(dname), (p) => p == null)
+  // …its own uploaded image is removed from storage…
+  await pollValue(() => storageObjectExists(ownUrl), (exists) => exists === false, 15000)
+  // …and the shared image (still referenced by the variant product) survives.
+  expect(await storageObjectExists(sharedUrl)).toBe(true)
+  await page.screenshot({ path: `e2e/shots/products-deleted-${uniq}.png` })
 })

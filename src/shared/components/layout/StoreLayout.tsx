@@ -2,12 +2,13 @@ import { FunctionalComponent } from 'preact'
 import { useEffect, useState } from 'preact/hooks'
 import { Link, useLocation } from 'wouter'
 import { useAuth } from '../../hooks/useAuth'
+import { setSeo } from '../../utils/seo'
 import { useCart } from '../../hooks/useCart'
 import { useStore } from '../../hooks/useStore'
 import { logout } from '../../services/auth'
 import { Dropdown } from '../ui/Dropdown'
 import { Avatar } from '../ui/Avatar'
-import { SmartImage } from '../ui/SmartImage'
+import { MerchantLogo } from '../brand/MerchantLogo'
 import { useTheme } from '../../hooks/useTheme'
 import { getTemplate } from '../../utils/themes'
 import { contrastFor, hexToRgba, shadeHex } from '../../utils/color'
@@ -44,18 +45,19 @@ export const StoreLayout: FunctionalComponent<Props> = ({ children }) => {
   const templateClass = getTemplate(store?.theme?.template).cssClass
   const storeDark = !!store?.theme?.darkMode ? ' store-dark' : ''
 
-  // SEO: title + meta description for the storefront.
+  // SEO: title, description, OG, Twitter, and canonical for the storefront.
   useEffect(() => {
     if (!store?.name) return
-    document.title = store.seoTitle || `${store.name} — متجر M&K`
-    let meta = document.querySelector<HTMLMetaElement>('meta[name="description"]')
-    if (!meta) {
-      meta = document.createElement('meta')
-      meta.name = 'description'
-      document.head.appendChild(meta)
-    }
-    meta.content = store.seoDescription || store.description || `تسوق من ${store.name} على منصة M&K`
-  }, [store?.name, store?.seoTitle, store?.seoDescription, store?.description])
+    const title = store.seoTitle || `${store.name} — متجر M&K`
+    const description = store.seoDescription || store.description || `تسوق من ${store.name} على منصة M&K`
+    setSeo({
+      title,
+      description,
+      type: 'website',
+      url: `${window.location.origin}/store/${store.slug}`,
+      image: store.logo || store.heroImage || null,
+    })
+  }, [store?.name, store?.slug, store?.seoTitle, store?.seoDescription, store?.description, store?.logo, store?.heroImage])
 
   const canPreview =
     !!user && (user.role === 'superAdmin' || (user.role === 'merchant' || user.role === 'staff') && (user.storeIds || []).includes(store?.id || ''))
@@ -98,17 +100,14 @@ export const StoreLayout: FunctionalComponent<Props> = ({ children }) => {
   return (
     <div className={`store-shell ${templateClass}${storeDark}`} style={themeStyleFor(store?.theme?.primary, store?.theme?.secondary)}>
       <header className="store-header">
-        <button type="button" className="icon-btn store-menu-btn" onClick={() => setMenuOpen(!menuOpen)} title="القائمة">
-          <Icon name={menuOpen ? 'close' : 'menu'} />
-        </button>
-        <Link href={base} className="store-brand">
-          {store?.logo ? (
-            <SmartImage src={store.logo} alt={store.name} className="store-logo" placeholderClassName="store-logo" />
-          ) : (
-            <Icon name="storefront" className="store-brand-mark" />
-          )}
-          <strong>{store?.name || 'المتجر'}</strong>
-        </Link>
+        <div className="store-header-start">
+          <button type="button" className="icon-btn store-menu-btn" onClick={() => setMenuOpen(!menuOpen)} title="القائمة">
+            <Icon name={menuOpen ? 'close' : 'menu'} />
+          </button>
+          <Link href={base} className="store-brand">
+            <MerchantLogo store={store} variant="header" />
+          </Link>
+        </div>
         <nav className="store-nav">{navLinks()}</nav>
         <form className="store-search" onSubmit={submitSearch}>
           <Icon name="search" className="store-search-icon" />
@@ -170,8 +169,7 @@ export const StoreLayout: FunctionalComponent<Props> = ({ children }) => {
         <div className="store-footer-grid">
           <div>
             <div className="store-footer-brand">
-              {store?.logo ? <SmartImage src={store.logo} alt={store.name} className="store-logo" placeholderClassName="store-logo" /> : <Icon name="storefront" />}
-              <strong>{store?.name || 'M&K'}</strong>
+               <MerchantLogo store={store} variant="footer" />
             </div>
             <p className="muted small">{store?.description || 'متجرك على منصة M&K'}</p>
           </div>

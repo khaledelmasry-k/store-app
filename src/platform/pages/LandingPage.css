@@ -495,7 +495,7 @@
 }
 
 #features, #how-it-works, #pricing, #faq {
-  scroll-margin-top: 84px;
+  scroll-margin-block-start: 84px;
 }
 
 html {
@@ -1166,8 +1166,8 @@ html {
   .trust-strip-tagline {
     width: auto;
     margin: 0;
-    padding-right: 2rem;
-    border-right: 1px solid rgba(255, 255, 255, 0.35);
+    padding-inline-end: 2rem;
+    border-inline-end: 1px solid rgba(255, 255, 255, 0.35);
   }
 }
 
@@ -1175,9 +1175,56 @@ html {
 
 .pricing-grid {
   display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(260px, 1fr));
+  grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
   gap: 1.2rem;
   align-items: stretch;
+}
+
+.pricing-grid-col {
+  display: flex;
+  flex-direction: column;
+  gap: 0.9rem;
+}
+
+/* Cards share the column height (grid rows already stretch) so the plan-scoped
+   CTA links sit on the same baseline across every column. */
+.pricing-grid-col > .mk-pricing-card {
+  flex: 1 1 auto;
+}
+
+.pricing-toggle {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.3rem;
+  background: #eef2ff;
+  border: 1px solid #e0e7ff;
+  border-radius: 999px;
+  padding: 0.3rem;
+  margin: 0 auto 1.6rem;
+}
+
+.pricing-toggle button {
+  border: 0;
+  background: transparent;
+  padding: 0.55rem 1.2rem;
+  border-radius: 999px;
+  font-size: 0.92rem;
+  font-weight: 600;
+  color: #6366f1;
+  cursor: pointer;
+  transition: background 0.16s, color 0.16s;
+}
+
+.pricing-toggle button.is-active {
+  background: #6366f1;
+  color: #fff;
+}
+
+.pricing-save {
+  font-size: 0.72rem;
+  font-weight: 700;
+  color: inherit;
+  opacity: 0.85;
 }
 
 .pricing-card {

@@ -5,10 +5,13 @@ import { ThemeContext } from './theme-context'
 const KEY = 'mk-theme'
 
 export const ThemeProvider: FunctionalComponent = ({ children }) => {
+  // The site defaults to LIGHT mode. The OS `prefers-color-scheme` is NEVER
+  // used on first visit — only an explicit user choice (saved in localStorage)
+  // overrides the default, so a fresh browser / new store always starts light.
   const [theme, setThemeState] = useState<'light' | 'dark'>(() => {
     const saved = localStorage.getItem(KEY)
     if (saved === 'light' || saved === 'dark') return saved
-    return window.matchMedia?.('(prefers-color-scheme: dark)').matches ? 'dark' : 'light'
+    return 'light'
   })
 
   useEffect(() => {

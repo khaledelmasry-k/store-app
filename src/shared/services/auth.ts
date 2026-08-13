@@ -22,6 +22,8 @@ export interface RegisterInput {
   storeName: string
   storeRef: string
   planId?: string
+  /** 'monthly' (default) or 'yearly' — charged for the subscription period. */
+  billingCycle?: 'monthly' | 'yearly'
 }
 
 export function login(creds: Credentials) {
@@ -148,6 +150,24 @@ export function getMerchantSubscriptionCallable(input: { storeId: string }) {
   return fn(input)
 }
 
+export function changeSubscriptionPlanCallable(input: { storeId: string; planId: string }) {
+  const functions = getFunctions()
+  const fn = httpsCallable(functions, 'changeSubscriptionPlan')
+  return fn(input)
+}
+
+export function checkStorageQuotaCallable(input: { storeId: string }) {
+  const functions = getFunctions()
+  const fn = httpsCallable(functions, 'checkStorageQuota')
+  return fn(input)
+}
+
+export function getBillingSnapshotsCallable(input: { storeId: string }) {
+  const functions = getFunctions()
+  const fn = httpsCallable<{ storeId: string }, { snapshots: any[] }>(functions, 'getBillingSnapshots')
+  return fn(input)
+}
+
 export function getMerchantPaymentInfoCallable() {
   const functions = getFunctions()
   const fn = httpsCallable(functions, 'getMerchantPaymentInfo')
@@ -187,6 +207,12 @@ export function setStorePublishedCallable(input: { storeId: string; published: b
 export function createLandingPageCallable(input: Record<string, unknown>) {
   const functions = getFunctions()
   const fn = httpsCallable(functions, 'createLandingPage')
+  return fn(input)
+}
+
+export function createProductCallable(input: { storeId: string; productId: string; data: Record<string, unknown> }) {
+  const functions = getFunctions()
+  const fn = httpsCallable(functions, 'createProduct')
   return fn(input)
 }
 

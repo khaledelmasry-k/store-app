@@ -4,6 +4,7 @@ import { Link } from 'wouter'
 import { Button } from '../../shared/components/ui/Button'
 import { BrandMark } from '../../shared/components/brand/BrandMark'
 import { useCollection } from '../../shared/hooks/useCollection'
+import { PricingCard } from '../../shared/components/subscription/PricingCard'
 import { formatCurrency } from '../../shared/utils/format'
 import { EmptyState } from '../../shared/components/ui/EmptyState'
 import type { SubscriptionPlan } from '../../shared/types'
@@ -222,8 +223,10 @@ function FeatureVisual({ kind }: { kind: FvKind }) {
 export const LandingPage: FunctionalComponent = () => {
   const [openFaq, setOpenFaq] = useState<number | null>(0)
   const [menuOpen, setMenuOpen] = useState(false)
+  const [yearly, setYearly] = useState(false)
   const plansRes = useCollection<SubscriptionPlan>('plans', { orderBy: { field: 'priceMonthly' } })
   const plans = useMemo(() => plansRes.data.filter((p) => p.active !== false), [plansRes.data])
+  const recommendedPlanId = plans.find((p) => p.isPopular)?.id
 
   useEffect(() => {
     const els = Array.from(document.querySelectorAll<HTMLElement>('.reveal'))
@@ -516,42 +519,33 @@ export const LandingPage: FunctionalComponent = () => {
                 action={<Link href="/register"><Button icon="rocket_launch">ابدأ متجرك الآن</Button></Link>}
               />
             ) : (
-              <div className="pricing-grid">
-                {plans.map((p, idx) => {
-                  const isFeatured = idx === Math.floor(plans.length / 2)
-                  return (
-                    <div key={p.id} className={`pricing-card lp-card reveal${isFeatured ? ' pricing-featured' : ''}`}>
-                      {isFeatured && <div className="pricing-badge">الأكثر شيوعاً</div>}
-                      <h3>{p.name}</h3>
-                      <p className="pricing-desc">{p.description || 'باقة مميزة لإدارة متجرك'}</p>
-                      <div className="pricing-price">
-                        <span className="pricing-amount">
-                          {p.priceMonthly === 0 ? '0' : formatCurrency(p.priceMonthly)}
-                        </span>
-                        {p.priceMonthly > 0 && <span className="pricing-period">/شهرياً</span>}
+              <>
+                <div className="pricing-toggle">
+                  <button type="button" className={!yearly ? 'is-active' : ''} onClick={() => setYearly(false)}>شهري</button>
+                  <button type="button" className={yearly ? 'is-active' : ''} onClick={() => setYearly(true)}>سنوي <span className="pricing-save">وفّر 2 دورة</span></button>
+                </div>
+                <div className="pricing-grid">
+                  {plans.map((p) => {
+                    const isFeatured = p.isPopular ?? p.id === recommendedPlanId
+                    return (
+                      <div key={p.id} className="pricing-grid-col">
+                        <PricingCard
+                          plan={p}
+                          featured={isFeatured}
+                          yearly={yearly}
+                          onSelect={() => undefined}
+                          ctaLabel="ابدأ الآن"
+                        />
+                        <Link href={`/register?plan=${p.id}`} className="pricing-cta">
+                          <Button variant={isFeatured ? 'primary' : 'outline'} block icon="rocket_launch">
+                            ابدأ الآن
+                          </Button>
+                        </Link>
                       </div>
-                      <div className="pricing-limits-row">
-                        {typeof p.productLimit === 'number' && p.productLimit > 0 && (
-                          <p className="pricing-limits">حتى {p.productLimit} منتج</p>
-                        )}
-                        {typeof p.orderLimitPerMonth === 'number' && p.orderLimitPerMonth > 0 && (
-                          <p className="pricing-limits">حتى {p.orderLimitPerMonth} طلب شهرياً</p>
-                        )}
-                      </div>
-                      <ul className="pricing-features">
-                        {(p.features || []).map((f, fi) => (
-                          <li key={fi}><Icon name="check" ariaHidden />{f}</li>
-                        ))}
-                      </ul>
-                      <Link href={`/register?plan=${p.id}`} className="pricing-cta">
-                        <Button variant={isFeatured ? 'primary' : 'outline'} block icon="rocket_launch">
-                          ابدأ الآن
-                        </Button>
-                      </Link>
-                    </div>
-                  )
-                })}
-              </div>
+                    )
+                  })}
+                </div>
+              </>
             )}
           </div>
         </section>

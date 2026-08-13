@@ -11,12 +11,15 @@ export const StoreProductCard: FunctionalComponent<{ product: Product }> = ({ pr
     product.oldPrice && product.oldPrice > product.price
       ? Math.round(((product.oldPrice - product.price) / product.oldPrice) * 100)
       : 0
+  const hasVariants = Array.isArray(product.variants) && product.variants.length > 0
+  const inStock = hasVariants ? product.variants.some((v) => v.stock > 0) : Number(product.stock || 0) > 0
 
   return (
-    <Link href={`/store/${store?.slug}/product/${product.id}`} className="store-card">
+    <Link href={`/store/${store?.slug}/product/${product.id}`} className={`store-card${inStock ? '' : ' store-card--out'}`}>
       <div className="store-card-img-wrap">
         <SmartImage src={product.images?.[0]} alt={product.name} className="store-card-img" placeholderClassName="store-card-img" />
-        {discount > 0 && <span className="store-card-badge">{discount}%-</span>}
+        {!inStock && <span className="store-card-badge store-card-badge--out">نفد المخزون</span>}
+        {inStock && discount > 0 && <span className="store-card-badge">{discount}%-</span>}
       </div>
       <div className="store-card-body">
         <span className="store-card-name">{product.name}</span>

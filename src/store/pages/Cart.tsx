@@ -38,9 +38,13 @@ export const StoreCart: FunctionalComponent = () => {
             const step = (dir: -1 | 1) => {
               if (isQtyMode) {
                 const next = nextTierQuantity(item.quantityTiers, item.quantity, dir)
-                if (next != null) cart.setQty(i, next)
+                // Bundle tiers can legitimately exceed stock; clamp only when a
+                // ceiling snapshot exists and the tier would oversell.
+                if (next != null && (item.maxQty == null || next <= item.maxQty)) cart.setQty(i, next)
               } else {
-                cart.setQty(i, Math.max(1, item.quantity + dir))
+                const maxQty = item.maxQty == null || item.maxQty < 1 ? undefined : item.maxQty
+                const next = dir === 1 && maxQty != null ? Math.min(item.quantity + 1, maxQty) : item.quantity + dir
+                cart.setQty(i, Math.max(1, next))
               }
             }
             return (

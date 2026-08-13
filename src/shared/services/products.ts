@@ -1,4 +1,4 @@
-import { listDocs, getDocById, createDoc, updateDocById, deleteDocById } from '../utils/firestore'
+import { listDocs, getDocById, createDoc, setDocById, updateDocById, deleteDocById } from '../utils/firestore'
 import type { Product } from '../types'
 
 const PATH = 'products'
@@ -6,6 +6,7 @@ const PATH = 'products'
 export const productsService = {
   list: (storeId: string) =>
     listDocs<Product>(PATH, { storeId, orderBy: { field: 'createdAt' } }),
+  all: () => listDocs<Product>(PATH),
   active: (storeId: string) =>
     listDocs<Product>(PATH, {
       storeId,
@@ -13,7 +14,10 @@ export const productsService = {
       orderBy: { field: 'createdAt' },
     }),
   get: (id: string) => getDocById<Product>(PATH, id),
-  create: (storeId: string, data: Omit<Product, 'id' | 'storeId'>) => createDoc<Product>(PATH, { ...data, storeId }),
+  create: (storeId: string, data: Omit<Product, 'id' | 'storeId'>, id?: string) =>
+    id
+      ? setDocById<Product>(PATH, id, { ...data, storeId })
+      : createDoc<Product>(PATH, { ...data, storeId }),
   update: (id: string, data: Record<string, unknown>) => updateDocById(PATH, id, data),
   remove: (id: string) => deleteDocById(PATH, id),
 }

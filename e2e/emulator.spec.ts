@@ -306,18 +306,18 @@ test('unpublished store shows coming-soon to visitors; owner can preview', async
   await expect(page.locator('.store-header')).toBeVisible()
 })
 
-test('platform Merchants shows seeded usage bars (132/200 moderate, 46/50 near)', async ({ page }) => {
+test('platform Merchants shows seeded usage bars (340/500 moderate, 92/100 near)', async ({ page }) => {
   await login(page, 'platform', 'admin@mk.store', 'Admin12345')
   await page.goto('/platform/merchants', { waitUntil: 'domcontentloaded' })
 
   const rowA = await merchantRow(page, 'beit-el-shay')
-  await expect(rowA).toContainText('132 / 200', { timeout: 15000 })
-  await expect(rowA).toContainText('66%')
+  await expect(rowA).toContainText('340 / 500', { timeout: 15000 })
+  await expect(rowA).toContainText('68%')
   await expect(rowA).toContainText('متوسط')
   await shot(page, 'platform-usage-a')
 
   const rowB = await merchantRow(page, 'active-shoes')
-  await expect(rowB).toContainText('46 / 50')
+  await expect(rowB).toContainText('92 / 100')
   await expect(rowB).toContainText('92%')
   await expect(rowB).toContainText('قريب من الحد')
   await shot(page, 'platform-usage-b')
@@ -331,18 +331,18 @@ test('platform Merchants shows seeded usage bars (132/200 moderate, 46/50 near)'
   await expect(rowE).toContainText('قيد الانتظار')
 })
 
-test('merchant subscription page shows persisted usage (132/200) and countdown', async ({ page }) => {
+test('merchant subscription page shows persisted usage (340/500) and countdown', async ({ page }) => {
   await login(page, 'merchant', 'owner@a.store', 'Owner12345')
   await page.waitForURL(/\/dashboard/, { timeout: 15000 })
   await page.goto('/dashboard/subscription', { waitUntil: 'domcontentloaded' })
-  await expect(page.getByText('132 من 200 طلب')).toBeVisible({ timeout: 15000 })
-  await expect(page.getByText('66%')).toBeVisible()
+  await expect(page.getByText('340 من 500 طلب')).toBeVisible({ timeout: 15000 })
+  await expect(page.getByText('68%')).toBeVisible()
   await expect(page.getByText('متوسط')).toBeVisible()
   await shot(page, 'merchant-subscription-a')
 
   // Merchant dashboard usage banner too.
   await page.goto('/dashboard', { waitUntil: 'domcontentloaded' })
-  await expect(page.getByText('132 / 200 طلب')).toBeVisible({ timeout: 15000 })
+  await expect(page.getByText('340 / 500 طلب')).toBeVisible({ timeout: 15000 })
 })
 
 test('shipping: zones store shows zone fee at checkout and persists shippingFee + snapshot', async ({ page }) => {
@@ -830,4 +830,90 @@ test('shipping: default provider honored (client+server) and refused-policy togg
   await expect(page.getByText('الرفض يتحمل العميل رسوماً قدرها 50 جنيهاً.')).toHaveCount(0, { timeout: 15000 })
   const again = await db.collection('orders').where('storeId', '==', store.id).orderBy('createdAt', 'desc').limit(1).get()
   expect((again.docs[0].data() as any).shippingFee).toBe(25)
+})
+
+// ─────────────────────────────────────────────────────────────
+// Merchant store LOGO (not the M&K platform mark): preset pick → upload →
+// persist in Firestore → render in public storefront Header+Footer without a
+// duplicated name → remove → name fallback. Exercises the full
+// Firebase Storage → Firestore → storefront loop through the UI.
+// ─────────────────────────────────────────────────────────────
+test('store logo: preset selection + upload persist and render on the public storefront', async ({ page }) => {
+  const { ref } = ctx()
+  await login(page, 'merchant', ctx().email, PASSWORD)
+  await page.goto('/dashboard/themes', { waitUntil: 'domcontentloaded' })
+
+  const storeEntry = (await storeBySlug(ref))!
+  const storeId = storeEntry.id
+
+  // 1) Select a platform-offered preset logo → persisted key in Firestore.
+  await page.locator('.preset-logo-item').first().click()
+  const presetId = await pollValue(
+    () =>
+      db
+        .collection('stores')
+        .doc(storeId)
+        .get()
+        .then((s) => (s.exists ? (s.data() as any).logo : null)),
+    (v) => typeof v === 'string' && v.startsWith('preset:'),
+  )
+  expect(presetId).toMatch(/^preset:/)
+
+  // Dashboard reflects the selection after a refresh.
+  await page.goto('/dashboard/themes', { waitUntil: 'domcontentloaded' })
+  await expect(page.locator('.preset-logo-item--active')).toHaveCount(1, { timeout: 15000 })
+
+  // 2) Upload a real image through the merchant logo field (Firebase Storage).
+  await page.locator('.logo-field input[type="file"]').first().setInputFiles([
+    { name: 'store-logo.png', mimeType: 'image/png', buffer: PNG },
+  ])
+  const uploadedUrl = await pollValue(
+    () =>
+      db
+        .collection('stores')
+        .doc(storeId)
+        .get()
+        .then((s) => (s.exists ? (s.data() as any).logo : null)),
+    (v) => typeof v === 'string' && /^https?:\/\//.test(v),
+  )
+  expect(uploadedUrl).toMatch(/^https?:\/\//)
+  // The stored value is a real Storage URL (never a blob:/data: URI).
+  expect(uploadedUrl).not.toMatch(/^(blob:|data:)/)
+
+  // Dashboard preview shows the uploaded image after refresh.
+  await page.goto('/dashboard/themes', { waitUntil: 'domcontentloaded' })
+  await expect(page.locator('.logo-preview img').first()).toBeVisible({ timeout: 15000 })
+
+  // 3) Publish so the public storefront is browsable, then verify the logo.
+  await db.collection('stores').doc(storeId).update({ published: true })
+  await page.goto(`/store/${ref}`, { waitUntil: 'domcontentloaded' })
+
+  // Header: logo only — the store name must NOT be duplicated beside it.
+  await expect(page.locator('.store-header img.store-logo').first()).toBeVisible({ timeout: 15000 })
+  await expect(page.locator('.store-brand .store-brand-name')).toHaveCount(0)
+  // Footer shows the same logo (larger variant).
+  await expect(page.locator('.store-footer .store-footer-logo').first()).toBeVisible({ timeout: 15000 })
+  const headerSrc = await page.locator('.store-header img.store-logo').first().getAttribute('src')
+  expect(headerSrc).toBe(uploadedUrl)
+
+  // 4) Refresh the public storefront — the logo persists (read from Firestore).
+  await page.reload({ waitUntil: 'domcontentloaded' })
+  await expect(page.locator('.store-header img.store-logo').first()).toBeVisible({ timeout: 15000 })
+  expect(await page.locator('.store-header img.store-logo').first().getAttribute('src')).toBe(uploadedUrl)
+
+  // 5) Remove the logo → header falls back to the store name.
+  await page.goto('/dashboard/themes', { waitUntil: 'domcontentloaded' })
+  await page.getByRole('button', { name: 'إزالة' }).click()
+  await pollValue(
+    () =>
+      db
+        .collection('stores')
+        .doc(storeId)
+        .get()
+        .then((s) => (s.exists ? (s.data() as any).logo : null)),
+    (v) => v == null,
+  )
+  await page.goto(`/store/${ref}`, { waitUntil: 'domcontentloaded' })
+  await expect(page.locator('.store-brand .store-brand-name')).toBeVisible({ timeout: 15000 })
+  await expect(page.locator('.store-header img.store-logo')).toHaveCount(0)
 })

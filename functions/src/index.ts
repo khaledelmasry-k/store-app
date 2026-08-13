@@ -1,8 +1,16 @@
 import * as admin from 'firebase-admin'
 import { FieldValue, Timestamp } from 'firebase-admin/firestore'
 import { onCall, HttpsError, type CallableRequest } from 'firebase-functions/v2/https'
+import { onObjectFinalized, onObjectDeleted } from 'firebase-functions/v2/storage'
+import { onSchedule } from 'firebase-functions/v2/scheduler'
 
 admin.initializeApp()
+
+// Bucket the app uploads to (matches VITE_FIREBASE_STORAGE_BUCKET). The Storage
+// triggers below watch THIS bucket so the `storageUsed` counter stays in sync
+// with real merchant uploads. Override via STORAGE_BUCKET when self-hosting.
+const STORAGE_BUCKET =
+  process.env.STORAGE_BUCKET || `${process.env.GCLOUD_PROJECT || 'mk-store-app'}.firebasestorage.app`
 
 const db = admin.firestore()
 const auth = admin.auth()
@@ -29,6 +37,64 @@ function isBundleTier(t: any): boolean {
   return typeof t?.quantity === 'number' && Number.isFinite(t.quantity)
 }
 
+/** Per-unit base price for remainder units: the qty:1 tier, else `fallback`. */
+function baseUnitPrice(tiers: any[] | null | undefined, fallback: number): number {
+  const t1 = (tiers || []).find((t: any) => isBundleTier(t) && t.quantity === 1)
+  if (t1 && typeof t1.price === 'number') return t1.price
+  return fallback || 0
+}
+
+/**
+ * Total price for `qty` pieces under quantity (bundle) pricing.
+ * Mirrors src/shared/utils/pricing.ts. For quantities beyond the highest
+ * configured tier, `strategy` (default 'cap') decides the overflow behavior:
+ *   - 'cap'    : highest bundle total + remainder at base unit price.
+ *   - 'repeat' : repeat the highest bundle, remainder at base unit price.
+ *   - 'last'   : always the highest bundle total once.
+ */
+function quantityTotalPrice(
+  tiers: any[] | null | undefined,
+  qty: number,
+  strategy: string = 'cap',
+  fallbackBase = 0,
+): number | null {
+  const sorted = [...(tiers || [])]
+    .filter((t: any) => isBundleTier(t))
+    .sort((a: any, b: any) => Number(a.quantity) - Number(b.quantity))
+  if (sorted.length === 0 || qty < 1) return null
+  const base = baseUnitPrice(tiers, fallbackBase)
+  const highest = sorted[sorted.length - 1]
+  const exact = sorted.find((t: any) => t.quantity === qty)
+  const largestBelow = [...sorted].reverse().find((t: any) => t.quantity < qty) || null
+
+  if (strategy === 'last') {
+    if (exact) return exact.price
+    if (qty >= Number(highest.quantity)) return highest.price
+    if (largestBelow) return largestBelow.price + (qty - Number(largestBelow.quantity)) * base
+    return qty * base
+  }
+  if (strategy === 'repeat') {
+    let remaining = qty
+    let total = 0
+    while (remaining > 0) {
+      const t = [...sorted].reverse().find((x: any) => x.quantity <= remaining) || null
+      if (t) {
+        total += t.price
+        remaining -= t.quantity
+      } else {
+        total += base * remaining
+        remaining = 0
+      }
+    }
+    return total
+  }
+  // 'cap' (default)
+  if (exact) return exact.price
+  if (qty > Number(highest.quantity)) return highest.price + (qty - Number(highest.quantity)) * base
+  if (largestBelow) return largestBelow.price + (qty - Number(largestBelow.quantity)) * base
+  return qty * base
+}
+
 function tierForQuantity(tiers: any[] | null | undefined, qty: number): any | null {
   if (!tiers || tiers.length === 0 || qty < 1) return null
   const sorted = [...tiers].sort((a, b) => Number(isBundleTier(a) ? a.quantity : a.minQuantity || 0) - Number(isBundleTier(b) ? b.quantity : b.minQuantity || 0))
@@ -45,18 +111,17 @@ function tierForQuantity(tiers: any[] | null | undefined, qty: number): any | nu
 }
 
 /** Total price for a quantity under bundle pricing, else null. */
-function tierTotalForQuantity(tiers: any[] | null | undefined, qty: number): number | null {
+function tierTotalForQuantity(tiers: any[] | null | undefined, qty: number, strategy: string = 'cap'): number | null {
   if (tiers && tiers.length > 0 && tiers.every(isBundleTier)) {
-    const tier = tierForQuantity(tiers, qty)
-    return tier && typeof tier.price === 'number' ? tier.price : null
+    return quantityTotalPrice(tiers, qty, strategy, 0)
   }
   return null
 }
 
-function unitPriceForQty(basePrice: number, qty: number, pricingMode?: string | null, tiers?: any[] | null): number {
+function unitPriceForQty(basePrice: number, qty: number, pricingMode?: string | null, tiers?: any[] | null, strategy: string = 'cap'): number {
   if (pricingMode === 'quantity') {
-    const tier = tierForQuantity(tiers, qty)
-    if (tier && typeof tier.price === 'number') return tier.price
+    const total = quantityTotalPrice(tiers, qty, strategy, basePrice)
+    if (total != null) return total
   }
   return basePrice || 0
 }
@@ -149,7 +214,7 @@ async function assertPlatformAdmin(request: CallableRequest) {
 // - superAdmin: platform-wide access
 // - merchant (owner of storeId): full access
 // - staff (member of storeId): access only when they hold `perm` (when provided)
-async function assertStoreAccess(request: CallableRequest, storeId: string, perm?: string) {
+async function assertStoreAccess(request: CallableRequest, storeId: string, perm?: string | string[]) {
   if (!request.auth) throw new HttpsError('unauthenticated', 'يجب تسجيل الدخول')
   const userSnap = await db.doc(`users/${request.auth.uid}`).get()
   const user = userSnap.data()
@@ -160,8 +225,10 @@ async function assertStoreAccess(request: CallableRequest, storeId: string, perm
   }
   if (user.role === 'merchant') return
   if (user.role === 'staff') {
-    if (perm && !(user.permissions || []).includes(perm)) {
-      throw new HttpsError('permission-denied', 'صلاحيات غير كافية لهذه العملية')
+    if (perm) {
+      const required = Array.isArray(perm) ? perm : [perm]
+      const ok = required.some((p) => (user.permissions || []).includes(p))
+      if (!ok) throw new HttpsError('permission-denied', 'صلاحيات غير كافية لهذه العملية')
     }
     return
   }
@@ -209,6 +276,7 @@ async function auditLog(storeId: string | null, userId: string, action: string, 
 
 const DAY_MS = 86400000
 const PERIOD_DAYS = 30
+const YEAR_DAYS = 365
 
 // Mirrors src/shared/services/subscription.ts (client). Functions is a
 // separate package, so status resolution is duplicated here on purpose and
@@ -276,6 +344,53 @@ async function grantForStore(storeId: string, userId?: string | null): Promise<{
   return null
 }
 
+// Structured feature gate (mirrors src/shared/services/subscription.ts).
+// A plan grants a feature when it explicitly sets the boolean flag true, or
+// (legacy plans) when the free-text features list contains the label.
+function canUseFeature(plan: any, feature: string): boolean {
+  if (!plan) return false
+  const flag = plan[feature]
+  if (typeof flag === 'boolean') return flag
+  const labels: Record<string, string> = {
+    quantityPricing: 'تسعير بالكمية',
+    variantInventory: 'مخزون حسب المقاس/اللون',
+    coupons: 'كوبونات خصم',
+    abandonedCart: 'استعادة سلة غير مكتملة',
+    analytics: 'تحليلات أساسية',
+    advancedReports: 'تقارير متقدمة',
+    customDomain: 'نطاق مخصص',
+    apiAccess: 'واجهة برمجية (API/Webhooks)',
+    removeBranding: 'إزالة علامة M&K',
+    prioritySupport: 'دعم أولوية',
+  }
+  const label = labels[feature] || feature
+  return Array.isArray(plan.features) && plan.features.some((f: any) => f === feature || f === label)
+}
+
+// Whether a plan grants a resource without a numeric ceiling.
+// New plans express this with an explicit boolean (unlimitedProducts /
+// unlimitedSalesLinks). An explicit `false` ALWAYS wins, so a brand-new plan
+// with a zero limit is treated as "0 allowed" (hard block), not unlimited.
+// Legacy plans that omit the boolean keep the historic 0-or-null == unlimited
+// semantics so already-seeded PRO stores continue to work during migration.
+function isResourceUnlimited(plan: any, field: 'unlimitedProducts' | 'unlimitedSalesLinks'): boolean {
+  if (!plan) return false
+  if (plan[field] === true) return true
+  if (plan[field] === false) return false
+  const limitField = field === 'unlimitedProducts' ? 'productLimit' : 'salesLinksLimit'
+  return Number(plan[limitField] || 0) === 0
+}
+
+// Resolve a plan's numeric quota for a resource. Returns `null` when the plan
+// grants the resource without a ceiling (explicit unlimited flag, OR — for
+// legacy plans with the boolean absent — a zero/missing limit). When it returns
+// a number it is an authoritative cap (0 == no resource allowed, hard block),
+// which is the new-plan semantics; legacy 0 stays unlimited via the helper above.
+function resolvedLimit(plan: any, limitField: 'productLimit' | 'salesLinksLimit', unlimitedField: 'unlimitedProducts' | 'unlimitedSalesLinks'): number | null {
+  if (isResourceUnlimited(plan, unlimitedField)) return null
+  return Number(plan[limitField] || 0)
+}
+
 async function createBillingNotification(storeId: string, userId: string | null, title: string, body: string) {
   await db.collection('notifications').add({
     storeId,
@@ -287,6 +402,39 @@ async function createBillingNotification(storeId: string, userId: string | null,
     createdAt: now(),
     createdBy: 'system',
   })
+}
+
+interface BillingSnapshotInput {
+  type: 'activation' | 'plan_change' | 'renewal' | 'manual'
+  planId: string
+  planName?: string
+  priceMonthly?: number
+  priceYearly?: number
+  orderLimitPerMonth?: number
+  productLimit?: number
+  storageLimitMB?: number
+  currency?: string
+  by?: string | null
+  note?: string
+}
+
+/**
+ * Appends an immutable, editable-history billing snapshot for the store. These
+ * records capture the plan + price + limits that were IN EFFECT at a given
+ * moment (activation, plan change, manual edit), giving merchants a transparent
+ * audit trail of what they were charged for. Non-blocking.
+ */
+async function recordBillingSnapshot(storeId: string, snap: BillingSnapshotInput) {
+  try {
+    await db.collection(`stores/${storeId}/billingSnapshots`).add({
+      storeId,
+      ...snap,
+      at: now(),
+      createdAt: now(),
+    })
+  } catch {
+    /* billing history must never break the primary mutation */
+  }
 }
 
 // Activates a subscription into a paid period. Shared by the legacy
@@ -315,6 +463,7 @@ async function activateSubscription(
 
   const normalPriceSnapshot = Number(sub.normalPriceSnapshot ?? plan?.priceMonthly ?? 0)
   const launchPriceSnapshot = Number(sub.launchPriceSnapshot ?? (plan?.launchEnabled && Number(plan.launchPrice) > 0 ? plan.launchPrice : normalPriceSnapshot) ?? normalPriceSnapshot)
+  const yearlyPriceSnapshot = Number(sub.yearlyPriceSnapshot ?? plan?.priceYearly ?? 0)
 
   if (user) {
     await auth.updateUser(store.ownerId, { disabled: false }).catch(() => {})
@@ -323,6 +472,10 @@ async function activateSubscription(
 
   const nowMs = Date.now()
   const periodNumber = opts.periodNumber != null ? opts.periodNumber : Number(sub.periodNumber || 0) + 1
+  // Yearly subscriptions renew every 365 days; monthly every 30. The period window
+  // and price snapshot used for THIS period are taken from the subscription doc
+  // (never recomputed from the live plan, so historical billing is stable).
+  const periodDays = sub.billingCycle === 'yearly' ? YEAR_DAYS : PERIOD_DAYS
 
   await db.doc(`subscriptions/${subId}`).update({
     status: 'active',
@@ -330,16 +483,32 @@ async function activateSubscription(
     adminEmail: user?.email || null,
     activatedAt: tsFromDate(new Date(nowMs)),
     currentPeriodStart: tsFromDate(new Date(nowMs)),
-    currentPeriodEnd: tsFromDate(new Date(nowMs + PERIOD_DAYS * DAY_MS)),
+    currentPeriodEnd: tsFromDate(new Date(nowMs + periodDays * DAY_MS)),
     ordersUsed: 0,
     periodNumber,
+    billingCycle: sub.billingCycle || 'monthly',
     normalPriceSnapshot,
     launchPriceSnapshot,
+    yearlyPriceSnapshot,
     launchUsed: opts.launchUsed ?? (launchPriceSnapshot < normalPriceSnapshot && periodNumber <= 1),
     trialStartedAt: FieldValue.delete(),
     trialEndsAt: FieldValue.delete(),
     ...(opts.paymentRequestId ? { lastPaymentRequestId: opts.paymentRequestId } : {}),
     updatedAt: now(),
+  })
+
+  await recordBillingSnapshot(sub.storeId, {
+    type: 'activation',
+    planId: sub.planId,
+    planName: sub.planName || plan?.name || sub.planId,
+    priceMonthly: normalPriceSnapshot,
+    priceYearly: yearlyPriceSnapshot,
+    orderLimitPerMonth: Number(plan?.orderLimitPerMonth || 0),
+    productLimit: Number(plan?.productLimit || 0),
+    storageLimitMB: Number(plan?.storageLimit || 0),
+    currency: store?.currency || 'SAR',
+    by: actorUid,
+    note: `تفعيل اشتراك (${sub.billingCycle === 'yearly' ? 'سنوي' : 'شهري'})`,
   })
 
   return { store, user, normalPriceSnapshot, launchPriceSnapshot, periodNumber }
@@ -353,7 +522,7 @@ export const generateOrderNumber = onCall(async (request: CallableRequest<{ stor
   const { storeId } = request.data || {}
   if (!storeId) throw new HttpsError('invalid-argument', 'storeId مطلوب')
 
-  await assertStoreAccess(request, storeId, 'orders:manage')
+  await assertStoreAccess(request, storeId, 'orders:view')
 
   const counterRef = db.doc(`stores/${storeId}/counters/orders`)
 
@@ -437,6 +606,14 @@ export const createOrder = onCall(async (request: CallableRequest<any>) => {
     let landingPageSnapshot: any = null
     let shippingSnapshot: any = { enabled: false }
 
+    // Re-read the granting subscription INSIDE the transaction so the
+    // ordersUsed limit is enforced atomically. The pre-check above only gives a
+    // fast failure path; concurrent orders must never overshoot the plan limit.
+    const subTxSnap = await tx.get(subRef)
+    if (subTxSnap.exists && orderLimit > 0 && Number(subTxSnap.data()?.ordersUsed || 0) >= orderLimit) {
+      throw new HttpsError('resource-exhausted', `تم تجاوز حد الطلبات الشهري (${orderLimit})`)
+    }
+
     // Read the order counter first — Firestore requires all reads to happen
     // before any writes within a transaction.
     const counterRef = db.doc(`stores/${storeId}/counters/orders`)
@@ -455,7 +632,12 @@ export const createOrder = onCall(async (request: CallableRequest<any>) => {
       }
       if (!product.active) throw new HttpsError('failed-precondition', `المنتج ${product.name} غير متاح`)
 
-      const qty = Number(item.quantity) || 1
+      // Quantity must be a positive integer — a negative/zero qty would pass the
+      // stock check, inflate stock via increment(-qty) and produce negative prices.
+      const qty = Number(item.quantity)
+      if (!Number.isInteger(qty) || qty < 1 || qty > 9999) {
+        throw new HttpsError('invalid-argument', `كمية غير صالحة للمنتج ${product.name}`)
+      }
 
       // Match the exact variant: prefer variantId (new checkout), then fall
       // back to color+size, color-only or size-only matching for legacy items.
@@ -482,12 +664,23 @@ export const createOrder = onCall(async (request: CallableRequest<any>) => {
         if ((matchedVariant.stock || 0) < qty) {
           throw new HttpsError('failed-precondition', `الكمية غير متوفرة لـ ${product.name}`)
         }
+        // Single source of truth: decrement ONLY the matched variant. The flat
+        // `stock` field is a derived aggregate (sum of variant stock) for variant
+        // products — recompute it here rather than decrementing it independently,
+        // which would double-subtract the same units.
         matchedVariant.stock -= qty
-        tx.update(db.doc(`products/${item.productId}`), { variants: product.variants })
+        const aggStock = product.variants.reduce((s: number, v: any) => s + (v.stock || 0), 0)
+        tx.update(db.doc(`products/${item.productId}`), { variants: product.variants, stock: aggStock })
+      } else if (Array.isArray(product.variants) && product.variants.length > 0) {
+        // The product defines variants but the submitted variantId / color+size
+        // resolves to none. This is a manipulated or stale request — do NOT fall
+        // back to decrementing the flat aggregate stock, which would silently
+        // mis-attribute inventory to a non-existent variant. Reject instead.
+        throw new HttpsError('failed-precondition', `المتغير غير موجود للمنتج ${product.name}`)
+      } else {
+        if ((product.stock || 0) < qty) throw new HttpsError('failed-precondition', `الكمية غير متوفرة لـ ${product.name}`)
+        tx.update(db.doc(`products/${item.productId}`), { stock: FieldValue.increment(-qty) })
       }
-
-      if ((product.stock || 0) < qty) throw new HttpsError('failed-precondition', `الكمية غير متوفرة لـ ${product.name}`)
-      tx.update(db.doc(`products/${item.productId}`), { stock: FieldValue.increment(-qty) })
 
       // Resolve pricing server-side. Quantity-tier pricing is recomputed
       // from the stored product, never trusted from the client.
@@ -495,21 +688,22 @@ export const createOrder = onCall(async (request: CallableRequest<any>) => {
       // Standard/legacy: unit price × quantity.
       const basePrice = typeof matchedVariant?.price === 'number' ? matchedVariant.price : (Number(product.price) || 0)
       const pricingMode: string = product.pricingMode === 'quantity' ? 'quantity' : 'standard'
+      const pricingStrategy: string = product.quantityPricingStrategy || 'cap'
       let unit = basePrice
       let lineTotal = 0
       let quantityTier: { quantity: number; price: number } | null = null
       if (pricingMode === 'quantity') {
-        const bundleTotal = tierTotalForQuantity(product.quantityTiers, qty)
+        const bundleTotal = tierTotalForQuantity(product.quantityTiers, qty, pricingStrategy)
         if (bundleTotal != null) {
           unit = bundleTotal / qty
           lineTotal = bundleTotal
           quantityTier = { quantity: qty, price: bundleTotal }
         } else {
-          unit = unitPriceForQty(basePrice, qty, pricingMode, product.quantityTiers)
+          unit = unitPriceForQty(basePrice, qty, pricingMode, product.quantityTiers, pricingStrategy)
           lineTotal = unit * qty
         }
       } else {
-        unit = unitPriceForQty(basePrice, qty, pricingMode, product.quantityTiers)
+        unit = unitPriceForQty(basePrice, qty, pricingMode, product.quantityTiers, pricingStrategy)
         lineTotal = unit * qty
       }
       subtotal += lineTotal
@@ -524,6 +718,7 @@ export const createOrder = onCall(async (request: CallableRequest<any>) => {
         pricingMode,
         lineTotal,
         ...(quantityTier ? { quantityTier } : {}),
+        ...(pricingMode === 'quantity' ? { quantityPricingStrategy: pricingStrategy } : {}),
         color: (matchedVariant?.color ?? item.color) || '',
         size: (matchedVariant?.size ?? item.size) || '',
         ...(variantId ? { variantId } : {}),
@@ -668,52 +863,63 @@ export const createOrder = onCall(async (request: CallableRequest<any>) => {
 })
 
 // ─────────────────────────────────────────────────────────────
-// 3b. createProduct — merchant creates a product with plan limit enforcement
+// 3b. createProduct — merchant creates a product with plan limit enforcement.
+//     Accepts the full product shape (the same payload the ProductForm builds)
+//     at a client-supplied id so product images (uploaded under that id first)
+//     line up with the created record. Updates/deletes remain direct writes.
 // ─────────────────────────────────────────────────────────────
 export const createProduct = onCall(async (request: CallableRequest<any>) => {
-  await assertStoreAccess(request, request.data?.storeId, 'products:manage')
-  const { storeId, name, price, description, images, stock, lowStockThreshold } = request.data || {}
-  if (!storeId || !name) throw new HttpsError('invalid-argument', 'بيانات المنتج غير مكتملة')
-  if (typeof price !== 'number' || price < 0) throw new HttpsError('invalid-argument', 'السعر غير صالح')
+  await assertStoreAccess(request, request.data?.storeId, ['products:create', 'products:edit'])
+  const { storeId, productId, data } = request.data || {}
+  if (!storeId || !productId || !data || !data.name) throw new HttpsError('invalid-argument', 'بيانات المنتج غير مكتملة')
+  if (typeof data.price !== 'number' || data.price < 0) throw new HttpsError('invalid-argument', 'السعر غير صالح')
 
   const storeSnap = await db.doc(`stores/${storeId}`).get()
   if (!storeSnap.exists || !storeSnap.data()?.active) {
     throw new HttpsError('not-found', 'المتجر غير موجود أو غير مفعل')
   }
 
-  // Check subscription grant + product limit from the plan. Trial and active
-  // subscriptions both grant the full features of the selected plan.
-  const grant = await grantForStore(storeId, request.auth?.uid)
-  if (!grant) {
-    throw new HttpsError('failed-precondition', 'الاشتراك غير نشط — لا يمكن إضافة منتجات حالياً. فعّل باقتك أولاً.')
+   // Check subscription grant + product limit from the plan. Trial and active
+   // subscriptions both grant the full features of the selected plan.
+   const grant = await grantForStore(storeId, request.auth?.uid)
+   if (!grant) {
+     throw new HttpsError('failed-precondition', 'الاشتراك غير نشط — لا يمكن إضافة منتجات حالياً. فعّل باقتك أولاً.')
+   }
+   const productLimit = resolvedLimit(grant.plan, 'productLimit', 'unlimitedProducts')
+   if (productLimit !== null) {
+     const existingProducts = await db.collection('products').where('storeId', '==', storeId).get()
+     if (existingProducts.size >= productLimit) {
+       throw new HttpsError('resource-exhausted', `تم تجاوز حد المنتجات (${productLimit})`)
+     }
+   }
+
+  // Phase 7 feature gates: advanced product modes are plan features. A product
+  // with variants (precomputed color/size matrix) or quantity pricing requires
+  // the matching plan flag; flat standard-price products are allowed everywhere.
+  const variantProduct = Array.isArray(data.variants) && data.variants.length > 0
+  const quantityProduct = data.pricingMode === 'quantity' && Array.isArray(data.quantityTiers) && data.quantityTiers.length > 0
+  if (variantProduct && !canUseFeature(grant.plan, 'variantInventory')) {
+    throw new HttpsError('resource-exhausted', 'ميزة المخزون حسب المقاس/اللون غير متوفرة في باقتك الحالية — ارتقِ باقتك لتفعيلها.')
   }
-  const productLimit = Number(grant.plan?.productLimit || 0)
-  if (productLimit > 0) {
-    const existingProducts = await db.collection('products').where('storeId', '==', storeId).get()
-    if (existingProducts.size >= productLimit) {
-      throw new HttpsError('resource-exhausted', `تم تجاوز حد المنتجات (${productLimit})`)
-    }
+  if (quantityProduct && !canUseFeature(grant.plan, 'quantityPricing')) {
+    throw new HttpsError('resource-exhausted', 'ميزة التسعير بالكمية غير متوفرة في باقتك الحالية — ارتقِ باقتك لتفعيلها.')
   }
 
-  const productId = db.collection('products').doc().id
+  const existing = await db.doc(`products/${productId}`).get()
+  if (existing.exists) throw new HttpsError('already-exists', 'يوجد منتج بهذا المعرّف')
+
   await db.doc(`products/${productId}`).set({
+    ...data,
     id: productId,
     storeId,
-    name,
-    price,
-    description: description || '',
-    images: images || [],
-    stock: stock || 0,
-    lowStockThreshold: lowStockThreshold ?? 5,
-    active: true,
     createdAt: now(),
     updatedAt: now(),
     createdBy: request.auth?.uid || 'guest',
   })
 
-  await auditLog(storeId, request.auth?.uid || 'guest', 'create_product', 'products', productId, { name })
+  await auditLog(storeId, request.auth?.uid || 'guest', 'create_product', 'products', productId, { name: data.name })
 
-  return { id: productId, name }
+  return { id: productId, name: data.name }
 })
 
 // ─────────────────────────────────────────────────────────────
@@ -722,7 +928,7 @@ export const createProduct = onCall(async (request: CallableRequest<any>) => {
 //     immediately — no platform approval required at signup.
 // ─────────────────────────────────────────────────────────────
 export const registerMerchant = onCall(async (request: CallableRequest<any>) => {
-  const { email, password, name, phone, storeName, storeRef, planId } = request.data || {}
+  const { email, password, name, phone, storeName, storeRef, planId, billingCycle } = request.data || {}
   if (!email || !password || !name || !storeName) throw new HttpsError('invalid-argument', 'بيانات التسجيل غير مكتملة')
 
   const uid = db.collection('users').doc().id
@@ -778,12 +984,20 @@ export const registerMerchant = onCall(async (request: CallableRequest<any>) => 
   resolvedPlanId = planSnap.id
   const planName = plan?.name || resolvedPlanId
 
-  const trialDays = Number(plan?.trialDays || 3)
+  // Free plan (price 0) skips the trial entirely: the subscription starts
+  // ACTIVE so the tenant/limits work forever without payment/approval. Paid
+  // plans keep the 3-day self-serve TRIAL window.
+  const isFreePlan = Number(plan?.priceMonthly || 0) <= 0
+  const trialDays = Number(plan?.trialDays ?? 3)
   const trialStarted = new Date()
   const trialEnds = new Date(trialStarted.getTime() + trialDays * DAY_MS)
   const normalPriceSnapshot = Number(plan?.priceMonthly || 0)
   const launchEnabled = !!plan?.launchEnabled
   const launchPriceSnapshot = launchEnabled && Number(plan?.launchPrice) > 0 ? Number(plan.launchPrice) : normalPriceSnapshot
+  const yearlyPriceSnapshot = Number(plan?.priceYearly || 0)
+  const cycle = billingCycle === 'yearly' ? 'yearly' : 'monthly'
+  const MB = 1024 * 1024
+  const storageLimitBytes = Number(plan?.storageLimit || 0) * MB
 
   await db.doc(`users/${uid}`).set({
     uid,
@@ -803,35 +1017,46 @@ export const registerMerchant = onCall(async (request: CallableRequest<any>) => 
     slug,
     active: true,
     published: false,
-    ownerId: uid,
+     ownerId: uid,
     currency: 'EGP',
     description: '',
     theme: { primary: '#6366f1', darkMode: false },
+    storageUsed: 0,
+    storageLimitBytes,
     createdAt: now(),
     updatedAt: now(),
     createdBy: uid,
   })
-  await db.collection('subscriptions').add({
+  const subDoc: Record<string, any> = {
     storeId,
     planId: resolvedPlanId,
     planName,
-    status: 'trialing',
-    requestNote: 'تجربة مجانية',
+    status: isFreePlan ? 'active' : 'trialing',
+    billingCycle: cycle,
+    requestNote: isFreePlan ? 'باقة مجانية' : 'تجربة مجانية',
     trialStartedAt: tsFromDate(trialStarted),
     trialEndsAt: tsFromDate(trialEnds),
-    trialDays,
+    trialDays: isFreePlan ? 0 : trialDays,
     periodNumber: 0,
     normalPriceSnapshot,
     launchPriceSnapshot,
+    yearlyPriceSnapshot,
     ordersUsed: 0,
     createdAt: now(),
     updatedAt: now(),
     createdBy: uid,
-  })
+  }
+  if (isFreePlan) {
+    delete subDoc.trialStartedAt
+    delete subDoc.trialEndsAt
+    // No paying period window — status 'active' with no expiry reads as active
+    // forever in resolveSubscriptionStatus.
+  }
+  await db.collection('subscriptions').add(subDoc)
 
   await auth.createUser({ uid, email: normalizedEmail, password, displayName: name, disabled: false })
 
-  await createBillingNotification(storeId, uid, 'بدأت تجربتك المجانية', `مرحباً ${name}! تجربتك المجانية لمدة ${trialDays} أيام بدأت الآن بباقة ${planName} — بكامل المزايا.`)
+  await createBillingNotification(storeId, uid, isFreePlan ? 'بدأت باقتك المجانية' : 'بدأت تجربتك المجانية', isFreePlan ? `باقتك «${planName}» مفعّلة الآن بكامل حدودها. رقِّ باقتك متى احتجت مزايا أكثر.` : `مرحباً ${name}! تجربتك المجانية لمدة ${trialDays} أيام بدأت الآن بباقة ${planName} — بكامل المزايا.`)
   await auditLog(storeId, uid, 'trial_started', 'subscriptions', storeId, { planId: resolvedPlanId, trialDays })
 
   return { uid, storeId, status: 'trial_started' }
@@ -934,7 +1159,209 @@ export const getMerchantSubscription = onCall(async (request: CallableRequest<{ 
     .get()
   const paymentRequests = paySnap.docs.map((d) => ({ id: d.id, ...d.data() }))
 
-  return { subscription: { id: entry.id, ...entry.data }, plan, paymentRequests, status }
+  const storeSnap = await db.doc(`stores/${storeId}`).get().catch(() => null)
+  const store = storeSnap?.exists ? storeSnap.data()! : null
+
+  return { subscription: { id: entry.id, ...entry.data }, plan, paymentRequests, status, store: store ? { id: storeId, storageUsed: Number(store.storageUsed || 0), storageLimitBytes: Number(store.storageLimitBytes || 0) } : null }
+})
+
+// ─────────────────────────────────────────────────────────────
+// 4d2+. changeSubscriptionPlan — merchant upgrades/downgrades their plan.
+//      Limits come from the plan doc read live, so flipping the granting
+//      subscription's planId immediately applies the new product/order/feature
+//      gates (upgrades reset the period counters right away; downgrades keep
+//      the current window but enforce the tighter limits). The change is
+//      audited + broadcast; the manual-payment flow already gates activations.
+// ─────────────────────────────────────────────────────────────
+export const changeSubscriptionPlan = onCall(async (request: CallableRequest<{ storeId?: string; planId?: string }>) => {
+  if (!request.auth) throw new HttpsError('unauthenticated', 'يجب تسجيل الدخول')
+  const { storeId, planId } = request.data || {}
+  if (!storeId || !planId) throw new HttpsError('invalid-argument', 'storeId و planId مطلوبان')
+  await assertStoreAccess(request, storeId, 'billing:edit')
+
+  const storeSnap = await db.doc(`stores/${storeId}`).get()
+  if (!storeSnap.exists || !storeSnap.data()?.active) throw new HttpsError('not-found', 'المتجر غير موجود')
+
+  const planSnap = await db.doc(`plans/${planId}`).get()
+  if (!planSnap.exists || !planSnap.data()?.active) throw new HttpsError('not-found', 'الباقة المطلوبة غير متاحة')
+
+  const grant = await grantForStore(storeId, request.auth.uid)
+  if (!grant) throw new HttpsError('failed-precondition', 'لا يوجد اشتراك نشط — فعّل باقتك أولاً.')
+  if (grant.sub.planId === planId) return { ok: true, changed: false, planId }
+
+  const newPlan = planSnap.data() as any
+  const oldPlanName = grant.plan?.name || grant.sub.planId
+  // Upgrades reset the period counters right away so the new quota applies fresh;
+  // downgrades keep the current window but start enforcing the tighter limits.
+  const isUpgrade = Number(newPlan?.priceMonthly || 0) > Number(grant.plan?.priceMonthly || 0)
+  const historyEntry = [
+    {
+      from: grant.sub.planId,
+      to: planId,
+      by: request.auth.uid,
+      at: Timestamp.now(),
+    },
+  ] as any[]
+
+  await db.doc(`subscriptions/${grant.subId}`).update({
+    planId,
+    planName: newPlan?.name || planId,
+    planChangedAt: now(),
+    planChangeFrom: grant.sub.planId,
+    planChangeBy: request.auth.uid,
+    planChangeHistory: FieldValue.arrayUnion(...historyEntry),
+    ...(isUpgrade ? { ordersUsed: 0 } : {}),
+    updatedAt: now(),
+  })
+
+  // Keep the store's cached storage quota in sync so the Storage triggers
+  // (which compare against `storageLimitBytes`) enforce the new plan limit
+  // immediately after an upgrade/downgrade.
+  const MB = 1024 * 1024
+  await db.doc(`stores/${storeId}`).update({
+    storageLimitBytes: Number(newPlan?.storageLimit || 0) * MB,
+    updatedAt: now(),
+  }).catch(() => {})
+
+  const storeSnapForSnap = await db.doc(`stores/${storeId}`).get().catch(() => null)
+  const currency = storeSnapForSnap?.exists ? storeSnapForSnap.data()?.currency : 'SAR'
+  await recordBillingSnapshot(storeId, {
+    type: 'plan_change',
+    planId,
+    planName: newPlan?.name || planId,
+    priceMonthly: Number(newPlan?.priceMonthly || 0),
+    priceYearly: Number(newPlan?.priceYearly || 0),
+    orderLimitPerMonth: Number(newPlan?.orderLimitPerMonth || 0),
+    productLimit: Number(newPlan?.productLimit || 0),
+    storageLimitMB: Number(newPlan?.storageLimit || 0),
+    currency: currency || 'SAR',
+    by: request.auth.uid,
+    note: `تغيير الباقة من «${oldPlanName}» إلى «${newPlan?.name || planId}»`,
+  })
+
+  await createBillingNotification(
+    storeId,
+    request.auth.uid,
+    'تم تغيير باقتك',
+    `تم تحديث باقتك من «${oldPlanName}» إلى «${newPlan?.name || planId}»`,
+  )
+  await auditLog(storeId, request.auth.uid, 'plan_changed', 'subscriptions', grant.subId, { from: grant.sub.planId, to: planId })
+
+  return { ok: true, changed: true, planId, from: grant.sub.planId, to: planId }
+})
+
+// ─────────────────────────────────────────────────────────────
+// 4d3. checkStorageQuota — authoritative storage usage check (server-side
+//      truth). Reads the `storageUsed` counter (maintained by the Storage
+//      triggers) and compares against the plan limit; returns a safe summary
+//      for the UI meter + product raiser pre-checks.
+// ─────────────────────────────────────────────────────────────
+export const checkStorageQuota = onCall(async (request: CallableRequest<{ storeId?: string }>) => {
+  if (!request.auth) throw new HttpsError('unauthenticated', 'يجب تسجيل الدخول')
+  const { storeId } = request.data || {}
+  if (!storeId) throw new HttpsError('invalid-argument', 'storeId مطلوب')
+  await assertStoreAccess(request, storeId, 'billing:view')
+
+  const grant = await grantForStore(storeId, request.auth.uid)
+  const MB = 1024 * 1024
+  const limitBytes = grant ? Number(grant.plan?.storageLimit || 0) * MB : 0
+
+  // Authoritative usage comes from the `storageUsed` counter maintained by the
+  // Storage finalize/delete triggers — no full-bucket listing required.
+  const usedBytes = await db
+    .doc(`stores/${storeId}`)
+    .get()
+    .then((s) => Number(s.exists ? s.data()?.storageUsed || 0 : 0))
+    .catch(() => 0)
+
+  const limitReached = limitBytes > 0 && usedBytes >= limitBytes
+  const remainingBytes = limitBytes > 0 ? Math.max(0, limitBytes - usedBytes) : null
+  return {
+    usedBytes,
+    limitBytes,
+    limitReached,
+    remainingBytes,
+    usedPercent: limitBytes > 0 ? Math.min(100, Math.round((usedBytes / limitBytes) * 100)) : 0,
+  }
+})
+
+// ─────────────────────────────────────────────────────────────
+// 4d3a. getBillingSnapshots — immutable, editable-history billing trail for a
+//       store (activation / plan changes / manual edits). Merchants can review
+//       exactly what plan + price + limits were in effect at each moment.
+// ─────────────────────────────────────────────────────────────
+export const getBillingSnapshots = onCall(async (request: CallableRequest<{ storeId?: string }>) => {
+  if (!request.auth) throw new HttpsError('unauthenticated', 'يجب تسجيل الدخول')
+  const { storeId } = request.data || {}
+  if (!storeId) throw new HttpsError('invalid-argument', 'storeId مطلوب')
+  await assertStoreAccess(request, storeId, 'billing:view')
+
+  const snaps = await db
+    .collection(`stores/${storeId}/billingSnapshots`)
+    .orderBy('createdAt', 'desc')
+    .limit(50)
+    .get()
+
+  return {
+    snapshots: snaps.docs.map((d) => ({ id: d.id, ...d.data() })),
+  }
+})
+
+// ─────────────────────────────────────────────────────────────
+// 4d3b. Storage triggers — maintain the per-store `storageUsed` counter
+//       atomically and enforce the plan storage quota server-side.
+//
+// The client uploads via the Storage SDK (gated by storage.rules for
+// tenancy + file size/type). These triggers are the SOURCE OF TRUTH for the
+// counter: on finalize we increment, and reject (delete) the object when it
+// would exceed the merchant's plan quota; on delete we release the bytes.
+// `checkStorageQuota` reads this counter instead of listing the whole bucket.
+// ─────────────────────────────────────────────────────────────
+function storeIdFromObjectName(name: string): string | null {
+  // Uploaded prefixes: stores/{storeId}/..., landingPages/{storeId}/...,
+  // documents/{storeId}/... (see src/shared/services/uploads.ts).
+  const m = name.match(/^(stores|landingPages|documents)\/([^/]+)\//)
+  return m ? m[2] : null
+}
+
+export const onStorageFinalize = onObjectFinalized({ bucket: STORAGE_BUCKET }, async (event) => {
+  const name = event.data.name
+  const size = Number((event.data as any)?.size || 0)
+  const storeId = storeIdFromObjectName(name)
+  if (!storeId || size <= 0) return
+  const storeRef = db.doc(`stores/${storeId}`)
+  const snap = await storeRef.get()
+  if (!snap.exists) return
+  const data = snap.data()!
+  const limit = Number(data?.storageLimitBytes || 0)
+  // Enforce the plan quota: reject (delete) objects that would push usage over.
+  if (limit > 0) {
+    const used = Number(data?.storageUsed || 0)
+    if (used + size > limit) {
+      try {
+        await admin.storage().bucket(event.data.bucket).file(name).delete()
+      } catch {
+        /* object may already be gone */
+      }
+      return
+    }
+  }
+  await storeRef.update({ storageUsed: FieldValue.increment(size), updatedAt: now() })
+})
+
+export const onStorageDelete = onObjectDeleted({ bucket: STORAGE_BUCKET }, async (event) => {
+  const name = event.data.name
+  const size = Number((event.data as any)?.size || 0)
+  const storeId = storeIdFromObjectName(name)
+  if (!storeId || size <= 0) return
+  const storeRef = db.doc(`stores/${storeId}`)
+  // Release the bytes, never letting the counter drop below zero.
+  await db.runTransaction(async (tx) => {
+    const s = await tx.get(storeRef)
+    if (!s.exists) return
+    const used = Number(s.data()?.storageUsed || 0)
+    tx.update(storeRef, { storageUsed: Math.max(0, used - size), updatedAt: now() })
+  }).catch(() => {})
 })
 
 // ─────────────────────────────────────────────────────────────
@@ -946,6 +1373,12 @@ export const getMerchantSubscription = onCall(async (request: CallableRequest<{ 
 // ─────────────────────────────────────────────────────────────
 export const getMerchantPaymentInfo = onCall(async (request: CallableRequest) => {
   if (!request.auth) throw new HttpsError('unauthenticated', 'يجب تسجيل الدخول')
+
+  const caller = await db.doc(`users/${request.auth.uid}`).get()
+  const role = caller.exists ? caller.data()?.role : null
+  if (role !== 'merchant' && role !== 'superAdmin') {
+    throw new HttpsError('permission-denied', 'بيانات الدفع متاحة للتجار فقط')
+  }
 
   const snap = await db.doc('settings/platform').get().catch(() => null)
   const data = snap?.exists ? snap.data() : {}
@@ -979,7 +1412,11 @@ export const submitPaymentRequest = onCall(async (request: CallableRequest<{ sub
   }
 
   const status = resolveSubscriptionStatus(sub)
-  if (status !== 'expired' && status !== 'trialing') {
+  // Allow recovery from suspension (trial grace expired without payment) in
+  // addition to the trialing/expired states. Suspended stores are NOT
+  // purchasable (getPublicStoreStatus), but the owning merchant can still
+  // submit a payment request to re-activate.
+  if (status !== 'expired' && status !== 'trialing' && status !== 'suspended') {
     throw new HttpsError('failed-precondition', 'الاشتراك الحالي لا يحتاج إلى تفعيل')
   }
 
@@ -993,7 +1430,16 @@ export const submitPaymentRequest = onCall(async (request: CallableRequest<{ sub
   const periodNumber = Number(sub.periodNumber || 0) + 1
   const normalPriceSnapshot = Number(sub.normalPriceSnapshot || 0)
   const launchPriceSnapshot = Number(sub.launchPriceSnapshot || normalPriceSnapshot)
-  const amount = periodNumber <= 1 ? launchPriceSnapshot : normalPriceSnapshot
+  const yearlyPriceSnapshot = Number(sub.yearlyPriceSnapshot || 0)
+  const isYearly = sub.billingCycle === 'yearly'
+  // Monthly billing: first paid month uses the launch price, renewals use normal.
+  // Yearly billing: always charges the yearly snapshot (no prorated first-year
+  // launch — the plan's yearly price is authoritative). Never trust client price.
+  const amount = isYearly
+    ? yearlyPriceSnapshot || normalPriceSnapshot
+    : periodNumber <= 1
+      ? launchPriceSnapshot
+      : normalPriceSnapshot
   if (amount <= 0) throw new HttpsError('failed-precondition', 'تعذر تحديد مبلغ الاشتراك')
 
   const payRef = db.collection('subscriptionPayments').doc()
@@ -1196,14 +1642,14 @@ export const createSalesLink = onCall(async (request: CallableRequest<any>) => {
   const { storeId, data } = request.data || {}
   if (!storeId || !data || !data.code) throw new HttpsError('invalid-argument', 'بيانات رابط البيع غير مكتملة')
 
-  const grant = await grantForStore(storeId, request.auth?.uid)
-  if (!grant) throw new HttpsError('failed-precondition', 'الاشتراك غير نشط — لا يمكن إنشاء روابط بيع الآن')
+   const grant = await grantForStore(storeId, request.auth?.uid)
+   if (!grant) throw new HttpsError('failed-precondition', 'الاشتراك غير نشط — لا يمكن إنشاء روابط بيع الآن')
 
-  const limit = Number(grant.plan?.salesLinksLimit || 0)
-  if (limit > 0) {
-    const count = await db.collection('storeLinks').where('storeId', '==', storeId).where('archived', '==', false).get()
-    if (count.size >= limit) throw new HttpsError('resource-exhausted', `تم تجاوز حد روابط البيع (${limit})`)
-  }
+   const salesLinksLimit = resolvedLimit(grant.plan, 'salesLinksLimit', 'unlimitedSalesLinks')
+   if (salesLinksLimit !== null) {
+     const count = await db.collection('storeLinks').where('storeId', '==', storeId).where('archived', '==', false).get()
+     if (count.size >= salesLinksLimit) throw new HttpsError('resource-exhausted', `تم تجاوز حد روابط البيع (${salesLinksLimit})`)
+   }
 
   const linkQuery = await db.collection('storeLinks').where('storeId', '==', storeId).where('code', '==', data.code).limit(1).get()
   if (!linkQuery.empty) throw new HttpsError('already-exists', 'كود الرابط مستخدم مسبقاً')
@@ -1250,17 +1696,47 @@ export const savePlan = onCall(async (request: CallableRequest<any>) => {
     priceMonthly: Number(plan.priceMonthly),
     priceYearly: Number(plan.priceYearly || 0),
     trialDays: Number(plan.trialDays || 3),
-    launchPrice: Number(plan.launchPrice || 0),
-    launchEnabled: !!plan.launchEnabled,
-    productLimit: Number(plan.productLimit || 0),
+     launchPrice: Number(plan.launchPrice || 0),
+     launchEnabled: !!plan.launchEnabled,
+     productLimit: Number(plan.productLimit || 0),
     orderLimitPerMonth: Number(plan.orderLimitPerMonth || 0),
     landingPagesLimit: Number(plan.landingPagesLimit || 0),
     salesLinksLimit: Number(plan.salesLinksLimit || 0),
     staffLimit: Number(plan.staffLimit || 0),
     storageLimit: Number(plan.storageLimit || 0),
+    isPopular: !!plan.isPopular,
+    sortOrder: Number(plan.sortOrder || 0),
     features: Array.isArray(plan.features) ? plan.features : [],
-    active: plan.active !== false,
+    // Structured feature gates (Phase 6 model) — persisted as booleans.
+    quantityPricing: !!plan.quantityPricing,
+    variantInventory: !!plan.variantInventory,
+    coupons: !!plan.coupons,
+    abandonedCart: !!plan.abandonedCart,
+    analytics: plan.analytics !== undefined ? !!plan.analytics : true,
+    advancedReports: !!plan.advancedReports,
+    customDomain: !!plan.customDomain,
+    apiAccess: !!plan.apiAccess,
+    removeBranding: !!plan.removeBranding,
+    prioritySupport: !!plan.prioritySupport,
+     storeLimit: Number(plan.storeLimit || 1),
+     unlimitedProducts: plan.unlimitedProducts === true,
+     unlimitedSalesLinks: plan.unlimitedSalesLinks === true,
+     active: plan.active !== false,
     updatedAt: now(),
+  }
+
+  if (plan.slug && String(plan.slug).trim()) payload.slug = String(plan.slug).trim()
+
+  // launchExpiresAt is only patched when the caller supplies it (so editing a
+  // plan's price alone does not wipe a previously-set expiry). Accepts a date
+  // string, a Date, or a Firestore Timestamp.
+  if (plan.launchExpiresAt !== undefined) {
+    if (plan.launchExpiresAt === null) {
+      payload.launchExpiresAt = null
+    } else {
+      const d = typeof plan.launchExpiresAt === 'string' ? new Date(plan.launchExpiresAt) : (plan.launchExpiresAt as any)?.toDate ? (plan.launchExpiresAt as any).toDate() : new Date(plan.launchExpiresAt)
+      payload.launchExpiresAt = tsFromDate(d)
+    }
   }
 
   let action: string
@@ -1418,46 +1894,60 @@ export const updateOrderStatus = onCall(async (request: CallableRequest<{ orderI
   if (role === 'superAdmin') {
     // ok
   } else {
-    await assertStoreAccess(request, order.storeId, 'orders:manage')
+    await assertStoreAccess(request, order.storeId, ['orders:edit', 'orders:status', 'orders:cancel'])
   }
 
-  const wasCancelled = ['CANCELLED', 'RETURNED'].includes(order.status)
+  // Durable idempotency for stock restoration: a cancelled/returned order must
+  // restore exactly once, no matter which path crosses into a cancelled state.
+  // We key the guard on the persisted `stockRestored` flag (not on the *previous*
+  // status), so sequences like NEW -> CANCELLED -> DELIVERED -> CANCELLED, or
+  // NEW -> CANCELLED -> CANCELLED, restore only on the first cancellation and
+  // never again. The flag is written inside the same transaction that restores.
   const becomesCancelled = ['CANCELLED', 'RETURNED'].includes(status)
 
   await db.runTransaction(async (tx) => {
-    if (becomesCancelled && !wasCancelled) {
+    if (becomesCancelled && !(order.stockRestored || false)) {
       for (const item of order.items || []) {
         const productRef = db.doc(`products/${item.productId}`)
         const productSnap = await tx.get(productRef)
         if (!productSnap.exists) continue
         const product = productSnap.data()!
+        // Match the exact variant: prefer variantId, then color+size, then
+        // color-only / size-only for legacy items. (Same resolution order as
+        // createOrder so a cancel/restore always targets the same stock unit.)
+        let variant: any = null
         if (Array.isArray(product.variants)) {
-          let variant: any = null
           if (item.variantId) {
             variant = product.variants.find((v: any) => v.id === item.variantId) || null
           }
           if (!variant) {
+            const normColor = item.color || ''
+            const normSize = item.size || ''
             variant =
-              product.variants.find((v: any) => (v.color || '') === (item.color || '') && (v.size || '') === (item.size || '')) ||
-              (item.color
-                ? product.variants.find((v: any) => (v.color || '') === item.color && !v.size) || null
-                : null) ||
-              (item.size
-                ? product.variants.find((v: any) => !v.color && (v.size || '') === item.size) || null
-                : null) ||
+              product.variants.find((v: any) => (v.color || '') === normColor && (v.size || '') === normSize) ||
+              (normColor ? product.variants.find((v: any) => (v.color || '') === normColor && !(v.size || '')) || null : null) ||
+              (normSize ? product.variants.find((v: any) => !(v.color || '') && (v.size || '') === normSize) || null : null) ||
               null
           }
-          if (variant) {
-            variant.stock = (variant.stock || 0) + item.quantity
-            tx.update(productRef, { variants: product.variants })
-          }
         }
-        tx.update(productRef, { stock: FieldValue.increment(item.quantity) })
+        // Restore ONLY the matched variant and recompute the derived aggregate;
+        // never increment the flat `stock` independently (would double-count
+        // the same units that were already rolled into the per-variant stock).
+        if (variant) {
+          variant.stock = (variant.stock || 0) + item.quantity
+          const aggStock = product.variants.reduce((s: number, v: any) => s + (v.stock || 0), 0)
+          tx.update(productRef, { variants: product.variants, stock: aggStock })
+        } else {
+          tx.update(productRef, { stock: FieldValue.increment(item.quantity) })
+        }
       }
     }
     tx.update(orderRef, {
       status,
       statusHistory: FieldValue.arrayUnion({ status, at: Timestamp.now(), by: request.auth!.uid }),
+      // Persist the restoration marker so subsequent cancelled-state transitions
+      // cannot restore the same stock again.
+      ...(becomesCancelled ? { stockRestored: true } : {}),
       updatedAt: now(),
     })
   })
@@ -1586,10 +2076,29 @@ export const exitImpersonation = onCall(async (request: CallableRequest) => {
 //    customer phone. Returns only a safe subset (no address/PII). Never leaks
 //    other stores' orders (scoped by storeId) or another phone's orders.
 // ─────────────────────────────────────────────────────────────
+// Simple per-phone sliding-window guard against brute-forcing sequential
+// ORD-NNNNN numbers. In-memory (not durable across cold starts) — sufficient
+// to slow enumeration; per-instance only.
+const trackOrderBuckets = new Map<string, number[]>()
+const TRACK_WINDOW_MS = 60 * 1000
+const TRACK_MAX_PER_WINDOW = 10
+
+function throttleTrack(phone: string) {
+  const nowMs = Date.now()
+  const bucket = (trackOrderBuckets.get(phone) || []).filter((t) => nowMs - t < TRACK_WINDOW_MS)
+  if (bucket.length >= TRACK_MAX_PER_WINDOW) return false
+  bucket.push(nowMs)
+  trackOrderBuckets.set(phone, bucket)
+  return true
+}
+
 export const trackOrder = onCall(async (request: CallableRequest<{ storeId?: string; phone?: string; orderNumber?: string }>) => {
   const { storeId, phone, orderNumber } = request.data || {}
   if (!storeId || !phone || !orderNumber) throw new HttpsError('invalid-argument', 'storeId و phone و orderNumber مطلوبة')
   if (!/^\d{9,15}$/.test(String(phone))) throw new HttpsError('invalid-argument', 'رقم هاتف غير صالح')
+  if (!throttleTrack(String(phone))) {
+    throw new HttpsError('resource-exhausted', 'طلبات كثيرة — حاول بعد قليل')
+  }
 
   const storeSnap = await db.doc(`stores/${storeId}`).get()
   if (!storeSnap.exists || !storeSnap.data()?.active) {
@@ -1823,7 +2332,7 @@ export const inviteStaff = onCall(async (request: CallableRequest<{ storeId?: st
   }
 
   // Only the store owner (merchant) or a staff member holding team:manage.
-  await assertStoreAccess(request, storeId, 'team:manage')
+  await assertStoreAccess(request, storeId, 'team:invite')
 
   // The chosen role must belong to this store.
   const roleSnap = await db.doc(`roles/${roleId}`).get()
@@ -1914,3 +2423,153 @@ export const inviteStaff = onCall(async (request: CallableRequest<{ storeId?: st
 
   return { uid, email, initialPassword }
 })
+
+// ─────────────────────────────────────────────────────
+// 6a. Scheduled maintenance jobs (idempotent, retryable, no frontend).
+// ─────────────────────────────────────────────────────
+
+const SCHEDULE_TIMEZONE = 'Africa/Cairo'
+// Trial-expired / expired-but-unpaid merchants get this grace window before the
+// scheduler flips them to `suspended`. Paid (approved) renewals are excluded.
+const UNPAID_GRACE_DAYS = 3
+
+// 6b. expireLaunchPricing — disables any plan whose launch offer has an
+// `launchExpiresAt` in the past, so promotional pricing never outlives its
+// campaign window. Audit-trails each disable; non-blocking.
+export const expireLaunchPricing = onSchedule(
+  { schedule: '0 2 * * *', timeZone: SCHEDULE_TIMEZONE, retryCount: 3 },
+  async () => {
+    const nowTs = Timestamp.now()
+    const expired = await db
+      .collection('plans')
+      .where('launchEnabled', '==', true)
+      .where('launchExpiresAt', '<=', nowTs)
+      .get()
+    if (expired.empty) return
+    const batch = db.batch()
+    for (const doc of expired.docs) batch.update(doc.ref, { launchEnabled: false, launchExpiredAt: now(), updatedAt: now() })
+    await batch.commit()
+    for (const doc of expired.docs) {
+      const data = doc.data() || {}
+      await auditLog(null, 'scheduler', 'launch_pricing_expired', 'plans', doc.id, { name: data.name, slug: data.slug }).catch(() => {})
+    }
+  },
+)
+
+// 6c. usageWarnings — emits billing notifications at 80/90/100% of each plan
+// quota (orders, products, sales links, staff, storage). Deduped per store +
+// resource via a `usageAlerts/{resource}` subcollection so a merchant receives
+// exactly one notification per threshold band per billing period.
+const USAGE_BANDS = [0, 80, 90, 100] as const
+type UsageBand = (typeof USAGE_BANDS)[number]
+function bandFor(percent: number): UsageBand {
+  if (percent >= 100) return 100
+  if (percent >= 90) return 90
+  if (percent >= 80) return 80
+  return 0
+}
+
+async function countWhere(storeId: string, coll: string): Promise<number> {
+  try {
+    const agg = await db.collection(coll).where('storeId', '==', storeId).count().get()
+    return Number(agg.data()?.count || 0)
+  } catch {
+    const snap = await db.collection(coll).where('storeId', '==', storeId).get()
+    return snap.size
+  }
+}
+
+export const usageWarnings = onSchedule(
+  { schedule: '*/30 * * * *', timeZone: SCHEDULE_TIMEZONE, retryCount: 3 },
+  async () => {
+    const live = await db.collection('subscriptions').where('status', 'in', ['trialing', 'active']).get()
+    let notified = 0
+    for (const sDoc of live.docs) {
+      const sub = sDoc.data() || {}
+      const storeId = sub.storeId as string
+      if (!storeId) continue
+      const [planSnap, storeSnap] = await Promise.all([
+        db.doc(`plans/${sub.planId}`).get(),
+        db.doc(`stores/${storeId}`).get(),
+      ])
+      if (!planSnap.exists) continue
+      const plan = planSnap.data()!
+      const store = storeSnap.exists ? storeSnap.data()! : {}
+
+      // { key, label, used, limit } — limit null means unlimited (skipped).
+      const orderLimit = Number(plan.orderLimitPerMonth || 0) > 0 ? Number(plan.orderLimitPerMonth || 0) : null
+      const checks: { key: string; label: string; used: number; limit: number | null }[] = []
+      checks.push({ key: 'orders', label: 'الطلبات', used: Number(sub.ordersUsed || 0), limit: orderLimit })
+      const pLimit = resolvedLimit(plan, 'productLimit', 'unlimitedProducts')
+      const sLimit = resolvedLimit(plan, 'salesLinksLimit', 'unlimitedSalesLinks')
+      const productsCount = pLimit !== null ? await countWhere(storeId, 'products') : 0
+      const linksCount = sLimit !== null ? await countWhere(storeId, 'storeLinks') : 0
+      const staffCount = await countWhere(storeId, 'team')
+      // Free uses staffLimit 0 to mean "owner only"; treat 0 as uncapped for warnings
+      // (the inviteStaff gate already blocks >0 staff on Free).
+      const staffLimit = Number(plan.staffLimit || 0) > 0 ? Number(plan.staffLimit || 0) : null
+      checks.push(
+        { key: 'products', label: 'المنتجات', used: productsCount, limit: pLimit },
+        { key: 'salesLinks', label: 'روابط البيع', used: linksCount, limit: sLimit },
+        { key: 'staff', label: 'أعضاء الفريق', used: staffCount, limit: staffLimit },
+        { key: 'storage', label: 'التخزين', used: Number(store.storageUsed || 0), limit: Number(plan.storageLimit) * 1024 * 1024 || null },
+      )
+
+      for (const c of checks) {
+        // limit null => unlimited (skip); a numeric limit must be > 0 to be a real cap.
+        if (c.limit === null || c.limit <= 0) continue
+        const percent = Math.min(100, Math.round((c.used / c.limit) * 100))
+        const band = bandFor(percent)
+        if (band === 0) continue
+        const alertRef = db.doc(`stores/${storeId}/usageAlerts/${c.key}`)
+        const existing = await alertRef.get()
+        const prev = existing.exists ? (existing.data() as any) : {}
+        const prevBand = Number(prev.band || 0) as UsageBand
+        const prevPeriod = prev.periodNumber ?? null
+        // Re-arm when entering a new billing period so warnings re-fire.
+        if (prevPeriod === null || prevPeriod !== Number(sub.periodNumber || 0) || band > prevBand) {
+          await createBillingNotification(
+            storeId,
+            null,
+            `حد ${c.label} قريب`,
+            percent >= 100
+              ? `وصلت إلى حد ${c.label} (${c.used} من ${c.limit}). ارفع باقتك لفتح المزيد.`
+              : `${c.used} من ${c.limit} ${c.label} مستغلك — استهدف رفع الباقة قريباً.`,
+          ).catch(() => {})
+          await alertRef.set({ key: c.key, band, periodNumber: Number(sub.periodNumber || 0), percent, notifiedAt: now(), updatedAt: now() }, { merge: true })
+          notified++
+        }
+      }
+    }
+  },
+)
+
+// 6d. suspendUnpaidTrials — flips unpaid/expired trial subscriptions (those that
+// never had an approval, i.e. `approvedBy` is absent) into `suspended` after
+// the grace window. Paid renewals always carry `approvedBy` and are skipped.
+// Merchants can still recover by submitting a payment request (submitPaymentRequest
+// accepts `suspended`).
+export const suspendUnpaidTrials = onSchedule(
+  { schedule: '0 3 * * *', timeZone: SCHEDULE_TIMEZONE, retryCount: 3 },
+  async () => {
+    const cutoff = Timestamp.fromMillis(Date.now() - UNPAID_GRACE_DAYS * DAY_MS)
+    const snap = await db
+      .collection('subscriptions')
+      .where('status', '==', 'expired')
+      .where('approvedBy', '==', null)
+      .where('trialEndsAt', '<=', cutoff)
+      .get()
+    if (snap.empty) return
+    const batch = db.batch()
+    for (const doc of snap.docs) {
+      batch.update(doc.ref, { status: 'suspended', suspendedReason: 'trial_expired_unpaid', updatedAt: now() })
+    }
+    await batch.commit()
+    for (const doc of snap.docs) {
+      const data = doc.data() || {}
+      await createBillingNotification(data.storeId, null, 'تجربتك منتهية', 'تجربتك المجانية انتهت ولا يزال الاشتراك غير مفعل. فعّل الآن لاستكمال البيع.').catch(() => {})
+      await auditLog(data.storeId, 'scheduler', 'trial_suspended', 'subscriptions', doc.id, {}).catch(() => {})
+    }
+  },
+)
+

@@ -10,8 +10,9 @@ import { Badge } from '../../shared/components/ui/Badge'
 import { EmptyState } from '../../shared/components/ui/EmptyState'
 import { SmartImage } from '../../shared/components/ui/SmartImage'
 import { formatCurrency } from '../../shared/utils/format'
-import { availableSizes, findVariant, imageIndexForColor, variantPrice, variantStock } from '../../shared/utils/product-variants'
-import { productUnitPrice, nextTierQuantity, tierForQuantity, piecesLabel } from '../../shared/utils/pricing'
+import { findVariant, imageIndexForColor, sizeInStock, variantPrice, variantStock } from '../../shared/utils/product-variants'
+import { productUnitPrice, nextTierQuantity, tierForQuantity, offerSavings, piecesLabel } from '../../shared/utils/pricing'
+import { setSeo } from '../../shared/utils/seo'
 import type { Product } from '../../shared/types'
 import { Icon } from '../../shared/components/ui/Icon'
 
@@ -38,6 +39,19 @@ export const StoreProduct: FunctionalComponent<Props> = ({ id }) => {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [product?.id, product?.pricingMode, product?.quantityTiers?.length])
 
+  useEffect(() => {
+    if (!product || !store?.name) return
+    const price = product.price ? ` — ${formatCurrency(product.price, store.currency)}` : ''
+    setSeo({
+      title: `${product.name}${price} | ${store.name}`,
+      description: product.description || `تسوق ${product.name} من ${store.name} على منصة M&K`,
+      type: 'product',
+      url: `${window.location.origin}/store/${store.slug}/product/${product.id}`,
+      image: (product.images && product.images[0]) || store.logo || null,
+    })
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [product?.id, product?.name, product?.description, product?.price, product?.images, store?.name, store?.slug, store?.currency, store?.logo])
+
   if (loading) return <div className="loading-screen"><span className="spinner spinner-lg" /></div>
 
   if (!product || product.storeId !== store?.id) {
@@ -56,12 +70,13 @@ export const StoreProduct: FunctionalComponent<Props> = ({ id }) => {
     : []
   const minQty = tiers.length > 0 ? tiers[0].quantity : 1
 
-  const availSizes = availableSizes(product, color)
-  const totalStock = hasVariants ? (product.variants || []).reduce((s, v) => s + (v.stock || 0), 0) : product.stock
-  const selectedStock = selectionComplete ? variantStock(product, color, size) : totalStock
+   const totalStock = hasVariants ? (product.variants || []).reduce((s, v) => s + (v.stock || 0), 0) : product.stock
+   const variant = hasVariants && selectionComplete ? findVariant(product, { color, size }) : undefined
+   // Resolve stock anchored on the exact variant identity (variantId) so
+   // duplicate color/size labels with different ids never read the wrong stock.
+   const selectedStock = selectionComplete ? variantStock(product, color, size, variant?.id) : totalStock
 
-  const variant = hasVariants && selectionComplete ? findVariant(product, { color, size }) : undefined
-  const displayPrice = hasVariants && selectionComplete && variant ? variantPrice(product, color, size) : product.price
+   const displayPrice = hasVariants && selectionComplete ? variantPrice(product, color, size, variant?.id) : product.price
   const unitPrice = productUnitPrice(product, variant, qty)
   const activeTier = tierForQuantity(product.quantityTiers, qty)
   const outOfStock = selectedStock <= 0
@@ -86,6 +101,13 @@ export const StoreProduct: FunctionalComponent<Props> = ({ id }) => {
 
   const addToCart = () => {
     if (!canAdd) return
+    // Never add more than the available in-stock units for this selection.
+    // For quantity (bundle) pricing a configured tier may legally exceed the
+    // available stock — surface that instead of silently overselling.
+    if (qty > Math.max(selectedStock, 0)) {
+      toast.push('الكمية غير متوفرة', 'الكمية المطلوبة غير متوفرة لهذه المجموعة.', 'error')
+      return
+    }
     cart.add({
       productId: product.id,
       name: product.name,
@@ -97,9 +119,11 @@ export const StoreProduct: FunctionalComponent<Props> = ({ id }) => {
       variantId: variant?.id,
       pricingMode: product.pricingMode,
       quantityTiers: product.quantityTiers,
-      lineTotal: unitPrice,
+      quantityPricingStrategy: product.quantityPricingStrategy,
+      lineTotal: product.pricingMode === 'quantity' ? unitPrice : unitPrice * qty,
+      maxQty: Math.max(selectedStock, 0),
     })
-    toast.push('تمت إضافة المنتج إلى السلة')
+    toast.push('تمت الإضافة إلى السلة')
   }
 
   return (
@@ -135,19 +159,27 @@ export const StoreProduct: FunctionalComponent<Props> = ({ id }) => {
           </p>
           {isQuantity && tiers.length > 0 && (
             <div className="qty-tier-table mb-2">
-              <span className="field-label">اختر الباقة</span>
+              <span className="field-label">اختر العرض</span>
               <div className="qty-tier-list">
-                {tiers.map((t) => (
-                  <button
-                    key={t.quantity}
-                    type="button"
-                    className={`qty-tier-row qty-tier-btn${activeTier && activeTier.quantity === t.quantity ? ' qty-tier-row--active' : ''}`}
-                    onClick={() => setQty(t.quantity)}
-                  >
-                    <span>{t.quantity} {piecesLabel(t.quantity)}</span>
-                    <span>{formatCurrency(t.price)}</span>
-                  </button>
-                ))}
+                {tiers.map((t) => {
+                  const sv = offerSavings(displayPrice, t.quantity, product.pricingMode, product.quantityTiers, product.quantityPricingStrategy)
+                  return (
+                    <button
+                      key={t.quantity}
+                      type="button"
+                      className={`qty-tier-row qty-tier-btn${activeTier && activeTier.quantity === t.quantity ? ' qty-tier-row--active' : ''}`}
+                      onClick={() => setQty(t.quantity)}
+                    >
+                      <span>{t.quantity} {piecesLabel(t.quantity)}</span>
+                      <span className="qty-tier-price">{formatCurrency(t.price)}</span>
+                      {sv.hasOffer && (sv.savings ?? 0) > 0 && (
+                        <span className="qty-tier-save">
+                          <s>{formatCurrency(sv.originalTotal)}</s> وفر {formatCurrency(sv.savings!)} ({sv.savingsPct}%)
+                        </span>
+                      )}
+                    </button>
+                  )
+                })}
               </div>
             </div>
           )}
@@ -180,7 +212,7 @@ export const StoreProduct: FunctionalComponent<Props> = ({ id }) => {
               <span className="field-label">المقاس:</span>
               <div className="flex flex-wrap mt-1">
                 {(product.sizes || []).map((s) => {
-                  const disabled = hasVariants && !availSizes.includes(s)
+                  const disabled = hasVariants && !sizeInStock(product, color, s)
                   return (
                     <button
                       key={s}

@@ -11,6 +11,8 @@ interface Props {
   placeholderClassName?: string
   loading?: 'lazy' | 'eager'
   decoding?: 'async' | 'sync' | 'auto'
+  /** Called when the image fails to load (lets the parent swap to its own fallback). */
+  onError?: () => void
 }
 
 /**
@@ -25,6 +27,7 @@ export const SmartImage: FunctionalComponent<Props> = ({
   title,
   loading = 'lazy',
   decoding = 'async',
+  onError,
 }) => {
   const [failed, setFailed] = useState(false)
   const usable = src && !failed
@@ -50,7 +53,10 @@ export const SmartImage: FunctionalComponent<Props> = ({
       className={className}
       loading={loading}
       decoding={decoding}
-      onError={() => setFailed(true)}
+      onError={() => {
+        setFailed(true)
+        onError?.()
+      }}
     />
   )
 }

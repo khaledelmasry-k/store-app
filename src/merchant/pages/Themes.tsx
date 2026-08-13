@@ -11,8 +11,9 @@ import { Icon } from '../../shared/components/ui/Icon'
 import { useStore } from '../../shared/hooks/useStore'
 import { useToast } from '../../shared/hooks/useToast'
 import { storesService } from '../../shared/services/stores'
-import { uploadStoreLogo, uploadStoreHero, validateImageFile } from '../../shared/services/uploads'
+import { uploadStoreLogo, uploadStoreHero, validateImageFile, uploadErrorMessage } from '../../shared/services/uploads'
 import { STORE_TEMPLATES } from '../../shared/utils/themes'
+import { STORE_LOGO_PRESETS, storeLogoKey, storeLogoKind, presetFromLogo, isPersistableImageUrl } from '../../shared/utils/store-brand'
 import type { StoreTheme } from '../../shared/types'
 
 const PRIMARY_SWATCHES = ['#6366f1', '#16a34a', '#dc2626', '#d97706', '#0284c7', '#7c3aed', '#0f172a']
@@ -99,13 +100,26 @@ export const MerchantThemes: FunctionalComponent = () => {
     setLogoUploading(true)
     try {
       const url = await uploadStoreLogo(file, store.id)
+      if (!isPersistableImageUrl(url)) {
+        throw new Error('رابط الصورة المرفوعة غير صالح للحفظ')
+      }
       await storesService.update(store.id, { logo: url })
-      toast.push('تم تحديث شعار المتجر', undefined, 'success')
+      toast.push('تم تحديث شعار المتجر', `تم الحفظ في تخزين Firebase`, 'success')
     } catch (e: any) {
       console.error('logo upload failed', e)
-      toast.push('فشل رفع الشعار', 'تحقق من اتصالك وحاول مجدداً', 'error')
+      toast.push('فشل رفع الشعار', `${uploadErrorMessage(e)}${e?.code ? ` — ${e.code}` : ''}`, 'error')
     } finally {
       setLogoUploading(false)
+    }
+  }
+
+  const selectPreset = async (id: string) => {
+    if (!store) return
+    try {
+      await storesService.update(store.id, { logo: storeLogoKey(id) })
+      toast.push('تم تحديث شعار المتجر', undefined, 'success')
+    } catch (err: any) {
+      toast.push('فشل حفظ شعار المتجر', err?.message || 'حدث خطأ غير متوقع', 'error')
     }
   }
 
@@ -134,11 +148,14 @@ export const MerchantThemes: FunctionalComponent = () => {
     setHeroUploading(true)
     try {
       const url = await uploadStoreHero(file, store.id)
+      if (!isPersistableImageUrl(url)) {
+        throw new Error('رابط الصورة المرفوعة غير صالح للحفظ')
+      }
       await storesService.update(store.id, { heroImage: url })
-      toast.push('تم تحديث صورة الغلاف', undefined, 'success')
+      toast.push('تم تحديث صورة الغلاف', `تم الحفظ في تخزين Firebase`, 'success')
     } catch (e: any) {
       console.error('hero upload failed', e)
-      toast.push('فشل رفع الصورة', 'تحقق من اتصالك وحاول مجدداً', 'error')
+      toast.push('فشل رفع الصورة', `${uploadErrorMessage(e)}${e?.code ? ` — ${e.code}` : ''}`, 'error')
     } finally {
       setHeroUploading(false)
     }
@@ -275,15 +292,44 @@ export const MerchantThemes: FunctionalComponent = () => {
         <Card title="شعار المتجر" subtitle="يظهر في رأس صفحة متجرك وتذييلها">
           <div className="logo-field">
             <div className="logo-preview">
-              {store.logo ? (
+              {storeLogoKind(store.logo) === 'preset' ? (
+                (() => {
+                  const preset = presetFromLogo(store.logo)
+                  return preset ? (
+                    <span className="logo-preview-preset"><Icon name={preset.icon} /></span>
+                  ) : (
+                    <span className="logo-preview-placeholder"><Icon name="storefront" /></span>
+                  )
+                })()
+              ) : store.logo ? (
                 <SmartImage src={store.logo} alt={store.name} className="logo-preview-img" placeholderClassName="logo-preview-placeholder" />
               ) : (
                 <span className="logo-preview-placeholder"><Icon name="storefront" /></span>
               )}
             </div>
-            <p className="muted small mb-2">JPG، PNG أو WebP — حتى 5 ميجابايت</p>
-            <div className="flex flex-gap-sm flex-wrap">
-                  <Button variant="outline" size="sm" icon="add_photo_alternate" onClick={pickLogo} loading={logoUploading}>رفع شعار</Button>
+            <p className="muted small mb-2">اختر شعاراً جاهزاً من المنصة أو ارفع شعاراً مخصصاً — JPG، PNG أو WebP حتى 5 ميجابايت</p>
+
+            <span className="field-label">شعارات جاهزة</span>
+            <div className="preset-logo-grid">
+              {STORE_LOGO_PRESETS.map((p) => {
+                const active = storeLogoKind(store.logo) === 'preset' && presetFromLogo(store.logo)?.id === p.id
+                return (
+                  <button
+                    key={p.id}
+                    type="button"
+                    className={`preset-logo-item${active ? ' preset-logo-item--active' : ''}`}
+                    title={p.name}
+                    onClick={() => selectPreset(p.id)}
+                  >
+                    <span className="preset-logo-icon"><Icon name={p.icon} /></span>
+                    <span className="preset-logo-name">{p.name}</span>
+                  </button>
+                )
+              })}
+            </div>
+
+            <div className="flex flex-gap-sm flex-wrap mt-2">
+              <Button variant="outline" size="sm" icon="add_photo_alternate" onClick={pickLogo} loading={logoUploading}>رفع شعار</Button>
               {store.logo && (
                 <Button variant="ghost" size="sm" icon="delete" onClick={removeLogo}>إزالة</Button>
               )}
