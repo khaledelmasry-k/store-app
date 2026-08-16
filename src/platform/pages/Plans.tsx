@@ -1,6 +1,7 @@
 import { FunctionalComponent, Fragment } from 'preact'
 import { useState } from 'preact/hooks'
 import { PageHeader } from '../../shared/components/ui/PageHeader'
+import { Card } from '../../shared/components/ui/Card'
 import { Badge } from '../../shared/components/ui/Badge'
 import { Button } from '../../shared/components/ui/Button'
 import { Modal } from '../../shared/components/ui/Modal'
@@ -9,13 +10,15 @@ import { Textarea } from '../../shared/components/ui/Textarea'
 import { Toggle } from '../../shared/components/ui/Toggle'
 import { EmptyState } from '../../shared/components/ui/EmptyState'
 import { SegmentedControl } from '../../shared/components/ui/SegmentedControl'
+import { Table } from '../../shared/components/ui/Table'
 import { useCollection } from '../../shared/hooks/useCollection'
 import { useToast } from '../../shared/hooks/useToast'
-import { savePlanCallable } from '../../shared/services/auth'
-import { formatCurrency } from '../../shared/utils/format'
+import { savePlanCallable, syncCanonicalPlansCallable } from '../../shared/services/auth'
+import { formatPriceEgp } from '../../shared/utils/format'
 import { PLAN_FEATURE_KEYS, PLAN_FEATURE_LABELS, type PlanFeatureKey } from '../../shared/services/subscription'
 import type { SubscriptionPlan } from '../../shared/types'
 import { Icon } from '../../shared/components/ui/Icon'
+import { CANONICAL_PLANS } from '../../shared/plans/catalog'
 
 const emptyFlags = () => Object.fromEntries(PLAN_FEATURE_KEYS.map((k) => [k as string, false])) as Record<PlanFeatureKey, boolean>
 
@@ -41,18 +44,27 @@ function formatLaunchDate(v?: any): string {
 }
 
 export const PlatformPlans: FunctionalComponent = () => {
-  const plansRes = useCollection<SubscriptionPlan>('plans', { orderBy: { field: 'priceMonthly' } })
-  const plans = plansRes.data
+  const plansRes = useCollection<SubscriptionPlan>('plans', { orderBy: { field: 'sortOrder' } })
+  const plans = [...plansRes.data].sort((a, b) => (a.sortOrder ?? 0) - (b.sortOrder ?? 0))
   const toast = useToast()
   const [billing, setBilling] = useState<'monthly' | 'yearly'>('monthly')
   const [open, setOpen] = useState(false)
   const [editing, setEditing] = useState<SubscriptionPlan | null>(null)
   const [form, setForm] = useState<Partial<SubscriptionPlan>>({ features: [] as string[] })
   const [flags, setFlags] = useState<Record<PlanFeatureKey, boolean>>(emptyFlags())
+  const [syncing, setSyncing] = useState(false)
 
   const recommendedId = [...plans].sort((a, b) => a.priceMonthly - b.priceMonthly)[Math.max(0, Math.floor((plans.length - 1) / 2))]?.id
 
   const priceOf = (p: SubscriptionPlan) => (billing === 'monthly' ? p.priceMonthly : p.priceYearly || p.priceMonthly * 10)
+  const storageLabel = (mb?: number) => {
+    const value = Number(mb || 0)
+    if (value >= 1024) {
+      const gb = value / 1024
+      return `${Number.isInteger(gb) ? gb : gb.toFixed(1)} GB`
+    }
+    return `${value} MB`
+  }
 
   const openCreate = () => {
     setEditing(null)
@@ -69,7 +81,7 @@ export const PlatformPlans: FunctionalComponent = () => {
   }
 
   const submit = async () => {
-    if (!form.name || !form.priceMonthly) {
+    if (!form.name || form.priceMonthly == null || Number(form.priceMonthly) < 0) {
       toast.push('أكمل بيانات الباقة', undefined, 'error')
       return
     }
@@ -117,13 +129,54 @@ export const PlatformPlans: FunctionalComponent = () => {
     }
   }
 
+  const syncCanonical = async () => {
+    setSyncing(true)
+    try {
+      const res = await syncCanonicalPlansCallable()
+      const count = (res.data as { count?: number })?.count || CANONICAL_PLANS.length
+      toast.push('تمت مزامنة كتالوج الخطط', `${count} خطط محدثة بالأسعار الحالية`, 'success')
+    } catch (err: any) {
+      toast.push('فشل مزامنة الخطط', err?.message || 'حدث خطأ غير متوقع', 'error')
+    } finally {
+      setSyncing(false)
+    }
+  }
+
   return (
-    <div>
+    <div className="platform-operations platform-plans-page">
       <PageHeader
         title="باقات الاشتراك"
         subtitle={`${plans.length} باقة`}
-        actions={<Button icon="add" onClick={openCreate}>باقة جديدة</Button>}
+        actions={
+          <div className="flex">
+            <Button variant="outline" icon="sync" loading={syncing} onClick={syncCanonical}>مزامنة الخطط الحالية</Button>
+            <Button icon="add" onClick={openCreate}>باقة جديدة</Button>
+          </div>
+        }
       />
+
+      <Card title="مصفوفة الخطط الحالية" subtitle="المصدر المرجعي للأسعار والحدود المطلوبة" className="mb-2">
+        <Table
+          cardMode
+          rows={CANONICAL_PLANS.map((p) => ({ ...p, id: p.id }))}
+          columns={[
+            { key: 'name', header: 'الخطة' },
+            { key: 'price', header: 'السعر', render: (p) => `${formatPriceEgp(p.priceMonthly)} / شهر، ${formatPriceEgp(p.priceYearly)} / سنة` },
+            { key: 'orders', header: 'الطلبات', render: (p) => `${p.orderLimitPerMonth} / شهر` },
+            { key: 'products', header: 'المنتجات', render: (p) => p.unlimitedProducts ? 'غير محدود' : p.productLimit },
+            { key: 'users', header: 'المستخدمون', render: (p) => p.staffLimit || 1 },
+            { key: 'storage', header: 'التخزين', render: (p) => storageLabel(p.storageLimit) },
+            { key: 'features', header: 'المزايا', render: (p) => [
+              p.customDomain ? 'نطاق مخصص' : null,
+              p.coupons ? 'كوبونات' : null,
+              p.salesLinksLimit || p.unlimitedSalesLinks ? 'روابط بيع' : null,
+              p.analytics ? 'تقارير أساسية' : null,
+              p.advancedReports ? 'تقارير متقدمة' : null,
+              p.apiAccess ? 'API' : null,
+            ].filter(Boolean).join('، ') || 'أساسي' },
+          ]}
+        />
+      </Card>
 
       <div className="flex-between mb-2">
         <SegmentedControl
@@ -149,11 +202,11 @@ export const PlatformPlans: FunctionalComponent = () => {
                 </div>
                 {p.description && <p className="plan-pricing-desc">{p.description}</p>}
                 <div className="plan-pricing-price">
-                  <strong>{formatCurrency(priceOf(p))}</strong>
+                  <strong>{formatPriceEgp(priceOf(p))}</strong>
                   <span>/ {billing === 'monthly' ? 'شهرياً' : 'سنوياً'}</span>
                 </div>
                 {p.launchEnabled && Number(p.launchPrice) > 0 && (
-                  <div className="plan-pricing-launch">أول شهر {formatCurrency(p.launchPrice)} (خصم إطلاق)</div>
+                  <div className="plan-pricing-launch">أول شهر {formatPriceEgp(p.launchPrice)} (خصم إطلاق)</div>
                 )}
                 <div className="plan-pricing-trial">تجربة مجانية {Number(p.trialDays || 3)} يوم</div>
                 <ul className="plan-pricing-features">
@@ -182,6 +235,10 @@ export const PlatformPlans: FunctionalComponent = () => {
                   <li>
                     <Icon name="group_add" />
                     حتى {p.staffLimit || 1} عضو فريق
+                  </li>
+                  <li>
+                    <Icon name="database" />
+                    {storageLabel(p.storageLimit)}
                   </li>
                   {featureList.length > 0 && (
                     <li>

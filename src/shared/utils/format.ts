@@ -6,6 +6,16 @@ export function formatCurrency(amount: number, currency = 'EGP'): string {
   }).format(amount || 0)
 }
 
+/**
+ * Price in Egyptian Arabic, number-first as required for pricing cards:
+ * "299 ج.م" / "1,499 ج.م" (Western digits + thousands separator, matching the
+ * card's other numeric labels; the Arabic "ج.م" follows the number).
+ */
+export function formatPriceEgp(amount: number): string {
+  const n = new Intl.NumberFormat('en-US').format(amount || 0)
+  return `${n} ج.م`
+}
+
 export function formatNumber(value: number): string {
   return new Intl.NumberFormat('en-US').format(value || 0)
 }

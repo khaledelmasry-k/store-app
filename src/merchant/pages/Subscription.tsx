@@ -7,7 +7,8 @@ import { getMerchantPaymentInfoCallable } from '../../shared/services/auth'
 import { submitPaymentRequestCallable } from '../../shared/services/auth'
 import { changeSubscriptionPlanCallable } from '../../shared/services/auth'
 import { uploadPaymentProof, validateImageFile } from '../../shared/services/uploads'
-import { PageHeader } from '../../shared/components/ui/PageHeader'
+import { InternalPageHeader, WorkspaceSection } from '../components/InternalWorkspace'
+import '../components/InternalWorkspace.css'
 import { Card } from '../../shared/components/ui/Card'
 import { Badge } from '../../shared/components/ui/Badge'
 import { Button } from '../../shared/components/ui/Button'
@@ -17,6 +18,7 @@ import { EmptyState } from '../../shared/components/ui/EmptyState'
 import { Modal } from '../../shared/components/ui/Modal'
 import { SegmentedControl } from '../../shared/components/ui/SegmentedControl'
 import { Icon } from '../../shared/components/ui/Icon'
+import { Table } from '../../shared/components/ui/Table'
 import { PricingCard } from '../../shared/components/subscription/PricingCard'
 import { UsageCard } from '../../shared/components/subscription/UsageCard'
 import { Progress } from '../../shared/components/ui/Progress'
@@ -52,10 +54,16 @@ export const MerchantSubscription: FunctionalComponent = () => {
   const { subscription, plan, paymentRequests, status, nextAmount, launchOffer, trialRemaining, loading, refresh } = useSubscription(storeId)
 
   const plansRes = useCollection<SubscriptionPlan>('plans', { orderBy: { field: 'priceMonthly' } })
-  const allPlans = plansRes.data.filter((p) => p.active !== false)
+  const allPlans = [...plansRes.data].filter((p) => p.active !== false).sort((a, b) => (a.sortOrder ?? 0) - (b.sortOrder ?? 0))
 
   const productsRes = useCollection<Product>('products', { storeId, orderBy: { field: 'createdAt' } })
   const productCount = productsRes.data.length
+  const teamRes = useCollection<any>('team', { storeId }, !!storeId)
+  const userCount = 1 + teamRes.data.length
+  const userLimit = Number(plan?.staffLimit || 1)
+  const userPct = userLimit > 0 ? Math.min(100, Math.round((userCount / userLimit) * 100)) : 0
+  const userLevel = userLimit > 0 ? usageLevelFor(userPct, true) : 'none'
+  const userTone = userLevel === 'reached' ? 'red' : userLevel === 'near' || userLevel === 'approaching' ? 'amber' : userLevel === 'moderate' ? 'primary' : 'green'
   const isProductsUnlimited = isPlanLimitUnlimited('products', plan)
   const productLimit = isProductsUnlimited ? 0 : Number(plan?.productLimit || 0)
   const productPct = productLimit > 0 ? Math.min(100, Math.round((productCount / productLimit) * 100)) : 0
@@ -100,6 +108,8 @@ export const MerchantSubscription: FunctionalComponent = () => {
     remainingBytes: Math.max(0, limitBytes - usedBytes),
     usedPercent: Math.min(100, Math.round((usedBytes / limitBytes) * 100)),
   } : null
+  const storageLevel = storage ? usageLevelFor(storage.usedPercent, true) : 'none'
+  const storageTone = storageLevel === 'reached' ? 'red' : storageLevel === 'near' || storageLevel === 'approaching' ? 'amber' : storageLevel === 'moderate' ? 'primary' : 'green'
 
   useEffect(() => {
     getMerchantPaymentInfoCallable()
@@ -112,7 +122,7 @@ export const MerchantSubscription: FunctionalComponent = () => {
   if (!subscription) {
     return (
       <div>
-        <PageHeader title="الاشتراك" subtitle="اشتراك متجرك" />
+        <InternalPageHeader eyebrow="إدارة الباقة" title="الاشتراك" subtitle="اشتراك متجرك" />
         <Card>
           <EmptyState
             icon="card_membership"
@@ -206,19 +216,27 @@ export const MerchantSubscription: FunctionalComponent = () => {
 
   const statusTone = SUBSCRIPTION_STATUS_TONES[status as keyof typeof SUBSCRIPTION_STATUS_TONES] || 'slate'
   const statusLabel = SUBSCRIPTION_STATUS_LABELS[status as keyof typeof SUBSCRIPTION_STATUS_LABELS] || status
+  const isFreePlan = Number(plan?.priceMonthly || 0) <= 0
+  const paidPeriodEnd = subscription.currentPeriodEnd || subscription.expiresAt
+  const renewalLabel = status === 'active' && !isFreePlan && paidPeriodEnd ? formatDate(paidPeriodEnd) : isFreePlan ? 'لا يوجد تجديد مدفوع' : '—'
 
   return (
-    <div>
-      <PageHeader title="الاشتراك" subtitle="تفاصيل باقة متجرك وتفعيل الاشتراك" />
+    <div className="merchant-operations merchant-subscription-page">
+      <InternalPageHeader eyebrow="إدارة الباقة" title="الاشتراك" subtitle="تفاصيل باقة متجرك، الاستخدام، الفوترة والميزات" />
 
+      <WorkspaceSection title="الخطة والحالة" subtitle="التواريخ مفصولة عن الاستخدام والفوترة" className="subscription-overview-workspace">
       <div className="grid grid-2">
         <Card title="معلومات الاشتراك">
           <div className="list-row"><span>الباقة</span><strong>{plan?.name || subscription.planName || '—'}</strong></div>
           <div className="list-row"><span>الحالة</span><Badge tone={statusTone}>{statusLabel}</Badge></div>
-          <div className="list-row">
-            <span>{status === 'trialing' ? 'تنتهي التجربة في' : 'ينتهي الاشتراك في'}</span>
-            <span>{formatDate(subscription.trialEndsAt || subscription.currentPeriodEnd || subscription.expiresAt)}</span>
-          </div>
+          <div className="list-row"><span>تاريخ الإنشاء</span><span>{formatDate(subscription.createdAt)}</span></div>
+          {subscription.trialStartedAt && <div className="list-row"><span>بداية التجربة</span><span>{formatDate(subscription.trialStartedAt)}</span></div>}
+          {subscription.trialEndsAt && <div className="list-row"><span>نهاية التجربة</span><span>{formatDate(subscription.trialEndsAt)}</span></div>}
+          {subscription.currentPeriodStart && <div className="list-row"><span>بداية الدورة الحالية</span><span>{formatDate(subscription.currentPeriodStart)}</span></div>}
+          {subscription.currentPeriodEnd && <div className="list-row"><span>نهاية الدورة الحالية</span><span>{formatDate(subscription.currentPeriodEnd)}</span></div>}
+          <div className="list-row"><span>موعد التجديد</span><span>{renewalLabel}</span></div>
+          <div className="list-row"><span>تاريخ الانتهاء</span><span>{isFreePlan ? 'لا ينتهي' : formatDate(subscription.expiresAt || subscription.currentPeriodEnd || subscription.trialEndsAt)}</span></div>
+          {(subscription as any).cancelledAt && <div className="list-row"><span>تاريخ الإلغاء</span><span>{formatDate((subscription as any).cancelledAt)}</span></div>}
           {subscription.activatedAt && (
             <div className="list-row"><span>تاريخ التفعيل</span><span>{formatDate(subscription.activatedAt)}</span></div>
           )}
@@ -233,8 +251,10 @@ export const MerchantSubscription: FunctionalComponent = () => {
 
         <UsageCard subscription={subscription} plan={plan} />
       </div>
+      </WorkspaceSection>
 
-      <div className="grid grid-2 mt-2">
+      <WorkspaceSection title="الاستخدام والحدود" subtitle="الاستهلاك الحالي مقارنة بحدود خطتك" className="subscription-usage-workspace">
+      <div className="grid grid-2">
         <Card title="استهلاك المنتجات">
           {productLimit <= 0 ? (
             <p className="muted small">باقتك الحالية لا تفرض حداً على عدد المنتجات.</p>
@@ -261,6 +281,41 @@ export const MerchantSubscription: FunctionalComponent = () => {
           )}
         </Card>
 
+        <Card title="استهلاك المستخدمين">
+          <div className="flex-between mb-1">
+            <span className="font-semibold">{formatNumber(userCount)} من {formatNumber(userLimit)} مستخدم</span>
+            <Badge tone={userTone as any}>{ORDER_USAGE_LABELS[userLevel] || 'طبيعي'}</Badge>
+          </div>
+          <Progress value={userCount} max={Math.max(userLimit, 1)} tone={userTone as any} />
+          <div className="summary-row mt-2">
+            <span>المقاعد المتبقية</span>
+            <strong>{formatNumber(Math.max(0, userLimit - userCount))}</strong>
+          </div>
+        </Card>
+
+        <Card title="استهلاك التخزين">
+          {storage && storage.limitBytes > 0 ? (
+            <>
+              <div className="flex-between mb-1">
+                <span className="font-semibold">
+                  {formatNumber(Math.round(storage.usedBytes / MB))} MB / {formatNumber(Math.round(storage.limitBytes / MB))} MB
+                </span>
+                <Badge tone={storageTone as any}>{ORDER_USAGE_LABELS[storageLevel] || 'طبيعي'}</Badge>
+              </div>
+              <Progress value={storage.usedBytes} max={storage.limitBytes} tone={storageTone as any} />
+              <p className="muted small mt-2">
+                {storage.limitReached
+                  ? 'استنفدت مساحة التخزين المتاحة. رقِّ باقتك أو احذف بعض الملفات للمتابعة.'
+                  : storage.remainingBytes != null
+                    ? `مساحة متبقية ${formatNumber(Math.round(storage.remainingBytes / MB))} MB (${storage.usedPercent}%).`
+                    : ''}
+              </p>
+            </>
+          ) : (
+            <p className="muted small">باقتك الحالية لا تفرض حداً واضحاً للتخزين.</p>
+          )}
+        </Card>
+
         <Card title="المزايا المفعّلة في باقتك">
           {enabledFeatures.length === 0 ? (
             <p className="muted small">لا توجد مزايا إضافية مفعّلة في باقتك الحالية.</p>
@@ -273,6 +328,7 @@ export const MerchantSubscription: FunctionalComponent = () => {
           )}
         </Card>
       </div>
+      </WorkspaceSection>
 
       <Card title="سجل الفوترة" className="mt-2">
         {snapshots.length === 0 ? (
@@ -431,34 +487,21 @@ export const MerchantSubscription: FunctionalComponent = () => {
 
       {paymentHistory.length > 0 && (
         <Card title="سجل المدفوعات" className="mt-2">
-          <div className="table-wrap">
-            <table className="table">
-              <thead>
-                <tr>
-                  <th>التاريخ</th>
-                  <th>المبلغ</th>
-                  <th>الوسيلة</th>
-                  <th>رقم العملية</th>
-                  <th>الحالة</th>
-                </tr>
-              </thead>
-              <tbody>
-                {paymentHistory.map((p: SubscriptionPayment) => (
-                  <tr key={p.id}>
-                    <td>{formatDateTime(p.createdAt)}</td>
-                    <td>{formatCurrency(p.amount, currency)}</td>
-                    <td>{p.paymentMethod}</td>
-                    <td dir="ltr">{p.reference}</td>
-                    <td>
-                      <Badge tone={p.status === 'approved' ? 'green' : p.status === 'rejected' ? 'red' : 'amber'}>
-                        {p.status === 'approved' ? 'مقبول' : p.status === 'rejected' ? 'مرفوض' : 'قيد المراجعة'}
-                      </Badge>
-                    </td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
+          <Table
+            cardMode
+            columns={[
+              { key: 'createdAt', header: 'التاريخ', render: (p: SubscriptionPayment) => formatDateTime(p.createdAt) },
+              { key: 'amount', header: 'المبلغ', render: (p: SubscriptionPayment) => formatCurrency(p.amount, currency) },
+              { key: 'paymentMethod', header: 'الوسيلة' },
+              { key: 'reference', header: 'رقم العملية', render: (p: SubscriptionPayment) => <span dir="ltr">{p.reference}</span> },
+              { key: 'status', header: 'الحالة', render: (p: SubscriptionPayment) => (
+                <Badge tone={p.status === 'approved' ? 'green' : p.status === 'rejected' ? 'red' : 'amber'}>
+                  {p.status === 'approved' ? 'مقبول' : p.status === 'rejected' ? 'مرفوض' : 'قيد المراجعة'}
+                </Badge>
+              ) },
+            ]}
+            rows={paymentHistory}
+          />
           {needsPayment && <p className="muted small mt-2">إذا سبق لك الإرسال، يرجى التحقق من حالة الطلب أعلاه قبل إعادة الإرسال.</p>}
         </Card>
       )}

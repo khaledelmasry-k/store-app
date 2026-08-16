@@ -1,7 +1,7 @@
 import { FunctionalComponent } from 'preact'
 import { useState } from 'preact/hooks'
-import { PageHeader } from '../../shared/components/ui/PageHeader'
-import { Card } from '../../shared/components/ui/Card'
+import { InternalPageHeader, WorkspaceSection } from '../components/InternalWorkspace'
+import '../components/InternalWorkspace.css'
 import { StatsCard } from '../../shared/components/ui/StatsCard'
 import { Table } from '../../shared/components/ui/Table'
 import { Badge } from '../../shared/components/ui/Badge'
@@ -147,17 +147,19 @@ export const MerchantStoreLinks: FunctionalComponent = () => {
   const totalRevenue = links.reduce((s, l) => s + (l.totalRevenue || 0), 0)
 
   return (
-    <div>
-      <PageHeader title="روابط البيع" subtitle={`${links.length} رابط`} actions={<Button icon="add" onClick={() => setOpen(true)}>رابط جديد</Button>} />
+    <div className="merchant-operations merchant-sales-links-page">
+      <InternalPageHeader eyebrow="التسويق والإسناد" title="روابط البيع" subtitle={`${links.length} رابط — تتبع الزيارات والطلبات والإيرادات حسب المصدر`} actions={<Button icon="add" onClick={() => setOpen(true)}>رابط جديد</Button>} />
 
+      <WorkspaceSection title="أداء روابط البيع" subtitle="ملخص الأداء للروابط النشطة" className="sales-links-kpi-workspace">
       <div className="stats-grid">
         <StatsCard title="إجمالي الروابط" value={links.length} icon="link" tone="primary" />
         <StatsCard title="إجمالي النقرات" value={totalClicks} icon="visibility" tone="blue" />
         <StatsCard title="طلبات مكتملة" value={totalOrders} icon="shopping_cart" tone="green" />
         <StatsCard title="إيرادات مسلّمة" value={formatCurrency(totalRevenue)} icon="payments" tone="indigo" />
       </div>
+      </WorkspaceSection>
 
-      <Card>
+      <WorkspaceSection title="كل روابط البيع" subtitle="انسخ الرابط أو افتحه أو عدّله أو أرشفه" className="sales-links-table-workspace">
         <Table cardMode
           columns={[
             { key: 'name', header: 'الاسم' },
@@ -180,7 +182,7 @@ export const MerchantStoreLinks: FunctionalComponent = () => {
           ]}
           rows={links}
         />
-      </Card>
+      </WorkspaceSection>
 
       <Modal open={open} onClose={() => setOpen(false)} title={form.id ? 'تعديل رابط بيع' : 'رابط بيع جديد'}>
         <Input label="اسم الرابط" value={form.name} onChange={(v) => setForm({ ...form, name: v })} required placeholder="مثال: رابط بائع أكتوبر" />

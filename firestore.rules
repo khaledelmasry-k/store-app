@@ -189,6 +189,23 @@ match /products/{id} {
        allow delete: if canWriteProducts(resource.data.storeId);
      }
 
+     // ─────────────────────────────────────────────────────────────
+     // productCosts — PRIVATE merchant cost data, keyed by product id.
+     // Deliberately NOT stored on the public `products` doc (public read)
+     // so the storefront and customers can never read cost prices.
+     // Read only by the owning merchant, staff with a product view/perm,
+     // or the platform admin; writes require a product-write permission.
+     // ─────────────────────────────────────────────────────────────
+     match /productCosts/{id} {
+       allow read: if isPlatformAdmin()
+         || (canAccessStore(resource.data.storeId)
+           && (isMerchant() || hasAnyPermission(['products:manage', 'products:view', 'products:create', 'products:edit', 'products:delete'])));
+       allow create: if canWriteProducts(request.resource.data.storeId);
+       allow update: if canWriteProducts(request.resource.data.storeId)
+         && request.resource.data.storeId == resource.data.storeId;
+       allow delete: if canWriteProducts(resource.data.storeId);
+     }
+
      match /categories/{id} {
        allow read: if true;
        allow create: if canWriteProducts(request.resource.data.storeId);
@@ -208,6 +225,14 @@ match /orders/{id} {
        allow update: if canWriteOrders(resource.data.storeId)
          && request.resource.data.storeId == resource.data.storeId;
        allow delete: if isPlatformAdmin();
+     }
+
+     // Private historical cost snapshots for merchant/platform profit reports.
+     // Deliberately separate from orders because registered customers may read
+     // their own order document.
+     match /orderCosts/{id} {
+       allow read: if canReadOrders(resource.data.storeId);
+       allow write: if false;
      }
 
      // ─────────────────────────────────────────────────────────────
@@ -252,10 +277,10 @@ match /orders/{id} {
       // customer must never enumerate another merchant's codes. Storefront
       // coupon validation is not read-based (coupon codes are applied server-side).
       allow read: if isAdminOrStore(resource.data.storeId) || isPlatformAdmin();
-      allow create: if canManage(request.resource.data.storeId, 'coupons:manage');
-      allow update: if canManage(request.resource.data.storeId, 'coupons:manage')
-        && request.resource.data.storeId == resource.data.storeId;
-      allow delete: if canManage(resource.data.storeId, 'coupons:manage');
+      // Mutations go through manageCoupon callable, which applies both RBAC
+      // and plan entitlement checks. A visible/disabled UI is never the only
+      // line of defence for paid features.
+      allow write: if false;
     }
 
     match /shipping/{id} {

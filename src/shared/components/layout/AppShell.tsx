@@ -119,6 +119,11 @@ export const AppShell: FunctionalComponent<Props> = ({ navKey, brand, storeSwitc
   }
 
   const impersonating = Boolean(user?.impersonatedBy)
+  const routeClass = location
+    .split('?')[0]
+    .replace(/^\/+/, '')
+    .replace(/\/+/g, '-')
+    .replace(/[^a-zA-Z0-9-]/g, '') || 'home'
 
   const sidebarContent = (
     <Fragment>
@@ -196,7 +201,7 @@ export const AppShell: FunctionalComponent<Props> = ({ navKey, brand, storeSwitc
 
   return (
     <Fragment>
-      <div className="app-shell">
+      <div className={`app-shell app-shell--${navKey} route-${routeClass}`} data-zone={navKey}>
         <aside className="sidebar" id="sidebar">
           {sidebarContent}
         </aside>
@@ -222,6 +227,10 @@ export const AppShell: FunctionalComponent<Props> = ({ navKey, brand, storeSwitc
               )}
             </div>
             <div className="topbar-actions">
+              <div className="topbar-product-state" aria-label="حالة المنصة">
+                <span className="topbar-product-state-dot" />
+                <span>{navKey === 'platform' ? 'مركز تحكم M&K' : 'تشغيل المتجر'}</span>
+              </div>
               {multiStore && (
                 <Dropdown
                   align="left"
@@ -270,7 +279,9 @@ export const AppShell: FunctionalComponent<Props> = ({ navKey, brand, storeSwitc
               </div>
             </div>
           </header>
-          <main className="shell-content">{children}</main>
+          <main className="shell-content">
+            <div className="route-surface">{children}</div>
+          </main>
         </div>
       </div>
       {drawerOpen && (

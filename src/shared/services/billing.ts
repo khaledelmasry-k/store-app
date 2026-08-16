@@ -1,4 +1,5 @@
 import { listDocs, getDocById, createDoc, updateDocById, deleteDocById } from '../utils/firestore'
+import { manageCouponCallable } from './auth'
 import type { Subscription, SubscriptionPlan, Transaction, Payment, Coupon, ShippingZone } from '../types'
 
 const subPath = 'subscriptions'
@@ -42,9 +43,9 @@ export const paymentsService = {
 
 export const couponsService = {
   list: (storeId: string) => listDocs<Coupon>(couponPath, { storeId, orderBy: { field: 'createdAt' } }),
-  create: (storeId: string, data: Omit<Coupon, 'id' | 'storeId'>) => createDoc<Coupon>(couponPath, { ...data, storeId }),
-  update: (id: string, data: Record<string, unknown>) => updateDocById(couponPath, id, data),
-  remove: (id: string) => deleteDocById(couponPath, id),
+  create: (storeId: string, data: Omit<Coupon, 'id' | 'storeId'>) => manageCouponCallable({ operation: 'create', storeId, coupon: data }),
+  update: (storeId: string, id: string, data: Record<string, unknown>) => manageCouponCallable({ operation: 'update', storeId, couponId: id, coupon: data }),
+  remove: (storeId: string, id: string) => manageCouponCallable({ operation: 'delete', storeId, couponId: id }),
 }
 
 export const shippingService = {

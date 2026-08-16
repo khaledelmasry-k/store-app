@@ -16,10 +16,10 @@ async function openStore(page: Page, slug: string) {
 }
 
 test('storefront sets title, description, OG and canonical', async ({ page }) => {
-  await openStore(page, 'beit-el-shay')
+  await openStore(page, 'test-store-a')
 
   // Title reflects the store name.
-  await expect(page).toHaveTitle(/بيت الشاي/)
+  await expect(page).toHaveTitle(/TEST - متجر اختبار A/)
 
   // Meta description present.
   const description = page.locator('meta[name="description"]')
@@ -29,10 +29,10 @@ test('storefront sets title, description, OG and canonical', async ({ page }) =>
   // Open Graph tags.
   await expect(page.locator('meta[property="og:title"]')).toHaveCount(1)
   await expect(page.locator('meta[property="og:type"]')).toHaveAttribute('content', 'website')
-  await expect(page.locator('meta[property="og:url"]')).toHaveAttribute('content', /.*\/store\/beit-el-shay$/)
+  await expect(page.locator('meta[property="og:url"]')).toHaveAttribute('content', /.*\/store\/test-store-a$/)
 
   // Canonical link matches the store URL.
-  await expect(page.locator('link[rel="canonical"]')).toHaveAttribute('href', /.*\/store\/beit-el-shay$/)
+  await expect(page.locator('link[rel="canonical"]')).toHaveAttribute('href', /.*\/store\/test-store-a$/)
 
   // Twitter card is configured.
   await expect(page.locator('meta[name="twitter:card"]')).toHaveAttribute('content', 'summary_large_image')

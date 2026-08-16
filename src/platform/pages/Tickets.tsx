@@ -35,7 +35,7 @@ export const PlatformTickets: FunctionalComponent = () => {
   }
 
   return (
-    <div>
+    <div className="platform-operations platform-tickets-page">
       <PageHeader title="تذاكر الدعم" subtitle={`${tickets.length} تذكرة`} />
       <Card>
         <Table cardMode

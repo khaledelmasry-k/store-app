@@ -1,14 +1,16 @@
 import { FunctionalComponent, Fragment } from 'preact'
-import { useRef, useState } from 'preact/hooks'
+import { useEffect, useRef, useState } from 'preact/hooks'
 import { Link } from 'wouter'
-import type { Category, ColorOption, Product, ProductVariant, QuantityPricingStrategy, QuantityTier } from '../../shared/types'
+import type { Category, ColorOption, Product, ProductCost, ProductVariant, QuantityPricingStrategy, QuantityTier } from '../../shared/types'
 import { legacyVariantId } from '../../shared/types'
-import { productsService } from '../../shared/services/products'
+import { productsService, productCostsService } from '../../shared/services/products'
 import { createProductCallable } from '../../shared/services/auth'
 import { useToast } from '../../shared/hooks/useToast'
 import { useSubscription } from '../../shared/hooks/useSubscription'
+import { useDocument } from '../../shared/hooks/useDocument'
 import { canUseFeature } from '../../shared/services/subscription'
 import { uid } from '../../shared/utils/validators'
+import { formatCurrency } from '../../shared/utils/format'
 import { Input } from '../../shared/components/ui/Input'
 import { Textarea } from '../../shared/components/ui/Textarea'
 import { Select } from '../../shared/components/ui/Select'
@@ -18,7 +20,7 @@ import { ImageGalleryUploader } from './ImageGalleryUploader'
 import { ColorManager } from './ColorManager'
 import { VariantMatrix } from './VariantMatrix'
 import { QuantityTiersEditor } from './QuantityTiersEditor'
-import { validateQuantityTiers } from '../../shared/utils/pricing'
+import { validateQuantityTiers, lineProfit, profitMargin, piecesLabel } from '../../shared/utils/pricing'
 import { Icon } from '../../shared/components/ui/Icon'
 
 interface Props {
@@ -98,6 +100,14 @@ export const ProductForm: FunctionalComponent<Props> = ({ storeId, initial, cate
   const [savingAction, setSavingAction] = useState<'draft' | 'save' | 'publish' | null>(null)
   const [error, setError] = useState('')
 
+  // Private cost price — loaded from the separate `productCosts` collection so
+  // it never travels through the public `products` document.
+  const [costPrice, setCostPrice] = useState('')
+  const { data: costDoc } = useDocument<ProductCost>('productCosts', initial?.id || null)
+  useEffect(() => {
+    if (costDoc && typeof costDoc.costPrice === 'number') setCostPrice(String(costDoc.costPrice))
+  }, [costDoc])
+
   const set = (patch: Partial<Draft>) => setDraft((prev) => ({ ...prev, ...patch }))
 
   // For a NEW product the id is generated once, before any image upload, so every
@@ -160,6 +170,13 @@ export const ProductForm: FunctionalComponent<Props> = ({ storeId, initial, cate
         return
       }
     }
+    if (costPrice !== '') {
+      const costNum = Number(costPrice)
+      if (!Number.isFinite(costNum) || costNum < 0) {
+        setError('أدخل سعر تكلفة صحيحاً (قيمة 0 أو أكثر)')
+        return
+      }
+    }
     setError('')
     setSavingAction(action)
     try {
@@ -172,6 +189,18 @@ export const ProductForm: FunctionalComponent<Props> = ({ storeId, initial, cate
         await createProductCallable({ storeId, productId, data })
         toast.push('تم إضافة المنتج')
       }
+      // Persist the private cost price separately from the public product doc.
+      const productId = getProductId()
+      const costNum = costPrice === '' ? null : Number(costPrice)
+      if (costNum != null && Number.isFinite(costNum)) {
+        await productCostsService.set(productId, storeId, { costPrice: costNum })
+      } else if (initial) {
+        try {
+          await productCostsService.remove(initial.id)
+        } catch {
+          // No cost doc existed yet — nothing to remove.
+        }
+      }
       onSaved()
     } catch (e) {
       console.error('save product failed', e)
@@ -182,14 +211,36 @@ export const ProductForm: FunctionalComponent<Props> = ({ storeId, initial, cate
     }
   }
 
-  const section = (title: string) => <h4 className="product-form-section">{title}</h4>
+  const section = (title: string, id: string, icon: string) => (
+    <div className="product-form-section" id={id} role="heading" aria-level={3}>
+      <Icon name={icon} ariaHidden />
+      <span>{title}</span>
+    </div>
+  )
 
   const lockedFeatures: string[] = []
   if (qtyLocked) lockedFeatures.push('التسعير حسب الكمية')
   if (variantLocked) lockedFeatures.push('المخزون حسب المقاس/اللون')
 
   return (
-    <div className="product-form">
+    <div className="product-form commerce-editor merchant-product-editor">
+      <aside className="commerce-editor-rail" aria-label="أقسام المنتج">
+        <a href="#product-basic"><Icon name="edit_note" ariaHidden />معلومات</a>
+        <a href="#product-pricing"><Icon name="payments" ariaHidden />تسعير</a>
+        <a href="#product-stock"><Icon name="inventory" ariaHidden />مخزون</a>
+        <a href="#product-media"><Icon name="photo_library" ariaHidden />صور</a>
+        <a href="#product-variants"><Icon name="tune" ariaHidden />متغيرات</a>
+        <a href="#product-publish"><Icon name="storefront" ariaHidden />نشر</a>
+      </aside>
+      <div className="commerce-editor-main">
+      <header className="product-editor-main-header">
+        <div>
+          <span className="internal-page-eyebrow">مساحة تحرير المنتج</span>
+          <h2>{initial ? 'تعديل المنتج' : 'إضافة منتج جديد'}</h2>
+          <p>نظّم بيانات المنتج، التسعير، المتغيرات والنشر من نفس المساحة.</p>
+        </div>
+        <span className="product-editor-state">{draft.active ? 'منشور' : 'مسودة'}</span>
+      </header>
       {error && <div className="form-error-banner">{error}</div>}
 
       {lockedFeatures.length > 0 && (
@@ -205,7 +256,7 @@ export const ProductForm: FunctionalComponent<Props> = ({ storeId, initial, cate
         </div>
       )}
 
-      {section('معلومات المنتج')}
+      {section('معلومات المنتج', 'product-basic', 'edit_note')}
       <div className="grid grid-2">
         <Input label="اسم المنتج" value={draft.name} onChange={(v) => set({ name: v })} required />
         <Input label="SKU" value={draft.sku} onChange={(v) => set({ sku: v })} />
@@ -218,10 +269,20 @@ export const ProductForm: FunctionalComponent<Props> = ({ storeId, initial, cate
         options={[{ value: '', label: 'بدون فئة' }, ...categories.map((c) => ({ value: c.id, label: c.name }))]}
       />
 
-      {section('التسعير')}
+      {section('التسعير والتكلفة', 'product-pricing', 'payments')}
       <div className="grid grid-2">
         <Input label="السعر" type="number" value={draft.price} onChange={(v) => set({ price: v })} required />
         <Input label="السعر قبل الخصم" type="number" value={draft.oldPrice} onChange={(v) => set({ oldPrice: v })} />
+      </div>
+      <div className="field mt-1">
+        <Input
+          label="سعر التكلفة"
+          type="number"
+          min={0}
+          value={costPrice}
+          onChange={setCostPrice}
+          hint="سعر التكلفة خاص بك ولن يظهر للعملاء."
+        />
       </div>
       <div className="field mt-1">
         <Select
@@ -261,7 +322,9 @@ export const ProductForm: FunctionalComponent<Props> = ({ storeId, initial, cate
         </>
       )}
 
-      {section('المخزون')}
+      <ProfitSummary draft={draft} costPrice={costPrice} />
+
+      {section('المخزون', 'product-stock', 'inventory')}
       <div className="grid grid-2">
         <Input
           label={draft.variants.length > 0 ? 'المخزون (يُحسب تلقائياً من المتغيرات)' : 'المخزون'}
@@ -273,10 +336,10 @@ export const ProductForm: FunctionalComponent<Props> = ({ storeId, initial, cate
         <Input label="حد التنبيه المنخفض" type="number" value={draft.lowStockThreshold} onChange={(v) => set({ lowStockThreshold: v })} />
       </div>
 
-      {section('صور المنتج')}
+      {section('صور المنتج', 'product-media', 'photo_library')}
       <ImageGalleryUploader storeId={storeId} productId={getProductId()} images={draft.images} onChange={(images) => set({ images })} />
 
-      {section('الألوان')}
+      {section('الألوان', 'product-colors', 'palette')}
       <ColorManager
         storeId={storeId}
         productId={getProductId()}
@@ -295,7 +358,7 @@ export const ProductForm: FunctionalComponent<Props> = ({ storeId, initial, cate
         }
       />
 
-      {section('المقاسات والمتغيرات')}
+      {section('المقاسات والمتغيرات', 'product-variants', 'tune')}
       {variantLocked && draft.variants.length > 0 && (
         <div className="form-error-banner mb-1">
           المخزون حسب المقاس/اللون غير متوفر في باقتك الحالية — رقِّ باقتك لحفظ المتغيرات.
@@ -309,7 +372,7 @@ export const ProductForm: FunctionalComponent<Props> = ({ storeId, initial, cate
         onVariantsChange={(variants) => set({ variants })}
       />
 
-      {section('النشر')}
+      {section('النشر', 'product-publish', 'storefront')}
       <div className="field">
         <Toggle checked={draft.active} onChange={(v) => set({ active: v })} label="منشور في المتجر" />
       </div>
@@ -322,6 +385,81 @@ export const ProductForm: FunctionalComponent<Props> = ({ storeId, initial, cate
           <Button variant="soft" icon="rocket_launch" onClick={() => save('publish', true)} loading={savingAction === 'publish'}>حفظ ونشر</Button>
         </Fragment>
       </div>
+      </div>
+    </div>
+  )
+}
+
+/**
+ * Live profit preview: selling − cost per unit, margin %, and — when quantity
+ * pricing is used — the profit of every bundle tier based on its ACTUAL total
+ * price (never `qty × base price`).
+ */
+function ProfitSummary({ draft, costPrice }: { draft: Draft; costPrice: string }) {
+  const unitPrice = Number(draft.price) || 0
+  const costValid = costPrice !== '' && Number.isFinite(Number(costPrice)) && Number(costPrice) >= 0
+  const cost = costValid ? Number(costPrice) : null
+
+  if (!costValid) {
+    return (
+      <div className="cost-profit-summary is-empty">
+        <Icon name="trending_up" ariaHidden />
+        <div>
+          <strong>الربح المتوقع</strong>
+          <p className="muted small m-0">أدخل سعر التكلفة لعرض الربح وهامش الربح.</p>
+        </div>
+      </div>
+    )
+  }
+
+  const unitProfit = unitPrice - (cost as number)
+  const margin = profitMargin(unitProfit, unitPrice)
+  const profitTone = unitProfit < 0 ? 'negative' : 'positive'
+
+  const tierRows: { qty: number; price: number; profit: number }[] = draft.pricingMode === 'quantity'
+    ? draft.quantityTiers
+        .filter((t) => Number.isFinite(t.price))
+        .map((t) => ({
+          qty: t.quantity,
+          price: t.price,
+          profit: lineProfit(unitPrice, t.quantity, cost as number, 'quantity', draft.quantityTiers, draft.quantityPricingStrategy),
+        }))
+    : []
+
+  return (
+    <div className={`cost-profit-summary ${profitTone}`}>
+      <div className="cost-profit-summary-head">
+        <span className="cost-profit-summary-title">
+          <Icon name="trending_up" ariaHidden />
+          الربح المتوقع
+        </span>
+        <span className="cost-profit-summary-margin">
+          {margin != null ? `هامش الربح: ${margin.toFixed(1).replace(/\.0$/, '')}%` : 'هامش الربح: —'}
+        </span>
+      </div>
+      <div className="cost-profit-summary-row">
+        <span>سعر البيع</span>
+        <strong>{formatCurrency(unitPrice)}</strong>
+      </div>
+      <div className="cost-profit-summary-row">
+        <span>التكلفة</span>
+        <strong>{formatCurrency(cost as number)}</strong>
+      </div>
+      <div className="cost-profit-summary-row is-profit">
+        <span>الربح للوحدة</span>
+        <strong>{formatCurrency(unitProfit)}</strong>
+      </div>
+      {tierRows.length > 0 && (
+        <div className="cost-profit-tiers">
+          <div className="cost-profit-tiers-title">الربح حسب باقات الكمية</div>
+          {tierRows.map((t) => (
+            <div key={t.qty} className="cost-profit-summary-row">
+              <span>{t.qty} {piecesLabel(t.qty)}</span>
+              <strong>{formatCurrency(t.profit)}</strong>
+            </div>
+          ))}
+        </div>
+      )}
     </div>
   )
 }

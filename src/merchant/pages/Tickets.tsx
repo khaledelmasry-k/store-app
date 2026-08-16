@@ -48,7 +48,7 @@ export const MerchantTickets: FunctionalComponent = () => {
   }
 
   return (
-    <div>
+    <div className="merchant-operations merchant-tickets-page">
       <PageHeader title="الدعم الفني" subtitle={`${tickets.length} تذكرة`} />
       <div className="grid grid-2">
         <Card title="إنشاء تذكرة جديدة">

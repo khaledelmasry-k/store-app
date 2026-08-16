@@ -11,9 +11,11 @@ import { Select } from '../../shared/components/ui/Select'
 import { Toggle } from '../../shared/components/ui/Toggle'
 import { ConfirmDialog } from '../../shared/components/ui/ConfirmDialog'
 import { useStore } from '../../shared/hooks/useStore'
+import { useSubscription } from '../../shared/hooks/useSubscription'
 import { useCollection } from '../../shared/hooks/useCollection'
 import { useToast } from '../../shared/hooks/useToast'
 import { couponsService } from '../../shared/services/billing'
+import { canUseFeature } from '../../shared/services/subscription'
 import { formatCurrency } from '../../shared/utils/format'
 import type { Coupon } from '../../shared/types'
 import { Icon } from '../../shared/components/ui/Icon'
@@ -23,12 +25,18 @@ export const MerchantCoupons: FunctionalComponent = () => {
   const storeId = store?.id || ''
   const couponsRes = useCollection<Coupon>('coupons', { storeId });
   const coupons = couponsRes.data
+  const { plan, loading: subscriptionLoading } = useSubscription(storeId)
+  const couponsEnabled = canUseFeature('coupons', plan)
   const toast = useToast()
   const [open, setOpen] = useState(false)
   const [deleteTarget, setDeleteTarget] = useState<Coupon | null>(null)
   const [form, setForm] = useState<Partial<Coupon>>({ type: 'percent', active: true })
 
   const submit = async () => {
+    if (!couponsEnabled) {
+      toast.push('ميزة مقفلة', 'الكوبونات متاحة بدايةً من خطة Starter.', 'error')
+      return
+    }
     if (!form.code || !form.value) {
       toast.push('أدخل الكود والقيمة', undefined, 'error')
       return
@@ -53,7 +61,7 @@ export const MerchantCoupons: FunctionalComponent = () => {
 
   const toggleActive = async (c: Coupon, v: boolean) => {
     try {
-      await couponsService.update(c.id, { active: v })
+      await couponsService.update(storeId, c.id, { active: v })
     } catch (err: any) {
       toast.push('تعذر تحديث حالة الكوبون', err?.message || 'حدث خطأ غير متوقع', 'error')
     }
@@ -62,7 +70,7 @@ export const MerchantCoupons: FunctionalComponent = () => {
   const remove = async () => {
     if (!deleteTarget) return
     try {
-      await couponsService.remove(deleteTarget.id)
+      await couponsService.remove(storeId, deleteTarget.id)
       toast.push('تم حذف الكوبون')
     } catch (err: any) {
       toast.push('تعذر حذف الكوبون', err?.message || 'حدث خطأ غير متوقع', 'error')
@@ -71,8 +79,16 @@ export const MerchantCoupons: FunctionalComponent = () => {
   }
 
   return (
-    <div>
-      <PageHeader title="الكوبونات" subtitle={`${coupons.length} كوبون`} actions={<Button icon="add" onClick={() => setOpen(true)}>كوبون جديد</Button>} />
+    <div className="merchant-operations merchant-coupons-page">
+      <PageHeader title="الكوبونات" subtitle={`${coupons.length} كوبون`} actions={<Button icon="add" disabled={!couponsEnabled || subscriptionLoading} onClick={() => setOpen(true)}>كوبون جديد</Button>} />
+      {!subscriptionLoading && !couponsEnabled && (
+        <Card className="mb-2" title="الكوبونات متاحة في خطة Starter">
+          <div className="flex-between flex-wrap">
+            <p className="muted">احتفظ بكوبوناتك الحالية كقراءة فقط، ورقِّ خطتك لإنشاء أو تفعيل كوبونات جديدة.</p>
+            <a href="/dashboard/subscription"><Button variant="primary" icon="workspace_premium">ترقية الخطة</Button></a>
+          </div>
+        </Card>
+      )}
       <Card>
         <Table cardMode
           columns={[
@@ -80,7 +96,7 @@ export const MerchantCoupons: FunctionalComponent = () => {
             { key: 'type', header: 'النوع', render: (c: Coupon) => <Badge tone={c.type === 'percent' ? 'violet' : 'blue'}>{c.type === 'percent' ? 'نسبة' : 'مبلغ'}</Badge> },
             { key: 'value', header: 'القيمة', render: (c: Coupon) => c.type === 'percent' ? `${c.value}%` : formatCurrency(c.value) },
             { key: 'usedCount', header: 'الاستخدام', render: (c: Coupon) => `${c.usedCount}${c.maxUses ? ` / ${c.maxUses}` : ''}` },
-            { key: 'active', header: 'الحالة', render: (c: Coupon) => <Toggle checked={c.active} onChange={(v) => toggleActive(c, v)} /> },
+            { key: 'active', header: 'الحالة', render: (c: Coupon) => <Toggle checked={c.active} disabled={!couponsEnabled} onChange={(v) => toggleActive(c, v)} /> },
             { key: 'actions', header: '', render: (c: Coupon) => <button className="icon-btn" onClick={() => setDeleteTarget(c)}><Icon name="delete" /></button> },
           ]}
           rows={coupons}

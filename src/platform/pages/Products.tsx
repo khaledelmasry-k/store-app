@@ -38,7 +38,7 @@ export const PlatformProducts: FunctionalComponent = () => {
   if (productsRes.loading) return <Loading />
 
   return (
-    <div>
+    <div className="platform-operations platform-products-page">
       <PageHeader title="منتجات المنصة" subtitle={`${totalProducts} منتج عبر جميع المتاجر`} />
 
       <div className="stats-grid">

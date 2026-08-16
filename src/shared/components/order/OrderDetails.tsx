@@ -1,4 +1,4 @@
-import { FunctionalComponent, Fragment } from 'preact'
+import { FunctionalComponent } from 'preact'
 import { useState } from 'preact/hooks'
 import { Card } from '../ui/Card'
 import { Badge } from '../ui/Badge'
@@ -6,12 +6,15 @@ import { Button } from '../ui/Button'
 import { Select } from '../ui/Select'
 import { Table } from '../ui/Table'
 import { useDocument } from '../../hooks/useDocument'
+import { useCollection } from '../../hooks/useCollection'
 import { useToast } from '../../hooks/useToast'
 import { updateOrderStatusCallable } from '../../services/auth'
 import { formatCurrency, formatDateTime } from '../../utils/format'
 import { ORDER_STATUSES, STATUS_LABELS, STATUS_COLORS } from '../../utils/constants'
-import type { Order } from '../../types'
+import { orderItemRevenue } from '../../utils/pricing'
+import type { Order, OrderCost, ProductCost } from '../../types'
 import { Icon } from '../ui/Icon'
+import '../../../merchant/components/InternalWorkspace.css'
 
 interface Props {
   id: string
@@ -22,12 +25,31 @@ const TERMINAL: Order['status'][] = ['CANCELLED', 'RETURNED']
 
 export const OrderDetails: FunctionalComponent<Props> = ({ id }) => {
   const { data: order, loading } = useDocument<Order>('orders', id)
+  const { data: orderCost } = useDocument<OrderCost>('orderCosts', order?.id || null)
+  const costsRes = useCollection<ProductCost>('productCosts', { storeId: order?.storeId || '__none__' }, !!order?.storeId)
   const toast = useToast()
   const [status, setStatus] = useState('')
   const [saving, setSaving] = useState(false)
 
   if (loading) return <div className="loading-screen"><span className="spinner spinner-lg" /></div>
   if (!order) return <Card title="الطلب غير موجود" />
+
+  // Gross profit: prefer the immutable private orderCosts snapshot. Fall back
+  // to current productCosts only for legacy orders created before snapshots.
+  const costByLine = new Map((orderCost?.items || []).map((c) => [c.lineId, c.costPrice]))
+  const costByProduct = new Map(costsRes.data.map((c) => [c.id, c.costPrice]))
+  let grossRevenue = 0
+  let cogs = 0
+  let costedLines = 0
+  for (const it of order.items) {
+    const cost = costByLine.has(it.id) ? costByLine.get(it.id) : costByProduct.get(it.productId)
+    if (typeof cost !== 'number' || cost < 0) continue
+    grossRevenue += orderItemRevenue(it)
+    cogs += Math.max(1, it.quantity || 1) * cost
+    costedLines += 1
+  }
+  const hasCosts = costedLines > 0
+  const grossProfit = grossRevenue - cogs
 
   const changeStatus = async () => {
     if (!status || status === order.status) return
@@ -49,15 +71,20 @@ export const OrderDetails: FunctionalComponent<Props> = ({ id }) => {
   const statusLabel = STATUS_LABELS[order.status as keyof typeof STATUS_LABELS] || order.status
 
   return (
-    <Fragment>
-      <div className="flex-between mb-2">
-        <h1 className="page-title">
-          <span className="monospace">{order.orderNumber}</span>
-        </h1>
-        <Badge tone={statusTone}>{statusLabel}</Badge>
-      </div>
+    <div className="order-detail-workspace">
+      <section className="workspace-section card order-detail-status-section">
+        <div className="workspace-section-body order-detail-status-body">
+          <div className="flex-between">
+            <div>
+              <span className="eyebrow">معرّف الطلب</span>
+              <h1 className="page-title"><span className="monospace">{order.orderNumber}</span></h1>
+            </div>
+            <Badge tone={statusTone}>{statusLabel}</Badge>
+          </div>
+        </div>
+      </section>
 
-      <Card className="mb-2">
+      <Card className="order-timeline-card">
         <div className="order-steps">
           {PROGRESS.map((s, i) => {
             const done = stepIndex >= 0 && i <= stepIndex
@@ -81,8 +108,8 @@ export const OrderDetails: FunctionalComponent<Props> = ({ id }) => {
         )}
       </Card>
 
-      <div className="grid grid-2">
-        <Card title="معلومات العميل">
+      <div className="order-detail-summary-grid">
+        <section className="workspace-section"><div className="workspace-section-head"><div><h2>معلومات العميل</h2><p>بيانات الشحن والتواصل المرتبطة بالطلب</p></div></div><div className="workspace-section-body">
           <dl className="kv">
             <div className="kv-item"><dt>الاسم</dt><dd>{order.customerName}</dd></div>
             <div className="kv-item"><dt>الهاتف</dt><dd>{order.phone}</dd></div>
@@ -91,8 +118,8 @@ export const OrderDetails: FunctionalComponent<Props> = ({ id }) => {
             <div className="kv-item"><dt>العنوان</dt><dd>{order.address}</dd></div>
             {order.notes && <div className="kv-item"><dt>ملاحظات</dt><dd>{order.notes}</dd></div>}
           </dl>
-        </Card>
-        <Card title="ملخص الطلب">
+        </div></section>
+        <section className="workspace-section"><div className="workspace-section-head"><div><h2>ملخص الطلب</h2><p>القيمة، الدفع والتاريخ</p></div></div><div className="workspace-section-body">
           <dl className="kv">
             <div className="kv-item"><dt>المجموع الفرعي</dt><dd>{formatCurrency(order.subtotal)}</dd></div>
             <div className="kv-item"><dt>الشحن</dt><dd>{formatCurrency(order.shippingFee)}</dd></div>
@@ -101,10 +128,10 @@ export const OrderDetails: FunctionalComponent<Props> = ({ id }) => {
             <div className="kv-item"><dt>طريقة الدفع</dt><dd>{order.paymentMethod === 'cod' ? 'عند الاستلام' : order.paymentMethod === 'bank' ? 'تحويل بنكي' : order.paymentMethod}</dd></div>
             <div className="kv-item"><dt>التاريخ</dt><dd>{formatDateTime(order.createdAt)}</dd></div>
           </dl>
-        </Card>
+        </div></section>
       </div>
 
-      <Card title="المنتجات" subtitle={`${order.items.length} منتج`} className="mt-2 mb-2">
+      <section className="workspace-section"><div className="workspace-section-head"><div><h2>المنتجات</h2><p>{order.items.length} منتج مع الخيارات والكميات والأسعار</p></div></div><div className="workspace-section-body">
         <Table
           columns={[
             { key: 'name', header: 'المنتج' },
@@ -115,9 +142,21 @@ export const OrderDetails: FunctionalComponent<Props> = ({ id }) => {
           ]}
           rows={order.items as any}
         />
-      </Card>
+      </div></section>
 
-      <Card title="تغيير الحالة">
+      <section className="workspace-section"><div className="workspace-section-head"><div><h2>الربح الإجمالي</h2><p>إيرادات الطلب مطروحاً منها تكلفة البضاعة المباعة</p></div></div><div className="workspace-section-body">
+        {hasCosts ? (
+          <div className="kv">
+            <div className="kv-item"><dt>إيرادات الطلب</dt><dd>{formatCurrency(grossRevenue)}</dd></div>
+            <div className="kv-item"><dt>تكلفة البضاعة (COGS)</dt><dd>{formatCurrency(cogs)}</dd></div>
+            <div className="kv-item"><dt>الربح الإجمالي</dt><dd className={grossProfit < 0 ? 'text-red font-semibold' : 'font-semibold'}>{formatCurrency(grossProfit)}</dd></div>
+          </div>
+        ) : (
+          <p className="muted small m-0">أضف أسعار التكلفة للمنتجات لعرض الأرباح.</p>
+        )}
+      </div></section>
+
+      <section className="workspace-section"><div className="workspace-section-head"><div><h2>تغيير الحالة</h2><p>تحديث حالة الطلب وفق دورة العمل الحالية</p></div></div><div className="workspace-section-body order-status-actions">
         <div className="flex">
           <Select
             value={status}
@@ -127,7 +166,7 @@ export const OrderDetails: FunctionalComponent<Props> = ({ id }) => {
           />
           <Button onClick={changeStatus} loading={saving} disabled={!status}>تحديث</Button>
         </div>
-      </Card>
-    </Fragment>
+      </div></section>
+    </div>
   )
 }

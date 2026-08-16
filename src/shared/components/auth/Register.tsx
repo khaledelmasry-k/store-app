@@ -12,6 +12,8 @@ import { formatCurrency } from '../../utils/format'
 import { isEmailValid } from '../../utils/validators'
 import type { SubscriptionPlan } from '../../types'
 import { Icon } from '../ui/Icon'
+import { PricingCard } from '../subscription/PricingCard'
+import { CANONICAL_PLANS } from '../../plans/catalog'
 
 const STEPS = [
   { key: 'account', label: 'إنشاء الحساب', icon: 'person' },
@@ -24,7 +26,9 @@ export const Register:FunctionalComponent = () => {
   const [loc] = useLocation()
   const params = new URLSearchParams(loc.split('?')[1] || window.location.search)
   const plansRes = useCollection<SubscriptionPlan>('plans', {})
-  const plans = plansRes.data
+  const plans = [...(plansRes.data.length ? plansRes.data : CANONICAL_PLANS)]
+    .filter((p) => p.active !== false)
+    .sort((a, b) => (a.sortOrder ?? 0) - (b.sortOrder ?? 0))
   const [planId, setPlanId] = useState(params.get('plan') || undefined)
   const selectedPlan = planId ? plans.find((p) => p.id === planId) : undefined
 
@@ -118,6 +122,26 @@ export const Register:FunctionalComponent = () => {
           ))}
         </div>
 
+        {plans.length > 0 && (
+          <div className="register-plan-strip" aria-label="اختيار الباقة">
+            {plans.map((p) => (
+              <button
+                key={p.id}
+                type="button"
+                className={`register-plan-pill${p.id === selectedPlan?.id ? ' is-selected' : ''}${p.isPopular ? ' is-popular' : ''}`}
+                onClick={() => {
+                  setPlanId(p.id)
+                  setStep(1)
+                }}
+              >
+                <span>{p.name}</span>
+                <strong>{formatCurrency(p.priceMonthly)}</strong>
+                {p.isPopular && <em>الأكثر شعبية</em>}
+              </button>
+            ))}
+          </div>
+        )}
+
         {step === 0 && (
           <>
             <h1 className="auth-title">إنشاء الحساب</h1>
@@ -150,26 +174,16 @@ export const Register:FunctionalComponent = () => {
                 </div>
               </div>
             )}
-            <div className="plan-cards">
+            <div className="plan-cards plan-cards--pricing">
               {plans.map((p) => (
-                <div
+                <PricingCard
                   key={p.id}
-                  className={`plan-card${p.id === selectedPlan?.id ? ' plan-card--selected' : ''}`}
-                  onClick={() => setPlanId(p.id)}
-                >
-                  <div className="plan-card-name">
-                    <span>{p.name}</span>
-                    {p.id === selectedPlan?.id && <Icon name="check_circle" />}
-                  </div>
-                  {p.description && <p className="plan-card-desc">{p.description}</p>}
-                  <span className="plan-card-price">
-                    {formatCurrency(p.priceMonthly)} <span className="muted">/ شهرياً</span>
-                  </span>
-                  {p.launchEnabled && Number(p.launchPrice) > 0 && (
-                    <span className="plan-card-launch">أول شهر {formatCurrency(p.launchPrice)}</span>
-                  )}
-                  <span className="plan-card-trial">تجربة مجانية {Number(p.trialDays || 3)} أيام</span>
-                </div>
+                  plan={p}
+                  featured={!!p.isPopular}
+                  selected={p.id === selectedPlan?.id}
+                  onSelect={() => setPlanId(p.id)}
+                  ctaLabel={p.id === selectedPlan?.id ? 'تم الاختيار' : 'اختيار الخطة'}
+                />
               ))}
             </div>
             <div className="flex flex-gap-md">

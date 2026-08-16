@@ -46,6 +46,17 @@ async function ensureStore(slug: string, email: string, name: string) {
     for (const doc of prods.docs) {
       await doc.ref.update({ variants: [], colors: [], sizes: [], stock: 50, active: true })
     }
+    if (prods.empty) {
+      const prod = db.collection('products').doc()
+      await prod.set({
+        id: prod.id, storeId: existing.id, name: 'منتج اختبار التدفق', price: 240, oldPrice: 300,
+        description: 'منتج تجريبي', images: [], stock: 50, variants: [], colors: [], sizes: [],
+        active: true, featured: true, lowStockThreshold: 5,
+        createdAt: admin.firestore.FieldValue.serverTimestamp(),
+        updatedAt: admin.firestore.FieldValue.serverTimestamp(),
+        createdBy: 'customer-flow-spec',
+      })
+    }
     return existing.id
   }
 
@@ -158,10 +169,12 @@ test('guest checkout confirms order + shows tracking hint and optional account C
 
 test('guest tracks order with order number + phone (correct pair allowed)', async ({ page }) => {
   const c = ctx()
-  await ensureStore(c.slug, c.email, `متجر تدفق العميل ${c.uniq}`)
+  const storeId = await ensureStore(c.slug, c.email, `متجر تدفق العميل ${c.uniq}`)
+  const latest = await latestOrderNumber(storeId)
+  expect(latest).not.toBeNull()
   await page.goto(`/store/${c.slug}/track`, { waitUntil: 'domcontentloaded' })
   await page.locator('.field', { hasText: 'رقم الهاتف' }).locator('input').fill('01020000001')
-  await page.locator('.field', { hasText: 'رقم الطلب' }).locator('input').fill('ORD-00001')
+  await page.locator('.field', { hasText: 'رقم الطلب' }).locator('input').fill(latest!.data.orderNumber)
   await page.getByRole('button', { name: 'تتبع الطلب' }).click()
   await expect(page.getByText('جديد').first()).toBeVisible({ timeout: 15000 })
   await expect(page.locator('.order-steps')).toBeVisible()
@@ -169,10 +182,12 @@ test('guest tracks order with order number + phone (correct pair allowed)', asyn
 
 test('guest tracking: wrong phone is denied', async ({ page }) => {
   const c = ctx()
-  await ensureStore(c.slug, c.email, `متجر تدفق العميل ${c.uniq}`)
+  const storeId = await ensureStore(c.slug, c.email, `متجر تدفق العميل ${c.uniq}`)
+  const latest = await latestOrderNumber(storeId)
+  expect(latest).not.toBeNull()
   await page.goto(`/store/${c.slug}/track`, { waitUntil: 'domcontentloaded' })
   await page.locator('.field', { hasText: 'رقم الهاتف' }).locator('input').fill('01099999999')
-  await page.locator('.field', { hasText: 'رقم الطلب' }).locator('input').fill('ORD-00001')
+  await page.locator('.field', { hasText: 'رقم الطلب' }).locator('input').fill(latest!.data.orderNumber)
   await page.getByRole('button', { name: 'تتبع الطلب' }).click()
   await expect(page.getByText('لا توجد طلبات مطابقة لهذه البيانات.')).toBeVisible({ timeout: 15000 })
 })

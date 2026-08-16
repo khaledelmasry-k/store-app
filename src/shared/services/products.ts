@@ -1,7 +1,8 @@
 import { listDocs, getDocById, createDoc, setDocById, updateDocById, deleteDocById } from '../utils/firestore'
-import type { Product } from '../types'
+import type { Product, ProductCost } from '../types'
 
 const PATH = 'products'
+const COST_PATH = 'productCosts'
 
 export const productsService = {
   list: (storeId: string) =>
@@ -20,4 +21,17 @@ export const productsService = {
       : createDoc<Product>(PATH, { ...data, storeId }),
   update: (id: string, data: Record<string, unknown>) => updateDocById(PATH, id, data),
   remove: (id: string) => deleteDocById(PATH, id),
+}
+
+/**
+ * Private cost-price service. `costPrice` is sensitive merchant data and is
+ * stored OUTSIDE the publicly-readable `products` collection, so it can never
+ * leak to the storefront, cart, checkout or customer order views.
+ */
+export const productCostsService = {
+  list: (storeId: string) => listDocs<ProductCost>(COST_PATH, { storeId }),
+  get: (id: string) => getDocById<ProductCost>(COST_PATH, id),
+  set: (productId: string, storeId: string, data: Pick<ProductCost, 'costPrice'> & Partial<Pick<ProductCost, 'variantCosts'>>) =>
+    setDocById<ProductCost>(COST_PATH, productId, { storeId, ...data }),
+  remove: (productId: string) => deleteDocById(COST_PATH, productId),
 }

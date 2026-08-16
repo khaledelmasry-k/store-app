@@ -60,7 +60,7 @@ export const MerchantTeam: FunctionalComponent = () => {
   }
 
   return (
-    <div>
+    <div className="merchant-operations merchant-team-page">
       <PageHeader
         title="الفريق والصلاحيات"
         subtitle={tab === 'members' ? `إدارة أعضاء فريقك ودعوة موظفين (${team.length} عضو)` : `إدارة الأدوار والصلاحيات (${roles.length} دور)`}

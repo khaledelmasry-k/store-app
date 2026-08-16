@@ -7,7 +7,7 @@ async function noHScroll(page: Page) {
 }
 
 test('published storefront renders themed and fits viewport', async ({ page }) => {
-  await page.goto('/store/beit-el-shay', { waitUntil: 'domcontentloaded' })
+  await page.goto('/store/test-store-a', { waitUntil: 'domcontentloaded' })
   await expect(page.locator('.store-shell')).toBeVisible({ timeout: 15000 })
   await expect(page.locator('.store-card').first()).toBeVisible()
   const primary = await page
@@ -20,7 +20,7 @@ test('published storefront renders themed and fits viewport', async ({ page }) =
 })
 
 test('coming-soon page fits viewport with no overflow', async ({ page }) => {
-  await page.goto('/store/amal-kids', { waitUntil: 'domcontentloaded' })
+  await page.goto('/store/test-store-e', { waitUntil: 'domcontentloaded' })
   await expect(page.locator('.store-coming-soon')).toBeVisible({ timeout: 15000 })
   const overflow = await noHScroll(page)
   expect(overflow).toBeLessThan(20)

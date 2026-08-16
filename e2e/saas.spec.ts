@@ -122,20 +122,20 @@ test('free store blocks quantity pricing inline and never creates the product', 
   expect(await productCount(storeId)).toBe(0)
 })
 
-test('free product cap (5) is enforced server-side — 6th product is rejected', async ({ page }) => {
-  const { storeId, email, password } = await makeFreeStore('cap', 5)
+test('free product cap (50) is enforced server-side — 51st product is rejected', async ({ page }) => {
+  const { storeId, email, password } = await makeFreeStore('cap', 50)
 
   await login(page, email, password)
   await page.goto('/dashboard/products', { waitUntil: 'domcontentloaded' })
-  await createWithinDrawer(page, 'المؤدي للمنتج السادس')
+  await createWithinDrawer(page, 'المؤدي للمنتج الحادي والخمسين')
 
   // The save fails and the drawer stays open; nothing was written to Firestore.
   await expect(page.locator('.drawer')).toBeVisible({ timeout: 15000 })
   await expect(page.locator('.form-error-banner')).toBeVisible({ timeout: 15000 })
-  expect(await productCount(storeId)).toBe(5)
+  expect(await productCount(storeId)).toBe(50)
 })
 
-test('merchant upgrades free → starter from the subscription page; advanced features unlock', async ({ page }) => {
+test('merchant upgrades free → growth from the subscription page; advanced features unlock', async ({ page }) => {
   const { storeId, email, password } = await makeFreeStore('upgrade')
 
   await login(page, email, password)
@@ -143,14 +143,14 @@ test('merchant upgrades free → starter from the subscription page; advanced fe
   await expect(page.getByRole('button', { name: 'تغيير الباقة' })).toBeVisible({ timeout: 15000 })
   await page.getByRole('button', { name: 'تغيير الباقة' }).click()
 
-  // Pick the Starter plan from the modal and confirm. The modal is scoped away
+  // Pick the Growth plan from the modal and confirm. The modal is scoped away
   // from the featured card above; the target card is identified by its exact
   // plan-name heading so ordering never matters.
-  await page.locator('.modal .mk-pricing-card').filter({ has: page.getByRole('heading', { name: 'البداية', exact: true }) }).getByRole('button', { name: 'اختيار' }).click()
+  await page.locator('.modal .mk-pricing-card').filter({ has: page.getByRole('heading', { name: 'GROWTH', exact: true }) }).getByRole('button', { name: 'اختيار' }).click()
   await page.getByRole('button', { name: 'تأكيد التغيير' }).click()
   await expect(page.getByText('تم تغيير باقتك بنجاح')).toBeVisible({ timeout: 15000 })
 
-  await expect.poll(async () => (await latestSub(storeId))?.planId, { timeout: 15000 }).toBe('plan-starter')
+  await expect.poll(async () => (await latestSub(storeId))?.planId, { timeout: 15000 }).toBe('plan-growth')
 
   // Quantity pricing is now selectable without an inline error.
   await page.goto('/dashboard/products', { waitUntil: 'domcontentloaded' })
@@ -189,7 +189,7 @@ test('variant product creation works after upgrade but is denied on free', async
   // Part 2: upgrade to Growth (also gate-checks the change callable) unlocks it.
   await page.goto('/dashboard/subscription', { waitUntil: 'domcontentloaded' })
   await page.getByRole('button', { name: 'تغيير الباقة' }).click()
-  await page.locator('.modal .mk-pricing-card').filter({ has: page.getByRole('heading', { name: 'النمو', exact: true }) }).getByRole('button', { name: 'اختيار' }).click()
+  await page.locator('.modal .mk-pricing-card').filter({ has: page.getByRole('heading', { name: 'GROWTH', exact: true }) }).getByRole('button', { name: 'اختيار' }).click()
   await page.getByRole('button', { name: 'تأكيد التغيير' }).click()
   await expect.poll(async () => (await latestSub(free.storeId))?.planId, { timeout: 15000 }).toBe('plan-growth')
 

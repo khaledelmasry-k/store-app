@@ -3,6 +3,7 @@ import { FieldValue, Timestamp } from 'firebase-admin/firestore'
 import { onCall, HttpsError, type CallableRequest } from 'firebase-functions/v2/https'
 import { onObjectFinalized, onObjectDeleted } from 'firebase-functions/v2/storage'
 import { onSchedule } from 'firebase-functions/v2/scheduler'
+import { CANONICAL_PLANS } from './planCatalog'
 
 admin.initializeApp()
 
@@ -208,6 +209,40 @@ async function assertPlatformAdmin(request: CallableRequest) {
   if (!request.auth) throw new HttpsError('unauthenticated', 'يجب تسجيل الدخول')
   const role = await getUserRole(request.auth.uid)
   if (role !== 'superAdmin') throw new HttpsError('permission-denied', 'صلاحيات غير كافية')
+}
+
+async function deleteCollectionDocs(collectionName: string, storeId: string): Promise<number> {
+  const snap = await db.collection(collectionName).where('storeId', '==', storeId).get()
+  if (snap.empty) return 0
+  let deleted = 0
+  const chunks = [...snap.docs]
+  while (chunks.length) {
+    const batch = db.batch()
+    const part = chunks.splice(0, 450)
+    for (const doc of part) {
+      batch.delete(doc.ref)
+      deleted++
+    }
+    await batch.commit()
+  }
+  return deleted
+}
+
+async function deleteStoreSubcollectionDocs(storeId: string, subcollection: string): Promise<number> {
+  const snap = await db.collection(`stores/${storeId}/${subcollection}`).get()
+  if (snap.empty) return 0
+  let deleted = 0
+  const chunks = [...snap.docs]
+  while (chunks.length) {
+    const batch = db.batch()
+    const part = chunks.splice(0, 450)
+    for (const doc of part) {
+      batch.delete(doc.ref)
+      deleted++
+    }
+    await batch.commit()
+  }
+  return deleted
 }
 
 // RBAC gate for store-scoped operations.
@@ -597,8 +632,18 @@ export const createOrder = onCall(async (request: CallableRequest<any>) => {
   const existingCustomerDoc = existingCustomer.empty ? null : existingCustomer.docs[0]
   const customerType = request.auth?.uid ? 'registered' : 'guest'
 
+  // Private historical cost snapshot. Read before the transaction and store it
+  // in orderCosts/{orderId}, never inside the customer-readable order document.
+  const productIds = Array.from(new Set(items.map((item: any) => String(item.productId || '')).filter(Boolean)))
+  const costSnaps = await Promise.all(productIds.map((id) => db.doc(`productCosts/${id}`).get()))
+  const productCostById = new Map<string, any>()
+  for (const snap of costSnaps) {
+    if (snap.exists) productCostById.set(snap.id, snap.data())
+  }
+
   const result = await db.runTransaction(async (tx) => {
     const lineItems: any[] = []
+    const orderCostItems: any[] = []
     let subtotal = 0
     let salesLinkId: string | null = null
     let salesLinkStaffId: string | null = null
@@ -708,8 +753,31 @@ export const createOrder = onCall(async (request: CallableRequest<any>) => {
       }
       subtotal += lineTotal
       const variantId = matchedVariant?.id || item.variantId
+      const lineId = `${item.productId}-${variantId || `${item.color || ''}-${item.size || ''}`}`
+      const costDoc = productCostById.get(item.productId)
+      const rawVariantCost = variantId && costDoc?.variantCosts && typeof costDoc.variantCosts[variantId] === 'number'
+        ? Number(costDoc.variantCosts[variantId])
+        : null
+      const productCost = typeof costDoc?.costPrice === 'number' ? Number(costDoc.costPrice) : null
+      const hasVariantCost = rawVariantCost != null && Number.isFinite(rawVariantCost) && rawVariantCost >= 0
+      const costPrice = hasVariantCost
+        ? rawVariantCost
+        : productCost != null && Number.isFinite(productCost) && productCost >= 0
+          ? productCost
+          : null
+      if (costPrice != null) {
+        orderCostItems.push({
+          lineId,
+          productId: item.productId,
+          variantId: variantId || null,
+          quantity: qty,
+          costPrice,
+          source: hasVariantCost ? 'variant' : 'product',
+          capturedAt: Timestamp.now(),
+        })
+      }
       lineItems.push({
-        id: `${item.productId}-${variantId || `${item.color || ''}-${item.size || ''}`}`,
+        id: lineId,
         productId: item.productId,
         name: product.name,
         price: unit,
@@ -845,6 +913,16 @@ export const createOrder = onCall(async (request: CallableRequest<any>) => {
       createdAt: now(),
       updatedAt: now(),
       createdBy: request.auth?.uid || 'guest',
+    })
+
+    tx.set(db.doc(`orderCosts/${orderId}`), {
+      id: orderId,
+      orderId,
+      storeId,
+      items: orderCostItems,
+      createdAt: now(),
+      updatedAt: now(),
+      createdBy: 'system',
     })
 
     // Atomically consume one order slot from the active subscription. The
@@ -1756,6 +1834,217 @@ export const savePlan = onCall(async (request: CallableRequest<any>) => {
 })
 
 // ─────────────────────────────────────────────────────────────
+// 4k2. syncCanonicalPlans — SuperAdmin-only idempotent upsert for the current
+//      public M&K pricing catalog. Existing subscriptions keep their snapshots;
+//      this only updates live plan documents used for new grants/enforcement.
+// ─────────────────────────────────────────────────────────────
+export const syncCanonicalPlans = onCall(async (request: CallableRequest) => {
+  await assertPlatformAdmin(request)
+  const batch = db.batch()
+  for (const plan of CANONICAL_PLANS) {
+    const ref = db.doc(`plans/${plan.id}`)
+    batch.set(ref, {
+      ...plan,
+      updatedAt: now(),
+      syncedFromCatalogAt: now(),
+      createdBy: 'canonical-catalog',
+    }, { merge: true })
+  }
+  await batch.commit()
+  await auditLog(null, request.auth!.uid, 'canonical_plans_synced', 'plans', 'canonical', {
+    planIds: CANONICAL_PLANS.map((p) => p.id),
+  })
+  return { ok: true, count: CANONICAL_PLANS.length, planIds: CANONICAL_PLANS.map((p) => p.id) }
+})
+
+// Coupon mutations are callable-only so plan entitlements cannot be bypassed
+// through a direct Firestore write. Platform admins retain their platform-wide
+// authority; merchants and staff need both the role permission and coupons
+// entitlement on the store's active plan.
+export const manageCoupon = onCall(async (request: CallableRequest<{
+  operation?: 'create' | 'update' | 'delete'
+  storeId?: string
+  couponId?: string
+  coupon?: Record<string, unknown>
+}>) => {
+  if (!request.auth) throw new HttpsError('unauthenticated', 'يجب تسجيل الدخول')
+  const { operation, storeId, couponId, coupon = {} } = request.data || {}
+  if (!storeId || !operation) throw new HttpsError('invalid-argument', 'بيانات الكوبون غير مكتملة')
+  await assertStoreAccess(request, storeId, 'coupons:manage')
+
+  const actor = await db.doc(`users/${request.auth.uid}`).get()
+  const isPlatformAdmin = actor.data()?.role === 'superAdmin'
+  const grant = isPlatformAdmin ? null : await grantForStore(storeId, request.auth.uid)
+  const couponsEnabled = isPlatformAdmin || Boolean(grant && canUseFeature(grant.plan, 'coupons'))
+
+  if (operation === 'create') {
+    if (!couponsEnabled) throw new HttpsError('resource-exhausted', 'ميزة الكوبونات متاحة بدايةً من خطة Starter. قم بترقية خطتك للمتابعة.')
+    const code = String(coupon.code || '').trim().toUpperCase()
+    const type = coupon.type === 'fixed' ? 'fixed' : 'percent'
+    const value = Number(coupon.value || 0)
+    if (!code || !Number.isFinite(value) || value <= 0) {
+      throw new HttpsError('invalid-argument', 'أدخل كوداً وقيمة صالحة للكوبون')
+    }
+    if (type === 'percent' && value > 100) throw new HttpsError('invalid-argument', 'لا يمكن أن تتجاوز النسبة 100%')
+    const ref = db.collection('coupons').doc()
+    await ref.set({
+      storeId,
+      code,
+      type,
+      value,
+      minOrder: Math.max(0, Number(coupon.minOrder || 0)),
+      maxUses: Math.max(0, Number(coupon.maxUses || 0)),
+      usedCount: 0,
+      active: coupon.active !== false,
+      createdAt: now(),
+      updatedAt: now(),
+      createdBy: request.auth.uid,
+    })
+    await auditLog(storeId, request.auth.uid, 'coupon_created', 'coupons', ref.id, { code })
+    return { ok: true, couponId: ref.id }
+  }
+
+  if (!couponId) throw new HttpsError('invalid-argument', 'couponId مطلوب')
+  const ref = db.doc(`coupons/${couponId}`)
+  const existingSnap = await ref.get()
+  if (!existingSnap.exists || existingSnap.data()?.storeId !== storeId) {
+    throw new HttpsError('not-found', 'الكوبون غير موجود ضمن هذا المتجر')
+  }
+
+  if (operation === 'delete') {
+    await ref.delete()
+    await auditLog(storeId, request.auth.uid, 'coupon_deleted', 'coupons', couponId)
+    return { ok: true }
+  }
+
+  if (operation !== 'update') throw new HttpsError('invalid-argument', 'عملية الكوبون غير صالحة')
+  if (coupon.active === true && !couponsEnabled) {
+    throw new HttpsError('resource-exhausted', 'ميزة الكوبونات متاحة بدايةً من خطة Starter. قم بترقية خطتك للمتابعة.')
+  }
+  const changes: Record<string, unknown> = { updatedAt: now() }
+  if (coupon.active != null) changes.active = coupon.active === true
+  if (coupon.code != null) changes.code = String(coupon.code).trim().toUpperCase()
+  if (coupon.type != null) changes.type = coupon.type === 'fixed' ? 'fixed' : 'percent'
+  for (const key of ['value', 'minOrder', 'maxUses'] as const) {
+    if (coupon[key] != null) {
+      const value = Number(coupon[key])
+      if (!Number.isFinite(value) || value < 0) throw new HttpsError('invalid-argument', 'قيمة الكوبون غير صالحة')
+      changes[key] = value
+    }
+  }
+  if (changes.type === 'percent' && Number(changes.value || existingSnap.data()?.value || 0) > 100) {
+    throw new HttpsError('invalid-argument', 'لا يمكن أن تتجاوز النسبة 100%')
+  }
+  await ref.update(changes)
+  await auditLog(storeId, request.auth.uid, 'coupon_updated', 'coupons', couponId)
+  return { ok: true }
+})
+
+const TENANT_COLLECTIONS = [
+  'subscriptions',
+  'subscriptionPayments',
+  'transactions',
+  'payments',
+  'orders',
+  'orderCosts',
+  'products',
+  'productCosts',
+  'categories',
+  'customers',
+  'coupons',
+  'shipping',
+  'storeLinks',
+  'landingPages',
+  'analytics',
+  'notifications',
+  'tickets',
+  'auditLogs',
+  'team',
+  'roles',
+  'invitations',
+]
+
+async function deleteTenantStorage(storeId: string): Promise<number> {
+  const bucket = admin.storage().bucket(STORAGE_BUCKET)
+  const prefixes = [`stores/${storeId}/`, `products/${storeId}/`, `landingPages/${storeId}/`, `documents/${storeId}/`]
+  let deleted = 0
+  for (const prefix of prefixes) {
+    const [files] = await bucket.getFiles({ prefix }).catch(() => [[] as any[]])
+    if (!files.length) continue
+    await Promise.all(files.map((file: any) => file.delete().then(() => { deleted++ }).catch(() => {})))
+  }
+  return deleted
+}
+
+async function deleteMarkedTestMerchant(storeId: string, actorUid: string): Promise<{ storeId: string; deletedDocs: number; deletedFiles: number; ownerId: string | null }> {
+  const storeRef = db.doc(`stores/${storeId}`)
+  const storeSnap = await storeRef.get()
+  if (!storeSnap.exists) throw new HttpsError('not-found', 'المتجر غير موجود')
+  const store = storeSnap.data()!
+  if (store.isTestMerchant !== true) {
+    throw new HttpsError('failed-precondition', 'لا يمكن حذف هذا المتجر لأنه غير محدد كمتجر اختباري')
+  }
+
+  const ownerId = store.ownerId || null
+  let deletedDocs = 0
+  for (const collectionName of TENANT_COLLECTIONS) {
+    deletedDocs += await deleteCollectionDocs(collectionName, storeId)
+  }
+  for (const subcollection of ['billingSnapshots', 'usageAlerts']) {
+    deletedDocs += await deleteStoreSubcollectionDocs(storeId, subcollection)
+  }
+
+  const userSnap = await db.collection('users').where('storeIds', 'array-contains', storeId).get()
+  for (const userDoc of userSnap.docs) {
+    const user = userDoc.data()
+    if (user.role === 'superAdmin') continue
+    const remainingStoreIds = Array.isArray(user.storeIds)
+      ? user.storeIds.filter((id: unknown) => id !== storeId)
+      : []
+    if (remainingStoreIds.length > 0) {
+      await userDoc.ref.update({ storeIds: remainingStoreIds, updatedAt: now() })
+      continue
+    }
+    await userDoc.ref.delete()
+    deletedDocs++
+    if (user.uid) await auth.deleteUser(user.uid).catch(() => {})
+  }
+
+  const deletedFiles = await deleteTenantStorage(storeId)
+  await storeRef.delete()
+  deletedDocs++
+  await auditLog(null, actorUid, 'delete_test_merchant', 'stores', storeId, { ownerId, deletedDocs, deletedFiles })
+  return { storeId, deletedDocs, deletedFiles, ownerId }
+}
+
+export const deleteTestMerchant = onCall(async (request: CallableRequest<{ storeId?: string; confirmation?: string }>) => {
+  await assertPlatformAdmin(request)
+  const { storeId, confirmation } = request.data || {}
+  if (!storeId) throw new HttpsError('invalid-argument', 'storeId مطلوب')
+  if (confirmation !== 'Delete merchant and all associated test data?') {
+    throw new HttpsError('invalid-argument', 'نص التأكيد غير صحيح')
+  }
+  return deleteMarkedTestMerchant(storeId, request.auth!.uid)
+})
+
+export const deleteSelectedTestMerchants = onCall(async (request: CallableRequest<{ storeIds?: string[]; confirmation?: string }>) => {
+  await assertPlatformAdmin(request)
+  const storeIds = Array.isArray(request.data?.storeIds) ? request.data.storeIds.filter((id) => typeof id === 'string' && id.trim()) : []
+  if (request.data?.confirmation !== 'DELETE SELECTED TEST MERCHANTS') {
+    throw new HttpsError('invalid-argument', 'نص التأكيد غير صحيح')
+  }
+  if (storeIds.length === 0) throw new HttpsError('invalid-argument', 'اختر متجراً اختبارياً واحداً على الأقل')
+  if (storeIds.length > 50) throw new HttpsError('invalid-argument', 'لا يمكن حذف أكثر من 50 متجراً في عملية واحدة')
+
+  const results = []
+  for (const storeId of Array.from(new Set(storeIds))) {
+    results.push(await deleteMarkedTestMerchant(storeId, request.auth!.uid))
+  }
+  await auditLog(null, request.auth!.uid, 'delete_selected_test_merchants', 'stores', 'test-merchants', { count: results.length, storeIds })
+  return { ok: true, count: results.length, results }
+})
+
+// ─────────────────────────────────────────────────────────────
 // 4c. getPlatformOverview — platform admin operational snapshot.
 //     Returns every store joined with its latest subscription, plan and
 //     owner, plus the live order-usage metrics used by the Super Admin UI.
@@ -1763,11 +2052,12 @@ export const savePlan = onCall(async (request: CallableRequest<any>) => {
 export const getPlatformOverview = onCall(async (request: CallableRequest) => {
   await assertPlatformAdmin(request)
 
-  const [storesSnap, subsSnap, plansSnap, usersSnap] = await Promise.all([
+  const [storesSnap, subsSnap, plansSnap, usersSnap, productsSnap] = await Promise.all([
     db.collection('stores').get(),
     db.collection('subscriptions').get(),
     db.collection('plans').get(),
     db.collection('users').get(),
+    db.collection('products').get(),
   ])
 
   const plans = new Map<string, any>()
@@ -1777,6 +2067,13 @@ export const getPlatformOverview = onCall(async (request: CallableRequest) => {
   for (const d of usersSnap.docs) {
     const u = d.data()
     users.set(u.uid || d.id, u)
+  }
+
+  const productsByStore = new Map<string, number>()
+  for (const d of productsSnap.docs) {
+    const p = d.data()
+    if (!p.storeId) continue
+    productsByStore.set(p.storeId, (productsByStore.get(p.storeId) || 0) + 1)
   }
 
   // Keep only the latest subscription per store (by createdAt).
@@ -1824,7 +2121,9 @@ export const getPlatformOverview = onCall(async (request: CallableRequest) => {
       slug: store.slug || '',
       active: !!store.active,
       published: !!store.published,
+      isTestMerchant: store.isTestMerchant === true,
       createdAt: store.createdAt || null,
+      ownerId: store.ownerId || null,
       ownerName: owner?.name || null,
       ownerEmail: owner?.email || null,
       ownerRole: owner?.role || null,
@@ -1833,6 +2132,9 @@ export const getPlatformOverview = onCall(async (request: CallableRequest) => {
       planName: plan?.name || sub?.planName || null,
       planPriceMonthly: Number(plan?.priceMonthly || 0),
       productLimit: Number(plan?.productLimit || 0),
+      productsUsed: productsByStore.get(storeId) || 0,
+      storageUsed: Number(store.storageUsed || 0),
+      storageLimitBytes: Number(store.storageLimitBytes || Number(plan?.storageLimit || 0) * 1024 * 1024),
       subStatus: resolvedStatus,
       subStartedAt: sub?.startedAt || null,
       subExpiresAt: sub?.expiresAt || null,
@@ -2572,4 +2874,3 @@ export const suspendUnpaidTrials = onSchedule(
     }
   },
 )
-

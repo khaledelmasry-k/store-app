@@ -22,7 +22,7 @@ export const PlatformSettings: FunctionalComponent = () => {
   }
 
   return (
-    <div>
+    <div className="platform-operations platform-settings-page">
       <PageHeader title="إعدادات المنصة" subtitle="الإعدادات العامة للمنصة" actions={<Button icon="save" onClick={save}>حفظ الإعدادات</Button>} />
 
       <Card title="التجارة" subtitle="العملة وحدود الاشتراك" className="mb-2">

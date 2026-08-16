@@ -23,7 +23,7 @@ export const StoreHome:FunctionalComponent = () => {
   const hasHeroImage = Boolean(store?.heroImage) && !heroFailed
 
   return (
-    <div>
+    <div className="storefront-page storefront-home">
       {hasHeroImage ? (
         <div className="store-hero store-hero--image">
           <SmartImage key={store.heroImage} src={store.heroImage} alt="" className="store-hero-img" placeholderClassName="store-hero-img" loading="eager" onError={() => setHeroFailed(true)} />
@@ -44,7 +44,7 @@ export const StoreHome:FunctionalComponent = () => {
       )}
 
       {categories.length > 0 && (
-        <section className="mt-2">
+        <section className="store-section store-category-strip">
           <h2 className="section-title">تسوق حسب الفئة</h2>
           <div className="flex" style={{ flexWrap: 'wrap', gap: 8 }}>
             {categories.map((c) => (
@@ -57,7 +57,7 @@ export const StoreHome:FunctionalComponent = () => {
       )}
 
       {featured.length > 0 && (
-        <section className="mt-2">
+        <section className="store-section">
           <h2 className="section-title">مميزات</h2>
           <div className="store-grid">
             {featured.map((p) => (
@@ -78,7 +78,7 @@ export const StoreHome:FunctionalComponent = () => {
       )}
 
       {latest.length > 0 && (
-        <section className="mt-2">
+        <section className="store-section">
           <h2 className="section-title">أحدث المنتجات</h2>
           <div className="store-grid">
             {latest.map((p) => (

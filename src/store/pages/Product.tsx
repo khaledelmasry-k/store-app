@@ -127,7 +127,7 @@ export const StoreProduct: FunctionalComponent<Props> = ({ id }) => {
   }
 
   return (
-    <div>
+    <div className="storefront-page storefront-product">
       <div className="store-crumb">
         <Link href={`/store/${store?.slug}`}>الرئيسية</Link>
         <Icon name="chevron_left" />
@@ -136,7 +136,7 @@ export const StoreProduct: FunctionalComponent<Props> = ({ id }) => {
         <span>{product.name}</span>
       </div>
 
-      <div className="product-detail">
+      <div className="product-detail store-product-workspace">
         <div>
           {images.length === 0 ? (
             <div className="product-detail-empty">

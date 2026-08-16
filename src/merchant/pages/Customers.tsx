@@ -1,7 +1,7 @@
 import { FunctionalComponent } from 'preact'
 import { useState } from 'preact/hooks'
-import { PageHeader } from '../../shared/components/ui/PageHeader'
-import { Card } from '../../shared/components/ui/Card'
+import { InternalPageHeader, WorkspaceSection } from '../components/InternalWorkspace'
+import '../components/InternalWorkspace.css'
 import { Badge } from '../../shared/components/ui/Badge'
 import { Button } from '../../shared/components/ui/Button'
 import { Modal } from '../../shared/components/ui/Modal'
@@ -94,19 +94,20 @@ export const MerchantCustomers: FunctionalComponent = () => {
   }
 
   return (
-    <div>
-      <PageHeader title="العملاء" subtitle={`${customers.length} عميل`} actions={<Button icon="person_add" onClick={openNew}>إضافة عميل</Button>} />
+    <div className="merchant-operations merchant-customers-page">
+      <InternalPageHeader eyebrow="دليل العملاء" title="العملاء" subtitle={`${customers.length} عميل — سجل العملاء والإنفاق والطلبات`} actions={<Button icon="person_add" onClick={openNew}>إضافة عميل</Button>} />
 
-      <FilterBar
+      <WorkspaceSection title="دليل العملاء" subtitle="ابحث وفلتر العملاء قبل فتح بياناتهم" className="customers-workspace">
+        <FilterBar
         search={query}
         onSearch={(v) => { setQuery(v); setPage(1) }}
         searchPlaceholder="بحث بالاسم أو الهاتف..."
         segments={[{ label: 'كل الشرائح', value: '' }, ...segments.map((s) => ({ label: segmentLabel(s), value: s }))]}
         activeSegment={segment}
         onSegmentChange={(v) => { setSegment(v); setPage(1) }}
-      />
+        />
 
-      <Card>
+      <div className="customers-table-body">
         {filtered.length === 0 ? (
           <EmptyState
             title="لا يوجد عملاء"
@@ -135,7 +136,8 @@ export const MerchantCustomers: FunctionalComponent = () => {
             rows={pageRows}
           />
         )}
-      </Card>
+      </div>
+      </WorkspaceSection>
 
       <Pagination page={page} totalPages={totalPages} total={filtered.length} pageSize={PAGE_SIZE} onPageChange={setPage} />
 

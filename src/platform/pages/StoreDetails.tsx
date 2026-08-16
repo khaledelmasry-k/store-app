@@ -82,7 +82,7 @@ export const PlatformStoreDetails: FunctionalComponent<Props> = ({ id }) => {
 
   if (!store) {
     return (
-      <div>
+      <div className="platform-operations platform-store-details-page">
         <PageHeader title="تفاصيل المتجر" subtitle="غير موجود" />
         <EmptyState icon="storefront" title="المتجر غير موجود" />
       </div>

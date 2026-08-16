@@ -132,6 +132,17 @@ export function recordLandingPageViewCallable(input: { landingPageId: string }) 
   return fn(input)
 }
 
+export function manageCouponCallable(input: {
+  operation: 'create' | 'update' | 'delete'
+  storeId: string
+  couponId?: string
+  coupon?: Record<string, unknown>
+}) {
+  const functions = getFunctions()
+  const fn = httpsCallable(functions, 'manageCoupon')
+  return fn(input)
+}
+
 export function inviteStaffCallable(input: Record<string, unknown>) {
   const functions = getFunctions()
   const fn = httpsCallable(functions, 'inviteStaff')
@@ -225,5 +236,23 @@ export function createSalesLinkCallable(input: Record<string, unknown>) {
 export function savePlanCallable(input: Record<string, unknown>) {
   const functions = getFunctions()
   const fn = httpsCallable(functions, 'savePlan')
+  return fn(input)
+}
+
+export function syncCanonicalPlansCallable() {
+  const functions = getFunctions()
+  const fn = httpsCallable(functions, 'syncCanonicalPlans')
+  return fn({})
+}
+
+export function deleteTestMerchantCallable(input: { storeId: string; confirmation: string }) {
+  const functions = getFunctions()
+  const fn = httpsCallable(functions, 'deleteTestMerchant')
+  return fn(input)
+}
+
+export function deleteSelectedTestMerchantsCallable(input: { storeIds: string[]; confirmation: string }) {
+  const functions = getFunctions()
+  const fn = httpsCallable(functions, 'deleteSelectedTestMerchants')
   return fn(input)
 }

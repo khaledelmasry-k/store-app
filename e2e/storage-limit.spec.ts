@@ -67,8 +67,11 @@ test('storageUsed counter increments on upload and rejects over-quota objects', 
   const secondPath = `stores/${STORE_ID}/second.bin`
   await bucket.file(secondPath).save(second, { metadata: { contentType: 'application/octet-stream', metadata: { storeId: STORE_ID } } })
 
-  // Give the trigger time to reject + delete the over-quota object.
-  await sleep(3000)
+  await waitFor(async () => {
+    const [exists] = await bucket.file(secondPath).exists()
+    return !exists && (await usedBytes()) <= 1 * MB
+  }, 20000)
+
   const afterSecond = await usedBytes()
   expect(afterSecond).toBeLessThanOrEqual(1 * MB)
 

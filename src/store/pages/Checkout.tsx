@@ -1,5 +1,5 @@
 import { FunctionalComponent } from 'preact'
-import { useMemo, useState } from 'preact/hooks'
+import { useState } from 'preact/hooks'
 import { Link } from 'wouter'
 import { useStore } from '../../shared/hooks/useStore'
 import { useCart } from '../../shared/hooks/useCart'
@@ -17,6 +17,7 @@ import { cartSubtotal, lineSubtotal, piecesLabel } from '../../shared/utils/pric
 import { calculateShipping } from '../../shared/utils/shipping'
 import type { ShippingZone } from '../../shared/types'
 import { Icon } from '../../shared/components/ui/Icon'
+import { EmptyState } from '../../shared/components/ui/EmptyState'
 
 export const StoreCheckout: FunctionalComponent = () => {
   const { store } = useStore()
@@ -27,14 +28,10 @@ export const StoreCheckout: FunctionalComponent = () => {
   const [loading, setLoading] = useState(false)
   const [done, setDone] = useState<{ orderNumber: string; phone: string } | null>(null)
 
-  const zonesRes = useCollection<ShippingZone>('shipping', { storeId: store?.id || '' })
-  const zones = zonesRes.data || []
+  const zonesRes = useCollection<ShippingZone>('shipping', { storeId: store?.id || '' }, !!store?.id && cart.items.length > 0)
   const subtotal = cartSubtotal(cart.items)
 
-  const quote = useMemo(
-    () => calculateShipping({ store, zones, subtotal, governorate: form.governorate }),
-    [store, zones, subtotal, form.governorate],
-  )
+  const quote = calculateShipping({ store, zones: zonesRes.data, subtotal, governorate: form.governorate })
   const total = subtotal + quote.fee
 
   const submit = async (e: Event) => {
@@ -75,7 +72,7 @@ export const StoreCheckout: FunctionalComponent = () => {
   if (done) {
     const isGuest = !user || user.role !== 'customer'
     return (
-      <div className="order-confirmed">
+      <div className="order-confirmed storefront-state storefront-order-confirmation">
         <div className="big-check"><Icon name="check_circle" /></div>
         <h1 className="auth-title">تم إنشاء طلبك بنجاح</h1>
         <p className="auth-subtitle">رقم طلبك: <strong className="monospace">{done.orderNumber}</strong></p>
@@ -101,10 +98,26 @@ export const StoreCheckout: FunctionalComponent = () => {
     )
   }
 
+  if (cart.items.length === 0) {
+    return (
+      <div className="order-confirmed storefront-state storefront-empty-cart">
+        <EmptyState
+          icon="shopping_cart"
+          title="سلتك فارغة"
+          description="أضف منتجات إلى السلة قبل إتمام الطلب."
+          action={<Link href={`/store/${store?.slug}/catalog`}><Button variant="outline">تصفح المنتجات</Button></Link>}
+        />
+      </div>
+    )
+  }
+
   return (
-    <div>
-      <h1 className="page-title mb-2">إتمام الطلب</h1>
-      <div className="cart-layout">
+    <div className="storefront-page storefront-checkout">
+      <div className="storefront-page-head">
+        <span>دفع آمن ومنظم</span>
+        <h1 className="page-title mb-2">إتمام الطلب</h1>
+      </div>
+      <div className="cart-layout checkout-workspace">
         <form onSubmit={submit}>
           <div className="grid grid-2">
             <Input label="الاسم الكامل" value={form.customerName} onChange={(v) => setForm({ ...form, customerName: v })} required />

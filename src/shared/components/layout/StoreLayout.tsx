@@ -66,7 +66,7 @@ export const StoreLayout: FunctionalComponent<Props> = ({ children }) => {
   // store staff, and platform admins. Purchases are rejected server-side too.
   if (store && !store.published && !canPreview) {
     return (
-      <div className={`store-shell ${templateClass}${storeDark}`} style={themeStyleFor(store.theme?.primary, store.theme?.secondary)}>
+      <div className={`store-shell store-shell--v3 ${templateClass}${storeDark}`} style={themeStyleFor(store.theme?.primary, store.theme?.secondary)}>
         <div className="store-coming-soon">
           <Icon name="storefront" className="store-brand-mark" />
           <h1>{store.name}</h1>
@@ -98,7 +98,7 @@ export const StoreLayout: FunctionalComponent<Props> = ({ children }) => {
     ))
 
   return (
-    <div className={`store-shell ${templateClass}${storeDark}`} style={themeStyleFor(store?.theme?.primary, store?.theme?.secondary)}>
+    <div className={`store-shell store-shell--v3 ${templateClass}${storeDark}`} style={themeStyleFor(store?.theme?.primary, store?.theme?.secondary)}>
       <header className="store-header">
         <div className="store-header-start">
           <button type="button" className="icon-btn store-menu-btn" onClick={() => setMenuOpen(!menuOpen)} title="القائمة">

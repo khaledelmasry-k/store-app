@@ -79,7 +79,7 @@ export const MerchantSettings: FunctionalComponent = () => {
   const status = store?.published ? 'published' : 'draft'
 
   return (
-    <div>
+    <div className="merchant-operations merchant-settings-page">
       <PageHeader title="إعدادات المتجر" subtitle="البيانات العامة والرابط والنشر" />
 
       <Card title="معلومات المتجر" className="mb-2">

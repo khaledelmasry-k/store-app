@@ -42,7 +42,7 @@ async function login(page: Page, role: 'platform' | 'merchant', email: string, p
   // after hydration. If the login form never renders, sign out and retry.
   await page.waitForTimeout(600)
   if ((await page.locator('button[type="submit"]').count()) === 0) {
-    await page.locator('.user-chip').first().click()
+    await page.locator('.topbar-user .user-chip:visible').first().click()
     await page.getByText('تسجيل الخروج').first().click()
     await page.waitForURL(/\/login/, { timeout: 15000 })
     await page.waitForLoadState('domcontentloaded')
@@ -55,7 +55,7 @@ async function login(page: Page, role: 'platform' | 'merchant', email: string, p
 }
 
 async function logout(page: Page) {
-  await page.locator('.user-chip').first().click()
+  await page.locator('.topbar-user .user-chip:visible').first().click()
   await page.getByText('تسجيل الخروج').first().click()
   await page.waitForURL(/\/login/, { timeout: 15000 })
   await page.waitForLoadState('domcontentloaded')
@@ -79,7 +79,15 @@ async function registerStore(
   await page.locator('.auth-card input').nth(0).fill(opts.name)
   await page.locator('.auth-card input').nth(1).fill(phoneFromEmail(opts.email))
   await page.getByRole('button', { name: 'التالي' }).click()
-  await page.locator('.plan-card', { hasText: opts.planName }).click()
+  const planCards = page.locator('.mk-pricing-card')
+  await expect(planCards).toHaveCount(5)
+  for (const planName of ['FREE', 'STARTER', 'GROWTH', 'BUSINESS', 'PRO']) {
+    await expect(page.getByRole('heading', { name: planName, exact: true })).toHaveCount(1)
+  }
+  await planCards
+    .filter({ has: page.getByRole('heading', { name: opts.planName, exact: true }) })
+    .getByRole('button', { name: /اختيار الخطة|تم الاختيار/ })
+    .click()
   await page.getByRole('button', { name: 'التالي' }).click()
   await page.locator('.auth-card input').nth(0).fill(opts.storeName)
   await page.locator('.auth-card input').nth(1).fill(opts.storeRef)
@@ -109,6 +117,19 @@ async function pollValue<T>(fn: () => Promise<T>, ok: (v: T) => boolean, timeout
     await new Promise((r) => setTimeout(r, 300))
   }
   throw new Error(`pollValue timed out; last=${JSON.stringify(last)}`)
+}
+
+async function updateOrderStatus(page: Page, value: string) {
+  const statusCard = page.locator('.card', { has: page.getByRole('heading', { name: 'تغيير الحالة' }) })
+  const select = statusCard.locator('select')
+  const button = statusCard.getByRole('button', { name: 'تحديث' })
+  const option = select.locator(`option[value="${value}"]`)
+  await expect(option).toHaveCount(1, { timeout: 15000 })
+  await select.selectOption(value)
+  await expect(button).toBeEnabled({ timeout: 15000 })
+  await button.click()
+  await expect(select).toHaveValue('', { timeout: 15000 })
+  await expect(option).toHaveCount(0, { timeout: 15000 })
 }
 
 function shot(page: Page, name: string) {
@@ -141,7 +162,7 @@ test('register new merchant (published=false, trialing) + slug created', async (
     name: 'مالك التدفق',
     storeName,
     storeRef: ref,
-    planName: 'البداية',
+    planName: 'STARTER',
   })
 
   const store = await pollValue(() => storeBySlug(ref), (s) => s != null)
@@ -152,8 +173,8 @@ test('register new merchant (published=false, trialing) + slug created', async (
   expect(sub!.status).toBe('trialing')
   expect(sub!.planId).toBe('plan-starter')
   expect(sub!.trialEndsAt).toBeTruthy()
-  expect(sub!.normalPriceSnapshot).toBe(299)
-  expect(sub!.launchPriceSnapshot).toBe(99)
+  expect(sub!.normalPriceSnapshot).toBe(399)
+  expect(sub!.launchPriceSnapshot).toBe(399)
   expect(sub!.launchUsed).toBeFalsy()
 })
 
@@ -165,14 +186,14 @@ test('register duplicate slug gets a numeric suffix', async ({ page }) => {
     name: 'مالك ثانٍ',
     storeName: `${storeName} نسخة`,
     storeRef: ref,
-    planName: 'البداية',
+    planName: 'STARTER',
   })
   const dup = await pollValue(() => storeBySlug(`${ref}-2`), (s) => s != null)
   expect(dup).not.toBeNull()
   expect(dup!.data()!.ref).toBe(`${ref}-2`)
 })
 
-test('trial merchant self-serves: publish + theme + product', async ({ page }) => {
+test('trial merchant self-serves: publish + theme + product', async ({ page, browser }) => {
   const { email, ref } = ctx()
   const store = (await pollValue(() => storeBySlug(ref), (s) => s != null))!
 
@@ -197,15 +218,15 @@ test('trial merchant self-serves: publish + theme + product', async ({ page }) =
     .toBe('minimal')
   await expect(page.locator('.theme-card--active')).toContainText('القالب الحالي')
 
-  // Override colors with the swatches (template default colors get replaced).
-  await page.locator('.swatch[title="#16a34a"]').first().click()
+  // Override colors with the current V3 swatches (template default colors get replaced).
+  await page.locator('.swatch[title="#0b766e"]').first().click()
   await expect
     .poll(() => storeBySlug(ref).then((s) => s?.data()?.theme?.primary), { timeout: 15000 })
-    .toBe('#16a34a')
-  await page.locator('.swatch[title="#f59e0b"]').first().click()
+    .toBe('#0b766e')
+  await page.locator('.swatch[title="#c78a25"]').first().click()
   await expect
     .poll(() => storeBySlug(ref).then((s) => s?.data()?.theme?.secondary), { timeout: 15000 })
-    .toBe('#f59e0b')
+    .toBe('#c78a25')
 
   // Add a product via the products drawer.
   await page.goto('/dashboard/products', { waitUntil: 'domcontentloaded' })
@@ -213,27 +234,38 @@ test('trial merchant self-serves: publish + theme + product', async ({ page }) =
   await page.locator('.field', { hasText: 'اسم المنتج' }).locator('input').fill('بن التدفق المختص')
   await page.locator('.drawer input[type="number"]').nth(0).fill('240')
   await page.locator('.drawer input[type="number"]').nth(1).fill('300')
-  await page.locator('.drawer input[type="number"]').nth(2).fill('10')
+  await page.locator('.field', { hasText: 'المخزون' }).locator('input[type="number"]').fill('10')
   await page.getByRole('button', { name: 'حفظ المنتج' }).click()
   await expect.poll(() => countProducts(store.id), { timeout: 15000 }).toBe(1)
 
-  // Theme survives a full logout → login cycle (persisted server-side, not in frontend state).
-  await logout(page)
-  await login(page, 'merchant', email, PASSWORD)
-  await page.goto('/dashboard/themes', { waitUntil: 'domcontentloaded' })
-  await expect(page.locator('.theme-card--active')).toContainText('مينيمال', { timeout: 15000 })
+  // Theme survives a fresh authenticated session (persisted server-side, not in frontend state).
+  // The responsive shell intentionally hides the desktop account chip below 760px,
+  // so use a new mobile context instead of forcing a hidden logout control.
+  const mobileSession = !!page.viewportSize()?.width && page.viewportSize()!.width <= 760
+  const sessionContext = mobileSession
+    ? await browser.newContext({ viewport: page.viewportSize() || { width: 390, height: 844 } })
+    : null
+  const sessionPage = sessionContext ? await sessionContext.newPage() : page
+  if (sessionPage !== page) await login(sessionPage, 'merchant', email, PASSWORD)
+  else {
+    await logout(page)
+    await login(page, 'merchant', email, PASSWORD)
+  }
+  await sessionPage.goto('/dashboard/themes', { waitUntil: 'domcontentloaded' })
+  await expect(sessionPage.locator('.theme-card--active')).toContainText('مينيمال', { timeout: 15000 })
   await expect
     .poll(() => storeBySlug(ref).then((s) => s?.data()?.theme?.template), { timeout: 15000 })
     .toBe('minimal')
   await expect
     .poll(() => storeBySlug(ref).then((s) => s?.data()?.theme?.primary), { timeout: 15000 })
-    .toBe('#16a34a')
+    .toBe('#0b766e')
+  if (sessionContext) await sessionContext.close()
 
   // Tenant isolation: another merchant's storefront never inherits this store's theme.
-  await page.goto('/store/active-shoes', { waitUntil: 'domcontentloaded' })
+  await page.goto('/store/test-store-b', { waitUntil: 'domcontentloaded' })
   await expect(page.locator('.store-shell.theme-minimal')).toHaveCount(0, { timeout: 15000 })
   await expect
-    .poll(() => storeBySlug('active-shoes').then((s) => s?.data()?.theme?.template || 'modern'), { timeout: 15000 })
+    .poll(() => storeBySlug('test-store-b').then((s) => s?.data()?.theme?.template || 'modern'), { timeout: 15000 })
     .toBe('modern')
 })
 
@@ -250,8 +282,8 @@ test('storefront theme vars, cart -> checkout -> order, ordersUsed increments', 
       accent: cs.getPropertyValue('--store-accent').trim(),
     }
   })
-  expect(vars.primary).toBe('#16a34a')
-  expect(vars.accent).toBe('#f59e0b')
+  expect(vars.primary).toBe('#0b766e')
+  expect(vars.accent).toBe('#c78a25')
 
   // Template class applied on the store shell (applied earlier on Appearance page).
   await expect(page.locator('.store-shell.theme-minimal')).toHaveCount(1, { timeout: 15000 })
@@ -294,55 +326,56 @@ test('storefront theme vars, cart -> checkout -> order, ordersUsed increments', 
 test('unpublished store shows coming-soon to visitors; owner can preview', async ({ page }) => {
   const { uniq } = ctx()
   // Anonymous visitor -> coming soon.
-  await page.goto('/store/amal-kids', { waitUntil: 'domcontentloaded' })
+  await page.goto('/store/test-store-e', { waitUntil: 'domcontentloaded' })
   await expect(page.locator('.store-coming-soon')).toBeVisible({ timeout: 15000 })
   await shot(page, `coming-soon-${uniq}`)
 
   // Owner (seeded store E) can preview the storefront.
   await login(page, 'merchant', 'owner@e.store', 'Owner12345')
   await page.waitForURL(/\/dashboard/, { timeout: 15000 })
-  await page.goto('/store/amal-kids', { waitUntil: 'domcontentloaded' })
+  await page.goto('/store/test-store-e', { waitUntil: 'domcontentloaded' })
   await expect(page.locator('.store-coming-soon')).toHaveCount(0, { timeout: 15000 })
   await expect(page.locator('.store-header')).toBeVisible()
 })
 
-test('platform Merchants shows seeded usage bars (340/500 moderate, 92/100 near)', async ({ page }) => {
+test('platform Merchants shows seeded usage bars (1020/1500 moderate, 276/300 near)', async ({ page }) => {
   await login(page, 'platform', 'admin@mk.store', 'Admin12345')
   await page.goto('/platform/merchants', { waitUntil: 'domcontentloaded' })
 
-  const rowA = await merchantRow(page, 'beit-el-shay')
-  await expect(rowA).toContainText('340 / 500', { timeout: 15000 })
+  const rowA = await merchantRow(page, 'test-store-a')
+  await expect(rowA).toContainText(/1,?020 \/ 1,?500/, { timeout: 15000 })
   await expect(rowA).toContainText('68%')
   await expect(rowA).toContainText('متوسط')
   await shot(page, 'platform-usage-a')
 
-  const rowB = await merchantRow(page, 'active-shoes')
-  await expect(rowB).toContainText('92 / 100')
+  const rowB = await merchantRow(page, 'test-store-b')
+  await expect(rowB).toContainText(/276 \/ 300/)
   await expect(rowB).toContainText('92%')
   await expect(rowB).toContainText('قريب من الحد')
   await shot(page, 'platform-usage-b')
 
   // Trialing + expired segments present from the seed.
-  const rowC = await merchantRow(page, 'zeina-gifts')
+  const rowC = await merchantRow(page, 'test-store-c')
   await expect(rowC).toContainText('تجربة مجانية')
-  const rowD = await merchantRow(page, 'noor-cafe')
+  const rowD = await merchantRow(page, 'test-store-d')
   await expect(rowD).toContainText('منتهي')
-  const rowE = await merchantRow(page, 'amal-kids')
+  const rowE = await merchantRow(page, 'test-store-e')
   await expect(rowE).toContainText('قيد الانتظار')
 })
 
-test('merchant subscription page shows persisted usage (340/500) and countdown', async ({ page }) => {
+test('merchant subscription page shows persisted usage (1020/1500) and countdown', async ({ page }) => {
   await login(page, 'merchant', 'owner@a.store', 'Owner12345')
   await page.waitForURL(/\/dashboard/, { timeout: 15000 })
   await page.goto('/dashboard/subscription', { waitUntil: 'domcontentloaded' })
-  await expect(page.getByText('340 من 500 طلب')).toBeVisible({ timeout: 15000 })
+  await expect(page.getByText(/1,?020 من 1,?500 طلب/)).toBeVisible({ timeout: 15000 })
   await expect(page.getByText('68%')).toBeVisible()
   await expect(page.getByText('متوسط')).toBeVisible()
   await shot(page, 'merchant-subscription-a')
 
   // Merchant dashboard usage banner too.
   await page.goto('/dashboard', { waitUntil: 'domcontentloaded' })
-  await expect(page.getByText('340 / 500 طلب')).toBeVisible({ timeout: 15000 })
+  await expect(page.getByText(/1,?020 \/ 1,?500 طلب/)).toBeVisible({ timeout: 15000 })
+  await expect(page.getByText('متوسط')).toBeVisible()
 })
 
 test('shipping: zones store shows zone fee at checkout and persists shippingFee + snapshot', async ({ page }) => {
@@ -438,6 +471,7 @@ test('sales link: /s/:code redirects to the storefront and DELIVERED orders coun
 
   // Buy via the link → the order snapshots the link.
   await page.getByRole('button', { name: 'أضف إلى السلة' }).click()
+  await expect(page.locator('.cart-badge')).toHaveText('1', { timeout: 15000 })
   await page.goto(`/store/${ref}/cart`, { waitUntil: 'domcontentloaded' })
   await page.getByRole('button', { name: 'إتمام الطلب' }).click()
   await page.locator('.field', { hasText: 'الاسم الكامل' }).locator('input').fill('عميل الرابط')
@@ -464,16 +498,14 @@ test('sales link: /s/:code redirects to the storefront and DELIVERED orders coun
   await login(page, 'merchant', ctx().email, PASSWORD)
   await page.goto(`/dashboard/orders/${orderSnap.docs[0].id}`, { waitUntil: 'domcontentloaded' })
   await expect(page.locator('.order-steps')).toBeVisible({ timeout: 15000 })
-  await page.locator('.card select').selectOption({ label: 'تم التسليم' })
-  await page.getByRole('button', { name: 'تحديث' }).click()
+  await updateOrderStatus(page, 'DELIVERED')
   await expect.poll(async () => {
     const snap = await linkRef.get()
     return { orders: (snap.data() as any)?.ordersCount || 0, rev: (snap.data() as any)?.totalRevenue || 0 }
   }, { timeout: 15000 }).toEqual({ orders: 1, rev: order.totalPrice })
 
   // Leaving DELIVERED (RETURNED) subtracts the revenue + order again.
-  await page.locator('.card select').selectOption({ label: 'مرتجع' })
-  await page.getByRole('button', { name: 'تحديث' }).click()
+  await updateOrderStatus(page, 'RETURNED')
   await expect.poll(async () => {
     const snap = await linkRef.get()
     return { orders: (snap.data() as any)?.ordersCount || 0, rev: (snap.data() as any)?.totalRevenue || 0 }
@@ -546,16 +578,14 @@ test('landing page: /landing/:slug renders, records a view, QuickBuy orders attr
   await login(page, 'merchant', ctx().email, PASSWORD)
   await page.goto(`/dashboard/orders/${orderSnap.docs[0].id}`, { waitUntil: 'domcontentloaded' })
   await expect(page.locator('.order-steps')).toBeVisible({ timeout: 15000 })
-  await page.locator('.card select').selectOption({ label: 'تم التسليم' })
-  await page.getByRole('button', { name: 'تحديث' }).click()
+  await updateOrderStatus(page, 'DELIVERED')
   await expect.poll(async () => {
     const snap = await landingRef.get()
     return { orders: (snap.data() as any)?.ordersCount || 0, rev: (snap.data() as any)?.totalRevenue || 0 }
   }, { timeout: 15000 }).toEqual({ orders: 1, rev: order.totalPrice })
 
   // Leaving DELIVERED (RETURNED) subtracts the counters again.
-  await page.locator('.card select').selectOption({ label: 'مرتجع' })
-  await page.getByRole('button', { name: 'تحديث' }).click()
+  await updateOrderStatus(page, 'RETURNED')
   await expect.poll(async () => {
     const snap = await landingRef.get()
     return { orders: (snap.data() as any)?.ordersCount || 0, rev: (snap.data() as any)?.totalRevenue || 0 }
@@ -613,7 +643,7 @@ test('all icons render as SVG glyphs (no raw icon names) — merchant dashboard 
   await page.waitForURL(/\/dashboard/, { timeout: 15000 })
   await assertNoRawIcons()
 
-  await page.goto('/store/beit-el-shay', { waitUntil: 'domcontentloaded' })
+  await page.goto('/store/test-store-a', { waitUntil: 'domcontentloaded' })
   await expect(page.locator('.store-header')).toBeVisible({ timeout: 15000 })
   await assertNoRawIcons()
 })
@@ -773,8 +803,49 @@ test('landing hero image upload persists to storage + renders on /landing/:slug'
 })
 
 test('shipping: default provider honored (client+server) and refused-policy toggle gates checkout', async ({ page }) => {
-  const { uniq, ref } = ctx()
+  // Keep this workflow isolated from the seeded platform-usage stores. In the
+  // full desktop + mobile run, writing an order to test-store-a would change
+  // its seeded 1,020 usage before the mobile usage assertion runs.
+  const { email, ref, storeName } = ctx()
+  if (!(await storeBySlug(ref))) {
+    await registerStore(page, {
+      email,
+      password: PASSWORD,
+      name: 'مالك اختبار الشحن',
+      storeName,
+      storeRef: ref,
+      planName: 'STARTER',
+    })
+  }
   const store = (await storeBySlug(ref))!
+  await db.collection('stores').doc(store.id).update({ published: true })
+  const category = await db.collection('categories').add({
+    storeId: store.id,
+    name: 'منتجات الشحن',
+    slug: `shipping-${store.id}`,
+    active: true,
+    order: 1,
+    createdAt: admin.firestore.FieldValue.serverTimestamp(),
+    updatedAt: admin.firestore.FieldValue.serverTimestamp(),
+  })
+  const existingProduct = await db.collection('products').where('storeId', '==', store.id).limit(1).get()
+  if (existingProduct.empty) {
+    await db.collection('products').add({
+      storeId: store.id,
+      categoryId: category.id,
+      name: 'منتج اختبار الشحن',
+      price: 100,
+      stock: 10,
+      images: [],
+      variants: [],
+      colors: [],
+      sizes: [],
+      active: true,
+      featured: true,
+      createdAt: admin.firestore.FieldValue.serverTimestamp(),
+      updatedAt: admin.firestore.FieldValue.serverTimestamp(),
+    })
+  }
   await db.collection('stores').doc(store.id).update({
     shipping: {
       enabled: true,

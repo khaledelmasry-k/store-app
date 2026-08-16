@@ -1,4 +1,4 @@
-import type { CartLine, Product, ProductVariant, QuantityPricingStrategy, QuantityTier } from '../types'
+import type { CartLine, OrderItem, Product, ProductVariant, QuantityPricingStrategy, QuantityTier } from '../types'
 
 /**
  * Shared quantity-pricing engine.
@@ -260,4 +260,62 @@ export function validateQuantityTiers(tiers: QuantityTier[]): string | null {
     seen.add(qty)
   }
   return null
+}
+
+// ─────────────────────────────────────────────────────────────────────────
+// Profit / COGS helpers. All computations use the ACTUAL resolved selling
+// price (quantity-tier aware) so profit is never `qty × base price` when a
+// bundle tier applies.
+// ─────────────────────────────────────────────────────────────────────────
+
+/** Total revenue charged for a quantity under the given pricing snapshot. */
+export function revenueForQty(
+  unitPrice: number,
+  qty: number,
+  pricingMode?: string | null,
+  tiers?: QuantityTier[] | null,
+  strategy: QuantityPricingStrategy = 'cap',
+): number {
+  if (pricingMode === 'quantity' && tiers && tiers.length > 0) {
+    const total = quantityTotalPrice(tiers, qty, strategy, unitPrice)
+    if (total != null) return total
+  }
+  return (unitPrice || 0) * qty
+}
+
+/** Gross profit for a quantity: revenue - (cost per unit × qty). */
+export function lineProfit(
+  unitPrice: number,
+  qty: number,
+  costPerUnit: number,
+  pricingMode?: string | null,
+  tiers?: QuantityTier[] | null,
+  strategy: QuantityPricingStrategy = 'cap',
+): number {
+  const n = Math.max(1, qty || 1)
+  return revenueForQty(unitPrice, n, pricingMode, tiers, strategy) - (costPerUnit || 0) * n
+}
+
+/** Profit margin % = profit / revenue × 100. Returns null when revenue is 0. */
+export function profitMargin(profit: number, revenue: number): number | null {
+  if (!revenue) return null
+  return (profit / revenue) * 100
+}
+
+/** Revenue for an order item line using its authoritative charge snapshot. */
+export function orderItemRevenue(
+  item: Pick<OrderItem, 'price' | 'unitPrice' | 'lineTotal' | 'quantity'>,
+): number {
+  if (typeof item.lineTotal === 'number' && Number.isFinite(item.lineTotal)) return item.lineTotal
+  const qty = Math.max(1, item.quantity || 1)
+  return (item.unitPrice ?? item.price ?? 0) * qty
+}
+
+/** Gross profit for an order item line given its per-unit cost. */
+export function orderItemProfit(
+  item: Pick<OrderItem, 'price' | 'unitPrice' | 'lineTotal' | 'quantity'>,
+  costPerUnit: number,
+): number {
+  const qty = Math.max(1, item.quantity || 1)
+  return orderItemRevenue(item) - (costPerUnit || 0) * qty
 }

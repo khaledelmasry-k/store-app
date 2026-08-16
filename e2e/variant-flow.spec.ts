@@ -309,9 +309,24 @@ test('cancel → deliver → cancel restores stock exactly once (no double resto
   // Delivering must NOT move stock (already 5).
   await expect.poll(async () => variantStockOf(productId, 'black-m'), { timeout: 10000 }).toBe(5)
 
+  // Wait for the page's live snapshot to reflect the direct DELIVERED write.
+  // The status select excludes the current status, so 'ملغي' must be offered
+  // again before the 2nd cancel can be selected (prevents a change-less
+  // selectOption that leaves the "تحديث" button disabled).
+  await expect
+    .poll(async () => (await page.locator('.card select option').allTextContents()).includes('ملغي'), { timeout: 15000 })
+    .toBe(true)
+
   // 2nd cancel (DELIVERED → CANCELLED): the durable `stockRestored` flag must
-  // prevent a second restoration.
-  await page.locator('.card select').selectOption({ label: 'ملغي' })
+  // prevent a second restoration. Re-select until the change actually lands in
+  // React state (a live snapshot re-render can replace the select mid-action
+  // and drop the change event, leaving "تحديث" disabled).
+  await expect
+    .poll(async () => {
+      await page.locator('.card select').selectOption({ label: 'ملغي' })
+      return page.getByRole('button', { name: 'تحديث' }).isEnabled()
+    }, { timeout: 15000 })
+    .toBe(true)
   await page.getByRole('button', { name: 'تحديث' }).click()
   await expect.poll(async () => variantStockOf(productId, 'black-m'), { timeout: 15000 }).toBe(5)
 })

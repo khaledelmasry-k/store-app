@@ -1,6 +1,5 @@
 import { FunctionalComponent, Fragment } from 'preact'
 import { useState } from 'preact/hooks'
-import { PageHeader } from '../../shared/components/ui/PageHeader'
 import { Card } from '../../shared/components/ui/Card'
 import { StatsCard } from '../../shared/components/ui/StatsCard'
 import { Badge } from '../../shared/components/ui/Badge'
@@ -18,17 +17,20 @@ import { useStore } from '../../shared/hooks/useStore'
 import { useCollection } from '../../shared/hooks/useCollection'
 import { useSubscription } from '../../shared/hooks/useSubscription'
 import { useToast } from '../../shared/hooks/useToast'
-import { productsService } from '../../shared/services/products'
+import { productsService, productCostsService } from '../../shared/services/products'
 import { deleteProductImage } from '../../shared/services/uploads'
 import { formatCurrency } from '../../shared/utils/format'
 import { stockTone } from '../../shared/utils/format'
+import { lineProfit } from '../../shared/utils/pricing'
 import { variantStock } from '../../shared/utils/product-variants'
 import { variantLabel } from '../../shared/types'
-import type { Product, Category } from '../../shared/types'
+import type { Product, ProductCost, Category } from '../../shared/types'
 import { LimitRaiser } from '../components/LimitRaiser'
 import { Icon } from '../../shared/components/ui/Icon'
 import { ProductForm } from '../components/ProductForm'
 import { SmartImage } from '../../shared/components/ui/SmartImage'
+import { InternalPageHeader, WorkspaceSection } from '../components/InternalWorkspace'
+import '../components/InternalWorkspace.css'
 
 interface VariantStockCellProps {
   product: Product
@@ -67,8 +69,15 @@ export const MerchantProducts: FunctionalComponent = () => {
   const storeId = store?.id || ''
   const productsRes = useCollection<Product>('products', { storeId, orderBy: { field: 'createdAt' } })
   const products = productsRes.data
+  const costsRes = useCollection<ProductCost>('productCosts', { storeId })
+  const costs = costsRes.data
   const categoriesRes = useCollection<Category>('categories', { storeId })
   const categories = categoriesRes.data
+  const costByProduct = new Map(costs.map((c) => [c.id, c.costPrice]))
+  const costOf = (p: Product): number | null => {
+    const c = costByProduct.get(p.id)
+    return typeof c === 'number' && c >= 0 ? c : null
+  }
   const toast = useToast()
   const sub = useSubscription(storeId)
   const productLimit = Number(sub.plan?.productLimit || 0)
@@ -132,6 +141,12 @@ export const MerchantProducts: FunctionalComponent = () => {
     const target = deleteTarget
     try {
       await productsService.remove(target.id)
+      // Remove the private cost doc too (productCosts is keyed by product id).
+      try {
+        await productCostsService.remove(target.id)
+      } catch {
+        // No cost doc existed — nothing to remove.
+      }
       // Best-effort storage cleanup: delete this product's images ONLY if no
       // other product still references them (shared URLs are kept alive).
       await cleanupOrphanedImages(target)
@@ -206,8 +221,9 @@ export const MerchantProducts: FunctionalComponent = () => {
   )
 
   return (
-    <div>
-      <PageHeader
+    <div className="merchant-operations merchant-products-page">
+      <InternalPageHeader
+        eyebrow="كتالوج المتجر"
         title="المنتجات والمخزون"
         subtitle={tab === 'products' ? `${products.length} منتج` : `${lowCount} منخفض • ${outCount} نفد المخزون`}
         actions={<Button icon="add" onClick={openCreate}>منتج جديد</Button>}
@@ -233,7 +249,8 @@ export const MerchantProducts: FunctionalComponent = () => {
 
       {tab === 'products' ? (
         <Fragment>
-          <div className="toolbar">
+          <WorkspaceSection title="كتالوج المنتجات" subtitle="إدارة الأسعار والنشر والمخزون من مساحة عمل واحدة" className="products-catalog-workspace">
+          <div className="toolbar workspace-toolbar">
             <Search value={query} onChange={setQuery} placeholder="بحث باسم المنتج أو SKU..." />
             <Select
               value={statusFilter}
@@ -262,7 +279,9 @@ export const MerchantProducts: FunctionalComponent = () => {
                 columns={[
                   { key: 'name', header: 'المنتج', render: productCell },
                   { key: 'category', header: 'الفئة', render: (p: Product) => <span className="muted">{categories.find((c) => c.id === p.categoryId)?.name || '—'}</span> },
-                  { key: 'price', header: 'السعر', render: (p: Product) => formatCurrency(p.price) },
+                  { key: 'price', header: 'سعر البيع', render: (p: Product) => formatCurrency(p.price) },
+                  { key: 'costPrice', header: 'سعر التكلفة', render: (p: Product) => { const c = costOf(p); return <span className={c == null ? 'muted' : ''}>{c == null ? '—' : formatCurrency(c)}</span> } },
+                  { key: 'profit', header: 'الربح للوحدة', render: (p: Product) => { const c = costOf(p); if (c == null) return <span className="muted">—</span>; const profit = lineProfit(p.price, 1, c, p.pricingMode, p.quantityTiers); return <span className={profit < 0 ? 'text-red' : ''}>{formatCurrency(profit)}</span> } },
                   { key: 'stock', header: 'المخزون', render: (p: Product) => <Badge tone={stockTone(p)}>{p.stock}</Badge> },
                   { key: 'active', header: 'النشر', render: (p: Product) => <Toggle checked={p.active} onChange={() => toggleActive(p)} /> },
                   { key: 'actions', header: '', render: (p: Product) => (
@@ -276,6 +295,7 @@ export const MerchantProducts: FunctionalComponent = () => {
               />
             )}
           </Card>
+          </WorkspaceSection>
         </Fragment>
       ) : (
         <Fragment>
@@ -285,8 +305,9 @@ export const MerchantProducts: FunctionalComponent = () => {
             <StatsCard title="نفد المخزون" value={outCount} icon="cancel" tone="red" />
           </div>
 
-          <Card>
-            <div className="toolbar">
+          <WorkspaceSection title="حالة المخزون" subtitle="راجع التنبيهات والمخزون حسب المتغيرات" className="products-inventory-workspace">
+            <Card>
+            <div className="toolbar workspace-toolbar">
               <Search value={stockQuery} onChange={setStockQuery} placeholder="بحث بالاسم أو SKU..." />
               <Select
                 value={stockFilter}
@@ -318,7 +339,8 @@ export const MerchantProducts: FunctionalComponent = () => {
                 rows={inventoryFiltered}
               />
             )}
-          </Card>
+            </Card>
+          </WorkspaceSection>
         </Fragment>
       )}
 

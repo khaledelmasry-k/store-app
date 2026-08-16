@@ -6,6 +6,8 @@ interface Props {
   error?: string
   hint?: string
   type?: string
+  min?: number | string
+  step?: number | string
   placeholder?: string
   value?: string | number
   onChange?: (value: string) => void
@@ -20,6 +22,8 @@ export const Input: FunctionalComponent<Props> = ({
   error,
   hint,
   type = 'text',
+  min,
+  step,
   placeholder,
   value,
   onChange,
@@ -32,6 +36,8 @@ export const Input: FunctionalComponent<Props> = ({
     {label && <span className="field-label">{label}</span>}
     <input
       type={type}
+      min={min}
+      step={step}
       className={clsx('input', error && 'input-error')}
       placeholder={placeholder}
       value={value}

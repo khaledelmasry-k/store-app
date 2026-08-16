@@ -10,7 +10,7 @@ export const PlatformNotifications: FunctionalComponent = () => {
   const unreadCount = notifications.filter((n) => !n.read).length
 
   return (
-    <div>
+    <div className="platform-operations platform-notifications-page">
       <PageHeader title="الإشعارات" subtitle={`${notifications.length} إشعار • ${unreadCount} غير مقروء`} />
       <NotificationsTable
         notifications={notifications}

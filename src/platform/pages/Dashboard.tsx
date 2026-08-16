@@ -90,7 +90,7 @@ export const PlatformDashboard: FunctionalComponent = () => {
   }
 
   return (
-    <div>
+    <div className="platform-operations platform-dashboard-page">
       <PageHeader
         title="لوحة تحكم المنصة"
         subtitle="نظرة عامة على الأداء والاهتمامات العاجلة"

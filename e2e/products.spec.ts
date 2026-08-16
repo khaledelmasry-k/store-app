@@ -470,7 +470,7 @@ test('cart persists variant selection across reload and re-login', async ({ page
 
 test('created product is isolated to its store (tenant isolation)', async ({ page }) => {
   const { name } = ctx()
-  const otherStore = (await storeBySlug('active-shoes'))!
+  const otherStore = (await storeBySlug('test-store-b'))!
   const inOther = await db
     .collection('products')
     .where('storeId', '==', otherStore.id)
@@ -479,7 +479,7 @@ test('created product is isolated to its store (tenant isolation)', async ({ pag
   expect(inOther.empty).toBe(true)
 
   // And it is not surfaced in another store's catalog.
-  await page.goto('/store/active-shoes', { waitUntil: 'domcontentloaded' })
+  await page.goto('/store/test-store-b', { waitUntil: 'domcontentloaded' })
   await expect(page.locator('.store-card', { hasText: name })).toHaveCount(0)
 })
 

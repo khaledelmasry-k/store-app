@@ -43,7 +43,7 @@ export const StoreAccount: FunctionalComponent = () => {
 
   if (!isCustomer) {
     return (
-      <div className="order-confirmed">
+      <div className="order-confirmed storefront-state">
         <div className="big-check"><Icon name="account_circle" /></div>
         <h1 className="auth-title">تسجيل الدخول مطلوب</h1>
         <p className="auth-subtitle">سجّل الدخول لعرض طلباتك وعناوينك ومفضلتك.</p>
@@ -68,7 +68,7 @@ export const StoreAccount: FunctionalComponent = () => {
   }
 
   return (
-    <div>
+    <div className="storefront-page storefront-account">
       <h1 className="page-title mb-2">حسابي</h1>
       <div className="grid grid-2">
         <Card title="طلباتي">

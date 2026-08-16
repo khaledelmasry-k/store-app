@@ -1,34 +1,46 @@
 import { FunctionalComponent } from 'preact'
 import { BrandMark } from '../brand/BrandMark'
 import { Icon } from '../ui/Icon'
-
-// Landing-matched split-screen shell for the auth pages: a branded gradient
-// panel with the core value props on one side and the auth card on the other.
-// The panel collapses to a compact brand bar on narrow viewports.
+import { AuthTopBar } from './AuthTopBar'
 
 const HIGHLIGHTS = [
-  { icon: 'storefront', label: 'متجر إلكتروني كامل' },
-  { icon: 'receipt_long', label: 'إدارة الطلبات والمخزون' },
-  { icon: 'groups', label: 'سجل عملاء ومتابعة' },
-  { icon: 'query_stats', label: 'تقارير ومبيعات لحظية' },
+  { icon: 'storefront', label: 'متجر عربي جاهز للبيع' },
+  { icon: 'receipt_long', label: 'طلبات ومخزون في مكان واحد' },
+  { icon: 'trending_up', label: 'ربحية حقيقية عند توفر التكلفة' },
+  { icon: 'workspace_premium', label: 'خطط وحدود واضحة' },
   { icon: 'link', label: 'روابط بيع قابلة للتتبع' },
 ]
 
 export const AuthShell: FunctionalComponent<{ children: any }> = ({ children }) => (
-  <div className="auth-screen auth-split">
-    <aside className="auth-panel">
+  <div className="auth-screen">
+    <AuthTopBar />
+    <div className="auth-split">
+      <aside className="auth-panel">
       <div className="auth-panel-top">
         <BrandMark small />
         <strong>M&amp;K Store</strong>
       </div>
 
       <div className="auth-panel-body">
-        <span className="auth-panel-eyebrow">منصة التجارة الإلكترونية المتكاملة</span>
-        <h2>أدر متجرك ومبيعاتك من مكان واحد</h2>
+        <span className="auth-panel-eyebrow">نظام تشغيل التجارة العربية</span>
+        <h2>ادخل إلى مركز قيادة متجرك</h2>
         <p>
-          إدارة المنتجات والطلبات والعملاء والمخزون والمبيعات — كل شيء في لوحة واحدة
-          بسيطة وآمنة.
+          نفس الحساب يدير المتجر، الطلبات، المنتجات، العملاء، الاشتراك، والأرباح بدون تبديل أدوات أو نسخ بيانات.
         </p>
+        <div className="auth-product-mini" aria-hidden="true">
+          <div>
+            <span>طلبات اليوم</span>
+            <strong>24</strong>
+          </div>
+          <div>
+            <span>الربح</span>
+            <strong>493 ج.م</strong>
+          </div>
+          <div>
+            <span>الخطة</span>
+            <strong>GROWTH</strong>
+          </div>
+        </div>
         <ul className="auth-panel-list">
           {HIGHLIGHTS.map((h) => (
             <li key={h.label}>
@@ -39,10 +51,11 @@ export const AuthShell: FunctionalComponent<{ children: any }> = ({ children }) 
         </ul>
       </div>
 
-      <p className="auth-panel-foot">© {new Date().getFullYear()} M&amp;K Store</p>
-    </aside>
+        <p className="auth-panel-foot">© {new Date().getFullYear()} M&amp;K Store</p>
+      </aside>
 
-    <main className="auth-main">{children}</main>
+      <main className="auth-main">{children}</main>
+    </div>
   </div>
 )
 

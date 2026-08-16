@@ -16,15 +16,23 @@ async function login(page: Page, email: string, password: string) {
 }
 
 // Branding rendering rules (seeded stores in scripts/seed-emulator.mjs):
-//   /store/logo-shop        -> has logo + heroImage: header shows LOGO ONLY (no
+//   /store/test-logo-store  -> has logo + heroImage: header shows LOGO ONLY (no
 //                              duplicated name), footer an independent logo,
 //                              hero renders the uploaded image (no overlay/CTA).
-//   /store/plain-shop       -> no logo: header shows icon + store NAME, hero is
+//   /store/test-plain-store -> no logo: header shows icon + store NAME, hero is
 //                              the generated overlay + CTA.
-//   /store/broken-logo-shop -> broken logo URL: header falls back to the name.
+//   /store/test-broken-logo-store -> broken logo URL: header falls back to the name.
+//   /store/test-preset-store -> platform preset logo only.
+
+const BRANDING_STORES = {
+  logo: 'test-logo-store',
+  plain: 'test-plain-store',
+  brokenLogo: 'test-broken-logo-store',
+  preset: 'test-preset-store',
+} as const
 
 test('header shows logo only when the store has a logo (no duplicated name)', async ({ page }) => {
-  await page.goto('/store/logo-shop', { waitUntil: 'domcontentloaded' })
+  await page.goto(`/store/${BRANDING_STORES.logo}`, { waitUntil: 'domcontentloaded' })
   await expect(page.locator('.store-header')).toBeVisible({ timeout: 15000 })
   const headerBrand = page.locator('.store-brand')
   await expect(headerBrand.locator('img.store-logo')).toBeVisible()
@@ -32,17 +40,17 @@ test('header shows logo only when the store has a logo (no duplicated name)', as
 })
 
 test('header falls back to icon + store name when the store has no logo', async ({ page }) => {
-  await page.goto('/store/plain-shop', { waitUntil: 'domcontentloaded' })
+  await page.goto(`/store/${BRANDING_STORES.plain}`, { waitUntil: 'domcontentloaded' })
   await expect(page.locator('.store-header')).toBeVisible({ timeout: 15000 })
   const headerBrand = page.locator('.store-brand')
   await expect(headerBrand.locator('.store-brand-name')).toBeVisible()
-  await expect(headerBrand.locator('.store-brand-name')).toContainText('المتجر البسيط')
+  await expect(headerBrand.locator('.store-brand-name')).toContainText('TEST - متجر بدون لوجو')
   await expect(headerBrand.locator('img.store-logo')).toHaveCount(0)
   await expect(headerBrand.locator('.store-logo--preset')).toHaveCount(0)
 })
 
 test('header falls back to the store name when the logo fails to load', async ({ page }) => {
-  await page.goto('/store/broken-logo-shop', { waitUntil: 'domcontentloaded' })
+  await page.goto(`/store/${BRANDING_STORES.brokenLogo}`, { waitUntil: 'domcontentloaded' })
   await expect(page.locator('.store-header')).toBeVisible({ timeout: 15000 })
   const headerBrand = page.locator('.store-brand')
   // The broken <img> is removed after onError; wait for the name fallback.
@@ -52,7 +60,7 @@ test('header falls back to the store name when the logo fails to load', async ({
 })
 
 test('header renders a platform-offered preset logo only (no duplicated name)', async ({ page }) => {
-  await page.goto('/store/preset-shop', { waitUntil: 'domcontentloaded' })
+  await page.goto(`/store/${BRANDING_STORES.preset}`, { waitUntil: 'domcontentloaded' })
   await expect(page.locator('.store-header')).toBeVisible({ timeout: 15000 })
   const headerBrand = page.locator('.store-brand')
   await expect(headerBrand.locator('.store-logo--preset')).toBeVisible()
@@ -61,7 +69,7 @@ test('header renders a platform-offered preset logo only (no duplicated name)', 
 })
 
 test('footer shows an independent (larger) logo when the store has one', async ({ page }) => {
-  await page.goto('/store/logo-shop', { waitUntil: 'domcontentloaded' })
+  await page.goto(`/store/${BRANDING_STORES.logo}`, { waitUntil: 'domcontentloaded' })
   await expect(page.locator('.store-footer')).toBeVisible({ timeout: 15000 })
   await expect(page.locator('.store-footer .store-footer-logo')).toBeVisible()
 
@@ -88,7 +96,7 @@ test('footer shows an independent (larger) logo when the store has one', async (
 })
 
 test('hero renders the uploaded image only (no generated overlay/CTA) when heroImage exists', async ({ page }) => {
-  await page.goto('/store/logo-shop', { waitUntil: 'domcontentloaded' })
+  await page.goto(`/store/${BRANDING_STORES.logo}`, { waitUntil: 'domcontentloaded' })
   await expect(page.locator('.store-hero--image')).toBeVisible({ timeout: 15000 })
   const img = page.locator('.store-hero--image img.store-hero-img')
   await expect(img).toBeVisible()
@@ -98,14 +106,19 @@ test('hero renders the uploaded image only (no generated overlay/CTA) when heroI
   // The uploaded image keeps its natural aspect ratio (no crop/stretch).
   const dims = await img.evaluate((el) => {
     const i = el as HTMLImageElement
-    return { ratio: i.getBoundingClientRect().width / i.getBoundingClientRect().height, n: i.naturalWidth / i.naturalHeight }
+    const r = i.getBoundingClientRect()
+    return { ratio: r.width / r.height, n: i.naturalWidth / i.naturalHeight, objectFit: getComputedStyle(i).objectFit }
   })
   expect(dims.n).toBeGreaterThan(0)
-  expect(Math.abs(dims.ratio - dims.n)).toBeLessThan(0.05)
+  // The storefront intentionally uses object-fit: cover so the hero fills its
+  // responsive frame; mobile cropping is expected and must not be treated as
+  // image stretching.
+  expect(dims.objectFit).toBe('cover')
+  expect(dims.ratio).toBeGreaterThan(0)
 })
 
 test('hero keeps the generated overlay + CTA when the store has no heroImage', async ({ page }) => {
-  await page.goto('/store/plain-shop', { waitUntil: 'domcontentloaded' })
+  await page.goto(`/store/${BRANDING_STORES.plain}`, { waitUntil: 'domcontentloaded' })
   await expect(page.locator('.store-hero')).toBeVisible({ timeout: 15000 })
   await expect(page.locator('.store-hero--image')).toHaveCount(0)
   await expect(page.locator('.store-hero .btn')).toContainText('تسوق الآن')
@@ -114,7 +127,7 @@ test('hero keeps the generated overlay + CTA when the store has no heroImage', a
 test('first visit defaults to LIGHT mode even when the OS prefers dark', async ({ page }) => {
   // Fresh browser context (no saved preference) + a dark OS → must STILL be light.
   await page.emulateMedia({ colorScheme: 'dark' })
-  await page.goto('/store/plain-shop', { waitUntil: 'domcontentloaded' })
+  await page.goto(`/store/${BRANDING_STORES.plain}`, { waitUntil: 'domcontentloaded' })
   await expect(page.locator('.store-header')).toBeVisible({ timeout: 15000 })
   await expect
     .poll(() => page.evaluate(() => document.documentElement.getAttribute('data-theme')), { timeout: 15000 })
@@ -122,7 +135,7 @@ test('first visit defaults to LIGHT mode even when the OS prefers dark', async (
 })
 
 test('user-selected dark mode persists across refresh; no preference = light', async ({ page }) => {
-  await page.goto('/store/plain-shop', { waitUntil: 'domcontentloaded' })
+  await page.goto(`/store/${BRANDING_STORES.plain}`, { waitUntil: 'domcontentloaded' })
   await expect(page.locator('.store-header')).toBeVisible({ timeout: 15000 })
   await expect
     .poll(() => page.evaluate(() => document.documentElement.getAttribute('data-theme')), { timeout: 15000 })
@@ -143,7 +156,7 @@ test('user-selected dark mode persists across refresh; no preference = light', a
 })
 
 test('upload trims transparent padding from a merchant logo (stored PNG = trimmed box)', async ({ page }) => {
-  // Merchant of the branding store (logo-shop) uploads a NEW logo: a solid
+  // Merchant of the branding store uploads a NEW logo: a solid
   // 120×80 mark drawn with large empty transparent margins inside a 400×400
   // canvas. The stored PNG must be cropped to exactly the visible mark
   // (120×80), otherwise it would keep rendering as a tiny stamp in the 132×60
@@ -174,7 +187,7 @@ test('upload trims transparent padding from a merchant logo (stored PNG = trimme
   await expect(page.getByText('تم تحديث شعار المتجر')).toBeVisible({ timeout: 20000 })
 
   // The trimmed asset is exactly what the storefront renders.
-  await page.goto('/store/logo-shop', { waitUntil: 'domcontentloaded' })
+  await page.goto(`/store/${BRANDING_STORES.logo}`, { waitUntil: 'domcontentloaded' })
   await expect(page.locator('.store-header img.store-logo')).toBeVisible({ timeout: 15000 })
   const dims = await page.evaluate(async () => {
     const img = document.querySelector('.store-header img.store-logo') as HTMLImageElement

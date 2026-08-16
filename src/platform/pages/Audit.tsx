@@ -13,7 +13,7 @@ export const PlatformAudit: FunctionalComponent = () => {
   const logs = auditRes.data
 
   return (
-    <div>
+    <div className="platform-operations platform-audit-page">
       <PageHeader title="سجل التدقيق" subtitle={`${logs.length} إدخال`} />
       <Card>
         <Table cardMode

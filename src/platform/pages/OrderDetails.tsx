@@ -7,7 +7,7 @@ interface Props {
 }
 
 export const PlatformOrderDetails: FunctionalComponent<Props> = ({ id }) => (
-  <div>
+  <div className="platform-operations platform-order-details-page">
     <Breadcrumb items={[{ label: 'الطلبات', href: '/platform/orders' }, { label: `طلب ${id.slice(0, 8)}` }]} />
     <OrderDetails id={id} />
   </div>

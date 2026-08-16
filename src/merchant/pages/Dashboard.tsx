@@ -1,7 +1,6 @@
 import { FunctionalComponent } from 'preact'
 import { useState } from 'preact/hooks'
 import { Link } from 'wouter'
-import { PageHeader } from '../../shared/components/ui/PageHeader'
 import { StatsCard } from '../../shared/components/ui/StatsCard'
 import { Card } from '../../shared/components/ui/Card'
 import { Badge } from '../../shared/components/ui/Badge'
@@ -18,11 +17,15 @@ import { Loading } from '../../shared/components/ui/Loading'
 import { EmptyState } from '../../shared/components/ui/EmptyState'
 import { UsageCard } from '../../shared/components/subscription/UsageCard'
 import { formatCurrency, timeAgo } from '../../shared/utils/format'
+import { orderItemRevenue } from '../../shared/utils/pricing'
 import { storePublicUrl } from '../../shared/utils/store-url'
 import { STATUS_LABELS, STATUS_COLORS } from '../../shared/utils/constants'
 import { setStorePublishedCallable } from '../../shared/services/auth'
-import type { Order, Product, StoreLink } from '../../shared/types'
+import type { Order, Product, ProductCost, StoreLink } from '../../shared/types'
 import { Icon } from '../../shared/components/ui/Icon'
+import './Dashboard.css'
+import { InternalPageHeader, WorkspaceSection } from '../components/InternalWorkspace'
+import '../components/InternalWorkspace.css'
 
 interface ChecklistStep {
   done: boolean
@@ -48,6 +51,7 @@ export const MerchantDashboard: FunctionalComponent = () => {
 
   const ordersRes = useCollection<Order>('orders', { storeId, orderBy: { field: 'createdAt' } }, canOrders)
   const productsRes = useCollection<Product>('products', { storeId }, canProducts)
+  const costsRes = useCollection<ProductCost>('productCosts', { storeId }, canProducts)
   const customersRes = useCollection('customers', { storeId }, canCustomers)
   const analyticsRes = useCollection<any>('analytics', { storeId }, canAnalytics)
   const linksRes = useCollection<StoreLink>('storeLinks', { storeId }, canLinks)
@@ -64,10 +68,9 @@ export const MerchantDashboard: FunctionalComponent = () => {
   const subStatus = subState.status
   const trialRemaining = subState.trialRemaining
 
-  if (ordersRes.loading || productsRes.loading || customersRes.loading || analyticsRes.loading || linksRes.loading) {
+  if (ordersRes.loading || productsRes.loading || costsRes.loading || customersRes.loading || analyticsRes.loading || linksRes.loading) {
     return <Loading />
   }
-
   const dayStart = new Date()
   dayStart.setHours(0, 0, 0, 0)
   const dayEnd = new Date()
@@ -83,13 +86,32 @@ export const MerchantDashboard: FunctionalComponent = () => {
   const activeProducts = products.filter((p) => p.active).length
   const lowStock = products.filter((p) => p.stock <= (p.lowStockThreshold ?? 5) && p.active)
 
+  // Gross profit over completed (DELIVERED) orders, computed only over lines
+  // whose product has a configured cost price (private productCosts data).
+  const costByProduct = new Map(costsRes.data.map((c) => [c.id, c.costPrice]))
+  const hasAnyCost = [...costByProduct.values()].some((c) => typeof c === 'number' && c >= 0)
+  let totalProfit = 0
+  let deliveredRevenue = 0
+  let totalCost = 0
+  for (const o of orders) {
+    if (o.status !== 'DELIVERED') continue
+    deliveredRevenue += o.totalPrice
+    for (const it of o.items) {
+      const cost = costByProduct.get(it.productId)
+      if (typeof cost !== 'number' || cost < 0) continue
+      const lineCost = Math.max(1, it.quantity || 1) * cost
+      totalCost += lineCost
+      totalProfit += orderItemRevenue(it) - lineCost
+    }
+  }
+  const profitMargin = deliveredRevenue > 0 && hasAnyCost ? (totalProfit / deliveredRevenue) * 100 : 0
+
   const last14 = Array.from({ length: 14 }, (_, i) => {
     const d = new Date()
     d.setDate(d.getDate() - (13 - i))
     return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`
   })
   const revenueSeries = last14.map((key) => analytics.filter((a) => a.date === key).reduce((s, a) => s + (a.revenue || 0), 0))
-  const ordersSeries = last14.map((key) => analytics.filter((a) => a.date === key).reduce((s, a) => s + (a.orders || 0), 0))
 
   const copyLink = async () => {
     if (!store) return
@@ -148,8 +170,9 @@ export const MerchantDashboard: FunctionalComponent = () => {
   const allDone = steps.every((s) => s.done)
 
   return (
-    <div>
-      <PageHeader
+    <div className="merchant-dashboard merchant-dashboard-canonical">
+      <InternalPageHeader
+        eyebrow="لوحة تشغيل المتجر"
         title={`مرحباً بك في ${store?.name || 'متجرك'}`}
         subtitle="نظرة عامة على أداء متجرك اليوم"
         actions={
@@ -166,150 +189,105 @@ export const MerchantDashboard: FunctionalComponent = () => {
         }
       />
 
-      <Card title={allDone ? 'متجرك جاهز' : 'ابدأ تشغيل متجرك'} subtitle={allDone ? 'أنجزت كل خطوات الإطلاق' : 'أكمل الخطوات التالية لنشر متجرك'} className="mb-2">
-        <div className="list-row mb-1" style={{ paddingBottom: 12, borderBottom: '1px solid var(--border)' }}>
-          <div>
-            <span className="font-semibold">حالة المتجر</span>
-            <div className="muted small">{store?.published ? 'متجرك منشور ويمكنه استقبال الطلبات' : 'المتجر مسودة — غير متاح للشراء بعد'}</div>
-          </div>
-          {store?.published ? <Badge tone="green">🟢 منشور</Badge> : <Badge tone="amber">🟡 مسودة</Badge>}
-        </div>
-        <div className="checklist">
-          {steps.map((s, i) => (
-            <div key={i} className={`checklist-item ${s.done ? 'checklist-item--done' : ''}`}>
-              <span className={`checklist-mark ${s.done ? 'checklist-mark--done' : ''}`}>
-                {s.done ? <Icon name="check" /> : i + 1}
-              </span>
-              <div className="grow">
-                <div className="font-semibold">{s.label}</div>
-                {s.hint && <div className="muted small">{s.hint}</div>}
-              </div>
-              {!s.done && s.to && (
-                <Link href={s.to}>
-                  <Button variant="soft" size="sm" icon="arrow_forward">ابدأ</Button>
-                </Link>
-              )}
-            </div>
-          ))}
-          {allDone && store && (
-            <div className="checklist-item">
-              <span className="checklist-mark checklist-mark--done">
-                <Icon name="link" />
-              </span>
-              <div className="grow">
-                <div className="font-semibold">شارك رابط متجرك</div>
-                <div className="muted small" dir="ltr">{storePublicUrl(store) || 'لم يتم إنشاء رابط المتجر بعد'}</div>
-              </div>
-              <Button variant="soft" size="sm" icon="link" onClick={copyLink} disabled={!storePublicUrl(store)} title={!storePublicUrl(store) ? 'رابط المتجر غير متاح بعد' : undefined}>نسخ</Button>
-            </div>
-          )}
-        </div>
-        {store && isOwner && (
-          <div className="flex-between mt-2" style={{ paddingTop: 12, borderTop: '1px solid var(--border)' }}>
-            <div>
-              <span className="font-semibold">نشر المتجر</span>
-              <div className="muted small">{store.published ? 'متجرك ظاهر للعملاء ويمكنه استقبال الطلبات' : 'الطلبات متوقفة حتى نشر المتجر'}</div>
-            </div>
-            <div className="flex" style={{ gap: 12, alignItems: 'center' }}>
-              <Link href="/dashboard/themes"><Button variant="ghost" size="sm" icon="palette">المظهر والقالب</Button></Link>
-              <Toggle checked={!!store.published} onChange={togglePublish} disabled={publishing} label="منشور" />
-            </div>
-          </div>
-        )}
-      </Card>
-
-      {(subStatus === 'active' || subStatus === 'trialing') && (
-        <div className="grid grid-2 mb-2">
-          {subStatus === 'trialing' && subscription && (
-            <Card title="تجربتك المجانية" actions={<Link href="/dashboard/subscription"><Button variant="ghost" size="sm" icon="arrow_forward">فعّل باقتك</Button></Link>}>
-              <div className="trial-countdown">
-                <Icon name="hourglass_top" />
-                <div>
-                  <strong>{trialRemaining || 'قاربت على الانتهاء'}</strong>
-                  <p className="muted small">تظل باقتك فعالة بكامل المزايا طوال الفترة التجريبية.</p>
-                </div>
-              </div>
-            </Card>
-          )}
-          <UsageCard subscription={subscription} plan={plan} title="استهلاك طلبات الدورة" compact />
-        </div>
-      )}
-
-      <div className="stats-grid">
+      <section className="dashboard-kpi-region" aria-label="مؤشرات الأداء">
+      <div className="dashboard-kpi-region-head"><div><span className="internal-page-eyebrow">ملخص الأداء</span><h2>كيف يسير متجرك اليوم؟</h2></div><span className="muted small">محدث من بيانات متجرك الحالية</span></div>
+      <div className="stats-grid dashboard-kpi-grid">
         {canOrders && <StatsCard title="طلبات اليوم" value={todayOrders.length} icon="receipt_long" tone="primary" />}
         {canOrders && <StatsCard title="المبيعات" value={todayRevenue} currency icon="payments" tone="green" />}
+        {canOrders && hasAnyCost && <StatsCard title="إجمالي الأرباح" value={totalProfit} currency icon="trending_up" tone="violet" />}
         {canOrders && <StatsCard title="طلبات معلقة" value={pendingOrders.length} icon="pending_actions" tone="amber" />}
         {canProducts && <StatsCard title="المنتجات" value={activeProducts} icon="inventory_2" tone="blue" />}
         {canCustomers && <StatsCard title="العملاء" value={customers.length} icon="groups" tone="violet" />}
       </div>
+      </section>
 
-      {canAnalytics && (
-        <div className="grid grid-2 mb-2">
-          <Card title="الإيرادات (آخر 14 يوم)">
-            <LineChart values={revenueSeries} height={200} />
-          </Card>
-          <Card title="الطلبات (آخر 14 يوم)">
-            <LineChart values={ordersSeries} color="var(--success)" height={200} />
-          </Card>
-        </div>
-      )}
-
-      {canProducts && lowStock.length > 0 && (
-        <Card title="تنبيهات المخزون" className="mb-2" actions={<Link href="/dashboard/products"><Button variant="ghost" size="sm" icon="arrow_forward">إدارة المخزون</Button></Link>}>
-          {lowStock.slice(0, 5).map((p) => (
-            <div key={p.id} className="flex-between mb-1">
-              <span>{p.name}</span>
-              <Badge tone={p.stock === 0 ? 'red' : 'amber'}>المتبقي: {p.stock}</Badge>
-            </div>
-          ))}
-        </Card>
-      )}
-
-      {canOrders ? (
-        <Card title="أحدث الطلبات" subtitle={`${orders.length} طلب إجمالي`}>
-          {orders.length === 0 ? (
-            <EmptyState
-              title="لا توجد طلبات بعد"
-              description="عند وصول طلبات من متجرك ستظهر هنا مباشرة."
-              icon="receipt_long"
-              action={store ? <a href={`/store/${store.slug}`} target="_blank" rel="noreferrer"><Button variant="outline" size="sm">عرض متجرك</Button></a> : null}
-            />
-          ) : (
-            <Table cardMode
-              columns={[
-                { key: 'orderNumber', header: 'الرقم', render: (o: Order) => <Link href={`/dashboard/orders/${o.id}`}><span className="monospace">{o.orderNumber}</span></Link> },
-                { key: 'customerName', header: 'العميل' },
-                { key: 'totalPrice', header: 'الإجمالي', render: (o: Order) => formatCurrency(o.totalPrice) },
-                { key: 'status', header: 'الحالة', render: (o: Order) => <Badge tone={STATUS_COLORS[o.status as keyof typeof STATUS_COLORS]}>{STATUS_LABELS[o.status as keyof typeof STATUS_LABELS] || o.status}</Badge> },
-                { key: 'createdAt', header: 'التاريخ', render: (o: Order) => <span className="muted">{timeAgo(o.createdAt)}</span> },
-              ]}
-              rows={orders.slice(0, 8)}
-            />
+      <div className="dashboard-canonical-grid">
+        <main className="dashboard-canonical-main">
+          {canOrders && (
+            <WorkspaceSection title="الصورة المالية" subtitle="الإيرادات والتكلفة والربح من الطلبات المسلّمة" className="dashboard-profit-workspace">
+            <Card className="dashboard-profit-panel dashboard-profit-card">
+              <div className="dashboard-card-heading">
+                <div>
+                  <span className="eyebrow">تحليل الأرباح</span>
+                  <h2>الصورة المالية لمتجرك</h2>
+                  <p className="muted small">من الطلبات المسلمة وأسعار التكلفة المسجلة فقط.</p>
+                </div>
+                <div className="profit-panel-icon"><Icon name={hasAnyCost ? 'trending_up' : 'analytics'} /></div>
+              </div>
+              {hasAnyCost ? (
+                <div className="dashboard-profit-metrics">
+                  <div><span>الإيرادات</span><strong>{formatCurrency(deliveredRevenue)}</strong></div>
+                  <div><span>التكلفة</span><strong>{formatCurrency(totalCost)}</strong></div>
+                  <div className="is-positive"><span>إجمالي الربح</span><strong>{formatCurrency(totalProfit)}</strong></div>
+                  <div><span>هامش الربح</span><strong>{profitMargin.toFixed(1)}%</strong></div>
+                </div>
+              ) : (
+                <div className="dashboard-profit-empty"><Icon name="analytics" /><p>أضف أسعار التكلفة للمنتجات لعرض الأرباح بدقة.</p><Link href="/dashboard/products"><Button variant="outline" icon="inventory_2">إضافة سعر التكلفة</Button></Link></div>
+              )}
+              {hasAnyCost && <Link href="/dashboard/products" className="dashboard-inline-link">مراجعة تكاليف المنتجات <Icon name="arrow_forward" /></Link>}
+            </Card>
+            </WorkspaceSection>
           )}
-        </Card>
-      ) : (
-        <Card title="أحدث الطلبات">
-          <EmptyState
-            title="صلاحيات غير كافية"
-            description="حسابك لا يملك صلاحية عرض الطلبات. تواصل مع مالك المتجر لتفعيلها."
-            icon="lock"
-          />
-        </Card>
-      )}
 
-      {canLinks && links.length > 0 && (
-        <Card title="أداء روابط البيع" subtitle="أفضل الروابط حسب الإيرادات" className="mt-2">
-          <Table cardMode
-            columns={[
-              { key: 'title', header: 'الرابط' },
-              { key: 'visits', header: 'الزيارات', render: (l: StoreLink) => <Badge>{l.visits || 0}</Badge> },
-              { key: 'ordersCount', header: 'الطلبات', render: (l: StoreLink) => <Badge tone="indigo">{l.ordersCount || 0}</Badge> },
-              { key: 'totalRevenue', header: 'الإيرادات', render: (l: StoreLink) => formatCurrency(l.totalRevenue || 0) },
-            ]}
-            rows={[...links].sort((a, b) => (b.totalRevenue || 0) - (a.totalRevenue || 0)).slice(0, 5)}
-          />
-        </Card>
-      )}
+          {canAnalytics && (
+            <WorkspaceSection title="اتجاه المبيعات" subtitle="آخر 14 يوماً" className="dashboard-chart-workspace">
+            <Card className="dashboard-chart-card">
+              <LineChart values={revenueSeries} height={220} />
+            </Card>
+            </WorkspaceSection>
+          )}
+
+          {canOrders ? (
+            <WorkspaceSection title="أحدث الطلبات" subtitle={`${orders.length} طلب إجمالي`} className="dashboard-orders-workspace">
+            <Card className="dashboard-orders-card">
+              {orders.length === 0 ? (
+                <EmptyState title="لا توجد طلبات بعد" description="عند وصول طلبات من متجرك ستظهر هنا مباشرة." icon="receipt_long" action={store ? <a href={`/store/${store.slug}`} target="_blank" rel="noreferrer"><Button variant="outline" size="sm">عرض متجرك</Button></a> : null} />
+              ) : (
+                <Table cardMode columns={[
+                  { key: 'orderNumber', header: 'الرقم', render: (o: Order) => <Link href={`/dashboard/orders/${o.id}`}><span className="monospace">{o.orderNumber}</span></Link> },
+                  { key: 'customerName', header: 'العميل' },
+                  { key: 'totalPrice', header: 'الإجمالي', render: (o: Order) => formatCurrency(o.totalPrice) },
+                  { key: 'status', header: 'الحالة', render: (o: Order) => <Badge tone={STATUS_COLORS[o.status as keyof typeof STATUS_COLORS]}>{STATUS_LABELS[o.status as keyof typeof STATUS_LABELS] || o.status}</Badge> },
+                  { key: 'createdAt', header: 'التاريخ', render: (o: Order) => <span className="muted">{timeAgo(o.createdAt)}</span> },
+                ]} rows={orders.slice(0, 8)} />
+              )}
+            </Card>
+            </WorkspaceSection>
+          ) : <Card title="أحدث الطلبات"><EmptyState title="صلاحيات غير كافية" description="حسابك لا يملك صلاحية عرض الطلبات. تواصل مع مالك المتجر لتفعيلها." icon="lock" /></Card>}
+        </main>
+
+        <aside className="dashboard-canonical-side">
+          <Card title="حالة المتجر" className="dashboard-store-status-card">
+            <div className="dashboard-status-line"><span className="dashboard-status-dot" data-published={store?.published ? 'true' : 'false'} /><div><strong>{store?.published ? 'متجرك منشور' : 'المتجر مسودة'}</strong><small>{store?.published ? 'يمكنه استقبال الطلبات' : 'انشر المتجر لبدء البيع'}</small></div></div>
+            {store && isOwner && <div className="dashboard-status-actions"><Toggle checked={!!store.published} onChange={togglePublish} disabled={publishing} label="منشور" /><Link href="/dashboard/themes"><Button variant="ghost" size="sm" icon="palette">المظهر</Button></Link></div>}
+            {store && <div className="dashboard-store-link" dir="ltr">{storePublicUrl(store) || 'رابط المتجر غير متاح'}</div>}
+            <div className="dashboard-action-row"><Button variant="soft" size="sm" icon="link" onClick={copyLink} disabled={!storePublicUrl(store)}>نسخ الرابط</Button>{store && <a href={`/store/${store.slug}`} target="_blank" rel="noreferrer"><Button variant="outline" size="sm" icon="store">فتح المتجر</Button></a>}</div>
+          </Card>
+
+          {(subStatus === 'active' || subStatus === 'trialing') && <Card title="استخدام الخطة" className="dashboard-usage-card" actions={<Link href="/dashboard/subscription"><Button variant="ghost" size="sm" icon="arrow_forward">التفاصيل</Button></Link>}>
+            {subStatus === 'trialing' && subscription && <div className="dashboard-trial"><Icon name="hourglass_top" /><span><strong>{trialRemaining || 'قاربت على الانتهاء'}</strong><small>الفترة التجريبية نشطة</small></span></div>}
+            <UsageCard subscription={subscription} plan={plan} title="الطلبات" compact />
+          </Card>}
+
+          <Card title="إجراءات سريعة" className="dashboard-quick-actions">
+            {canProducts && <Link href="/dashboard/products"><Icon name="add" /><span>إضافة منتج</span><Icon name="arrow_forward" /></Link>}
+            {canOrders && <Link href="/dashboard/orders"><Icon name="receipt_long" /><span>مراجعة الطلبات</span><Icon name="arrow_forward" /></Link>}
+            {canAnalytics && <Link href="/dashboard/analytics"><Icon name="analytics" /><span>عرض التحليلات</span><Icon name="arrow_forward" /></Link>}
+          </Card>
+
+          {canProducts && <Card title="تنبيهات المخزون" className="dashboard-inventory-card" actions={<Link href="/dashboard/products"><Button variant="ghost" size="sm" icon="arrow_forward">إدارة</Button></Link>}>
+            {lowStock.length > 0 ? lowStock.slice(0, 4).map((p) => <div key={p.id} className="dashboard-inventory-row"><span>{p.name}</span><Badge tone={p.stock === 0 ? 'red' : 'amber'}>{p.stock === 0 ? 'نفد المخزون' : `متبقي ${p.stock}`}</Badge></div>) : <div className="dashboard-no-alert"><Icon name="check_circle" /><span>لا توجد تنبيهات مخزون</span></div>}
+          </Card>}
+        </aside>
+      </div>
+
+      {!allDone && <Card title="خطوات إطلاق المتجر" subtitle="أكمل الخطوات التالية لبدء البيع" className="dashboard-launch-card">
+        <div className="checklist dashboard-checklist">{steps.map((s, i) => <div key={i} className={`checklist-item ${s.done ? 'checklist-item--done' : ''}`}><span className={`checklist-mark ${s.done ? 'checklist-mark--done' : ''}`}>{s.done ? <Icon name="check" /> : i + 1}</span><div className="grow"><div className="font-semibold">{s.label}</div>{s.hint && <div className="muted small">{s.hint}</div>}</div>{!s.done && s.to && <Link href={s.to}><Button variant="soft" size="sm" icon="arrow_forward">ابدأ</Button></Link>}</div>)}</div>
+      </Card>}
+
+      {canLinks && links.length > 0 && <Card title="أداء روابط البيع" subtitle="أفضل الروابط حسب الإيرادات" className="dashboard-links-card">
+        <Table cardMode columns={[{ key: 'title', header: 'الرابط' }, { key: 'visits', header: 'الزيارات', render: (l: StoreLink) => <Badge>{l.visits || 0}</Badge> }, { key: 'ordersCount', header: 'الطلبات', render: (l: StoreLink) => <Badge tone="indigo">{l.ordersCount || 0}</Badge> }, { key: 'totalRevenue', header: 'الإيرادات', render: (l: StoreLink) => formatCurrency(l.totalRevenue || 0) }]} rows={[...links].sort((a, b) => (b.totalRevenue || 0) - (a.totalRevenue || 0)).slice(0, 5)} />
+      </Card>}
     </div>
   )
 }

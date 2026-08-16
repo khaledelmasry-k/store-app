@@ -15,7 +15,7 @@ export const StoreCart: FunctionalComponent = () => {
 
   if (cart.items.length === 0) {
     return (
-      <div className="order-confirmed">
+      <div className="order-confirmed storefront-state storefront-empty-cart">
         <div className="big-check"><Icon name="shopping_cart" /></div>
         <h1 className="auth-title">سلتك فارغة</h1>
         <p className="auth-subtitle">أضف بعض المنتجات وعد إلى هنا لإتمام الطلب.</p>
@@ -25,13 +25,13 @@ export const StoreCart: FunctionalComponent = () => {
   }
 
   return (
-    <div>
-      <div className="page-header">
+    <div className="storefront-page storefront-cart">
+      <div className="page-header storefront-page-head">
         <h1 className="page-title">سلة التسوق</h1>
         <p className="page-subtitle">{cart.count} منتج</p>
       </div>
 
-      <div className="cart-layout">
+      <div className="cart-layout checkout-workspace">
         <div>
           {cart.items.map((item, i) => {
             const isQtyMode = item.pricingMode === 'quantity' && item.quantityTiers && item.quantityTiers.length > 0

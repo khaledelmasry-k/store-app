@@ -11,7 +11,10 @@ async function login(page: Page, role: 'platform' | 'merchant', email: string, p
 test('platform can open a merchant subscription detail with billing history', async ({ page }) => {
   await login(page, 'platform', 'admin@mk.store', 'Admin12345')
   await page.goto('/platform/subscriptions', { waitUntil: 'domcontentloaded' })
-  await page.waitForSelector('table, .table', { timeout: 20000 })
+  // The subscriptions list is a shared Table (cardMode): it renders a table on
+  // desktop and collapses to cards below 768px. Wait for the actionable rows
+  // rather than assuming a desktop-only `<table>` on mobile.
+  await page.getByRole('button', { name: 'تفاصيل' }).first().waitFor({ timeout: 20000 })
 
   // Open the first subscription's detail view.
   await page.getByRole('button', { name: 'تفاصيل' }).first().click()

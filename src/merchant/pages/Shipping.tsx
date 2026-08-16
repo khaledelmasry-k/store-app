@@ -176,7 +176,7 @@ export const MerchantShipping: FunctionalComponent = () => {
   const activeProviders = providers.filter((p) => p.active).length
 
   return (
-    <div>
+    <div className="merchant-operations merchant-shipping-page">
       <PageHeader title="الشحن والتوصيل" subtitle="إعدادات الشحن والمناطق وشركات التوصيل" />
 
       <Tabs

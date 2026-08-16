@@ -274,7 +274,7 @@ export const MerchantLandingPages: FunctionalComponent = () => {
   const templateName = (id?: string) => STORE_TEMPLATES.find((t) => t.id === id)?.name || 'مودرن'
 
   return (
-    <div>
+    <div className="merchant-operations merchant-landing-pages-page">
       <PageHeader title="صفحات الهبوط" subtitle={`${pages.length} صفحة`} actions={<Button icon="add" onClick={() => openEditor()}>صفحة جديدة</Button>} />
 
       <div className="stats-grid">

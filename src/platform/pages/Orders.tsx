@@ -40,7 +40,7 @@ export const PlatformOrders: FunctionalComponent = () => {
   if (ordersRes.loading) return <Loading />
 
   return (
-    <div>
+    <div className="platform-operations platform-orders-page">
       <PageHeader title="طلبات المنصة" subtitle={`${orders.length} طلب عبر جميع المتاجر`} />
 
       <div className="stats-grid">
@@ -67,8 +67,9 @@ export const PlatformOrders: FunctionalComponent = () => {
               { key: 'orderNumber', header: 'الرقم', render: (o: Order) => <Link href={`/platform/orders/${o.id}`}><span className="monospace">{o.orderNumber}</span></Link> },
               { key: 'storeId', header: 'المتجر', render: (o: Order) => (stores.find((s: any) => s.id === o.storeId) as any)?.name || '—' },
               { key: 'customerName', header: 'العميل' },
-              { key: 'phone', header: 'الهاتف' },
-              { key: 'totalPrice', header: 'الإجمالي', render: (o: Order) => formatCurrency(o.totalPrice) },
+               { key: 'phone', header: 'الهاتف' },
+               { key: 'items', header: 'المنتجات', render: (o: Order) => <ProductsCell items={o.items} /> },
+               { key: 'totalPrice', header: 'الإجمالي', render: (o: Order) => formatCurrency(o.totalPrice) },
               { key: 'status', header: 'الحالة', render: (o: Order) => <Badge tone={STATUS_COLORS[o.status]}>{STATUS_LABELS[o.status]}</Badge> },
               { key: 'createdAt', header: 'التاريخ', render: (o: Order) => <span className="muted">{timeAgo(o.createdAt)}</span> },
             ]}
@@ -88,4 +89,17 @@ export const PlatformOrders: FunctionalComponent = () => {
     </div>
   )
 }
+
+function ProductsCell({ items }: { items: Order['items'] }) {
+  const list = items || []
+  if (list.length === 0) return <span className="muted small">—</span>
+  const total = list.reduce((s, i) => s + (i.quantity || 0), 0)
+  return (
+    <div className="flex flex-col" style={{ lineHeight: 1.3 }}>
+      <span className="muted small" title={list.map((i) => i.name).join('، ')} style={{ maxWidth: 160, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{list[0].name}</span>
+      <span className="muted small">{total} قطعة</span>
+    </div>
+  )
+}
+
 export default PlatformOrders

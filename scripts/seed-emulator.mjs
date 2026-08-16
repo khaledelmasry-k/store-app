@@ -25,7 +25,7 @@ const COLLECTIONS = [
   'plans', 'users', 'stores', 'subscriptions', 'orders', 'products', 'customers',
   'analytics', 'transactions', 'payments', 'coupons', 'categories', 'storeLinks',
   'notifications', 'auditLogs', 'shipping', 'team', 'roles', 'invitations',
-  'landingPages', 'subscriptionPayments',
+  'landingPages', 'subscriptionPayments', 'productCosts', 'orderCosts',
 ]
 
 async function wipe() {
@@ -98,6 +98,7 @@ async function createStore(storeId, ref, name, ownerId, opts = {}) {
     name,
     slug: ref,
     active: opts.active ?? true,
+    isTestMerchant: opts.isTestMerchant === true,
     published: !!opts.published,
     ownerId,
     currency: 'EGP',
@@ -170,8 +171,33 @@ async function createProduct(storeId, categoryId, name, price, stock, descriptio
   return ref.id
 }
 
-async function createOrder(storeId, counterId, orderNumber, productId, customerName, phone, price, status, daysAgo) {
+async function createProductCost(storeId, productId, costPrice) {
+  await db.collection('productCosts').doc(productId).set({
+    id: productId,
+    storeId,
+    costPrice,
+    updatedAt: ts(),
+    updatedBy: 'seed',
+  })
+}
+
+async function createOrder(storeId, counterId, orderNumber, productId, customerName, phone, price, status, daysAgo, opts = {}) {
   const createdAt = new Date(Date.now() - daysAgo * 86400000)
+  const quantity = opts.quantity || 1
+  const lineId = `${productId}-${opts.variantId || ''}-${quantity}`
+  const lineTotal = opts.lineTotal ?? price * quantity
+  const item = {
+    id: lineId,
+    productId,
+    name: opts.productName || productId,
+    price,
+    quantity,
+    lineTotal,
+    ...(opts.pricingMode ? { pricingMode: opts.pricingMode } : {}),
+    ...(opts.quantityTiers ? { quantityTiers: opts.quantityTiers } : {}),
+    ...(opts.quantityTier ? { quantityTier: opts.quantityTier } : {}),
+    ...(opts.quantityPricingStrategy ? { quantityPricingStrategy: opts.quantityPricingStrategy } : {}),
+  }
   const ref = await db.collection('orders').add({
     storeId,
     orderNumber,
@@ -182,11 +208,11 @@ async function createOrder(storeId, counterId, orderNumber, productId, customerN
     address: 'شارع رئيسي ١٢',
     notes: null,
     customerId: null,
-    items: [{ id: `${productId}-`, productId, name: productId, price, quantity: 1 }],
-    subtotal: price,
+    items: [item],
+    subtotal: lineTotal,
     shippingFee: 0,
     discount: 0,
-    totalPrice: price,
+    totalPrice: lineTotal,
     status,
     paymentMethod: 'cod',
     couponCode: null,
@@ -198,6 +224,16 @@ async function createOrder(storeId, counterId, orderNumber, productId, customerN
     updatedAt: admin.firestore.Timestamp.fromDate(createdAt),
     createdBy: 'seed',
   })
+  if (typeof opts.costPrice === 'number') {
+    await db.collection('orderCosts').doc(ref.id).set({
+      id: ref.id,
+      storeId,
+      orderId: ref.id,
+      items: [{ lineId, productId, costPrice: opts.costPrice, quantity }],
+      createdAt: admin.firestore.Timestamp.fromDate(createdAt),
+      createdBy: 'seed',
+    })
+  }
   await db.doc(`stores/${storeId}/counters/orders`).set({ value: inc(1) }, { merge: true })
   return ref
 }
@@ -246,30 +282,34 @@ async function main() {
   await wipe()
   console.log('Wiped existing data.')
 
-  // Plans — the 4 M&K Store plans. Prices/limits are the source of truth;
-  // 0 product/stock/salesLinks limits = unlimited. Storage is in MB.
-  // Feature flags (quantityPricing, variantInventory, ...) gate advanced product
-  // modes; the Free plan has none of them.
-   await createPlan('plan-free', 'الأساسية', 0, 5, 30, 'للبدء والتجريب', ['متجر واحد', 'منتجات محدودة', 'تحليلات أساسية'], { priceYearly: 0, priceYearlyDiscount: 0, trialDays: 0, landingPagesLimit: 0, salesLinksLimit: 1, staffLimit: 0, storageLimit: 200, slug: 'free', sortOrder: 0, unlimitedProducts: false, unlimitedSalesLinks: false, analytics: true })
-  await createPlan('plan-starter', 'البداية', 299, 50, 100, 'للبدء والبيع', ['متجر إلكتروني كامل', 'دعم بالهاتف', 'روابط بيع'], { priceYearly: 2990, launchPrice: 99, launchEnabled: true, launchExpiresAt: new Date('2026-12-31T23:59:59Z'), landingPagesLimit: 1, salesLinksLimit: 3, staffLimit: 1, storageLimit: 1024, slug: 'starter', sortOrder: 1, unlimitedProducts: false, unlimitedSalesLinks: false, quantityPricing: true, variantInventory: true, coupons: true, analytics: true })
-  await createPlan('plan-growth', 'النمو', 599, 250, 500, 'للمتاجر التي تنمو', ['كل مزايب البداية', 'تحليلات متقدمة', 'فريق حتى 3 أعضاء'], { priceYearly: 5990, launchPrice: 199, launchEnabled: true, launchExpiresAt: new Date('2026-12-31T23:59:59Z'), landingPagesLimit: 5, salesLinksLimit: 15, staffLimit: 3, storageLimit: 5120, slug: 'growth', isPopular: true, sortOrder: 2, unlimitedProducts: false, unlimitedSalesLinks: false, quantityPricing: true, variantInventory: true, coupons: true, abandonedCart: true, analytics: true, advancedReports: true })
-  await createPlan('plan-pro', 'الاحتراف', 999, 0, 2000, 'للمتاجر المتقدمة', ['كل مزايب النمو', 'أولوية دعم', 'إزالة علامة M&K'], { priceYearly: 9990, launchPrice: 299, launchEnabled: true, launchExpiresAt: new Date('2026-12-31T23:59:59Z'), landingPagesLimit: 20, salesLinksLimit: 0, staffLimit: 10, storageLimit: 20480, slug: 'pro', sortOrder: 3, unlimitedProducts: true, unlimitedSalesLinks: true, quantityPricing: true, variantInventory: true, coupons: true, abandonedCart: true, analytics: true, advancedReports: true, customDomain: true, apiAccess: true, removeBranding: true, prioritySupport: true })
+  // Plans — the M&K Store catalog (Egyptian EGP, monthly/yearly). Prices/limits are
+  // the single source of truth; 0 product/salesLinks limits = unlimited (handled via
+  // the explicit unlimitedProducts/unlimitedSalesLinks flags below). Storage is in MB.
+  // Feature flags (quantityPricing, variantInventory, ...) gate advanced product modes;
+  // the Free plan has none of them and keeps no trial. Each plan advertises its public
+  // store link ('رابط متجرك') so the pricing cards communicate that capability.
+  await createPlan('plan-free', 'FREE', 0, 50, 50, 'للبداية بمتجر أساسي وحدود واضحة', ['واجهة متجر أساسية', 'إدارة المنتجات', 'الطلبات', 'العملاء', 'لوحة تحكم أساسية', 'تخصيص أساسي'], { priceYearly: 0, trialDays: 0, landingPagesLimit: 0, salesLinksLimit: 0, staffLimit: 1, storageLimit: 200, slug: 'free', sortOrder: 0, unlimitedProducts: false, unlimitedSalesLinks: false, analytics: true })
+  await createPlan('plan-starter', 'STARTER', 399, 500, 300, 'للمتاجر التي بدأت البيع وتحتاج أدوات تسويق أساسية', ['كل مزايا Free', 'نطاق مخصص', 'كوبونات', 'روابط بيع', 'تقارير أساسية', 'تخصيص المتجر', 'تنبيهات المخزون'], { priceYearly: 3990, launchPrice: 0, launchEnabled: false, landingPagesLimit: 1, salesLinksLimit: 10, staffLimit: 3, storageLimit: 1024, slug: 'starter', sortOrder: 1, unlimitedProducts: false, unlimitedSalesLinks: false, variantInventory: true, coupons: true, analytics: true, customDomain: true })
+  await createPlan('plan-growth', 'GROWTH', 749, 2000, 1500, 'للمتاجر النامية التي تحتاج تقارير وتحليلات أفضل', ['كل مزايا Starter', 'تقارير متقدمة', 'تحليلات متقدمة', 'رؤى مبيعات متقدمة', 'تخصيص أوسع', 'دعم أولوية عند توفره'], { priceYearly: 7490, launchPrice: 0, launchEnabled: false, landingPagesLimit: 5, salesLinksLimit: 50, staffLimit: 10, storageLimit: 5120, slug: 'growth', isPopular: true, sortOrder: 2, unlimitedProducts: false, unlimitedSalesLinks: false, quantityPricing: true, variantInventory: true, coupons: true, abandonedCart: true, analytics: true, advancedReports: true, customDomain: true, prioritySupport: true })
+  await createPlan('plan-business', 'BUSINESS', 1099, 5000, 3500, 'للمتاجر التشغيلية التي تحتاج فريقاً أكبر وحدوداً أعلى', ['كل مزايا Growth', 'صلاحيات فريق متقدمة', 'تحليلات محسنة', 'حدود تشغيل أكبر', 'دعم أولوية', 'أدوات تاجر متقدمة'], { priceYearly: 10990, launchPrice: 0, launchEnabled: false, landingPagesLimit: 10, salesLinksLimit: 100, staffLimit: 20, storageLimit: 10240, slug: 'business', sortOrder: 3, unlimitedProducts: false, unlimitedSalesLinks: false, quantityPricing: true, variantInventory: true, coupons: true, abandonedCart: true, analytics: true, advancedReports: true, customDomain: true, prioritySupport: true })
+  await createPlan('plan-pro', 'PRO', 1499, 0, 10000, 'للمتاجر الكبيرة التي تحتاج حدوداً أعلى وربطاً برمجياً', ['كل مزايا Business', 'وصول API عند توفره', 'أعلى حدود استخدام', 'تقارير متقدمة', 'قدرات فريق متقدمة', 'دعم مميز'], { priceYearly: 14990, launchPrice: 0, launchEnabled: false, landingPagesLimit: 20, salesLinksLimit: 0, staffLimit: 50, storageLimit: 20480, slug: 'pro', sortOrder: 4, unlimitedProducts: true, unlimitedSalesLinks: true, quantityPricing: true, variantInventory: true, coupons: true, abandonedCart: true, analytics: true, advancedReports: true, customDomain: true, apiAccess: true, prioritySupport: true })
 
   // Platform admin
   const adminUid = 'seed-admin'
   await createUser(adminUid, 'admin@mk.store', 'Admin12345', 'مدير المنصة', 'superAdmin', [])
 
-  // Store A — active growth plan, published, moderate usage
+  // Store A — TEST active growth plan, published, moderate usage
   const aUid = 'seed-owner-a'
-  await createUser(aUid, 'owner@a.store', 'Owner12345', 'محمد علي', 'merchant', ['store-a'])
-  await createStore('store-a', 'beit-el-shay', 'بيت الشاي', aUid, {
+  await createUser(aUid, 'owner@a.store', 'Owner12345', 'TEST Owner A', 'merchant', ['store-a'])
+  await createStore('store-a', 'test-store-a', 'TEST - متجر اختبار A', aUid, {
+    isTestMerchant: true,
     published: true,
     primary: '#16a34a',
     secondary: '#f59e0b',
     storageLimitBytes: 5 * 1024 * 1024 * 1024,
-    description: 'أجود أنواع الشاي والقهوة وأدوات التحضير — توصيل لكل المحافظات.',
-    seoTitle: 'بيت الشاي — متجر شاي وقهوة',
-    seoDescription: 'تشكيلة واسعة من الشاي والقهوة وأدوات التحضير بتوصيل سريع.',
+    description: 'متجر اختبار محلي للتحقق من واجهة المتجر والطلبات والتسعير الكمي.',
+    seoTitle: 'TEST - متجر اختبار A',
+    seoDescription: 'بيانات اختبار محلية فقط للتحقق من واجهة M&K Store.',
   })
   await db.collection('stores').doc('store-a').update({
     shipping: {
@@ -295,12 +335,13 @@ async function main() {
     currentPeriodEnd: new Date(Date.now() + 18 * 86400000),
     activatedAt: new Date(Date.now() - 12 * 86400000),
     approvedBy: adminUid,
-    ordersUsed: 340,
-    periodNumber: 1,
-    normalPriceSnapshot: 599,
-    launchPriceSnapshot: 199,
-    launchUsed: true,
-  })
+     ordersUsed: 1020,
+     periodNumber: 1,
+     normalPriceSnapshot: 749,
+     launchPriceSnapshot: 749,
+     yearlyPriceSnapshot: 7490,
+     launchUsed: false,
+   })
   const teaCat = await createCategory('store-a', 'شاي', 'tea', 1)
   const coffeeCat = await createCategory('store-a', 'قهوة', 'coffee', 2)
   const p1 = await createProduct('store-a', teaCat, 'شاي صيني ممتاز', 180, 40, 'شاي أخضر فاخر')
@@ -316,11 +357,30 @@ async function main() {
       { quantity: 4, price: 1400 },
     ],
   })
-  await createOrder('store-a', 'store-a', 'ORD-00001', p1, 'أحمد حسن', '01000000001', 180, 'DELIVERED', 8)
-  await createOrder('store-a', 'store-a', 'ORD-00002', p2, 'سارة أحمد', '01000000002', 320, 'DELIVERED', 5)
-  await createOrder('store-a', 'store-a', 'ORD-00003', p3, 'خالد محمود', '01000000003', 150, 'SHIPPED', 3)
-  await createOrder('store-a', 'store-a', 'ORD-00004', p2, 'منى خليل', '01000000004', 320, 'NEW', 1)
-  await createOrder('store-a', 'store-a', 'ORD-00005', p1, 'يوسف إبراهيم', '01000000005', 180, 'CANCELLED', 2)
+  await createProductCost('store-a', p1, 92)
+  await createProductCost('store-a', p2, 185)
+  await createProductCost('store-a', p3, 80)
+  await createProductCost('store-a', p4, 310)
+  await createOrder('store-a', 'store-a', 'ORD-00001', p1, 'أحمد حسن', '01000000001', 180, 'DELIVERED', 8, { productName: 'شاي صيني ممتاز', costPrice: 92 })
+  await createOrder('store-a', 'store-a', 'ORD-00002', p2, 'سارة أحمد', '01000000002', 320, 'DELIVERED', 5, { productName: 'قهوة مختصة', costPrice: 185 })
+  await createOrder('store-a', 'store-a', 'ORD-00003', p3, 'خالد محمود', '01000000003', 150, 'SHIPPED', 3, { productName: 'أدوات تحضير الشاي', costPrice: 80 })
+  await createOrder('store-a', 'store-a', 'ORD-00004', p2, 'منى خليل', '01000000004', 320, 'NEW', 1, { productName: 'قهوة مختصة', costPrice: 185 })
+  await createOrder('store-a', 'store-a', 'ORD-00005', p1, 'يوسف إبراهيم', '01000000005', 180, 'CANCELLED', 2, { productName: 'شاي صيني ممتاز', costPrice: 92 })
+  await createOrder('store-a', 'store-a', 'ORD-00006', p4, 'هبة سمير', '01000000006', 500, 'DELIVERED', 1, {
+    productName: 'علبة هدايا شاي فاخرة',
+    quantity: 3,
+    lineTotal: 1200,
+    pricingMode: 'quantity',
+    quantityTiers: [
+      { quantity: 1, price: 500 },
+      { quantity: 2, price: 900 },
+      { quantity: 3, price: 1200 },
+      { quantity: 4, price: 1400 },
+    ],
+    quantityTier: { quantity: 3, price: 1200 },
+    quantityPricingStrategy: 'cap',
+    costPrice: 310,
+  })
   await createCustomer('store-a', 'أحمد حسن', '01000000001', 3, 640)
   await createCustomer('store-a', 'سارة أحمد', '01000000002', 2, 470)
   await createCustomer('store-a', 'منى خليل', '01000000004', 1, 320)
@@ -379,7 +439,7 @@ async function main() {
       image: '',
       ctaText: 'اطلب الآن',
     },
-    seo: { title: 'عرض رمضان — بيت الشاي', description: 'عروض رمضان على الشاي والقهوة' },
+    seo: { title: 'TEST - صفحة هبوط متجر اختبار A', description: 'صفحة هبوط اختبارية محلية فقط' },
     sections: [
       {
         type: 'features',
@@ -437,15 +497,16 @@ async function main() {
     createdAt: ts(), updatedAt: ts(), createdBy: 'seed',
   })
 
-  // Store B — active starter plan, published, near limit
+  // Store B — TEST active starter plan, published, near limit
   const bUid = 'seed-owner-b'
-  await createUser(bUid, 'owner@b.store', 'Owner12345', 'نور الشاذلي', 'merchant', ['store-b'])
-  await createStore('store-b', 'active-shoes', 'أحذية أكتيف', bUid, {
+  await createUser(bUid, 'owner@b.store', 'Owner12345', 'TEST Owner B', 'merchant', ['store-b'])
+  await createStore('store-b', 'test-store-b', 'TEST - متجر اختبار B', bUid, {
+    isTestMerchant: true,
     published: true,
     primary: '#0284c7',
     secondary: '#f43f5e',
     storageLimitBytes: 1 * 1024 * 1024 * 1024,
-    description: 'أحذية رياضية وعصريّة للرجال والنساء بأسعار منافسة.',
+    description: 'متجر اختبار محلي قريب من حدود الخطة.',
   })
   await db.collection('stores').doc('store-b').update({
     shipping: {
@@ -465,31 +526,35 @@ async function main() {
     currentPeriodEnd: new Date(Date.now() + 10 * 86400000),
     activatedAt: new Date(Date.now() - 20 * 86400000),
     approvedBy: adminUid,
-    ordersUsed: 92,
-    periodNumber: 2,
-    normalPriceSnapshot: 299,
-    launchPriceSnapshot: 99,
-    launchUsed: true,
-  })
+     ordersUsed: 276,
+     periodNumber: 2,
+     normalPriceSnapshot: 399,
+     launchPriceSnapshot: 399,
+     yearlyPriceSnapshot: 3990,
+     launchUsed: false,
+   })
   const shoesCat = await createCategory('store-b', 'أحذية', 'shoes', 1)
   const sp1 = await createProduct('store-b', shoesCat, 'حذاء رياضي', 550, 20, 'مقاسات متعددة')
   const sp2 = await createProduct('store-b', shoesCat, 'حذاء رسمي', 720, 12, 'جلد طبيعي')
-  await createOrder('store-b', 'store-b', 'ORD-00001', sp1, 'ليلى سالم', '01000000010', 550, 'PROCESSING', 1)
-  await createOrder('store-b', 'store-b', 'ORD-00002', sp2, 'عمر فاروق', '01000000011', 720, 'NEW', 0)
+  await createProductCost('store-b', sp1, 340)
+  await createProductCost('store-b', sp2, 470)
+  await createOrder('store-b', 'store-b', 'ORD-00001', sp1, 'ليلى سالم', '01000000010', 550, 'PROCESSING', 1, { productName: 'حذاء رياضي', costPrice: 340 })
+  await createOrder('store-b', 'store-b', 'ORD-00002', sp2, 'عمر فاروق', '01000000011', 720, 'NEW', 0, { productName: 'حذاء رسمي', costPrice: 470 })
   await seedAnalytics('store-b', 3, 1500)
 
-  // Store C — trialing (instant self-serve trial), with a pending activation request
+  // Store C — TEST trialing (instant self-serve trial), with a pending activation request
   const cUid = 'seed-owner-c'
-  await createUser(cUid, 'owner@c.store', 'Owner12345', 'طارق فؤاد', 'merchant', ['store-c'])
-  await createStore('store-c', 'zeina-gifts', 'زينة الجملة', cUid, { published: true })
+  await createUser(cUid, 'owner@c.store', 'Owner12345', 'TEST Owner C', 'merchant', ['store-c'])
+  await createStore('store-c', 'test-store-c', 'TEST - متجر اختبار C', cUid, { published: true, isTestMerchant: true })
   const cSubId = await createSubscription('store-c', 'plan-starter', 'trialing', {
     planName: 'البداية',
     trialStartedAt: new Date(Date.now() - 2 * 86400000),
     trialEndsAt: new Date(Date.now() + 1 * 86400000),
     startedAt: new Date(Date.now() - 2 * 86400000),
     expiresAt: new Date(Date.now() + 1 * 86400000),
-    normalPriceSnapshot: 299,
-    launchPriceSnapshot: 99,
+    normalPriceSnapshot: 399,
+    launchPriceSnapshot: 399,
+    yearlyPriceSnapshot: 3990,
     ordersUsed: 5,
   })
   await db.collection('subscriptionPayments').add({
@@ -498,10 +563,10 @@ async function main() {
     storeId: 'store-c',
     planId: 'plan-starter',
     planName: 'البداية',
-    amount: 99,
+    amount: 349,
     paymentMethod: 'فودافون كاش',
     reference: '487221900123',
-    note: 'تحويل أول شهر بسعر الإطلاق',
+    note: 'تحويل أول شهر بالخطة الحالية',
     screenshotUrl: null,
     status: 'pending',
     periodNumber: 1,
@@ -510,25 +575,26 @@ async function main() {
     createdBy: cUid,
   })
 
-  // Store D — trial expired (data preserved, storefront gated)
+  // Store D — TEST trial expired (data preserved, storefront gated)
   const dUid = 'seed-owner-d'
-  await createUser(dUid, 'owner@d.store', 'Owner12345', 'هدى رمضان', 'merchant', ['store-d'])
-  await createStore('store-d', 'noor-cafe', 'كافتيريا النور', dUid, { published: true })
+  await createUser(dUid, 'owner@d.store', 'Owner12345', 'TEST Owner D', 'merchant', ['store-d'])
+  await createStore('store-d', 'test-store-d', 'TEST - متجر اختبار D', dUid, { published: true, isTestMerchant: true })
   await createSubscription('store-d', 'plan-pro', 'expired', {
     planName: 'الاحتراف',
     trialStartedAt: new Date(Date.now() - 12 * 86400000),
     trialEndsAt: new Date(Date.now() - 4 * 86400000),
     startedAt: new Date(Date.now() - 12 * 86400000),
     expiresAt: new Date(Date.now() - 4 * 86400000),
-    normalPriceSnapshot: 999,
-    launchPriceSnapshot: 299,
+    normalPriceSnapshot: 1499,
+    launchPriceSnapshot: 1499,
+    yearlyPriceSnapshot: 14990,
     ordersUsed: 40,
   })
 
-  // Store E — legacy pending subscription (admin-approval flow still supported)
+  // Store E — TEST legacy pending subscription (admin-approval flow still supported)
   const eUid = 'seed-owner-e'
-  await createUser(eUid, 'owner@e.store', 'Owner12345', 'سلمى عادل', 'merchant', ['store-e'])
-  await createStore('store-e', 'amal-kids', 'أمل للأطفال', eUid, { published: false })
+  await createUser(eUid, 'owner@e.store', 'Owner12345', 'TEST Owner E', 'merchant', ['store-e'])
+  await createStore('store-e', 'test-store-e', 'TEST - متجر اختبار E', eUid, { published: false, isTestMerchant: true })
   await createSubscription('store-e', 'plan-starter', 'pending', { planName: 'البداية' })
 
   // Store F — published, active, WITH a logo and a hero image. Used by the
@@ -536,8 +602,9 @@ async function main() {
   // footer an independent larger logo, and the hero renders the uploaded image
   // without the generated overlay/CTA.
   const fUid = 'seed-owner-f'
-  await createUser(fUid, 'owner@f.store', 'Owner12345', 'رنا محمود', 'merchant', ['store-f'])
-  await createStore('store-f', 'logo-shop', 'متجر اللوجو', fUid, {
+  await createUser(fUid, 'owner@f.store', 'Owner12345', 'TEST Owner F', 'merchant', ['store-f'])
+  await createStore('store-f', 'test-logo-store', 'TEST - متجر لوجو', fUid, {
+    isTestMerchant: true,
     published: true,
     primary: '#0d9488',
     secondary: '#f97316',
@@ -556,7 +623,8 @@ async function main() {
     approvedBy: adminUid,
     ordersUsed: 0,
     periodNumber: 1,
-    normalPriceSnapshot: 299,
+    normalPriceSnapshot: 399,
+    yearlyPriceSnapshot: 3990,
   })
   const fCat = await createCategory('store-f', 'منتجات', 'products', 1)
   await createProduct('store-f', fCat, 'منتج تجريبي', 100, 50, 'للمتجر التجريبي', { featured: true })
@@ -564,11 +632,12 @@ async function main() {
   // Store G — published, active, NO logo. The header must fall back to the
   // store name (icon + text) and the hero is the generated overlay + CTA.
   const gUid = 'seed-owner-g'
-  await createUser(gUid, 'owner@g.store', 'Owner12345', 'فريق سام', 'merchant', ['store-g'])
-  await createStore('store-g', 'plain-shop', 'المتجر البسيط', gUid, {
+  await createUser(gUid, 'owner@g.store', 'Owner12345', 'TEST Owner G', 'merchant', ['store-g'])
+  await createStore('store-g', 'test-plain-store', 'TEST - متجر بدون لوجو', gUid, {
+    isTestMerchant: true,
     published: true,
-    primary: '#7c3aed',
-    secondary: '#ec4899',
+    primary: '#0b766e',
+    secondary: '#c78a25',
     description: 'متجر بدون لوجو — يعرض اسم المتجر في الهيدر.',
   })
   await createSubscription('store-g', 'plan-starter', 'active', {
@@ -581,7 +650,8 @@ async function main() {
     approvedBy: adminUid,
     ordersUsed: 0,
     periodNumber: 1,
-    normalPriceSnapshot: 299,
+    normalPriceSnapshot: 399,
+    yearlyPriceSnapshot: 3990,
   })
   const gCat = await createCategory('store-g', 'منتجات', 'products', 1)
   await createProduct('store-g', gCat, 'منتج البسيط', 90, 30, 'مند غير لوجو', { featured: true })
@@ -589,11 +659,12 @@ async function main() {
   // Store H — published, active, WITH a broken logo URL. The header must catch
   // the load failure and fall back to the store name.
   const hUid = 'seed-owner-h'
-  await createUser(hUid, 'owner@h.store', 'Owner12345', 'هدى فاروق', 'merchant', ['store-h'])
-  await createStore('store-h', 'broken-logo-shop', 'متجر لوجو معطل', hUid, {
+  await createUser(hUid, 'owner@h.store', 'Owner12345', 'TEST Owner H', 'merchant', ['store-h'])
+  await createStore('store-h', 'test-broken-logo-store', 'TEST - متجر لوجو معطل', hUid, {
+    isTestMerchant: true,
     published: true,
-    primary: '#e11d48',
-    secondary: '#0ea5e9',
+    primary: '#0b766e',
+    secondary: '#c78a25',
     description: 'لوجو معطل يتحقق من الفولباك للاسم.',
     logo: 'https://invalid.example.invalid/broken-logo.png',
   })
@@ -607,7 +678,8 @@ async function main() {
     approvedBy: adminUid,
     ordersUsed: 0,
     periodNumber: 1,
-    normalPriceSnapshot: 299,
+    normalPriceSnapshot: 399,
+    yearlyPriceSnapshot: 3990,
   })
   const hCat = await createCategory('store-h', 'منتجات', 'products', 1)
   await createProduct('store-h', hCat, 'منتج معطل اللوجو', 80, 20, 'مند بدون صورة', { featured: true })
@@ -616,8 +688,9 @@ async function main() {
   // (`preset:storefront`). The header must render the preset mark only (no
   // duplicated name) and fall back to the name after the logo is removed.
   const iUid = 'seed-owner-i'
-  await createUser(iUid, 'owner@i.store', 'Owner12345', 'يوسف إبراهيم', 'merchant', ['store-i'])
-  await createStore('store-i', 'preset-shop', 'متجر بريزيت', iUid, {
+  await createUser(iUid, 'owner@i.store', 'Owner12345', 'TEST Owner I', 'merchant', ['store-i'])
+  await createStore('store-i', 'test-preset-store', 'TEST - متجر شعار جاهز', iUid, {
+    isTestMerchant: true,
     published: true,
     primary: '#0e7490',
     secondary: '#f59e0b',
@@ -634,7 +707,8 @@ async function main() {
     approvedBy: adminUid,
     ordersUsed: 0,
     periodNumber: 1,
-    normalPriceSnapshot: 299,
+    normalPriceSnapshot: 399,
+    yearlyPriceSnapshot: 3990,
   })
   const iCat = await createCategory('store-i', 'منتجات', 'products', 1)
   await createProduct('store-i', iCat, 'منتج بريزيت', 120, 40, 'منتج بدون صورة', { featured: true })

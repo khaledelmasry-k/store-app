@@ -63,7 +63,7 @@ export const MerchantCategories: FunctionalComponent = () => {
   if (categoriesRes.loading) return <div className="loading-screen"><span className="spinner spinner-lg" /></div>
 
   return (
-    <div>
+    <div className="merchant-operations merchant-categories-page">
       <PageHeader title="الفئات" subtitle={`${categories.length} فئة`} actions={<Button icon="add" onClick={() => setOpen(true)}>فئة جديدة</Button>} />
 
       <div className="stats-grid">

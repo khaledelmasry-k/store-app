@@ -65,9 +65,16 @@ export const PlatformSubscriptions: FunctionalComponent = () => {
 
   const statusLabel = (st: string) => SUBSCRIPTION_STATUS_LABELS[st as keyof typeof SUBSCRIPTION_STATUS_LABELS] || st
   const statusTone = (st: string) => SUBSCRIPTION_STATUS_TONES[st as keyof typeof SUBSCRIPTION_STATUS_TONES] || 'slate'
+  const periodLabel = (s: Subscription & { _status: string }) => {
+    if (s._status === 'trialing') return formatDate(s.trialEndsAt)
+    if (s._status === 'active') return formatDate(s.currentPeriodEnd || s.expiresAt)
+    if (s._status === 'expired') return formatDate(s.expiresAt || s.currentPeriodEnd || s.trialEndsAt)
+    if (s._status === 'cancelled' && (s as any).cancelledAt) return formatDate((s as any).cancelledAt)
+    return '—'
+  }
 
   return (
-    <div>
+    <div className="platform-operations platform-subscriptions-page">
       <PageHeader title="الاشتراكات" subtitle={`${subs.length} اشتراك`} />
       <div className="stats-grid">
         <StatsCard title="نشط" value={counts.active} icon="check_circle" tone="green" />
@@ -95,7 +102,7 @@ export const PlatformSubscriptions: FunctionalComponent = () => {
             { key: 'planName', header: 'الباقة' },
             { key: 'status', header: 'الحالة', render: (s: Subscription & { _status: string }) => <Badge tone={statusTone(s._status)}>{statusLabel(s._status)}</Badge> },
             { key: 'ordersUsed', header: 'الطلبات', render: (s: Subscription & { _status: string }) => <span className="muted">{formatNumber(s.ordersUsed || 0)}</span> },
-            { key: 'periodEnd', header: 'انتهاء الدورة/التجربة', render: (s: Subscription & { _status: string }) => <span className="muted">{formatDate(s.trialEndsAt || s.currentPeriodEnd || s.expiresAt)}</span> },
+            { key: 'periodEnd', header: 'التاريخ الحاكم للحالة', render: (s: Subscription & { _status: string }) => <span className="muted">{periodLabel(s)}</span> },
             { key: 'createdAt', header: 'التاريخ', render: (s: Subscription & { _status: string }) => <span className="muted">{timeAgo(s.createdAt)}</span> },
             {
               key: 'actions',

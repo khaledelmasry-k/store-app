@@ -14,7 +14,7 @@ export const MerchantNotifications: FunctionalComponent = () => {
   const unreadCount = notifications.filter((n) => !n.read).length
 
   return (
-    <div>
+    <div className="merchant-operations merchant-notifications-page">
       <PageHeader title="الإشعارات" subtitle={`${notifications.length} إشعار • ${unreadCount} غير مقروء`} />
 
       <div className="stats-grid">

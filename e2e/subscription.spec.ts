@@ -21,10 +21,14 @@ async function login(page: Page, role: 'platform' | 'merchant', email: string, p
   await page.goto(`/login?role=${role}`, { waitUntil: 'domcontentloaded' })
   // The auth guard redirects an already-authenticated session away from /login
   // after hydration. If the login form never renders, sign out and retry.
-  await page.waitForTimeout(600)
-  if ((await page.locator('button[type="submit"]').count()) === 0) {
-    await page.locator('.user-chip').first().click()
-    await page.getByText('تسجيل الخروج').first().click()
+  const loginEmail = page.locator('input[type="email"]')
+  const accountTrigger = page.locator('.topbar-user .user-chip:visible').first()
+  await expect(loginEmail.or(accountTrigger)).toBeVisible({ timeout: 15000 })
+  if (!(await loginEmail.isVisible())) {
+    await accountTrigger.click()
+    const logoutButton = page.getByRole('button', { name: 'تسجيل الخروج', exact: true }).last()
+    await expect(logoutButton).toBeVisible({ timeout: 5000 })
+    await logoutButton.click()
     await page.waitForURL(/\/login/, { timeout: 15000 })
     await page.waitForLoadState('domcontentloaded')
     // Reset to a blank document to cancel any in-flight SPA navigation (e.g.
@@ -41,10 +45,16 @@ async function login(page: Page, role: 'platform' | 'merchant', email: string, p
         await page.waitForTimeout(200)
       }
     }
+    await expect(loginEmail).toBeVisible({ timeout: 15000 })
   }
-  await page.locator('input[type="email"]').fill(email)
-  await page.locator('input[type="password"]').fill(password)
-  await page.locator('button[type="submit"]').click()
+  await expect(loginEmail).toBeVisible({ timeout: 15000 })
+  await loginEmail.fill(email)
+  const passwordInput = page.locator('input[type="password"]').first()
+  const submit = page.getByRole('button', { name: 'تسجيل الدخول', exact: true })
+  await expect(passwordInput).toBeVisible({ timeout: 15000 })
+  await passwordInput.fill(password)
+  await expect(submit).toBeVisible({ timeout: 15000 })
+  await submit.click()
   await page.waitForURL(/\/dashboard|\/platform/, { timeout: 15000 })
 }
 
@@ -82,7 +92,7 @@ async function makeTrialStore(tag: string) {
     trialEndsAt: admin.firestore.Timestamp.fromDate(new Date(Date.now() + 2 * 86400000)),
     startedAt: admin.firestore.Timestamp.fromDate(new Date(Date.now() - 86400000)),
     expiresAt: admin.firestore.Timestamp.fromDate(new Date(Date.now() + 2 * 86400000)),
-    normalPriceSnapshot: 299, launchPriceSnapshot: 99, ordersUsed: 0, periodNumber: 0,
+    normalPriceSnapshot: 399, launchPriceSnapshot: 399, yearlyPriceSnapshot: 3990, ordersUsed: 0, periodNumber: 0,
     createdAt: ts(), updatedAt: ts(), createdBy: 'sub-spec',
   })
   return { uid, storeId, email, password }
@@ -116,7 +126,7 @@ test('expired store is gated for visitors; products stay intact', async ({ page 
   expect(productSnap.exists).toBe(true)
 })
 
-test('merchant activates during trial: submit payment → platform approves → active + orders reset', async ({ page }) => {
+test('merchant activates during trial: submit payment → platform approves → active + orders reset', async ({ page, browser }) => {
   const { storeId, email, password } = await makeTrialStore('activate')
   const sub = (await latestSub(storeId))!
   await db.collection('subscriptions').doc(sub.id).update({ ordersUsed: 12 })
@@ -126,8 +136,8 @@ test('merchant activates during trial: submit payment → platform approves → 
   await page.goto('/dashboard/subscription', { waitUntil: 'domcontentloaded' })
   await expect(page.getByRole('heading', { name: 'تفعيل الاشتراك' })).toBeVisible({ timeout: 15000 })
 
-  // Launch offer is shown (first month at 99 instead of 299).
-  await expect(page.getByText('خصم الإطلاق')).toBeVisible()
+  // The current catalog charges the canonical Starter monthly price.
+  await expect(page.getByText('399 ج.م')).toBeVisible()
 
   // Submit a payment request.
   await page.locator('.field', { hasText: 'وسيلة الدفع' }).locator('input').fill('فودافون كاش')
@@ -136,9 +146,9 @@ test('merchant activates during trial: submit payment → platform approves → 
   await expect(page.getByText('طلبك قيد المراجعة')).toBeVisible({ timeout: 15000 })
 
   expect(await pendingRequests(sub.id)).toBe(1)
-  // Server computed the launch price for the first paid month.
+  // Server computed the canonical Starter price for the first paid month.
   const paySnap = await db.collection('subscriptionPayments').where('subscriptionId', '==', sub.id).get()
-  expect(paySnap.docs[0].data().amount).toBe(99)
+  expect(paySnap.docs[0].data().amount).toBe(399)
 
   // Duplicate submission is blocked while a request is pending (still on the
   // same merchant session — no need to log in again).
@@ -147,20 +157,26 @@ test('merchant activates during trial: submit payment → platform approves → 
   await expect(page.getByRole('button', { name: 'إرسال طلب التفعيل' })).toHaveCount(0)
 
   // Platform sees the request in the activation tab and approves it.
-  await login(page, 'platform', 'admin@mk.store', 'Admin12345')
-  await page.goto('/platform/payments', { waitUntil: 'domcontentloaded' })
-  await page.getByRole('tab', { name: /طلبات التفعيل/ }).click()
-  const row = page.locator('tr, .card-table-card', { hasText: '123456789012' }).first()
-  await expect(row).toBeVisible({ timeout: 15000 })
-  await row.getByRole('button', { name: 'قبول' }).click()
-  await expect(page.getByText('تم تفعيل الاشتراك')).toBeVisible({ timeout: 15000 })
+  const platformContext = await browser.newContext({ viewport: page.viewportSize() || { width: 1440, height: 900 } })
+  const platformPage = await platformContext.newPage()
+  try {
+    await login(platformPage, 'platform', 'admin@mk.store', 'Admin12345')
+    await platformPage.goto('/platform/payments', { waitUntil: 'domcontentloaded' })
+    await platformPage.getByRole('tab', { name: /طلبات التفعيل/ }).click()
+    const row = platformPage.locator('tr, .card-table-card', { hasText: '123456789012' }).first()
+    await expect(row).toBeVisible({ timeout: 15000 })
+    await row.getByRole('button', { name: 'قبول' }).click()
+    await expect(platformPage.getByText('تم تفعيل الاشتراك')).toBeVisible({ timeout: 15000 })
+  } finally {
+    await platformContext.close()
+  }
 
   // Subscription is now active with a fresh cycle; ordersUsed reset to 0.
   await expect.poll(async () => (await latestSub(storeId))?.status, { timeout: 15000 }).toBe('active')
   const after = await latestSub(storeId)
   expect(after.ordersUsed).toBe(0)
   expect(after.periodNumber).toBe(1)
-  expect(after.launchUsed).toBe(true)
+  expect(after.launchUsed).toBe(false)
   expect(after.currentPeriodEnd).toBeTruthy()
   expect(after.trialEndsAt).toBeFalsy()
   expect(await pendingRequests(sub.id)).toBe(0)

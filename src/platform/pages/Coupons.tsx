@@ -55,7 +55,7 @@ export const PlatformCoupons: FunctionalComponent = () => {
   const selectableStores = (stores as any[]).map((s: any) => ({ value: s.id, label: s.name }))
 
   return (
-    <div>
+    <div className="platform-operations platform-coupons-page">
       <PageHeader title="الكوبونات" subtitle={`${coupons.length} كوبون`} actions={<Button icon="add" onClick={() => setOpen(true)}>كوبون جديد</Button>} />
 
       <div className="stats-grid">

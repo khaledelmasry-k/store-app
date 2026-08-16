@@ -12,6 +12,9 @@ node scripts/seed-emulator.mjs
 echo "── Checking icon integrity..."
 node scripts/check-icons.mjs
 
+echo "── Building app for emulator mode..."
+npm run verify:build
+
 echo "── Starting vite preview on :4173..."
 npx vite preview --port 4173 --strictPort &
 PREVIEW_PID=$!
@@ -25,4 +28,4 @@ for _ in $(seq 1 40); do
 done
 
 echo "── Running Playwright (emulator config)..."
-npx playwright test --config playwright.emulator.config.ts
+npx playwright test --config playwright.emulator.config.ts "$@"

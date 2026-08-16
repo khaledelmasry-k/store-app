@@ -36,8 +36,11 @@ export const StoreCatalog:FunctionalComponent = () => {
   )
 
   return (
-    <div>
-      <h1 className="page-title mb-2">المنتجات</h1>
+    <div className="storefront-page storefront-catalog">
+      <div className="storefront-page-head">
+        <span>كتالوج المتجر</span>
+        <h1 className="page-title mb-2">المنتجات</h1>
+      </div>
       <div className="toolbar">
         <Search value={query} onChange={setQuery} placeholder="ابحث عن منتج..." />
         <Select

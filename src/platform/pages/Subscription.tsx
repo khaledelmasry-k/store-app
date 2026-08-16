@@ -37,7 +37,7 @@ export const PlatformSubscriptionDetail: FunctionalComponent<{ id: string }> = (
   if (loading) return <div className="loading-screen"><span className="spinner spinner-lg" /></div>
   if (!sub) {
     return (
-      <div>
+      <div className="platform-operations platform-subscription-detail-page">
         <PageHeader title="تفاصيل الاشتراك" />
         <Card><p className="muted">الاشتراك غير موجود.</p><Link href="/platform/subscriptions"><Button variant="ghost">العودة للقائمة</Button></Link></Card>
       </div>

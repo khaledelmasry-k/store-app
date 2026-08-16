@@ -1,6 +1,7 @@
 import { FunctionalComponent } from 'preact'
 import { useEffect, useRef, useState } from 'preact/hooks'
-import { PageHeader } from '../../shared/components/ui/PageHeader'
+import { InternalPageHeader } from '../components/InternalWorkspace'
+import '../components/InternalWorkspace.css'
 import { Card } from '../../shared/components/ui/Card'
 import { Button } from '../../shared/components/ui/Button'
 import { Badge } from '../../shared/components/ui/Badge'
@@ -16,13 +17,13 @@ import { STORE_TEMPLATES } from '../../shared/utils/themes'
 import { STORE_LOGO_PRESETS, storeLogoKey, storeLogoKind, presetFromLogo, isPersistableImageUrl } from '../../shared/utils/store-brand'
 import type { StoreTheme } from '../../shared/types'
 
-const PRIMARY_SWATCHES = ['#6366f1', '#16a34a', '#dc2626', '#d97706', '#0284c7', '#7c3aed', '#0f172a']
-const SECONDARY_SWATCHES = ['#f59e0b', '#10b981', '#f43f5e', '#8b5cf6', '#0ea5e9', '#f97316', '#64748b']
+const PRIMARY_SWATCHES = ['#0b766e', '#073f49', '#0f8f5f', '#075985', '#be3a34', '#102327', '#111827']
+const SECONDARY_SWATCHES = ['#c78a25', '#2dd4bf', '#b87512', '#0f748c', '#64748b', '#f4bf55', '#4f6265']
 
 export const MerchantThemes: FunctionalComponent = () => {
   const { store } = useStore()
   const toast = useToast()
-  const [themeForm, setThemeForm] = useState<StoreTheme>({ primary: '#6366f1', secondary: '#f59e0b', darkMode: false, template: 'modern', imageFit: 'contain' })
+  const [themeForm, setThemeForm] = useState<StoreTheme>({ primary: '#0b766e', secondary: '#c78a25', darkMode: false, template: 'modern', imageFit: 'contain' })
   const [savingTheme, setSavingTheme] = useState(false)
   const [applying, setApplying] = useState<string | null>(null)
   const [logoUploading, setLogoUploading] = useState(false)
@@ -34,8 +35,8 @@ export const MerchantThemes: FunctionalComponent = () => {
   useEffect(() => {
     if (!store) return
     setThemeForm({
-      primary: store.theme?.primary || '#6366f1',
-      secondary: store.theme?.secondary || '#f59e0b',
+      primary: store.theme?.primary || '#0b766e',
+      secondary: store.theme?.secondary || '#c78a25',
       darkMode: !!store.theme?.darkMode,
       template: store.theme?.template || 'modern',
       imageFit: store.theme?.imageFit || 'contain',
@@ -174,9 +175,11 @@ export const MerchantThemes: FunctionalComponent = () => {
   if (!store) return <Loading />
 
   return (
-    <div>
-      <PageHeader title="المظهر والقالب" subtitle="اختر قالباً لمتجرك، عدّل الألوان، وأضف شعارك — تُحفظ التغييرات تلقائياً" />
+    <div className="merchant-operations merchant-themes-page">
+      <InternalPageHeader eyebrow="استوديو المتجر" title="المظهر والقالب" subtitle="عدّل هوية متجرك وشاهد المعاينة الحية قبل فتحه للزوار" />
 
+      <div className="theme-studio">
+        <section className="theme-studio-controls">
       <Card title="اختر قالب متجرك" subtitle="تصميمات جاهزة تظهر في صفحة متجرك للزوار" className="mb-2">
         <div className="theme-gallery">
           {STORE_TEMPLATES.map((tpl) => {
@@ -358,6 +361,38 @@ export const MerchantThemes: FunctionalComponent = () => {
           </div>
         </Card>
       </div>
+      </div>
+        </section>
+        <aside className="theme-studio-preview" style={{ '--theme-preview-primary': themeForm.primary, '--theme-preview-secondary': themeForm.secondary } as any}>
+          <div className="theme-device">
+            <div className="theme-device-top">
+              <span />
+              <span />
+              <span />
+            </div>
+            <div className={`theme-device-screen${themeForm.darkMode ? ' is-dark' : ''}`}>
+              <div className="theme-device-nav">
+                <strong>{store.name}</strong>
+                <small>متجر مباشر</small>
+              </div>
+              <div className="theme-device-hero">
+                <span>واجهة المتجر</span>
+                <h3>{store.seoTitle || store.name}</h3>
+                <p>{store.description || 'منتجات مختارة، عروض واضحة، وتجربة شراء سهلة.'}</p>
+                <b>تسوق الآن</b>
+              </div>
+              <div className="theme-device-products">
+                <span />
+                <span />
+                <span />
+              </div>
+            </div>
+          </div>
+          <a href={`/store/${store.slug}`} target="_blank" rel="noreferrer" className="btn btn-primary btn-lg theme-preview-link">
+            <Icon name="open_in_new" />
+            فتح المعاينة الحية
+          </a>
+        </aside>
       </div>
     </div>
   )

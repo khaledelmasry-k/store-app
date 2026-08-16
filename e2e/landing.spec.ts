@@ -1,14 +1,14 @@
 import { test, expect, type Page } from '@playwright/test'
 
 // Read-only landing page checks. Runs on every project (1440/1024/390/360/430)
-// against the seeded emulator data (3 plans) served by vite preview on :4173.
+// against the seeded emulator data (5 canonical plans) served by vite preview on :4173.
 
 async function noHScroll(page: Page) {
   return page.evaluate(() => document.documentElement.scrollWidth - document.documentElement.clientWidth)
 }
 
-// Reveal animations hide below-fold sections until IntersectionObserver fires.
-// Force everything visible so content assertions + screenshots are deterministic.
+// Keep screenshot assertions deterministic if a future landing variant reintroduces
+// deferred section motion. The current approved composition renders sections directly.
 async function forceReveal(page: Page) {
   await page.evaluate(() => {
     document.querySelectorAll<HTMLElement>('.reveal').forEach((el) => el.classList.add('in-view'))
@@ -20,85 +20,99 @@ test('renders hero, nav anchors, features, steps, sales, faq', async ({ page }) 
   await page.goto('/', { waitUntil: 'domcontentloaded' })
 
   // Hero
-  await expect(page.getByRole('heading', { level: 1 })).toContainText('أنشئ متجرك الإلكتروني')
-  await expect(page.locator('.hero-eyebrow')).toContainText('منصة التجارة الإلكترونية المتكاملة')
+  await expect(page.getByRole('heading', { level: 1 })).toHaveText(/ابنِ متجرك\.\s*أدر مبيعاتك\.\s*كبّر تجارتك\./)
+  await expect(page.locator('.stitch-release-pill')).toContainText('الإصدار 3.0 متاح الآن')
   await expect(page.locator('.landing-brand')).toContainText('M&K Store')
   await expect(page.locator('.landing-header .brand-mark')).toHaveCount(1)
-  await expect(page.locator('.landing-footer .brand-mark')).toHaveCount(1)
+  await expect(page.locator('.stitch-footer-band .brand-mark')).toHaveCount(1)
 
   // Nav anchors (desktop links + mobile menu target)
-  for (const label of ['المميزات', 'كيف تعمل', 'روابط البيع', 'الأسعار', 'الأسئلة الشائعة']) {
+  for (const label of ['المميزات', 'الأسعار', 'حلول الأعمال', 'عن المتجر']) {
     await expect(page.locator('.landing-nav-link', { hasText: label })).toHaveCount(1)
   }
-  await expect(page.locator('.landing-nav-btn-primary', { hasText: 'ابدأ مجاناً' })).toHaveCount(1)
+  await expect(page.locator('.landing-nav-btn-primary', { hasText: 'ابدأ الآن مجاناً' })).toHaveCount(1)
   await expect(page.locator('.landing-nav-btn-ghost', { hasText: 'تسجيل الدخول' })).toHaveCount(1)
 
   // Sections
-  await expect(page.locator('.feature-card')).toHaveCount(8)
-  await expect(page.locator('.step-item')).toHaveCount(4)
-  await expect(page.locator('.sales-step-card')).toHaveCount(4)
-  await expect(page.locator('.sales-metric')).toHaveCount(4)
-  await expect(page.locator('.stat-card')).toHaveCount(4)
-  await expect(page.locator('.faq-item')).toHaveCount(6)
-
-  // Demo-only labeling for the (fake) sales metrics
-  await expect(page.locator('.demo-tag')).toContainText('عرض توضيحي')
-  await expect(page.locator('.sales-metrics-demo')).toContainText('وليست إحصائيات فعلية')
-  await expect(page.locator('.hero-preview-caption')).toContainText('لقطة تمثيلية')
+  await expect(page.locator('.stitch-capability-card')).toHaveCount(4)
+  await expect(page.locator('.stitch-rich-overview')).toHaveCount(1)
+  await expect(page.locator('.stitch-rich-feature')).toHaveCount(5)
+  await expect(page.locator('.rich-workflow-grid > div')).toHaveCount(8)
+  await expect(page.locator('.rich-links-preview .rich-link-row')).toHaveCount(4)
+  await expect(page.locator('.rich-faq-list details')).toHaveCount(4)
+  await expect(page.locator('.rich-storefront-preview')).toBeVisible()
 })
 
 test('pricing shows real seeded plans with limits and plan-scoped CTAs', async ({ page }) => {
   await page.goto('/', { waitUntil: 'domcontentloaded' })
-  // Free + Starter + Growth + Pro  — rendered by the shared PricingCard.
-  await expect(page.locator('.mk-pricing-card')).toHaveCount(4)
+  await expect(page.locator('#pricing')).toBeVisible({ timeout: 15000 })
+  // Free + Starter + Growth + Business + Pro — rendered by the shared PricingCard.
+  await expect(page.locator('.mk-pricing-card')).toHaveCount(5, { timeout: 15000 })
 
-  // Each plan renders as a `.pricing-grid-col` wrapping the PricingCard plus the
-  // plan-scoped `.pricing-cta` link (the href lives on the column's link, not inside the card).
+  // Each plan renders as a `.stitch-plan-wrap` wrapping the PricingCard plus a
+  // single plan-scoped link.
   const cardByName = (name: string) =>
     page.locator('.mk-pricing-card').filter({ has: page.locator('.mk-pricing-name', { hasText: name }) })
   const colByName = (name: string) =>
-    page.locator('.pricing-grid-col').filter({ has: page.locator('.mk-pricing-name', { hasText: name }) })
+    page.locator('.stitch-plan-wrap').filter({ has: page.locator('.mk-pricing-name', { hasText: name }) })
 
-  // Free tier: flat product/order limits and a "مجاناً" price.
-  await expect(cardByName('الأساسية')).toContainText('مجاناً')
-  await expect(cardByName('الأساسية')).toContainText('حتى 5 منتج')
-  await expect(cardByName('الأساسية')).toContainText('حتى 30 طلب شهرياً')
-  await expect(colByName('الأساسية').locator('.pricing-cta')).toHaveAttribute('href', '/register?plan=plan-free')
+  // FREE: 50 products and 50 orders/month, free forever.
+  await expect(cardByName('FREE')).toContainText('مجاناً')
+  await expect(cardByName('FREE')).toContainText('للأبد')
+  await expect(cardByName('FREE')).toContainText('حتى 50 منتج')
+  await expect(cardByName('FREE')).toContainText('حتى 50 طلب شهرياً')
+  await expect(colByName('FREE').locator('.stitch-plan-link')).toHaveAttribute('href', '/register?plan=plan-free')
 
-  await expect(cardByName('البداية')).toContainText('حتى 50 منتج')
-  await expect(cardByName('البداية')).toContainText('حتى 100 طلب شهرياً')
-  await expect(colByName('البداية').locator('.pricing-cta')).toHaveAttribute('href', '/register?plan=plan-starter')
+  // STARTER: 399 EGP, 500 products, 300 orders/month.
+  await expect(cardByName('STARTER')).toContainText('399 ج.م')
+  await expect(cardByName('STARTER')).toContainText('/ شهريًا')
+  await expect(cardByName('STARTER')).toContainText('حتى 500 منتج')
+  await expect(cardByName('STARTER')).toContainText('حتى 300 طلب شهرياً')
+  await expect(cardByName('STARTER')).toContainText('1 GB تخزين')
+  await expect(colByName('STARTER').locator('.stitch-plan-link')).toHaveAttribute('href', '/register?plan=plan-starter')
 
-  const growth = cardByName('النمو')
-  await expect(growth).toContainText('حتى 250 منتج')
-  await expect(growth).toContainText('حتى 500 طلب شهرياً')
-  await expect(colByName('النمو').locator('.pricing-cta')).toHaveAttribute('href', '/register?plan=plan-growth')
+  // GROWTH (recommended): 749 EGP, 2000 products, 1500 orders/month.
+  const growth = cardByName('GROWTH')
+  await expect(growth).toContainText('749 ج.م')
+  await expect(growth).toContainText('حتى 2000 منتج')
+  await expect(growth).toContainText('حتى 1500 طلب شهرياً')
+  await expect(growth).toContainText('5 GB تخزين')
+  await expect(colByName('GROWTH').locator('.stitch-plan-link')).toHaveAttribute('href', '/register?plan=plan-growth')
 
-  // Pro: orders are large; products/storage amounts are shown from the plan doc.
-  await expect(cardByName('الاحتراف')).toContainText('حتى 2000 طلب شهرياً')
-  await expect(cardByName('الاحتراف')).toContainText('تخزين 20480 ميجابايت')
-  await expect(colByName('الاحتراف').locator('.pricing-cta')).toHaveAttribute('href', '/register?plan=plan-pro')
+  // BUSINESS: 1099 EGP, 5000 products, 3500 orders/month.
+  await expect(cardByName('BUSINESS')).toContainText('1,099 ج.م')
+  await expect(cardByName('BUSINESS')).toContainText('حتى 5000 منتج')
+  await expect(cardByName('BUSINESS')).toContainText('حتى 3500 طلب شهرياً')
+  await expect(cardByName('BUSINESS')).toContainText('10 GB تخزين')
+  await expect(colByName('BUSINESS').locator('.stitch-plan-link')).toHaveAttribute('href', '/register?plan=plan-business')
+
+  // PRO: 1499 EGP, unlimited products, 10000 orders/month, 20 GB storage.
+  await expect(cardByName('PRO')).toContainText('1,499 ج.م')
+  await expect(cardByName('PRO')).toContainText('منتجات غير محدودة')
+  await expect(cardByName('PRO')).toContainText('حتى 10000 طلب شهرياً')
+  await expect(cardByName('PRO')).toContainText('20 GB تخزين')
+  await expect(colByName('PRO').locator('.stitch-plan-link')).toHaveAttribute('href', '/register?plan=plan-pro')
+
+  // Each card has exactly ONE primary CTA (no duplicate "ابدأ الآن" buttons).
+  await expect(page.locator('.stitch-plan-wrap .stitch-plan-link')).toHaveCount(5)
 
   // Featured plan is النمو (isPopular), rendered as a single badge.
   await expect(page.locator('.mk-pricing-badge')).toHaveCount(1)
-  await expect(growth.locator('.mk-pricing-badge')).toContainText('الأكثر شيوعاً')
+  await expect(growth.locator('.mk-pricing-badge')).toContainText('الأكثر شعبية')
 })
 
 test('faq toggles expand/collapse with aria state', async ({ page }) => {
   await page.goto('/', { waitUntil: 'domcontentloaded' })
-  const first = page.locator('.faq-item').first()
-  const btn = first.locator('.faq-question')
+  const first = page.locator('.rich-faq-list details').first()
+  const btn = first.locator('summary')
 
-  await expect(btn).toHaveAttribute('aria-expanded', 'true')
-  await expect(first.locator('.faq-answer')).toBeVisible()
+  await expect(first).not.toHaveAttribute('open', '')
+  await btn.click()
+  await expect(first).toHaveAttribute('open', '')
+  await expect(first.locator('p')).toBeVisible()
 
   await btn.click()
-  await expect(btn).toHaveAttribute('aria-expanded', 'false')
-  await expect(first.locator('.faq-answer')).toBeHidden()
-
-  await btn.click()
-  await expect(btn).toHaveAttribute('aria-expanded', 'true')
-  await expect(first.locator('.faq-answer')).toBeVisible()
+  await expect(first).not.toHaveAttribute('open', '')
 })
 
 test('nav works: mobile menu toggles, desktop links visible', async ({ page }) => {
@@ -110,7 +124,8 @@ test('nav works: mobile menu toggles, desktop links visible', async ({ page }) =
     await expect(page.locator('.landing-nav')).not.toHaveClass(/open/)
     await toggle.click()
     await expect(page.locator('.landing-nav')).toHaveClass(/open/)
-    await expect(page.locator('.landing-nav-actions')).toBeVisible()
+    await expect(page.locator('.landing-nav .landing-nav-link')).toHaveCount(4)
+    await expect(page.locator('.landing-nav .landing-nav-btn')).toHaveCount(3)
     await toggle.click()
     await expect(page.locator('.landing-nav')).not.toHaveClass(/open/)
   } else {
@@ -133,18 +148,18 @@ test('visual & style sanity: fonts, mockup, equal-height cards, reveal', async (
   expect(family).toContain('IBM Plex Sans Arabic')
   expect(await page.evaluate(() => document.fonts.check('700 16px "IBM Plex Sans Arabic"'))).toBe(true)
 
-  // Hero mockup is the lightweight CSS composition with real Arabic labels.
-  await expect(page.locator('.dm-store')).toContainText('بيت الشاي')
-  await expect(page.locator('.dm-url')).toHaveText('beit-el-shay.store')
-  await expect(page.locator('.dm-kpi')).toHaveCount(4)
-  await expect(page.locator('.dm-order')).toHaveCount(3)
-  await expect(page.locator('.dm-float')).toHaveCount(2)
+  // Hero product showcase is a CSS composition and must not leak fake merchant data.
+  await expect(page.locator('.stitch-hero-visual')).toBeVisible()
+  await expect(page.locator('.stitch-dashboard-tabs span')).toHaveCount(4)
+  await expect(page.locator('.stitch-order-float')).toBeVisible()
+  await expect(page.locator('.stitch-profit-float')).toBeVisible()
+  await expect(page.locator('.landing')).not.toContainText('بيت الشاي')
 
   // Every feature card renders a decorative visual.
-  await expect(page.locator('.feature-card .fv')).toHaveCount(8)
+  await expect(page.locator('.stitch-capability-card .stitch-capability-icon')).toHaveCount(4)
 
   // Feature cards in the same grid row share the same height (P5.1 alignment).
-  const featureRows = await page.locator('.feature-card').evaluateAll((els) => {
+  const featureRows = await page.locator('.stitch-capability-card').evaluateAll((els) => {
     const groups = new Map<number, number[]>()
     for (const el of els) {
       const r = el.getBoundingClientRect()
@@ -161,10 +176,10 @@ test('visual & style sanity: fonts, mockup, equal-height cards, reveal', async (
   }
 
   // Pricing columns align: same height and CTAs pinned to the same baseline.
-  const pricingBoxes = await page.locator('.pricing-grid-col').evaluateAll((els) =>
+  const pricingBoxes = await page.locator('.stitch-plan-wrap').evaluateAll((els) =>
     els.map((el) => {
       const r = el.getBoundingClientRect()
-      const cta = el.querySelector('.pricing-cta')
+      const cta = el.querySelector('.stitch-plan-link')
       const ctaR = cta ? cta.getBoundingClientRect() : null
       return { top: Math.round(r.top), height: Math.round(r.height), ctaBottom: ctaR ? Math.round(ctaR.bottom - r.top) : null }
     }),
@@ -177,10 +192,9 @@ test('visual & style sanity: fonts, mockup, equal-height cards, reveal', async (
     expect(Math.max(...ctaBottoms) - Math.min(...ctaBottoms)).toBeLessThanOrEqual(1)
   }
 
-  // Scroll reveal: sections below the fold start hidden, then enter view.
+  // The current approved composition renders rich sections directly.
   await forceReveal(page)
-  const revealed = await page.locator('.reveal.in-view').count()
-  expect(revealed).toBe(await page.locator('.reveal').count())
+  await expect(page.locator('.stitch-rich-feature').last()).toBeVisible()
 })
 
 test('prefers-reduced-motion: reveal visible and smooth-scroll disabled', async ({ page }) => {
@@ -188,8 +202,7 @@ test('prefers-reduced-motion: reveal visible and smooth-scroll disabled', async 
   await page.goto('/', { waitUntil: 'domcontentloaded' })
   await page.evaluate(() => (document as any).fonts?.ready)
 
-  const opacity = await page.locator('.reveal').first().evaluate((el) => getComputedStyle(el as HTMLElement).opacity)
-  expect(opacity).toBe('1')
+  await expect(page.locator('.stitch-hero')).toBeVisible()
   const scroll = await page.evaluate(() => getComputedStyle(document.documentElement).scrollBehavior)
   expect(scroll).toBe('auto')
 })

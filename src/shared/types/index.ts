@@ -72,6 +72,8 @@ export interface Store extends Partial<FirestoreMeta> {
   /** Whether the storefront is publicly visible and can accept orders. */
   published: boolean
   ownerId: string
+  /** SuperAdmin-only safety marker: destructive test cleanup only targets stores with this flag. */
+  isTestMerchant?: boolean
   currency: string
   logo?: string
   /** Hero banner image shown at the top of the storefront home page. */
@@ -177,6 +179,21 @@ export interface Product extends Partial<FirestoreMeta> {
   lowStockThreshold?: number
 }
 
+/**
+ * Private merchant cost data, keyed by the product id. Lives in its OWN
+ * collection (`productCosts`) — NEVER on the public `products` doc — so the
+ * storefront / customers can never read it. Readable only by the owning
+ * merchant, staff with a product view permission, or the platform admin.
+ */
+export interface ProductCost extends Partial<FirestoreMeta> {
+  id: string
+  storeId: string
+  /** Cost per unit at the product level. Private merchant data. */
+  costPrice: number
+  /** Optional per-variant cost, keyed by variant id. */
+  variantCosts?: Record<string, number>
+}
+
 /** Variant display label, e.g. "أسود / M". */
 export function variantLabel(color?: string | null, size?: string | null): string {
   return [color, size].filter(Boolean).join(' / ')
@@ -216,6 +233,29 @@ export interface OrderItem {
   quantityTier?: { quantity: number; price: number }
   /** Pricing strategy snapshot at order time (quantity pricing only). */
   quantityPricingStrategy?: QuantityPricingStrategy
+}
+
+export interface OrderItemCostSnapshot {
+  lineId: string
+  productId: string
+  variantId?: string | null
+  quantity: number
+  /** Private merchant-only unit cost captured when the order was created. */
+  costPrice: number
+  source: 'product' | 'variant'
+  capturedAt?: { seconds: number; nanoseconds: number }
+}
+
+/**
+ * Private merchant/platform cost snapshot for an order. Kept OUTSIDE the
+ * customer-readable `orders` document so storefront tracking never exposes
+ * cost price while historical gross profit stays stable after cost edits.
+ */
+export interface OrderCost extends Partial<FirestoreMeta> {
+  id: string
+  orderId: string
+  storeId: string
+  items: OrderItemCostSnapshot[]
 }
 
 /** Snapshot of the shipping calculation at order time. */
@@ -362,13 +402,18 @@ export interface PlatformMerchantRow {
   published: boolean
   createdAt?: { seconds: number; nanoseconds: number } | null
   ownerName: string | null
+  ownerId?: string | null
   ownerEmail: string | null
   ownerRole: string | null
+  isTestMerchant?: boolean
   subId: string | null
   planId: string | null
   planName: string | null
   planPriceMonthly: number
   productLimit: number
+  productsUsed?: number
+  storageUsed?: number
+  storageLimitBytes?: number
   subStatus: SubscriptionStatus | null
   subStartedAt?: { seconds: number; nanoseconds: number } | null
   subExpiresAt?: { seconds: number; nanoseconds: number } | null
