@@ -22,7 +22,9 @@ export const StoreSlugLoader: FunctionalComponent<Props> = ({ children }) => {
   const [store, setStore] = useState<Store | null>(null)
   const [loading, setLoading] = useState(!!slug)
   const [error, setError] = useState<string | null>(null)
-  const [pubStatus, setPubStatus] = useState<PublicStoreStatus | null>(null)
+  // Explicit fail-closed initial state: an unavailable local callable must
+  // resolve to an unavailable storefront, never an infinite spinner.
+  const [pubStatus, setPubStatus] = useState<PublicStoreStatus | null>({ purchasable: false, reason: 'status_unavailable' })
 
   useEffect(() => {
     if (!slug || !ref || !store?.id) return
@@ -68,6 +70,7 @@ export const StoreSlugLoader: FunctionalComponent<Props> = ({ children }) => {
       .then((res) => {
         if (cancelled) return
         setStore(res.data as Store)
+        setPubStatus({ purchasable: false, reason: 'status_unavailable' })
         setLoading(false)
       })
       .catch((err) => {
@@ -83,7 +86,7 @@ export const StoreSlugLoader: FunctionalComponent<Props> = ({ children }) => {
   useEffect(() => {
     if (!slug) return
     let cancelled = false
-    setPubStatus(null)
+    setPubStatus({ purchasable: false, reason: 'status_unavailable' })
     getPublicStoreStatusCallable({ slug })
       .then((res) => {
         if (!cancelled) setPubStatus((res.data as PublicStoreStatus) || { purchasable: false, reason: 'status_unavailable' })
@@ -142,8 +145,6 @@ export const StoreSlugLoader: FunctionalComponent<Props> = ({ children }) => {
   // Do not render a public commerce surface until the server has answered the
   // publication check. Merchant/admin previews may continue while the check is
   // pending, but public visitors must not see a fail-open storefront.
-  if (!pubStatus && !canPreview) return <Loading />
-
   const ctx = { store, loading: false, setStoreId: () => {} }
 
   return <StoreContext.Provider value={ctx}>{children}</StoreContext.Provider>

@@ -109,7 +109,13 @@
   --v3-primary-soft: #e7e5ff;
   background: var(--v3-bg);
   color: var(--v3-text);
+  /* The global legacy rule made the shell itself a horizontal flex row while
+     the topbar is fixed. That shrank app-shell-body to its content width and
+     produced the large blank band beside Merchant pages. */
+  display: block !important;
 }
+.app-shell .app-shell-body { display: block; width: 100%; min-width: 0; }
+.app-shell .shell-main { width: calc(100% - var(--merchant-sidebar-width)); margin-inline-start: var(--merchant-sidebar-width); }
 
 .app-shell .topbar {
   background: var(--v3-surface);
