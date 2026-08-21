@@ -25,7 +25,7 @@ const COLLECTIONS = [
   'plans', 'users', 'stores', 'subscriptions', 'orders', 'products', 'customers',
   'analytics', 'transactions', 'payments', 'coupons', 'categories', 'storeLinks',
   'notifications', 'auditLogs', 'shipping', 'team', 'roles', 'invitations',
-  'landingPages', 'subscriptionPayments', 'productCosts', 'orderCosts',
+  'landingPages', 'subscriptionPayments', 'productCosts', 'orderCosts', 'publicStores',
 ]
 
 async function wipe() {
@@ -141,7 +141,51 @@ async function createSubscription(storeId, planId, status, opts = {}) {
   if (opts.yearlyPriceSnapshot != null) sub.yearlyPriceSnapshot = opts.yearlyPriceSnapshot
   if (opts.launchUsed != null) sub.launchUsed = opts.launchUsed
   const ref = await db.collection('subscriptions').add(sub)
+  if (status === 'active' || status === 'trialing') {
+    await db.collection('stores').doc(storeId).set({ activeSubscriptionId: ref.id, updatedAt: ts() }, { merge: true })
+  }
   return ref.id
+}
+
+function publicStoreData(data) {
+  return {
+    name: data.name || '', slug: data.slug || '', logo: data.logo || null,
+    hero: data.hero || null, heroImage: data.heroImage || null,
+    description: data.description || '', seoTitle: data.seoTitle || null,
+    seoDescription: data.seoDescription || null, theme: data.theme || {},
+    currency: data.currency || 'EGP', phone: data.publicPhone || data.phone || null,
+    published: data.published === true, active: data.active !== false, updatedAt: ts(),
+  }
+}
+
+async function rebuildPublicProjections() {
+  const stores = await db.collection('stores').get()
+  for (const storeDoc of stores.docs) {
+    const store = storeDoc.data()
+    await db.doc(`publicStores/${storeDoc.id}`).set(publicStoreData(store), { merge: true })
+    const products = await db.collection('products').where('storeId', '==', storeDoc.id).get()
+    for (const productDoc of products.docs) {
+      const p = productDoc.data()
+      const ref = db.doc(`publicStores/${storeDoc.id}/products/${productDoc.id}`)
+      if (p.active !== true) await ref.delete()
+      else await ref.set({
+        storeId: storeDoc.id, name: p.name || '', description: p.description || '', images: p.images || [],
+        price: Number(p.price || 0), oldPrice: p.oldPrice == null ? null : Number(p.oldPrice), active: true,
+        featured: p.featured === true, categoryId: p.categoryId || null,
+        variants: (p.variants || []).map((v) => ({ id: v.id, color: v.color, size: v.size, stock: Number(v.stock || 0), price: v.price == null ? undefined : v.price })),
+        colors: p.colors || [], sizes: p.sizes || [], colorOptions: p.colorOptions || [],
+        pricingMode: p.pricingMode || 'unit', quantityTiers: p.quantityTiers || [],
+        quantityPricingStrategy: p.quantityPricingStrategy || 'cap', updatedAt: ts(),
+      }, { merge: true })
+    }
+    const categories = await db.collection('categories').where('storeId', '==', storeDoc.id).get()
+    for (const categoryDoc of categories.docs) {
+      const c = categoryDoc.data()
+      const ref = db.doc(`publicStores/${storeDoc.id}/categories/${categoryDoc.id}`)
+      if (c.active === false) await ref.delete()
+      else await ref.set({ storeId: storeDoc.id, name: c.name || '', image: c.image || null, active: true, sortOrder: Number(c.sortOrder || c.order || 0), updatedAt: ts() }, { merge: true })
+    }
+  }
 }
 
 async function createCategory(storeId, name, slug, order) {
@@ -713,6 +757,35 @@ async function main() {
   const iCat = await createCategory('store-i', 'منتجات', 'products', 1)
   await createProduct('store-i', iCat, 'منتج بريزيت', 120, 40, 'منتج بدون صورة', { featured: true })
 
+  // Malek Store — deterministic local fixture used by storefront and
+  // merchant smoke checks. It is a FREE store, not a fabricated paid tenant.
+  const malekUid = 'seed-owner-malek'
+  await createUser(malekUid, 'malek@mk.store', 'Owner12345', 'مالك المتجر', 'merchant', ['malek-store'])
+  await createStore('malek-store', 'malek-store', 'Malek Store', malekUid, {
+    published: true,
+    primary: '#3525cd',
+    secondary: '#4f46e5',
+    description: 'متجر مالك التجريبي المحلي.',
+    seoTitle: 'Malek Store',
+    seoDescription: 'متجر تجريبي محلي للتحقق من مسار المتجر العام.',
+  })
+  await createSubscription('malek-store', 'plan-free', 'active', {
+    planName: 'FREE',
+    startedAt: new Date(),
+    currentPeriodStart: new Date(),
+    currentPeriodEnd: new Date(Date.now() + 30 * 86400000),
+    activatedAt: new Date(),
+    approvedBy: adminUid,
+    ordersUsed: 0,
+    periodNumber: 1,
+  })
+  const malekCat = await createCategory('malek-store', 'منتجات', 'products', 1)
+  await createProduct('malek-store', malekCat, 'منتج مالك التجريبي', 120, 25, 'منتج متاح في المتجر المحلي.', { featured: true })
+
+  // Firestore triggers do not replay historical seed writes. Rebuild the
+  // safe public projections explicitly so a clean emulator starts usable.
+  await rebuildPublicProjections()
+
   console.log('Seed complete:')
   console.log('  admin     -> admin@mk.store / Admin12345')
   console.log('  store A   -> owner@a.store / Owner12345 (published, moderate usage, paid growth)')
@@ -720,6 +793,7 @@ async function main() {
   console.log('  store C   -> owner@c.store / Owner12345 (trialing + pending activation request)')
   console.log('  store D   -> owner@d.store / Owner12345 (trial expired — storefront gated)')
   console.log('  store E   -> owner@e.store / Owner12345 (pending legacy subscription)')
+  console.log('  malek     -> malek@mk.store / Owner12345 (published FREE storefront)')
   process.exit(0)
 }
 
