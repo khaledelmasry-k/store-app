@@ -144,16 +144,19 @@ export const PlatformPlans: FunctionalComponent = () => {
 
   return (
     <div className="platform-operations platform-plans-page">
-      <PageHeader
-        title="باقات الاشتراك"
-        subtitle={`${plans.length} باقة`}
-        actions={
-          <div className="flex">
-            <Button variant="outline" icon="sync" loading={syncing} onClick={syncCanonical}>مزامنة الخطط الحالية</Button>
-            <Button icon="add" onClick={openCreate}>باقة جديدة</Button>
-          </div>
-        }
-      />
+      <div className="platform-page-intro platform-page-intro--plans">
+        <PageHeader
+          title="باقات الاشتراك"
+          subtitle={`${plans.length} باقة`}
+          actions={
+            <div className="flex">
+              <Button variant="outline" icon="sync" loading={syncing} onClick={syncCanonical}>مزامنة الخطط الحالية</Button>
+              <Button icon="add" onClick={openCreate}>باقة جديدة</Button>
+            </div>
+          }
+        />
+        <div className="platform-intro-meta">الأسعار والحدود والمزايا المعتمدة للمنصة</div>
+      </div>
 
       <Card title="مصفوفة الخطط الحالية" subtitle="المصدر المرجعي للأسعار والحدود المطلوبة" className="mb-2">
         <Table

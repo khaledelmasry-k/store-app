@@ -195,3 +195,26 @@
 .card-head-icon { font-size: 22px; }
 .card-head-icon.is-primary { color: var(--primary); }
 .card-head-icon.is-secondary { color: var(--secondary); }
+.shipping-page-context {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  margin-block: 0 18px;
+  padding: 14px 16px;
+  border: 1px solid #c7c4d8;
+  border-radius: 12px;
+  background: #f1f3ff;
+  color: #141b2b;
+}
+.shipping-page-context-icon {
+  display: grid;
+  place-items: center;
+  width: 34px;
+  height: 34px;
+  border-radius: 10px;
+  background: #e7e5ff;
+  color: #3525cd;
+}
+.shipping-page-context div { display: grid; gap: 2px; }
+.shipping-page-context strong { font-size: 14px; }
+.shipping-page-context span { color: #464555; font-size: 12px; }

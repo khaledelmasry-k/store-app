@@ -253,6 +253,20 @@
   border-radius: 12px;
 }
 .app-shell--platform .platform-feature-card { padding-block: 4px; }
+.app-shell--platform .platform-plans-page > .card:first-of-type,
+.app-shell--platform .platform-payments-page > .card,
+.app-shell--platform .platform-settings-page > .card {
+  border-radius: 14px;
+}
+.app-shell--platform .platform-plans-page .segmented-control,
+.app-shell--platform .platform-payments-page .tabs {
+  margin-block: 4px 16px;
+}
+.app-shell--platform .platform-settings-page > .card {
+  padding: 4px;
+}
+.app-shell--platform .platform-settings-page > .card > .card-header,
+.app-shell--platform .platform-settings-page > .card > .card-body { padding-inline: 20px; }
 
 @media (max-width: 1180px) {
   .app-shell--platform .platform-stat-grid { grid-template-columns: repeat(3, minmax(0, 1fr)); }

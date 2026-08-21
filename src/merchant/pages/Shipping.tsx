@@ -212,8 +212,12 @@ export const MerchantShipping: FunctionalComponent = () => {
     })
 
   return (
-    <div className="merchant-operations merchant-shipping-page">
+    <div className="merchant-operations merchant-shipping-page shipping-page--stitch">
       <PageHeader title="الشحن والتوصيل" subtitle="إعدادات الشحن والمناطق وشركات التوصيل" />
+      <div className="shipping-page-context">
+        <span className="shipping-page-context-icon"><Icon name="compare_arrows" ariaHidden /></span>
+        <div><strong>قارن شركات الشحن قبل الإسناد</strong><span>الأسعار والسرعة والتقييمات مأخوذة من آخر عروض الشحن المتاحة.</span></div>
+      </div>
 
       <Tabs
         tabs={[

@@ -58,10 +58,13 @@ export const PlatformPayments: FunctionalComponent = () => {
 
   return (
     <div className="platform-operations platform-payments-page">
-      <PageHeader
-        title="المدفوعات والمعاملات"
-        subtitle={tab === 'subscriptions' ? `${subPayments.length} طلب تفعيل اشتراك` : tab === 'payments' ? `${payments.length} عملية دفع` : `${txns.length} معاملة • ${formatCurrency(txnTotal)}`}
-      />
+      <div className="platform-page-intro platform-page-intro--payments">
+        <PageHeader
+          title="المدفوعات والمعاملات"
+          subtitle={tab === 'subscriptions' ? `${subPayments.length} طلب تفعيل اشتراك` : tab === 'payments' ? `${payments.length} عملية دفع` : `${txns.length} معاملة • ${formatCurrency(txnTotal)}`}
+        />
+        <div className="platform-intro-meta">مراجعة التدفقات المالية وطلبات تفعيل الاشتراكات</div>
+      </div>
 
       <Tabs
         tabs={[
