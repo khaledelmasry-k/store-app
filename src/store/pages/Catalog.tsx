@@ -47,35 +47,51 @@ export const StoreCatalog: FunctionalComponent = () => {
   const totalPages = Math.ceil(filtered.length / perPage)
 
   return (
-    <div className="storefront-page storefront-catalog">
-      <div className="storefront-page-head">
-        <h1 className="page-title">كتالوج المنتجات</h1>
-        <p className="page-subtitle">استكشف أحدث المنتجات المتوفرة لدينا.</p>
-      </div>
-
-      <div className="toolbar">
-        <div className="toolbar-search">
-          <Input
-            placeholder="ابحث عن منتج..."
-            value={q}
-            onChange={(v) => { setQ(v); setPage(1) }}
-          />
+    <div className="storefront-page storefront-catalog storefront-catalog--stitch">
+      <header className="catalog-hero">
+        <div>
+          <span className="page-eyebrow">اكتشف مجموعتنا</span>
+          <h1 className="page-title">كتالوج المنتجات</h1>
+          <p className="page-subtitle">استكشف أحدث المنتجات المتوفرة لدينا.</p>
         </div>
-        <div className="toolbar-filters">
-          <Select
-            value={cat}
-            onChange={(v) => { setCat(v); setPage(1) }}
-            placeholder="الكل"
-            options={[
-              { value: '', label: 'الكل' },
-              ...categories.map((c) => ({ value: c.id, label: c.name })),
-            ]}
-          />
-          <Select
-            value={sort}
-            onChange={(v) => { setSort(v); setPage(1) }}
-            options={SORT_OPTIONS}
-          />
+        <div className="catalog-result-count" aria-live="polite"><strong>{filtered.length}</strong><span>منتج متاح</span></div>
+      </header>
+
+      {categories.length > 0 && (
+        <nav className="catalog-category-rail" aria-label="فئات المنتجات">
+          <button type="button" className={!cat ? 'active' : ''} onClick={() => { setCat(''); setPage(1) }}>الكل</button>
+          {categories.slice(0, 8).map((c) => (
+            <button type="button" key={c.id} className={cat === c.id ? 'active' : ''} onClick={() => { setCat(c.id); setPage(1) }}>{c.name}</button>
+          ))}
+        </nav>
+      )}
+
+      <div className="catalog-toolbar-wrap">
+        <div className="catalog-toolbar-label">المنتجات</div>
+        <div className="toolbar">
+          <div className="toolbar-search">
+            <Input
+              placeholder="ابحث عن منتج..."
+              value={q}
+              onChange={(v) => { setQ(v); setPage(1) }}
+            />
+          </div>
+          <div className="toolbar-filters">
+            <Select
+              value={cat}
+              onChange={(v) => { setCat(v); setPage(1) }}
+              placeholder="الكل"
+              options={[
+                { value: '', label: 'الكل' },
+                ...categories.map((c) => ({ value: c.id, label: c.name })),
+              ]}
+            />
+            <Select
+              value={sort}
+              onChange={(v) => { setSort(v); setPage(1) }}
+              options={SORT_OPTIONS}
+            />
+          </div>
         </div>
       </div>
 

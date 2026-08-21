@@ -137,10 +137,14 @@ export const StoreCheckout: FunctionalComponent = () => {
   }
 
   return (
-    <div className="storefront-page storefront-checkout">
-      <div className="storefront-page-head">
+    <div className="storefront-page storefront-checkout storefront-checkout--stitch">
+      <header className="checkout-hero">
         <span className="page-eyebrow">دفع آمن ومنظم</span>
         <h1 className="page-title">إتمام الطلب</h1>
+        <p className="page-subtitle">أدخل بيانات التوصيل لإتمام طلبك بأمان.</p>
+      </header>
+      <div className="checkout-stepper" aria-label="خطوات الشراء">
+        <span className="complete"><b>1</b> السلة</span><i /> <span className="active"><b>2</b> بيانات التوصيل</span><i /> <span><b>3</b> التأكيد</span>
       </div>
       <div className="checkout-layout">
         <form onSubmit={submit} className="checkout-form">

@@ -26,10 +26,17 @@ export const StoreCart: FunctionalComponent = () => {
   }
 
   return (
-    <div className="storefront-page storefront-cart">
-      <div className="storefront-page-head">
-        <h1 className="page-title">سلة التسوق</h1>
-        <p className="page-subtitle">{cart.count} منتج</p>
+    <div className="storefront-page storefront-cart storefront-cart--stitch">
+      <header className="cart-hero">
+        <div>
+          <span className="page-eyebrow">خطوتك التالية</span>
+          <h1 className="page-title">سلة التسوق</h1>
+          <p className="page-subtitle">راجع اختياراتك قبل إتمام الطلب</p>
+        </div>
+        <div className="cart-count-badge"><strong>{cart.count}</strong><span>منتج</span></div>
+      </header>
+      <div className="cart-stepper" aria-label="خطوات الشراء">
+        <span className="active"><b>1</b> السلة</span><i /> <span><b>2</b> العنوان</span><i /> <span><b>3</b> التأكيد</span>
       </div>
 
       <div className="cart-layout">
