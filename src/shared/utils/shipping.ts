@@ -17,6 +17,10 @@ export interface ShippingQuote {
   freeDelivery: boolean
   /** Policy text for refused deliveries (empty when not configured). */
   policy: string
+  /** Whether the destination is covered by an actual configured rule. */
+  available: boolean
+  /** Human-readable reason when the destination is not covered. */
+  unavailableReason?: string
 }
 
 export interface ShippingContext {
@@ -48,20 +52,28 @@ function effectiveProvider(cfg: { providers?: ShippingProvider[]; defaultProvide
 export function calculateShipping(ctx: ShippingContext): ShippingQuote {
   const cfg = ctx.store?.shipping
   const policy = showRefusedPolicy(cfg || {})
-  const empty: ShippingQuote = { fee: 0, method: '', freeDelivery: false, policy }
+  const empty: ShippingQuote = { fee: 0, method: '', freeDelivery: false, policy, available: true }
 
-  if (!cfg?.enabled) return empty
-  if (isFreeShipping(cfg.freeAbove, ctx.subtotal)) {
-    return { fee: 0, method: 'توصيل مجاني', freeDelivery: true, policy: showRefusedPolicy(cfg) }
-  }
+  // Disabled shipping is an intentional merchant policy (for example local
+  // pickup), so it remains a valid zero-fee checkout. An enabled policy must
+  // still prove destination coverage below.
+  if (!cfg?.enabled) return { ...empty, method: 'بدون شحن' }
 
   if (cfg.model === 'flat') {
     const provider = effectiveProvider(cfg)
+    const hasRule = Boolean(provider || cfg.flatFee != null || cfg.freeAbove != null)
+    if (!hasRule) {
+      return { fee: 0, method: 'الشحن غير متوفر', freeDelivery: false, policy, available: false, unavailableReason: 'لا توجد قاعدة شحن مفعّلة' }
+    }
+    if (isFreeShipping(cfg.freeAbove, ctx.subtotal)) {
+      return { fee: 0, method: 'توصيل مجاني', freeDelivery: true, policy, available: true }
+    }
     return {
       fee: provider?.fee ?? cfg.flatFee ?? 0,
       method: provider?.name || 'شحن',
       freeDelivery: false,
-      policy: showRefusedPolicy(cfg),
+      policy,
+      available: true,
     }
   }
 
@@ -75,18 +87,21 @@ export function calculateShipping(ctx: ShippingContext): ShippingQuote {
       fee: 0,
       method: 'الشحن غير متوفر لهذه المنطقة',
       freeDelivery: false,
-      policy: showRefusedPolicy(cfg),
+      policy,
+      available: false,
+      unavailableReason: 'لا توجد قاعدة شحن لهذه المحافظة',
     }
   }
 
   if (isFreeShipping(zone.freeAbove, ctx.subtotal)) {
-    return { fee: 0, method: `${zone.name} — توصيل مجاني`, freeDelivery: true, policy: showRefusedPolicy(cfg) }
+    return { fee: 0, method: `${zone.name} — توصيل مجاني`, freeDelivery: true, policy, available: true }
   }
 
   return {
     fee: zone.fee || 0,
     method: zone.name || 'شحن',
     freeDelivery: false,
-    policy: showRefusedPolicy(cfg),
+    policy,
+    available: true,
   }
 }

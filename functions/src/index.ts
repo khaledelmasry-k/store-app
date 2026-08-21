@@ -1,5 +1,5 @@
 import * as admin from 'firebase-admin'
-import { FieldValue, Timestamp } from 'firebase-admin/firestore'
+import { FieldValue, Timestamp, type DocumentReference } from 'firebase-admin/firestore'
 import { onCall, HttpsError, type CallableRequest } from 'firebase-functions/v2/https'
 import { onObjectFinalized, onObjectDeleted } from 'firebase-functions/v2/storage'
 import { onSchedule } from 'firebase-functions/v2/scheduler'
@@ -142,37 +142,41 @@ function isFreeShipping(threshold: number | undefined | null, subtotal: number) 
   return !!threshold && threshold > 0 && subtotal >= threshold
 }
 
-function computeShippingFee(cfg: any, zones: any[], subtotal: number, governorate: string): { fee: number; method: string; policy: string; snapshot: any } {
+function computeShippingFee(cfg: any, zones: any[], subtotal: number, governorate: string): { fee: number; method: string; policy: string; available: boolean; unavailableReason?: string; snapshot: any } {
   const showPolicy = () => (cfg?.refusedPolicyEnabled !== false ? cfg?.refusedPolicy || '' : '')
-  if (!cfg?.enabled) return { fee: 0, method: '', policy: showPolicy(), snapshot: { enabled: false } }
-  if (isFreeShipping(cfg.freeAbove, subtotal)) {
-    return { fee: 0, method: 'توصيل مجاني', policy: showPolicy(), snapshot: { enabled: true, model: cfg.model, freeDelivery: true } }
-  }
+  if (!cfg?.enabled) return { fee: 0, method: 'بدون شحن', policy: showPolicy(), available: true, snapshot: { enabled: false, customerShippingFee: 0 } }
   if (cfg.model === 'flat') {
     const providers = Array.isArray(cfg.providers) ? cfg.providers : []
     let provider = cfg.defaultProviderId ? providers.find((p: any) => p.id === cfg.defaultProviderId && p.active) : null
     if (!provider) provider = providers.find((p: any) => p.active) || null
+    const hasRule = Boolean(provider || cfg.flatFee != null || cfg.freeAbove != null)
+    if (!hasRule) return { fee: 0, method: 'الشحن غير متوفر', policy: showPolicy(), available: false, unavailableReason: 'لا توجد قاعدة شحن مفعّلة', snapshot: { enabled: true, model: 'flat', customerShippingFee: 0 } }
+    if (isFreeShipping(cfg.freeAbove, subtotal)) {
+      return { fee: 0, method: 'توصيل مجاني', policy: showPolicy(), available: true, snapshot: { enabled: true, model: 'flat', freeDelivery: true, providerId: provider?.id || null, customerShippingFee: 0 } }
+    }
     const fee = provider?.fee ?? cfg.flatFee ?? 0
     return {
       fee,
       method: provider?.name || 'شحن',
       policy: showPolicy(),
-      snapshot: { enabled: true, model: 'flat', providerId: provider?.id || null },
+      available: true,
+      snapshot: { enabled: true, model: 'flat', providerId: provider?.id || null, customerShippingFee: fee },
     }
   }
   // zones model
   const zone = (zones || []).find((z: any) => z.active && Array.isArray(z.governorates) && z.governorates.includes(governorate))
   if (!zone) {
-    return { fee: 0, method: 'الشحن غير متوفر لهذه المنطقة', policy: showPolicy(), snapshot: { enabled: true, model: 'zones', zoneId: null } }
+    return { fee: 0, method: 'الشحن غير متوفر لهذه المنطقة', policy: showPolicy(), available: false, unavailableReason: 'لا توجد قاعدة شحن لهذه المحافظة', snapshot: { enabled: true, model: 'zones', zoneId: null, customerShippingFee: 0 } }
   }
   if (isFreeShipping(zone.freeAbove, subtotal)) {
-    return { fee: 0, method: `${zone.name} — توصيل مجاني`, policy: showPolicy(), snapshot: { enabled: true, model: 'zones', zoneId: zone.id, providerId: zone.providerId || null, freeDelivery: true } }
+    return { fee: 0, method: `${zone.name} — توصيل مجاني`, policy: showPolicy(), available: true, snapshot: { enabled: true, model: 'zones', zoneId: zone.id, providerId: zone.providerId || null, freeDelivery: true, customerShippingFee: 0 } }
   }
   return {
     fee: zone.fee || 0,
     method: zone.name || 'شحن',
     policy: showPolicy(),
-    snapshot: { enabled: true, model: 'zones', zoneId: zone.id, providerId: zone.providerId || null },
+    available: true,
+    snapshot: { enabled: true, model: 'zones', zoneId: zone.id, providerId: zone.providerId || null, customerShippingFee: zone.fee || 0 },
   }
 }
 
@@ -576,6 +580,7 @@ export const generateOrderNumber = onCall(async (request: CallableRequest<{ stor
 // ─────────────────────────────────────────────────────────────
 export const createOrder = onCall(async (request: CallableRequest<any>) => {
   const { storeId, items, customer, paymentMethod, salesLinkRef, landingPageId } = request.data || {}
+  const requestedCouponCode = String(request.data?.couponCode || '').trim().toUpperCase()
   if (!storeId || !Array.isArray(items) || items.length === 0) throw new HttpsError('invalid-argument', 'بيانات الطلب غير مكتملة')
   if (!customer?.name || !customer?.phone) throw new HttpsError('invalid-argument', 'بيانات العميل مطلوبة')
 
@@ -632,6 +637,19 @@ export const createOrder = onCall(async (request: CallableRequest<any>) => {
   const existingCustomerDoc = existingCustomer.empty ? null : existingCustomer.docs[0]
   const customerType = request.auth?.uid ? 'registered' : 'guest'
 
+  // Resolve the coupon before the transaction, then re-read it transactionally
+  // before incrementing usage so maxUses cannot be exceeded concurrently.
+  let couponRef: DocumentReference | null = null
+  if (requestedCouponCode) {
+    const couponQuery = await db.collection('coupons')
+      .where('storeId', '==', storeId)
+      .where('code', '==', requestedCouponCode)
+      .limit(1)
+      .get()
+    if (couponQuery.empty) throw new HttpsError('failed-precondition', 'كود الخصم غير صالح')
+    couponRef = couponQuery.docs[0].ref
+  }
+
   // Private historical cost snapshot. Read before the transaction and store it
   // in orderCosts/{orderId}, never inside the customer-readable order document.
   const productIds = Array.from(new Set(items.map((item: any) => String(item.productId || '')).filter(Boolean)))
@@ -650,6 +668,7 @@ export const createOrder = onCall(async (request: CallableRequest<any>) => {
     let salesLinkSnapshot: any = null
     let landingPageSnapshot: any = null
     let shippingSnapshot: any = { enabled: false }
+    let discount = 0
 
     // Re-read the granting subscription INSIDE the transaction so the
     // ordersUsed limit is enforced atomically. The pre-check above only gives a
@@ -665,6 +684,7 @@ export const createOrder = onCall(async (request: CallableRequest<any>) => {
     const counterSnap = await tx.get(counterRef)
     const seq = (counterSnap.exists ? counterSnap.data()?.value : 0) + 1
     const orderNumber = `ORD-${String(seq).padStart(5, '0')}`
+    const couponSnap = couponRef ? await tx.get(couponRef) : null
 
     for (const item of items) {
       const productSnap = await tx.get(db.doc(`products/${item.productId}`))
@@ -793,6 +813,22 @@ export const createOrder = onCall(async (request: CallableRequest<any>) => {
       })
     }
 
+    if (couponSnap) {
+      const coupon = couponSnap.data() || {}
+      if (!coupon.active) throw new HttpsError('failed-precondition', 'كود الخصم غير نشط')
+      const expiresAt = coupon.expiresAt
+      const expiryMs = expiresAt?.toMillis ? expiresAt.toMillis() : expiresAt?.seconds ? Number(expiresAt.seconds) * 1000 : null
+      if (expiryMs && expiryMs <= Date.now()) throw new HttpsError('failed-precondition', 'انتهت صلاحية كود الخصم')
+      if (Number(coupon.maxUses || 0) > 0 && Number(coupon.usedCount || 0) >= Number(coupon.maxUses)) {
+        throw new HttpsError('failed-precondition', 'اكتمل استخدام كود الخصم')
+      }
+      if (Number(coupon.minOrder || 0) > subtotal) throw new HttpsError('failed-precondition', 'الطلب لا يحقق الحد الأدنى للكوبون')
+      const value = Number(coupon.value || 0)
+      discount = coupon.type === 'fixed' ? Math.min(subtotal, value) : Math.min(subtotal, subtotal * Math.min(100, value) / 100)
+      if (discount <= 0) throw new HttpsError('failed-precondition', 'قيمة كود الخصم غير صالحة')
+      tx.update(couponRef!, { usedCount: FieldValue.increment(1), updatedAt: now() })
+    }
+
     tx.set(counterRef, { value: seq }, { merge: true })
 
     if (salesLinkRef) {
@@ -838,6 +874,7 @@ export const createOrder = onCall(async (request: CallableRequest<any>) => {
     // Compute shipping server-side from stored config + zones (mirrors the
     // client quote; never trusts a client-supplied fee).
     const shipping = computeShippingFee(shippingCfg, zones, subtotal, customer.governorate || '')
+    if (!shipping.available) throw new HttpsError('failed-precondition', shipping.unavailableReason || 'الشحن غير متوفر لهذه الوجهة')
     shippingSnapshot = shipping.snapshot
 
     // Customer upsert — one Customer doc per (storeId, phone). Reuse the
@@ -854,7 +891,7 @@ export const createOrder = onCall(async (request: CallableRequest<any>) => {
         note: customer.notes || null,
         ...(customerType === 'registered' ? { type: 'registered', userId: request.auth?.uid || null } : {}),
         totalOrders: FieldValue.increment(1),
-        totalSpent: FieldValue.increment(subtotal),
+        totalSpent: FieldValue.increment(subtotal - discount),
         lastOrderAt: now(),
         updatedAt: now(),
       })
@@ -872,7 +909,7 @@ export const createOrder = onCall(async (request: CallableRequest<any>) => {
         type: customerType,
         userId: request.auth?.uid || null,
         totalOrders: FieldValue.increment(1),
-        totalSpent: FieldValue.increment(subtotal),
+        totalSpent: FieldValue.increment(subtotal - discount),
         lastOrderAt: now(),
         createdAt: now(),
         updatedAt: now(),
@@ -897,12 +934,12 @@ export const createOrder = onCall(async (request: CallableRequest<any>) => {
       shippingFee: shipping.fee,
       shippingMethod: shipping.method,
       shippingSnapshot,
-      discount: 0,
-      totalPrice: subtotal + shipping.fee,
+      discount,
+      totalPrice: subtotal + shipping.fee - discount,
       status: 'NEW',
       statusHistory: [{ status: 'NEW', at: Timestamp.now(), by: request.auth?.uid || 'guest' }],
       paymentMethod: paymentMethod || 'cod',
-      couponCode: null,
+      couponCode: requestedCouponCode || null,
       trackingCode: null,
       salesLinkRef: salesLinkRef || null,
       salesLinkId,
@@ -930,7 +967,7 @@ export const createOrder = onCall(async (request: CallableRequest<any>) => {
     // never overshoot the plan limit.
     tx.update(subRef, { ordersUsed: FieldValue.increment(1), updatedAt: now() })
 
-    return { orderId, orderNumber, totalPrice: subtotal + shipping.fee, shippingFee: shipping.fee, customerId: customerDocId }
+    return { orderId, orderNumber, totalPrice: subtotal + shipping.fee - discount, shippingFee: shipping.fee, discount, couponCode: requestedCouponCode || null, customerId: customerDocId }
   })
 
   await bumpAnalytics(storeId, { totalPrice: result.totalPrice, status: 'NEW', countOrder: true }).catch(() => {})
@@ -1938,6 +1975,39 @@ export const manageCoupon = onCall(async (request: CallableRequest<{
   await ref.update(changes)
   await auditLog(storeId, request.auth.uid, 'coupon_updated', 'coupons', couponId)
   return { ok: true }
+})
+
+// Public coupon preview. It never exposes the coupon collection and never
+// increments usage; createOrder repeats the validation transactionally.
+export const quoteCoupon = onCall(async (request: CallableRequest<{ storeId?: string; code?: string; subtotal?: number }>) => {
+  const { storeId, code, subtotal } = request.data || {}
+  const normalized = String(code || '').trim().toUpperCase()
+  const amount = Number(subtotal || 0)
+  if (!storeId || !normalized || !Number.isFinite(amount) || amount < 0) {
+    throw new HttpsError('invalid-argument', 'بيانات الكوبون غير مكتملة')
+  }
+  const storeSnap = await db.doc(`stores/${storeId}`).get()
+  if (!storeSnap.exists || !storeSnap.data()?.active || !storeSnap.data()?.published) {
+    throw new HttpsError('failed-precondition', 'المتجر لا يقبل الطلبات حاليًا')
+  }
+  const snap = await db.collection('coupons')
+    .where('storeId', '==', storeId)
+    .where('code', '==', normalized)
+    .limit(1)
+    .get()
+  if (snap.empty) throw new HttpsError('failed-precondition', 'كود الخصم غير صالح')
+  const coupon = snap.docs[0].data()
+  const expiresAt = coupon.expiresAt
+  const expiryMs = expiresAt?.toMillis ? expiresAt.toMillis() : expiresAt?.seconds ? Number(expiresAt.seconds) * 1000 : null
+  if (expiryMs && expiryMs <= Date.now()) throw new HttpsError('failed-precondition', 'انتهت صلاحية كود الخصم')
+  if (Number(coupon.maxUses || 0) > 0 && Number(coupon.usedCount || 0) >= Number(coupon.maxUses)) {
+    throw new HttpsError('failed-precondition', 'اكتمل استخدام كود الخصم')
+  }
+  if (Number(coupon.minOrder || 0) > amount) throw new HttpsError('failed-precondition', 'الطلب لا يحقق الحد الأدنى للكوبون')
+  const value = Number(coupon.value || 0)
+  const discount = coupon.type === 'fixed' ? Math.min(amount, value) : Math.min(amount, amount * Math.min(100, value) / 100)
+  if (discount <= 0) throw new HttpsError('failed-precondition', 'قيمة كود الخصم غير صالحة')
+  return { code: normalized, discount, subtotal: amount }
 })
 
 const TENANT_COLLECTIONS = [

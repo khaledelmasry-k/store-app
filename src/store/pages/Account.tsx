@@ -1,6 +1,8 @@
 import { FunctionalComponent } from 'preact'
-import { useState } from 'preact/hooks'
-import { Link } from 'wouter'
+import { useEffect, useState } from 'preact/hooks'
+import { Link, useSearch } from 'wouter'
+import { doc, updateDoc } from 'firebase/firestore'
+import { db } from '../../shared/firebase'
 import { useStore } from '../../shared/hooks/useStore'
 import { useAuth } from '../../shared/hooks/useAuth'
 import { useCollection } from '../../shared/hooks/useCollection'
@@ -11,9 +13,10 @@ import { Select } from '../../shared/components/ui/Select'
 import { Badge } from '../../shared/components/ui/Badge'
 import { formatCurrency, formatDateTime } from '../../shared/utils/format'
 import { STATUS_LABELS, STATUS_COLORS } from '../../shared/utils/constants'
-import { logout } from '../../shared/services/auth'
+import { logout, resetPassword } from '../../shared/services/auth'
+import { useToast } from '../../shared/hooks/useToast'
 import { Icon } from '../../shared/components/ui/Icon'
-import type { Order } from '../../shared/types'
+import type { Order, Product, WishlistItem } from '../../shared/types'
 
 const NAV_ITEMS = [
   { id: 'overview', label: 'نظرة عامة', icon: 'dashboard' },
@@ -30,12 +33,59 @@ const GOVERNORATE_OPTIONS = [{ value: '', label: 'اختر المحافظة' }, 
 export const StoreAccount: FunctionalComponent = () => {
   const { store } = useStore()
   const { user, loading: authLoading } = useAuth()
-  const [activeTab, setActiveTab] = useState('overview')
+  const search = useSearch()
+  const toast = useToast()
+  const [activeTab, setActiveTab] = useState(() => new URLSearchParams(search).get('tab') || 'overview')
   const [newAddress, setNewAddress] = useState({ name: '', phone: '', governorate: '', city: '', address: '', isDefault: false })
+  const [addresses, setAddresses] = useState(user?.addresses || [])
+  const addressSignature = JSON.stringify(user?.addresses || [])
 
-  const phone = user?.phone || '__none__'
-const ordersRes = useCollection<Order>('orders', { storeId: store?.id || '', where: { customerPhone: { value: phone } } })
+  useEffect(() => {
+    const next = new URLSearchParams(search).get('tab')
+    if (next && NAV_ITEMS.some((item) => item.id === next)) setActiveTab(next)
+  }, [search])
+
+  useEffect(() => {
+    setAddresses(JSON.parse(addressSignature) as typeof addresses)
+  }, [user?.uid, addressSignature])
+
+const ordersRes = useCollection<Order>('orders', { where: { customerId: { value: user?.uid || '__none__' } } }, !!store?.id && !!user?.uid)
 const orders = ordersRes.data?.sort((a, b) => (b.createdAt?.seconds || 0) - (a.createdAt?.seconds || 0)) || []
+const wishlistRes = useCollection<WishlistItem>('wishlist', { where: { userId: { value: user?.uid || '__none__' } } }, !!store?.id && !!user?.uid)
+const productsRes = useCollection<Product>('products', { storeId: store?.id || '' }, !!store?.id)
+const wishlistProducts = productsRes.data.filter((product) => wishlistRes.data.some((item) => item.productId === product.id && (!item.storeId || item.storeId === store?.id)))
+
+  const persistAddresses = async (next: typeof addresses) => {
+    if (!user?.uid) return
+    await updateDoc(doc(db, 'users', user.uid), { addresses: next })
+    setAddresses(next)
+  }
+
+  const saveAddress = async () => {
+    if (!user?.uid || !newAddress.name || !newAddress.phone || !newAddress.governorate || !newAddress.city || !newAddress.address) {
+      toast.push('أكمل بيانات العنوان المطلوبة', undefined, 'error')
+      return
+    }
+    const id = typeof crypto !== 'undefined' && crypto.randomUUID ? crypto.randomUUID() : `address-${Date.now()}`
+    const nextAddress = { id, label: 'عنوان', ...newAddress }
+    const next = newAddress.isDefault ? addresses.map((a) => ({ ...a, isDefault: false })).concat(nextAddress) : addresses.concat(nextAddress)
+    try {
+      await persistAddresses(next)
+      setNewAddress({ name: '', phone: '', governorate: '', city: '', address: '', isDefault: false })
+      toast.push('تم حفظ العنوان')
+    } catch {
+      toast.push('تعذر حفظ العنوان', 'حاول مرة أخرى', 'error')
+    }
+  }
+
+  const removeAddress = async (id: string) => {
+    try {
+      await persistAddresses(addresses.filter((a) => a.id !== id))
+      toast.push('تم حذف العنوان')
+    } catch {
+      toast.push('تعذر حذف العنوان', 'حاول مرة أخرى', 'error')
+    }
+  }
 
 if (authLoading) return <div className="loading-screen"><span className="spinner spinner-lg" /></div>
 
@@ -190,8 +240,8 @@ if (!user || user.role !== 'customer') {
               <h2 className="section-title">العناوين المحفوظة</h2>
             </div>
             <div className="addresses-list">
-              {user.addresses?.length > 0 ? (
-                user.addresses.map((addr, idx) => (
+              {addresses.length > 0 ? (
+                addresses.map((addr, idx) => (
                   <article key={idx} className="address-card">
                     <div className="address-info">
                       <div className="address-header">
@@ -207,7 +257,7 @@ if (!user || user.role !== 'customer') {
                     </div>
                     <div className="address-actions">
                       <Link href={`/store/${store?.slug}/account?editAddress=${idx}`} className="btn btn-sm btn-outline"><Icon name="edit" /> تعديل</Link>
-                      <button className="btn btn-sm btn-outline danger"><Icon name="delete" /> حذف</button>
+                      <button className="btn btn-sm btn-outline danger" onClick={() => removeAddress(addr.id)}><Icon name="delete" /> حذف</button>
                     </div>
                   </article>
                 ))
@@ -233,7 +283,7 @@ if (!user || user.role !== 'customer') {
                 <input type="checkbox" checked={newAddress.isDefault} onChange={(e) => setNewAddress({ ...newAddress, isDefault: (e.target as HTMLInputElement).checked })} />
                 <span>تعيين كافتراضي</span>
               </label>
-              <Button onClick={() => { /* TODO: save address */ }}>حفظ العنوان</Button>
+              <Button onClick={saveAddress}>حفظ العنوان</Button>
             </div>
           </section>
         )}
@@ -241,11 +291,23 @@ if (!user || user.role !== 'customer') {
         {activeTab === 'wishlist' && (
           <section className="account-section">
             <h2 className="section-title">قائمة الأمنيات</h2>
-            <div className="empty-state">
-              <Icon name="favorite" />
-              <p>لا توجد منتجات في قائمة الأمنيات</p>
-              <Link href={`/store/${store?.slug}/catalog`}><Button variant="outline" className="mt-1">تصفح المنتجات</Button></Link>
-            </div>
+            {wishlistProducts.length > 0 ? (
+              <div className="wishlist-grid">
+                {wishlistProducts.map((product) => (
+                  <Link key={product.id} href={`/store/${store?.slug}/product/${product.id}`} className="wishlist-card">
+                    {product.images?.[0] && <img src={product.images[0]} alt="" className="wishlist-card-image" />}
+                    <span className="wishlist-card-name">{product.name}</span>
+                    <span className="wishlist-card-price">{formatCurrency(product.price, store?.currency)}</span>
+                  </Link>
+                ))}
+              </div>
+            ) : (
+              <div className="empty-state">
+                <Icon name="favorite" />
+                <p>لا توجد منتجات في قائمة الأمنيات</p>
+                <Link href={`/store/${store?.slug}/catalog`}><Button variant="outline" className="mt-1">تصفح المنتجات</Button></Link>
+              </div>
+            )}
           </section>
         )}
 
@@ -258,7 +320,7 @@ if (!user || user.role !== 'customer') {
                   <h3>تغيير كلمة المرور</h3>
                   <p className="muted small">تحديث كلمة المرور الخاصة بحسابك</p>
                 </div>
-                <Button variant="outline">تغيير</Button>
+                <Button variant="outline" onClick={() => user.email && resetPassword(user.email).then(() => toast.push('تم إرسال رابط تغيير كلمة المرور')).catch(() => toast.push('تعذر إرسال الرابط', undefined, 'error'))}>تغيير</Button>
               </div>
               <div className="security-card">
                 <div>

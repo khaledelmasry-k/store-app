@@ -95,11 +95,12 @@ export const StoreSlugLoader: FunctionalComponent<Props> = ({ children }) => {
     setPubStatus(null)
     getPublicStoreStatusCallable({ slug })
       .then((res) => {
-        if (!cancelled) setPubStatus((res.data as PublicStoreStatus) || { purchasable: true })
+        if (!cancelled) setPubStatus((res.data as PublicStoreStatus) || { purchasable: false, reason: 'status_unavailable' })
       })
       .catch(() => {
-        // Never gate the storefront because of a status-check failure.
-        if (!cancelled) setPubStatus({ purchasable: true })
+        // Fail closed: a status-check failure must never make an unpublished
+        // or suspended store look purchasable.
+        if (!cancelled) setPubStatus({ purchasable: false, reason: 'status_unavailable' })
       })
     return () => {
       cancelled = true
@@ -146,6 +147,11 @@ export const StoreSlugLoader: FunctionalComponent<Props> = ({ children }) => {
   if (pubStatus && !pubStatus.purchasable && !canPreview) {
     return <StoreUnavailable storeName={store.name} reason={pubStatus.reason} />
   }
+
+  // Do not render a public commerce surface until the server has answered the
+  // publication check. Merchant/admin previews may continue while the check is
+  // pending, but public visitors must not see a fail-open storefront.
+  if (!pubStatus && !canPreview) return <Loading />
 
   const ctx = { store, loading: false, setStoreId: () => {} }
 

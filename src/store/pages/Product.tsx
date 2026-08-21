@@ -1,19 +1,22 @@
 import { FunctionalComponent } from 'preact'
 import { useEffect, useState } from 'preact/hooks'
-import { Link } from 'wouter'
+import { Link, useLocation } from 'wouter'
 import { useStore } from '../../shared/hooks/useStore'
 import { useDocument } from '../../shared/hooks/useDocument'
 import { useCart } from '../../shared/hooks/useCart'
 import { useToast } from '../../shared/hooks/useToast'
+import { useAuth } from '../../shared/hooks/useAuth'
+import { useCollection } from '../../shared/hooks/useCollection'
 import { Button } from '../../shared/components/ui/Button'
 import { SmartImage } from '../../shared/components/ui/SmartImage'
 import { formatCurrency } from '../../shared/utils/format'
 import { findVariant, imageIndexForColor, sizeInStock, variantPrice, variantStock } from '../../shared/utils/product-variants'
 import { productUnitPrice, nextTierQuantity, tierForQuantity, offerSavings, piecesLabel } from '../../shared/utils/pricing'
 import { setSeo } from '../../shared/utils/seo'
-import type { Product } from '../../shared/types'
+import type { Product, WishlistItem } from '../../shared/types'
 import { Icon } from '../../shared/components/ui/Icon'
 import { StoreProductCard } from '../components/StoreProductCard'
+import { wishlistService } from '../../shared/services/system'
 
 interface Props {
   id: string
@@ -24,6 +27,9 @@ export const StoreProduct: FunctionalComponent<Props> = ({ id }) => {
   const { data: product, loading } = useDocument<Product>('products', id)
   const cart = useCart()
   const toast = useToast()
+  const { user } = useAuth()
+  const [, navigate] = useLocation()
+  const wishlistRes = useCollection<WishlistItem>('wishlist', { where: { userId: { value: user?.uid || '__none__' } } }, user?.role === 'customer' && !!user.uid)
   const [qty, setQty] = useState(1)
   const [color, setColor] = useState('')
   const [size, setSize] = useState('')
@@ -137,6 +143,25 @@ export const StoreProduct: FunctionalComponent<Props> = ({ id }) => {
   }
 
   const related: Product[] = []
+  const wishlistItem = wishlistRes.data.find((item) => item.productId === product.id && (!item.storeId || item.storeId === store?.id))
+
+  const toggleWishlist = async () => {
+    if (!user || user.role !== 'customer') {
+      navigate(`/store/${store?.slug}/login?returnTo=${encodeURIComponent(window.location.pathname)}`)
+      return
+    }
+    try {
+      if (wishlistItem) {
+        await wishlistService.remove(wishlistItem.id)
+        toast.push('تمت الإزالة من المفضلة')
+      } else {
+        await wishlistService.create({ userId: user.uid, storeId: store?.id || '', productId: product.id })
+        toast.push('تمت الإضافة إلى المفضلة')
+      }
+    } catch {
+      toast.push('تعذر تحديث المفضلة', 'حاول مرة أخرى', 'error')
+    }
+  }
 
   return (
     <div className="storefront-page storefront-product">
@@ -203,7 +228,7 @@ export const StoreProduct: FunctionalComponent<Props> = ({ id }) => {
                       <button
                         key={c.name}
                         type="button"
-                        className={`color-swatch${active ? ' color-swatch--active' : ''}`}
+                        className={`color-swatch color-btn${active ? ' color-swatch--active' : ''}`}
                         style={{ background: c.hex }}
                         onClick={() => selectColor(c.name)}
                         aria-label={c.name}
@@ -228,7 +253,7 @@ export const StoreProduct: FunctionalComponent<Props> = ({ id }) => {
                       <button
                         key={s}
                         type="button"
-                        className={`size-chip${size === s ? ' size-chip--active' : ''}${disabled ? ' size-chip--disabled' : ''}`}
+                        className={`size-chip size-btn${size === s ? ' size-chip--active' : ''}${disabled ? ' size-chip--disabled' : ''}`}
                         disabled={disabled}
                         onClick={() => { setSize(s); setQty(minQty) }}
                       >
@@ -282,15 +307,15 @@ export const StoreProduct: FunctionalComponent<Props> = ({ id }) => {
               <button type="button" className="qty-btn" onClick={() => stepQty(1)}>+</button>
             </div>
             <Button icon="shopping_cart" onClick={addToCart} disabled={!canAdd} className="product-add-btn">أضف إلى السلة</Button>
-            <button type="button" className="product-wishlist" title="إضافة للمفضلة">
-              <Icon name="favorite_border" ariaHidden />
+            <button type="button" className="product-wishlist" title={wishlistItem ? 'إزالة من المفضلة' : 'إضافة للمفضلة'} aria-label={wishlistItem ? 'إزالة من المفضلة' : 'إضافة للمفضلة'} aria-pressed={!!wishlistItem} onClick={toggleWishlist}>
+              <Icon name={wishlistItem ? 'favorite' : 'favorite_border'} ariaHidden />
             </button>
           </div>
 
           <div className="product-trust">
             <div className="product-trust-item">
               <Icon name="local_shipping" ariaHidden />
-              <div><h4>حد الشحن المجاني</h4><p>توصيل مجاني للطلبات فوق {formatCurrency(store?.shipping?.freeAbove || 500, store?.currency)}</p></div>
+              <div><h4>الشحن</h4><p>{store?.shipping?.freeAbove ? `توصيل مجاني للطلبات فوق ${formatCurrency(store.shipping.freeAbove, store?.currency)}` : 'رسوم الشحن تُحسب حسب الوجهة عند إتمام الطلب'}</p></div>
             </div>
             <div className="product-trust-item">
               <Icon name="support_agent" ariaHidden />
@@ -298,7 +323,7 @@ export const StoreProduct: FunctionalComponent<Props> = ({ id }) => {
             </div>
             <div className="product-trust-item">
               <Icon name="verified_user" ariaHidden />
-              <div><h4>ضمان الاسترجاع</h4><p>إمكانية الاسترجاع خلال 14 يوماً</p></div>
+              <div><h4>سياسة الاسترجاع</h4><p>تُطبق سياسة الاسترجاع الخاصة بالمتجر على الطلبات المكتملة.</p></div>
             </div>
           </div>
 

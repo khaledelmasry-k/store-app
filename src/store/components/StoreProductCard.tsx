@@ -1,10 +1,14 @@
 import { FunctionalComponent } from 'preact'
-import { Link } from 'wouter'
+import { Link, useLocation } from 'wouter'
 import { useStore } from '../../shared/hooks/useStore'
+import { useAuth } from '../../shared/hooks/useAuth'
+import { useCollection } from '../../shared/hooks/useCollection'
+import { useToast } from '../../shared/hooks/useToast'
+import { wishlistService } from '../../shared/services/system'
 import { SmartImage } from '../../shared/components/ui/SmartImage'
 import { formatCurrency } from '../../shared/utils/format'
 import { Icon } from '../../shared/components/ui/Icon'
-import type { Product } from '../../shared/types'
+import type { Product, WishlistItem } from '../../shared/types'
 import './StoreProductCard.css'
 
 interface Props {
@@ -24,6 +28,11 @@ interface Props {
  */
 export const StoreProductCard: FunctionalComponent<Props> = ({ product, categoryName }) => {
   const { store } = useStore()
+  const { user } = useAuth()
+  const [, navigate] = useLocation()
+  const toast = useToast()
+  const wishlistRes = useCollection<WishlistItem>('wishlist', { where: { userId: { value: user?.uid || '__none__' } } }, user?.role === 'customer' && !!user.uid)
+  const wished = wishlistRes.data.some((item) => item.productId === product.id && (!item.storeId || item.storeId === store?.id))
   const discount =
     product.oldPrice && product.oldPrice > product.price
       ? Math.round(((product.oldPrice - product.price) / product.oldPrice) * 100)
@@ -42,7 +51,7 @@ export const StoreProductCard: FunctionalComponent<Props> = ({ product, category
   const goto = `/store/${store?.slug}/product/${product.id}`
 
   return (
-    <article className={`spc-card${!inStock ? ' spc-card--out' : ''}`}>
+    <article className={`spc-card store-card${!inStock ? ' spc-card--out' : ''}`}>
       <Link href={goto} className="spc-media" aria-label={product.name}>
         <SmartImage src={product.images?.[0]} alt={product.name} className="spc-media-img" placeholderClassName="spc-media-img" />
         {product.featured && <span className="spc-badge spc-badge--new">جديد</span>}
@@ -55,8 +64,32 @@ export const StoreProductCard: FunctionalComponent<Props> = ({ product, category
           </button>
         </div>
       </Link>
-      <button type="button" className="spc-favorite" aria-label="إضافة للمفضلة">
-        <Icon name="favorite_border" ariaHidden />
+      <button
+        type="button"
+        className="spc-favorite"
+        aria-label={wished ? 'إزالة من المفضلة' : 'إضافة للمفضلة'}
+        aria-pressed={wished}
+        onClick={async (event) => {
+          event.preventDefault()
+          event.stopPropagation()
+          if (!user || user.role !== 'customer') {
+            navigate(`/store/${store?.slug}/login?returnTo=${encodeURIComponent(goto)}`)
+            return
+          }
+          try {
+            if (wished) {
+              await wishlistService.remove(wishlistRes.data.find((item) => item.productId === product.id && (item.storeId === store?.id || !item.storeId))?.id || '')
+              toast.push('تمت الإزالة من المفضلة')
+            } else {
+              await wishlistService.create({ userId: user.uid, storeId: store?.id || '', productId: product.id })
+              toast.push('تمت الإضافة إلى المفضلة')
+            }
+          } catch {
+            toast.push('تعذر تحديث المفضلة', 'حاول مرة أخرى', 'error')
+          }
+        }}
+      >
+        <Icon name={wished ? 'favorite' : 'favorite_border'} ariaHidden />
       </button>
       <div className="spc-body">
         {colorCount > 0 && (

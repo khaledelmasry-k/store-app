@@ -11,7 +11,7 @@ import { Input } from '../../shared/components/ui/Input'
 import { Select } from '../../shared/components/ui/Select'
 import { Textarea } from '../../shared/components/ui/Textarea'
 import { SmartImage } from '../../shared/components/ui/SmartImage'
-import { createOrderCallable } from '../../shared/services/auth'
+import { createOrderCallable, quoteCouponCallable } from '../../shared/services/auth'
 import { GOVER_EG } from '../../shared/utils/constants'
 import { formatCurrency, todayKey } from '../../shared/utils/format'
 import { cartSubtotal, lineSubtotal, piecesLabel } from '../../shared/utils/pricing'
@@ -25,20 +25,43 @@ export const StoreCheckout: FunctionalComponent = () => {
   const cart = useCart()
   const toast = useToast()
   const { user } = useAuth()
-  const [form, setForm] = useState({ customerName: '', phone: '', governorate: '', city: '', address: '', notes: '', paymentMethod: 'cod' })
+  const [form, setForm] = useState({ customerName: '', phone: '', governorate: '', city: '', address: '', notes: '', paymentMethod: 'cod', couponCode: '' })
   const [loading, setLoading] = useState(false)
+  const [couponLoading, setCouponLoading] = useState(false)
+  const [coupon, setCoupon] = useState<{ code: string; discount: number } | null>(null)
   const [done, setDone] = useState<{ orderNumber: string; phone: string } | null>(null)
 
   const zonesRes = useCollection<ShippingZone>('shipping', { storeId: store?.id || '' }, !!store?.id && cart.items.length > 0)
   const subtotal = cartSubtotal(cart.items)
 
   const quote = calculateShipping({ store, zones: zonesRes.data, subtotal, governorate: form.governorate })
-  const total = subtotal + quote.fee
+  const total = subtotal + quote.fee - (coupon?.discount || 0)
+
+  const applyCoupon = async () => {
+    const code = form.couponCode.trim().toUpperCase()
+    if (!code || !store?.id) return
+    setCouponLoading(true)
+    try {
+      const res = await quoteCouponCallable({ storeId: store.id, code, subtotal })
+      const data = res.data as { code: string; discount: number }
+      setCoupon({ code: data.code, discount: Number(data.discount || 0) })
+      toast.push(`تم تطبيق الخصم: ${formatCurrency(Number(data.discount || 0))}`)
+    } catch (err: any) {
+      setCoupon(null)
+      toast.push('تعذر تطبيق الكوبون', err?.message || 'تحقق من الكود وشروطه', 'error')
+    } finally {
+      setCouponLoading(false)
+    }
+  }
 
   const submit = async (e: Event) => {
     e.preventDefault()
     if (!form.customerName || !form.phone || !form.governorate || !form.city || !form.address) {
       toast.push('أكمل جميع الحقول المطلوبة', undefined, 'error')
+      return
+    }
+    if (!quote.available) {
+      toast.push('الشحن غير متوفر لهذه الوجهة', quote.unavailableReason || 'اختر محافظة مغطاة قبل المتابعة', 'error')
       return
     }
     setLoading(true)
@@ -50,6 +73,7 @@ export const StoreCheckout: FunctionalComponent = () => {
         items: cart.items.map((i) => ({ productId: i.productId, quantity: i.quantity, color: i.color, size: i.size, variantId: i.variantId })),
         customer: { name: form.customerName, phone: form.phone, governorate: form.governorate, city: form.city, address: form.address, notes: form.notes || '' },
         paymentMethod: form.paymentMethod,
+        couponCode: coupon?.code || form.couponCode.trim() || undefined,
         salesLinkRef,
         landingPageId,
       })
@@ -71,7 +95,7 @@ export const StoreCheckout: FunctionalComponent = () => {
   if (done) {
     const isGuest = !user || user.role !== 'customer'
     return (
-      <div className="storefront-page storefront-checkout storefront-confirmation">
+      <div className="storefront-page storefront-checkout storefront-confirmation order-confirmed">
         <div className="confirmation-card">
           <div className="confirmation-icon">
             <Icon name="check_circle" />
@@ -126,9 +150,22 @@ export const StoreCheckout: FunctionalComponent = () => {
               <h2 className="checkout-section-title">المعلومات الشخصية</h2>
             </div>
             <div className="form-grid">
-              <Input label="الاسم بالكامل" value={form.customerName} onChange={(v) => setForm({ ...form, customerName: v })} required />
+              <Input label="الاسم الكامل" value={form.customerName} onChange={(v) => setForm({ ...form, customerName: v })} required />
               <Input label="رقم الهاتف" value={form.phone} onChange={(v) => setForm({ ...form, phone: v })} placeholder="01xxxxxxxxx" required type="tel" />
             </div>
+          </section>
+
+          <section className="checkout-section">
+            <div className="checkout-section-header">
+              <Icon name="local_offer" className="checkout-section-icon" />
+              <h2 className="checkout-section-title">كود الخصم</h2>
+            </div>
+            <div className="coupon-entry-row">
+              <Input label="الكود (اختياري)" value={form.couponCode} onChange={(v) => { setForm({ ...form, couponCode: v.toUpperCase() }); setCoupon(null) }} placeholder="مثال: SAVE10" />
+              <Button type="button" variant="outline" loading={couponLoading} disabled={!form.couponCode.trim()} onClick={applyCoupon}>تطبيق</Button>
+            </div>
+            {coupon && <p className="coupon-applied" role="status">تم تطبيق خصم {formatCurrency(coupon.discount)}</p>}
+            <p className="muted small">سيتم التحقق من صلاحية الكود وتطبيقه على الخادم.</p>
           </section>
 
           <section className="checkout-section">
@@ -151,13 +188,13 @@ export const StoreCheckout: FunctionalComponent = () => {
             </div>
             <div className="shipping-options">
               <label className="shipping-option">
-                <input type="radio" name="shipping" value="standard" checked />
+                <input type="radio" name="shipping" value="standard" checked disabled={!quote.available} />
                 <div className="shipping-option-content">
                   <div className="shipping-option-main">
                     <span className="shipping-option-name">شحن قياسي</span>
                     <span className="shipping-option-price">{quote.freeDelivery ? 'مجاني' : formatCurrency(quote.fee)}</span>
                   </div>
-                  <p className="shipping-option-desc">تسليم خلال 3-5 أيام عمل</p>
+                    <p className="shipping-option-desc">{quote.available ? 'التوصيل حسب سياسة المتجر' : quote.unavailableReason}</p>
                 </div>
               </label>
               {quote.policy && (
@@ -198,7 +235,7 @@ export const StoreCheckout: FunctionalComponent = () => {
             </div>
           </section>
 
-          <Button type="submit" block size="lg" loading={loading} icon="shopping_cart_checkout" className="checkout-submit-btn">
+          <Button type="submit" block size="lg" loading={loading} disabled={!quote.available} icon="shopping_cart_checkout" className="checkout-submit-btn">
             تأكيد الطلب — {formatCurrency(total)}
           </Button>
         </form>
@@ -231,7 +268,9 @@ export const StoreCheckout: FunctionalComponent = () => {
             <span>الشحن {quote.method ? `(${quote.method})` : ''}</span>
             <span>{quote.freeDelivery ? 'مجاني' : formatCurrency(quote.fee)}</span>
           </div>
+          {coupon && <div className="summary-row"><span>الخصم ({coupon.code})</span><span>-{formatCurrency(coupon.discount)}</span></div>}
           <div className="summary-row total"><span>الإجمالي</span><strong>{formatCurrency(total)}</strong></div>
+          {!quote.available && <p className="checkout-shipping-error" role="alert">{quote.unavailableReason}</p>}
           {quote.policy && <p className="muted small mt-1">{quote.policy}</p>}
           <p className="muted small mt-1">تاريخ اليوم: {todayKey()}</p>
         </aside>

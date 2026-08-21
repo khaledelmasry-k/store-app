@@ -395,13 +395,32 @@ match /orders/{id} {
     // wishlist (customer) — own read/write
     // ─────────────────────────────────────────────────────────────
     match /addresses/{id} {
-      allow read, write: if isSameUser(resource.data.userId)
+      allow read: if isSameUser(resource.data.userId)
+        || isPlatformAdmin()
+        || (isMerchant() && canAccessStore(resource.data.storeId));
+      allow create: if isSameUser(request.resource.data.userId)
+        || isPlatformAdmin()
+        || (isMerchant() && canAccessStore(request.resource.data.storeId));
+      allow update: if (
+          isSameUser(resource.data.userId)
+          && request.resource.data.userId == resource.data.userId
+          && request.resource.data.storeId == resource.data.storeId
+        )
+        || isPlatformAdmin()
+        || (isMerchant() && canAccessStore(resource.data.storeId)
+          && request.resource.data.storeId == resource.data.storeId
+          && request.resource.data.userId == resource.data.userId);
+      allow delete: if isSameUser(resource.data.userId)
         || isPlatformAdmin()
         || (isMerchant() && canAccessStore(resource.data.storeId));
     }
 
     match /wishlist/{id} {
-      allow read, write: if isSameUser(resource.data.userId);
+      allow read: if isSameUser(resource.data.userId);
+      allow create: if isSameUser(request.resource.data.userId);
+      allow update: if isSameUser(resource.data.userId)
+        && request.resource.data.userId == resource.data.userId;
+      allow delete: if isSameUser(resource.data.userId);
     }
   }
 }

@@ -761,6 +761,7 @@ export interface Address extends Partial<FirestoreMeta> {
 export interface WishlistItem extends Partial<FirestoreMeta> {
   id: string
   userId: string
+  storeId?: string
   productId: string
 }
 

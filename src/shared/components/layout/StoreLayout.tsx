@@ -149,8 +149,8 @@ export const StoreLayout: FunctionalComponent<Props> = ({ children }) => {
           <div>
             <h4>الدعم</h4>
             <Link href={`${base}/track`} className="store-footer-link">تتبع الطلب</Link>
-            <Link href="#" className="store-footer-link">سياسة الاسترجاع</Link>
-            <Link href="#" className="store-footer-link">تواصل معنا</Link>
+            <span className="store-footer-link store-footer-link--muted">سياسة الاسترجاع</span>
+            {store?.phone ? <a href={`tel:${store.phone}`} className="store-footer-link ltr-text">تواصل معنا</a> : <span className="store-footer-link store-footer-link--muted">تواصل معنا</span>}
           </div>
         </div>
         <div className="store-footer-bottom">

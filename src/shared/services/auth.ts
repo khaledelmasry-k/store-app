@@ -143,6 +143,12 @@ export function manageCouponCallable(input: {
   return fn(input)
 }
 
+export function quoteCouponCallable(input: { storeId: string; code: string; subtotal: number }) {
+  const functions = getFunctions()
+  const fn = httpsCallable(functions, 'quoteCoupon')
+  return fn(input)
+}
+
 export function inviteStaffCallable(input: Record<string, unknown>) {
   const functions = getFunctions()
   const fn = httpsCallable(functions, 'inviteStaff')

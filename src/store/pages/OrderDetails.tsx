@@ -1,5 +1,4 @@
 import { FunctionalComponent } from 'preact'
-import { useEffect } from 'preact/hooks'
 import { Link, useParams } from 'wouter'
 import { useStore } from '../../shared/hooks/useStore'
 import { useAuth } from '../../shared/hooks/useAuth'
@@ -23,15 +22,11 @@ export const StoreOrderDetails: FunctionalComponent<Props> = ({ id }) => {
   const orderId = params.id || id
   const { data: order, loading } = useDocument<Order>('orders', orderId)
 
-  useEffect(() => {
-    if (order && order.phone !== user?.phone && user?.role !== 'superAdmin') {
-      // Order doesn't belong to this user
-    }
-  }, [order, user])
+  const ownsOrder = Boolean(order && store?.id && order.storeId === store.id && user?.role === 'customer' && order.customerId === user.uid)
 
   if (loading) return <div className="loading-screen"><span className="spinner spinner-lg" /></div>
 
-  if (!order || (order.phone !== user?.phone && user?.role !== 'superAdmin')) {
+  if (!order || !ownsOrder) {
     return (
       <div className="storefront-page storefront-order-details">
         <div className="auth-required">
