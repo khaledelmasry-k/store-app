@@ -39,6 +39,7 @@ const PlatformTickets = lazy(() => import('./platform/pages/Tickets'))
 const PlatformAudit = lazy(() => import('./platform/pages/Audit'))
 const PlatformNotifications = lazy(() => import('./platform/pages/Notifications'))
 const PlatformSettings = lazy(() => import('./platform/pages/Settings'))
+const PlatformShippingCompanies = lazy(() => import('./platform/pages/ShippingCompanies'))
 
 const MerchantDashboard = lazy(() => import('./merchant/pages/Dashboard'))
 const MerchantProducts = lazy(() => import('./merchant/pages/Products'))
@@ -144,6 +145,7 @@ function PlatformRoutes() {
       <Route path="/audit" component={() => <PlatformAudit />} />
       <Route path="/notifications" component={() => <PlatformNotifications />} />
       <Route path="/settings" component={() => <PlatformSettings />} />
+      <Route path="/shipping-companies" component={() => <PlatformShippingCompanies />} />
       <Route component={() => <Redirect to="/platform" replace />} />
     </ZoneRouter>
   )
