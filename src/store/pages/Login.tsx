@@ -77,8 +77,9 @@ export const StoreLogin: FunctionalComponent = () => {
   }
 
   return (
-    <div className="storefront-page storefront-login">
+    <div className="storefront-page storefront-login storefront-login--stitch">
       <div className="auth-container">
+        <div className="auth-context"><Icon name="verified_user" ariaHidden /><span>تجربة تسوق آمنة وخصوصية كاملة</span></div>
         <div className="auth-card">
           <div className="auth-header">
             <Link href={`/store/${store?.slug}`} className="auth-brand">

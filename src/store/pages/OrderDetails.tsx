@@ -28,7 +28,7 @@ export const StoreOrderDetails: FunctionalComponent<Props> = ({ id }) => {
 
   if (!order || !ownsOrder) {
     return (
-      <div className="storefront-page storefront-order-details">
+      <div className="storefront-page storefront-order-details storefront-order-details--stitch">
         <div className="auth-required">
           <Icon name="visibility_off" className="auth-icon" />
           <h1>الطلب غير موجود</h1>

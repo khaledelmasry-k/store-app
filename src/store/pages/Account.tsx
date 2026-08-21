@@ -103,7 +103,7 @@ if (!user || user.role !== 'customer') {
   }
 
   return (
-    <div className="storefront-page storefront-account">
+    <div className="storefront-page storefront-account storefront-account--stitch">
       <aside className="account-sidebar">
         <div className="account-header">
           <Avatar name={user.name} size="lg" />

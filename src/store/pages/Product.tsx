@@ -164,7 +164,7 @@ export const StoreProduct: FunctionalComponent<Props> = ({ id }) => {
   }
 
   return (
-    <div className="storefront-page storefront-product">
+    <div className="storefront-page storefront-product storefront-product--stitch">
       <nav className="store-crumb" aria-label="خيط البيان">
         <Link href={`/store/${store?.slug}`}>الرئيسية</Link>
         <Icon name="chevron_left" ariaHidden />
@@ -200,7 +200,7 @@ export const StoreProduct: FunctionalComponent<Props> = ({ id }) => {
           )}
         </div>
 
-        <div className="product-info">
+        <div className="product-info product-info--purchase">
           <div className="product-avail">
             <span className={`product-avail-dot${outOfStock ? ' product-avail-dot--out' : ''}`} />
             <span>{outOfStock ? 'نفد المخزون' : `متوفر (${selectedStock} قطعة)`}</span>

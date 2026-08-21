@@ -267,6 +267,24 @@
 }
 .app-shell--platform .platform-settings-page > .card > .card-header,
 .app-shell--platform .platform-settings-page > .card > .card-body { padding-inline: 20px; }
+.app-shell--platform .platform-products-page .table-wrap,
+.app-shell--platform .platform-orders-page .table-wrap,
+.app-shell--platform .platform-customers-page .table-wrap { overflow: auto; }
+.app-shell--platform .platform-products-page .stats-grid,
+.app-shell--platform .platform-customers-page .stats-grid { grid-template-columns: repeat(4, minmax(0, 1fr)); }
+.app-shell--platform .platform-orders-page .orders-toolbar,
+.app-shell--platform .platform-customers-page .filter-bar { border-radius: 12px; background: #f1f3ff; padding: 12px; }
+.app-shell--platform .platform-order-details-page .order-detail-grid,
+.app-shell--platform .platform-subscription-detail-page .subscription-detail-grid { align-items: start; gap: 20px; }
+.app-shell--platform .platform-subscriptions-page .tabs,
+.app-shell--platform .platform-coupons-page .tabs { margin-block: 4px 16px; }
+.app-shell--platform .platform-reports-page .chart-card,
+.app-shell--platform .platform-reports-page .report-chart { min-height: 260px; border-radius: 14px; background: #fff; border: 1px solid #c7c4d8; }
+.app-shell--platform .platform-audit-page table td:first-child,
+.app-shell--platform .platform-audit-page table th:first-child { font-family: ui-monospace, SFMono-Regular, Menlo, monospace; }
+.app-shell--platform .platform-notifications-page .notification-item { border-inline-start: 3px solid #4f46e5; padding-inline-start: 14px; }
+.app-shell--platform .platform-shipping-companies-page .shipping-company-card,
+.app-shell--platform .platform-store-details-page .store-overview-card { border-radius: 14px; }
 
 @media (max-width: 1180px) {
   .app-shell--platform .platform-stat-grid { grid-template-columns: repeat(3, minmax(0, 1fr)); }

@@ -68,11 +68,12 @@ export const StoreTrack: FunctionalComponent = () => {
   }
 
   return (
-    <div className="storefront-page storefront-track">
-      <div className="storefront-page-head">
+    <div className="storefront-page storefront-track storefront-track--stitch">
+      <header className="track-hero">
+        <span className="page-eyebrow">خدمة ما بعد البيع</span>
         <h1 className="page-title">تتبع طلبك</h1>
         <p className="page-subtitle">أدخل رقم الطلب ورقم الهاتف للبحث عن طلبك</p>
-      </div>
+      </header>
 
       <form onSubmit={search} className="track-form">
         <div className="form-grid">

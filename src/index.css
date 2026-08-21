@@ -11306,6 +11306,33 @@ body {
   .cart-stepper i, .checkout-stepper i { width: 24px; }
 }
 
+/* Remaining storefront routes: page-specific V3 compositions. */
+.storefront-product--stitch .product-detail {
+  display: grid;
+  grid-template-columns: minmax(0, 1.15fr) minmax(360px, .85fr);
+  gap: 40px;
+  align-items: start;
+}
+.storefront-product--stitch .product-info--purchase {
+  padding: 24px;
+  border: 1px solid var(--outline-variant, #c7c4d8);
+  border-radius: 16px;
+  background: var(--surface, #fff);
+}
+.storefront-product--stitch .product-gallery-main { border-radius: 16px; overflow: hidden; background: var(--surface-container-low, #f1f3ff); }
+.track-hero { max-width: 700px; margin-inline: auto; text-align: center; padding-block: 8px 20px; }
+.storefront-track--stitch .track-form { max-width: 700px; margin-inline: auto; padding: 24px; border: 1px solid var(--outline-variant, #c7c4d8); border-radius: 16px; background: var(--surface, #fff); }
+.storefront-track--stitch .track-results { max-width: 900px; margin: 24px auto 0; }
+.storefront-login--stitch .auth-context { display: flex; justify-content: center; align-items: center; gap: 6px; margin-block-end: 12px; color: var(--muted-foreground, #464555); font-size: 12px; }
+.storefront-account--stitch .account-layout,
+.storefront-order-details--stitch .order-details-layout { align-items: start; }
+.storefront-account--stitch .account-sidebar { border-radius: 14px; }
+
+@media (max-width: 800px) {
+  .storefront-product--stitch .product-detail { grid-template-columns: 1fr; gap: 20px; }
+  .storefront-product--stitch .product-info--purchase { padding: 18px; }
+}
+
 @media (max-width: 1024px) {
   .order-detail-grid {
     grid-template-columns: 1fr;
