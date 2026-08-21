@@ -291,6 +291,24 @@ match /orders/{id} {
       allow delete: if canWriteSettings(resource.data.storeId);
     }
 
+    // Platform-managed carrier marketplace. Active company profiles are safe
+    // for storefront/merchant comparison; pricing changes never rewrite shipment
+    // snapshots because shipment writes are callable/server-owned.
+    match /shippingCompanies/{id} {
+      allow read: if (resource.data.status == 'active') || isPlatformAdmin();
+      allow write: if isPlatformAdmin();
+    }
+
+    match /shipments/{id} {
+      allow read: if isAdminOrStore(resource.data.storeId);
+      allow write: if false;
+    }
+
+    match /shippingCompanyReviews/{id} {
+      allow read: if isPlatformAdmin() || isSameUser(resource.data.merchantId);
+      allow write: if false;
+    }
+
     // ─────────────────────────────────────────────────────────────
     // plans — public read (pricing), admin-only write
     // ─────────────────────────────────────────────────────────────

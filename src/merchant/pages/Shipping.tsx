@@ -19,7 +19,7 @@ import { shippingService } from '../../shared/services/billing'
 import { storesService } from '../../shared/services/stores'
 import { formatCurrency } from '../../shared/utils/format'
 import { GOVER_EG } from '../../shared/utils/constants'
-import type { ShippingProvider, ShippingZone } from '../../shared/types'
+import type { ShippingCompany, ShippingProvider, ShippingZone } from '../../shared/types'
 import { Icon } from '../../shared/components/ui/Icon'
 import './Shipping.css'
 
@@ -46,9 +46,12 @@ export const MerchantShipping: FunctionalComponent = () => {
   const { store } = useStore()
   const storeId = store?.id || ''
   const shippingRes = useCollection<ShippingZone>('shipping', { storeId })
+  const companiesRes = useCollection<ShippingCompany>('shippingCompanies', {}, true)
   const zones = shippingRes.data
   const toast = useToast()
   const [tab, setTab] = useState('settings')
+  const [companySearch, setCompanySearch] = useState('')
+  const [companySort, setCompanySort] = useState<'value' | 'price' | 'rating' | 'speed'>('value')
   const [savingCfg, setSavingCfg] = useState(false)
   const [zoneOpen, setZoneOpen] = useState(false)
   const [provOpen, setProvOpen] = useState(false)
@@ -196,6 +199,17 @@ export const MerchantShipping: FunctionalComponent = () => {
   const zoneCount = zones.length
   const activeZones = zones.filter((z) => z.active).length
   const activeProviders = providers.filter((p) => p.active).length
+  const eligibleCompanies = companiesRes.data
+    .filter((company) => company.status === 'active')
+    .filter((company) => !companySearch.trim() || company.name.toLowerCase().includes(companySearch.trim().toLowerCase()))
+    .sort((a, b) => {
+      if (companySort === 'rating') return Number(b.averageRating || 0) - Number(a.averageRating || 0)
+      if (companySort === 'speed') return Number(a.ratesByZone?.default?.estimatedDays || 99) - Number(b.ratesByZone?.default?.estimatedDays || 99)
+      if (companySort === 'price') return Number(a.ratesByZone?.default?.deliveryPrice || 0) - Number(b.ratesByZone?.default?.deliveryPrice || 0)
+      const av = Number(a.averageRating || 0) * Math.log10(Number(a.completedShipments || 0) + 10)
+      const bv = Number(b.averageRating || 0) * Math.log10(Number(b.completedShipments || 0) + 10)
+      return bv - av
+    })
 
   return (
     <div className="merchant-operations merchant-shipping-page">
@@ -203,6 +217,7 @@ export const MerchantShipping: FunctionalComponent = () => {
 
       <Tabs
         tabs={[
+          { key: 'marketplace', label: 'شركات الشحن', count: eligibleCompanies.length },
           { key: 'settings', label: 'الإعدادات' },
           { key: 'zones', label: 'مناطق الشحن', count: zoneCount },
           { key: 'providers', label: 'شركات التوصيل', count: activeProviders },
@@ -210,6 +225,36 @@ export const MerchantShipping: FunctionalComponent = () => {
         active={tab}
         onChange={setTab}
       />
+
+      {tab === 'marketplace' && (
+        <section className="shipping-marketplace mt-2" aria-label="مقارنة شركات الشحن">
+          <div className="card shipping-marketplace-head">
+            <div>
+              <h2 className="card-title">قارن شركات الشحن قبل إسناد الشحنة</h2>
+              <p className="muted small">الأسعار المعروضة تقديرية، ويُحفظ السعر المختار كلقطة تاريخية على الشحنة.</p>
+            </div>
+            <div className="shipping-marketplace-controls">
+              <Input label="بحث" value={companySearch} onChange={setCompanySearch} placeholder="اسم الشركة" />
+              <label className="field"><span className="field-label">ترتيب</span><select className="input" value={companySort} onChange={(e) => setCompanySort((e.target as HTMLSelectElement).value as typeof companySort)}><option value="value">أفضل قيمة</option><option value="price">الأرخص</option><option value="rating">الأعلى تقييماً</option><option value="speed">الأسرع</option></select></label>
+            </div>
+          </div>
+          {companiesRes.loading ? <Loading /> : eligibleCompanies.length === 0 ? (
+            <Card title="لا توجد شركات شحن متاحة"><p className="muted">سيظهر هنا ما تديره إدارة المنصة من شركات فعالة.</p></Card>
+          ) : (
+            <div className="shipping-company-grid">
+              {eligibleCompanies.map((company) => {
+                const rate = company.ratesByZone?.default || Object.values(company.ratesByZone || {})[0]
+                return <Card key={company.id} className="shipping-company-card">
+                  <div className="shipping-company-brand"><div className="shipping-company-logo">{company.logo ? <img src={company.logo} alt="" /> : <Icon name="local_shipping" ariaHidden />}</div><div><h3>{company.name}</h3><Badge tone="green">متاحة</Badge></div></div>
+                  <div className="shipping-company-metrics"><span><strong>{formatCurrency(Number(rate?.deliveryPrice || 0))}</strong><small>التوصيل</small></span><span><strong>{formatCurrency(Number(rate?.returnPrice || 0))}</strong><small>المرتجع</small></span><span><strong>★ {Number(company.averageRating || 0).toFixed(1)}</strong><small>{company.reviewsCount || 0} مراجعة موثقة</small></span></div>
+                  <div className="shipping-company-meta"><span><Icon name="schedule" ariaHidden /> {rate?.estimatedDays || 'حسب المنطقة'}</span><span><Icon name="verified" ariaHidden /> نجاح {company.deliverySuccessRate != null ? `${company.deliverySuccessRate}%` : '—'}</span></div>
+                  <p className="muted small">{company.completedShipments || 0} شحنة مكتملة · لا يتم الاختيار تلقائياً</p>
+                </Card>
+              })}
+            </div>
+          )}
+        </section>
+      )}
 
       {tab === 'settings' && (
         <div className="mt-2">

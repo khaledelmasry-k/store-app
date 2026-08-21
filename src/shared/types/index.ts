@@ -53,6 +53,62 @@ export interface ShippingProvider {
   active: boolean
 }
 
+/** Platform-managed carrier offer. Rates are snapshots at shipment assignment time. */
+export interface ShippingCompany extends Partial<FirestoreMeta> {
+  id: string
+  name: string
+  logo?: string
+  status: 'active' | 'disabled' | 'pending'
+  zones?: string[]
+  ratesByZone?: Record<string, { deliveryPrice: number; returnPrice?: number; codFee?: number; additionalFees?: number; estimatedDays?: string }>
+  services?: string[]
+  averageRating?: number
+  reviewsCount?: number
+  completedShipments?: number
+  deliverySuccessRate?: number
+}
+
+export interface ShipmentPriceSnapshot {
+  shippingCompanyId: string
+  shippingCompanyName: string
+  zoneId?: string
+  deliveryPrice: number
+  returnPrice: number
+  codFee: number
+  additionalFees: number
+  quotedAt: { seconds: number; nanoseconds: number } | string
+}
+
+export interface Shipment extends Partial<FirestoreMeta> {
+  id: string
+  storeId: string
+  orderId: string
+  active?: boolean
+  status: string
+  shippingCompanyId?: string
+  shippingCompanyName?: string
+  priceSnapshot?: ShipmentPriceSnapshot
+  trackingNumber?: string
+  customerShippingFee?: number
+  carrierShippingCost?: number
+  carrierReturnCost?: number
+}
+
+export interface ShippingCompanyReview extends Partial<FirestoreMeta> {
+  id: string
+  merchantId: string
+  shippingCompanyId: string
+  shipmentId: string
+  orderId: string
+  pickupSpeed: number
+  deliverySpeed: number
+  reliability: number
+  shipmentCondition: number
+  supportQuality: number
+  overallRating: number
+  comment?: string
+}
+
 export type ShippingModel = 'flat' | 'zones'
 
 /** Per-store shipping configuration. */

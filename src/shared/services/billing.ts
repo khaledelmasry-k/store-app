@@ -1,6 +1,6 @@
 import { listDocs, getDocById, createDoc, updateDocById, deleteDocById } from '../utils/firestore'
 import { manageCouponCallable } from './auth'
-import type { Subscription, SubscriptionPlan, Transaction, Payment, Coupon, ShippingZone } from '../types'
+import type { Shipment, ShippingCompany, ShippingCompanyReview, Subscription, SubscriptionPlan, Transaction, Payment, Coupon, ShippingZone } from '../types'
 
 const subPath = 'subscriptions'
 const plansPath = 'plans'
@@ -8,6 +8,9 @@ const txnPath = 'transactions'
 const payPath = 'payments'
 const couponPath = 'coupons'
 const shippingPath = 'shipping'
+const shippingCompaniesPath = 'shippingCompanies'
+const shipmentsPath = 'shipments'
+const shippingReviewsPath = 'shippingCompanyReviews'
 
 export const subscriptionsService = {
   list: (storeId?: string) =>
@@ -53,4 +56,10 @@ export const shippingService = {
   create: (storeId: string, data: Omit<ShippingZone, 'id' | 'storeId'>) => createDoc<ShippingZone>(shippingPath, { ...data, storeId }),
   update: (id: string, data: Record<string, unknown>) => updateDocById(shippingPath, id, data),
   remove: (id: string) => deleteDocById(shippingPath, id),
+}
+
+export const shippingMarketplaceService = {
+  companies: () => listDocs<ShippingCompany>(shippingCompaniesPath, { orderBy: { field: 'name' } }),
+  shipments: (storeId: string) => listDocs<Shipment>(shipmentsPath, { storeId, orderBy: { field: 'createdAt' } }),
+  reviews: (merchantId: string) => listDocs<ShippingCompanyReview>(shippingReviewsPath, { where: { merchantId: { value: merchantId } }, orderBy: { field: 'createdAt' } }),
 }
