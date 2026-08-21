@@ -92,6 +92,180 @@
   margin-inline: auto;
 }
 
+/* ─────────────────────────────────────────────────────────────
+   Final visual migration: Stitch V3 geometry and contrast.
+   This is presentation-only; navigation state and data handlers stay
+   in AppShell.tsx.  Keep the shell flat and let the workspace breathe.
+   ───────────────────────────────────────────────────────────── */
+.app-shell {
+  --v3-bg: #f9f9ff;
+  --v3-surface: #ffffff;
+  --v3-surface-low: #f1f3ff;
+  --v3-surface-high: #e9edff;
+  --v3-text: #141b2b;
+  --v3-muted: #464555;
+  --v3-outline: #c7c4d8;
+  --v3-primary: #3525cd;
+  --v3-primary-soft: #e7e5ff;
+  background: var(--v3-bg);
+  color: var(--v3-text);
+}
+
+.app-shell .topbar {
+  background: var(--v3-surface);
+  border: 0;
+  border-bottom: 1px solid var(--v3-outline);
+  border-radius: 0;
+  box-shadow: none;
+  margin: 0;
+  padding-inline: 24px;
+}
+
+.app-shell .topbar-brand-name,
+.app-shell .topbar-brand-sub { color: var(--v3-text); }
+.app-shell .topbar-brand-sub { color: var(--v3-muted); }
+.app-shell .topbar-search {
+  min-height: 40px;
+  max-width: 560px;
+  background: var(--v3-surface-low);
+  border: 1px solid transparent;
+  border-radius: 10px;
+}
+.app-shell .topbar-search:focus-within {
+  border-color: var(--v3-primary);
+  box-shadow: 0 0 0 3px color-mix(in srgb, var(--v3-primary) 14%, transparent);
+}
+.app-shell .topbar-icon-btn { color: var(--v3-muted); }
+.app-shell .topbar-icon-btn:hover { color: var(--v3-primary); background: var(--v3-primary-soft); }
+
+.app-shell .shell-main,
+.app-shell .shell-content,
+.app-shell .route-surface {
+  background: var(--v3-bg);
+}
+.app-shell .shell-main { min-width: 0; }
+.app-shell .shell-content {
+  width: 100%;
+  max-width: none;
+  margin: 0;
+  padding: 28px 32px 52px;
+}
+.app-shell .route-surface { width: 100%; max-width: none; margin: 0; }
+
+.app-shell--dashboard .sidebar {
+  background: var(--v3-surface);
+  color: var(--v3-text);
+  border: 0;
+  box-shadow: none;
+}
+.app-shell--dashboard .sidebar-group-header,
+.app-shell--dashboard .sidebar-child-link,
+.app-shell--dashboard .sidebar-link { color: var(--v3-text); }
+.app-shell--dashboard .sidebar-group-header { color: var(--v3-muted); }
+.app-shell--dashboard .sidebar-group-header:hover,
+.app-shell--dashboard .sidebar-child-link:hover,
+.app-shell--dashboard .sidebar-link:hover { color: var(--v3-primary); background: var(--v3-surface-low); }
+.app-shell--dashboard .sidebar-child-link.active,
+.app-shell--dashboard .sidebar-link.active { color: var(--v3-primary); background: var(--v3-primary-soft); }
+.app-shell--dashboard .sidebar-group-header.active { color: var(--v3-muted); }
+.app-shell--dashboard .sidebar-foot-user strong { color: var(--v3-text); }
+.app-shell--dashboard .sidebar-foot-user small { color: var(--v3-muted); }
+
+.app-shell--platform .sidebar {
+  background: #1b2440;
+  color: #e9edff;
+  border: 0;
+  box-shadow: none;
+}
+.app-shell--platform .sidebar-group-header,
+.app-shell--platform .sidebar-child-link,
+.app-shell--platform .sidebar-link { color: #c7c4d8; }
+.app-shell--platform .sidebar-group-header { color: #e0def0; }
+.app-shell--platform .sidebar-group-header:hover,
+.app-shell--platform .sidebar-child-link:hover,
+.app-shell--platform .sidebar-link:hover { color: #fff; background: rgba(79,70,229,.24); }
+.app-shell--platform .sidebar-child-link.active,
+.app-shell--platform .sidebar-link.active { color: #fff; background: rgba(79,70,229,.38); }
+.app-shell--platform .sidebar-foot-user strong { color: #fff; }
+.app-shell--platform .sidebar-foot-user small { color: #c7c4d8; }
+
+.app-shell .page-header {
+  background: transparent;
+  border: 0;
+  border-radius: 0;
+  box-shadow: none;
+  padding: 0 0 18px;
+  margin: 0;
+  min-height: 0;
+}
+.app-shell .page-header::after { display: none; }
+.app-shell .page-header h1,
+.app-shell .page-title { font-size: clamp(24px, 2.2vw, 30px); line-height: 1.25; color: var(--v3-text); }
+.app-shell .page-header p,
+.app-shell .page-subtitle { color: var(--v3-muted); }
+
+.app-shell .card,
+.app-shell .data-table,
+.app-shell .table-wrap {
+  background: var(--v3-surface);
+  border: 1px solid var(--v3-outline);
+  border-radius: 12px;
+  box-shadow: 0 8px 24px rgba(31, 38, 75, .05);
+}
+.app-shell .card:hover { transform: none; }
+.app-shell .input,
+.app-shell .select,
+.app-shell .textarea,
+.app-shell input,
+.app-shell select,
+.app-shell textarea {
+  background: var(--v3-surface);
+  border-color: var(--v3-outline);
+  color: var(--v3-text);
+  border-radius: 8px;
+}
+.app-shell .btn-primary { background: var(--v3-primary); border-color: var(--v3-primary); }
+.app-shell--platform .platform-page-intro {
+  display: grid;
+  gap: 4px;
+  margin-block-end: 8px;
+}
+.app-shell--platform .platform-intro-meta {
+  color: #777587;
+  font-size: 12px;
+  padding-inline: 2px;
+}
+.app-shell--platform .platform-intro-dot {
+  display: inline-block;
+  width: 6px;
+  height: 6px;
+  margin-inline: 6px;
+  border-radius: 50%;
+  background: #2e9b67;
+  vertical-align: middle;
+}
+.app-shell--platform .platform-stat-grid {
+  grid-template-columns: repeat(6, minmax(0, 1fr));
+  gap: 12px;
+}
+.app-shell--platform .platform-stat-grid > * {
+  min-height: 118px;
+  border-radius: 12px;
+}
+.app-shell--platform .platform-feature-card { padding-block: 4px; }
+
+@media (max-width: 1180px) {
+  .app-shell--platform .platform-stat-grid { grid-template-columns: repeat(3, minmax(0, 1fr)); }
+}
+@media (max-width: 640px) {
+  .app-shell--platform .platform-stat-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+}
+
+@media (max-width: 768px) {
+  .app-shell .shell-content { padding: 20px 16px 88px; }
+  .app-shell .topbar { padding-inline: 16px; }
+}
+
 /* ── Warm leftover overrides: ensure merchant uses cool tokens ── */
 .app-shell--dashboard .table td {
   background: var(--surface-container-lowest);
@@ -942,4 +1116,128 @@
     padding-inline: 12px;
     gap: 8px;
   }
+}
+
+/* FINAL V3 OVERRIDES — keep after legacy shell rules so the migration is
+   deterministic in the cascade. Presentation only. */
+.app-shell {
+  --v3-bg: #f9f9ff;
+  --v3-surface: #ffffff;
+  --v3-surface-low: #f1f3ff;
+  --v3-text: #141b2b;
+  --v3-muted: #464555;
+  --v3-outline: #c7c4d8;
+  --v3-primary: #3525cd;
+  --v3-primary-soft: #e7e5ff;
+  background: var(--v3-bg);
+  color: var(--v3-text);
+}
+.app-shell .topbar {
+  background: var(--v3-surface) !important;
+  border: 0 !important;
+  border-bottom: 1px solid var(--v3-outline) !important;
+  border-radius: 0 !important;
+  box-shadow: none !important;
+  margin: 0 !important;
+  padding-inline: 24px;
+}
+.app-shell .topbar-brand-name { color: var(--v3-text); }
+.app-shell .topbar-brand-sub { color: var(--v3-muted); }
+.app-shell .topbar-search {
+  min-height: 40px;
+  max-width: 560px;
+  background: var(--v3-surface-low) !important;
+  border: 1px solid transparent !important;
+  border-radius: 10px !important;
+}
+.app-shell .topbar-search:focus-within { border-color: var(--v3-primary) !important; }
+.app-shell .topbar-icon-btn { color: var(--v3-muted); }
+.app-shell .topbar-icon-btn:hover { color: var(--v3-primary); background: var(--v3-primary-soft); }
+.app-shell .shell-main,
+.app-shell .shell-content,
+.app-shell .route-surface { background: var(--v3-bg) !important; }
+.app-shell .shell-main { min-width: 0; }
+.app-shell .shell-content {
+  width: 100%;
+  max-width: none !important;
+  margin: 0 !important;
+  padding: 28px 32px 52px !important;
+}
+.app-shell .route-surface { width: 100%; max-width: none !important; margin: 0 !important; }
+
+.app-shell--dashboard .sidebar {
+  background: var(--v3-surface) !important;
+  color: var(--v3-text);
+  border: 0 !important;
+  box-shadow: none !important;
+}
+.app-shell--dashboard .sidebar-group-header,
+.app-shell--dashboard .sidebar-child-link,
+.app-shell--dashboard .sidebar-link { color: var(--v3-text) !important; }
+.app-shell--dashboard .sidebar-group-header { color: var(--v3-muted) !important; }
+.app-shell--dashboard .sidebar-group-header:hover,
+.app-shell--dashboard .sidebar-child-link:hover,
+.app-shell--dashboard .sidebar-link:hover { color: var(--v3-primary) !important; background: var(--v3-surface-low) !important; }
+.app-shell--dashboard .sidebar-child-link.active,
+.app-shell--dashboard .sidebar-link.active { color: var(--v3-primary) !important; background: var(--v3-primary-soft) !important; }
+.app-shell--dashboard .sidebar-foot-user strong { color: var(--v3-text) !important; }
+.app-shell--dashboard .sidebar-foot-user small { color: var(--v3-muted) !important; }
+
+.app-shell--platform .sidebar {
+  background: #1b2440 !important;
+  color: #e9edff;
+  border: 0 !important;
+  box-shadow: none !important;
+}
+.app-shell--platform .sidebar-group-header,
+.app-shell--platform .sidebar-child-link,
+.app-shell--platform .sidebar-link { color: #c7c4d8 !important; }
+.app-shell--platform .sidebar-group-header { color: #e0def0 !important; }
+.app-shell--platform .sidebar-group-header:hover,
+.app-shell--platform .sidebar-child-link:hover,
+.app-shell--platform .sidebar-link:hover { color: #fff !important; background: rgba(79,70,229,.24) !important; }
+.app-shell--platform .sidebar-child-link.active,
+.app-shell--platform .sidebar-link.active { color: #fff !important; background: rgba(79,70,229,.38) !important; }
+.app-shell--platform .sidebar-foot-user strong { color: #fff !important; }
+.app-shell--platform .sidebar-foot-user small { color: #c7c4d8 !important; }
+
+.app-shell .page-header {
+  background: transparent !important;
+  border: 0 !important;
+  border-radius: 0 !important;
+  box-shadow: none !important;
+  padding: 0 0 18px !important;
+  margin: 0 !important;
+  min-height: 0 !important;
+}
+.app-shell .page-header::after { display: none !important; }
+.app-shell .page-header h1,
+.app-shell .page-title { font-size: clamp(24px, 2.2vw, 30px) !important; line-height: 1.25; color: var(--v3-text); }
+.app-shell .page-header p,
+.app-shell .page-subtitle { color: var(--v3-muted); }
+.app-shell .card,
+.app-shell .data-table,
+.app-shell .table-wrap {
+  background: var(--v3-surface) !important;
+  border: 1px solid var(--v3-outline) !important;
+  border-radius: 12px !important;
+  box-shadow: 0 8px 24px rgba(31, 38, 75, .05) !important;
+}
+.app-shell .card:hover { transform: none !important; }
+.app-shell .input,
+.app-shell .select,
+.app-shell .textarea,
+.app-shell input,
+.app-shell select,
+.app-shell textarea {
+  background: var(--v3-surface) !important;
+  border-color: var(--v3-outline) !important;
+  color: var(--v3-text);
+  border-radius: 8px;
+}
+.app-shell .btn-primary { background: var(--v3-primary); border-color: var(--v3-primary); }
+
+@media (max-width: 768px) {
+  .app-shell .shell-content { padding: 20px 16px 88px !important; }
+  .app-shell .topbar { padding-inline: 16px; }
 }

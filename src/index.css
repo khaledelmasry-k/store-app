@@ -11182,6 +11182,29 @@ textarea.input:focus {
   flex: 1;
 }
 
+/* V3 visual migration foundation. Keep semantic warning colors, but remove
+   decorative warm workspace surfaces from the application chrome. */
+:root {
+  --background: #f9f9ff;
+  --bg: #f9f9ff;
+  --surface: #ffffff;
+  --surface-2: #f1f3ff;
+  --surface-3: #e9edff;
+  --foreground: #141b2b;
+  --text: #141b2b;
+  --text-secondary: #464555;
+  --text-muted: #777587;
+  --border: #c7c4d8;
+  --primary: #3525cd;
+  --primary-soft: #e7e5ff;
+  --brand-primary: #3525cd;
+  --brand-accent: #4f46e5;
+}
+body {
+  background: var(--background) !important;
+  color: var(--foreground);
+}
+
 @media (max-width: 1024px) {
   .order-detail-grid {
     grid-template-columns: 1fr;

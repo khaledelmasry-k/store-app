@@ -91,17 +91,20 @@ export const PlatformDashboard: FunctionalComponent = () => {
 
   return (
     <div className="platform-operations platform-dashboard-page">
-      <PageHeader
-        title="لوحة تحكم المنصة"
-        subtitle="نظرة عامة على الأداء والاهتمامات العاجلة"
-        actions={
-          <Link href="/platform/merchants">
-            <Button variant="outline" icon="add">إضافة تاجر</Button>
-          </Link>
-        }
-      />
+      <div className="platform-page-intro">
+        <PageHeader
+          title="لوحة تحكم المنصة"
+          subtitle="نظرة عامة على الأداء والاهتمامات العاجلة"
+          actions={
+            <Link href="/platform/merchants">
+              <Button variant="outline" icon="add">إضافة تاجر</Button>
+            </Link>
+          }
+        />
+        <div className="platform-intro-meta">تشغيل المنصة <span className="platform-intro-dot" /> البيانات محدثة الآن</div>
+      </div>
 
-      <div className="stats-grid">
+      <div className="stats-grid platform-stat-grid">
         <StatsCard title="إجمالي التجار" value={stores.length} icon="storefront" tone="primary" />
         <StatsCard title="المتاجر النشطة" value={activeStores} icon="store" tone="green" changeLabel={`${suspendedStores} موقوف`} />
         <StatsCard title="الإيراد الشهري المتكرر" value={metrics.mrr} currency icon="payments" tone="blue" changeLabel={`${metrics.activeSubscriptions} اشتراك مدفوع`} />
@@ -110,7 +113,7 @@ export const PlatformDashboard: FunctionalComponent = () => {
         <StatsCard title="تفعيلات بسعر الإطلاق" value={metrics.launchActivations} icon="local_offer" tone="green" />
       </div>
 
-      <Card title="يحتاج اهتماماً" subtitle={attention.length ? `${attention.length} متجر يتطلب إجراء` : 'كل المتاجر بحالة جيدة'} className="mb-2">
+      <Card title="يحتاج اهتماماً" subtitle={attention.length ? `${attention.length} متجر يتطلب إجراء` : 'كل المتاجر بحالة جيدة'} className="mb-2 platform-feature-card">
         {!overviewLoading && attention.length === 0 ? (
           <EmptyState icon="verified" title="لا توجد اهتمامات" description="جميع الاشتراكات نشطة والحدود ضمن المعدل الطبيعي." />
         ) : (

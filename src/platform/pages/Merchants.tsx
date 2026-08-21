@@ -202,11 +202,12 @@ export const PlatformMerchants: FunctionalComponent = () => {
 
   return (
     <div className="platform-operations platform-merchants-page">
-      <PageHeader
-        title="التجار والمتاجر"
-        subtitle={`${rows.length} متجر مسجل`}
-        actions={
-          <div className="flex">
+      <div className="platform-page-intro">
+        <PageHeader
+          title="التجار والمتاجر"
+          subtitle={`${rows.length} متجر مسجل`}
+          actions={
+            <div className="flex">
             <Button
               variant="soft"
               icon={allVisibleTestSelected ? 'done_all' : 'fact_check'}
@@ -228,9 +229,11 @@ export const PlatformMerchants: FunctionalComponent = () => {
               حذف المحدد ({selectedTestCount})
             </Button>
             <Button icon="add" onClick={() => setOpen(true)}>إضافة متجر</Button>
-          </div>
-        }
-      />
+            </div>
+          }
+        />
+        <div className="platform-intro-meta">إدارة الحسابات والاشتراكات والحدود من مساحة واحدة</div>
+      </div>
 
       {error && (
         <Card className="mb-2">
