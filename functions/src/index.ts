@@ -342,6 +342,15 @@ function resolveSubscriptionStatus(sub: any, nowMs = Date.now()): string {
 }
 
 async function latestSubscriptionForStore(storeId: string): Promise<{ id: string; data: any } | null> {
+  // Store.activeSubscriptionId is the single canonical effective-subscription pointer.
+  // Keep the query fallback only for legacy/local records; callers should converge the
+  // pointer whenever an activation succeeds.
+  const storeSnap = await db.doc(`stores/${storeId}`).get()
+  const pointer = storeSnap.exists ? storeSnap.data()?.activeSubscriptionId : null
+  if (pointer) {
+    const pointed = await db.doc(`subscriptions/${pointer}`).get()
+    if (pointed.exists && pointed.data()?.storeId === storeId) return { id: pointed.id, data: pointed.data() }
+  }
   const snap = await db.collection('subscriptions').where('storeId', '==', storeId).orderBy('createdAt', 'desc').limit(1).get()
   if (snap.empty) return null
   return { id: snap.docs[0].id, data: snap.docs[0].data() }
@@ -535,6 +544,9 @@ async function activateSubscription(
     ...(opts.paymentRequestId ? { lastPaymentRequestId: opts.paymentRequestId } : {}),
     updatedAt: now(),
   })
+  // Effective plan resolution is store-owned; do not duplicate an active pointer
+  // inside subscription documents.
+  await db.doc(`stores/${sub.storeId}`).update({ activeSubscriptionId: subId, updatedAt: now() })
 
   await recordBillingSnapshot(sub.storeId, {
     type: 'activation',
@@ -1189,6 +1201,13 @@ export const approveSubscription = onCall(async (request: CallableRequest<{ subs
   const subSnap = await subRef.get()
   if (!subSnap.exists) throw new HttpsError('not-found', 'الاشتراك غير موجود')
   const sub = subSnap.data()!
+
+  // Idempotent approval: a repeated admin click returns the already-active result
+  // and never creates a second entitlement or billing activation.
+  const storeForApproval = await db.doc(`stores/${sub.storeId}`).get()
+  if (sub.status === 'active' && storeForApproval.exists && storeForApproval.data()?.activeSubscriptionId === subscriptionId) {
+    return { ok: true, alreadyActive: true }
+  }
 
   const { store, user, periodNumber } = await activateSubscription(subscriptionId, sub, request.auth!.uid)
 
