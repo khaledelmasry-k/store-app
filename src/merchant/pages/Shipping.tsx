@@ -248,7 +248,8 @@ export const MerchantShipping: FunctionalComponent = () => {
                   <div className="shipping-company-brand"><div className="shipping-company-logo">{company.logo ? <img src={company.logo} alt="" /> : <Icon name="local_shipping" ariaHidden />}</div><div><h3>{company.name}</h3><Badge tone="green">متاحة</Badge></div></div>
                   <div className="shipping-company-metrics"><span><strong>{formatCurrency(Number(rate?.deliveryPrice || 0))}</strong><small>التوصيل</small></span><span><strong>{formatCurrency(Number(rate?.returnPrice || 0))}</strong><small>المرتجع</small></span><span><strong>★ {Number(company.averageRating || 0).toFixed(1)}</strong><small>{company.reviewsCount || 0} مراجعة موثقة</small></span></div>
                   <div className="shipping-company-meta"><span><Icon name="schedule" ariaHidden /> {rate?.estimatedDays || 'حسب المنطقة'}</span><span><Icon name="verified" ariaHidden /> نجاح {company.deliverySuccessRate != null ? `${company.deliverySuccessRate}%` : '—'}</span></div>
-                  <p className="muted small">{company.completedShipments || 0} شحنة مكتملة · لا يتم الاختيار تلقائياً</p>
+                  <p className="muted small">{company.completedShipments || 0} شحنة مكتملة · أفضل قيمة = السعر + التقييم + سرعة التسليم</p>
+                  {(!company.averageRating || !company.completedShipments) && <p className="muted small">بيانات محدودة — الترتيب يعتمد على المتاح فقط.</p>}
                 </Card>
               })}
             </div>
