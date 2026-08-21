@@ -1,0 +1,177 @@
+.merchant-team-page .team-limit-banner {
+  display: flex;
+  align-items: flex-start;
+  gap: 12px;
+  padding: 16px;
+  margin-bottom: 16px;
+  background: var(--error-container);
+  color: var(--on-error-container);
+  border: 1px solid color-mix(in srgb, var(--error) 20%, transparent);
+  border-radius: 12px;
+}
+.merchant-team-page .team-limit-banner .mk-icon {
+  margin-top: 2px;
+  flex-shrink: 0;
+}
+.merchant-team-page .team-limit-banner h4 {
+  margin: 0 0 2px;
+  font-size: 14px;
+  font-weight: 700;
+}
+.merchant-team-page .team-limit-banner p {
+  margin: 0;
+  font-size: 12px;
+  opacity: 0.9;
+}
+.merchant-team-page .team-limit-upgrade {
+  margin-inline-start: auto;
+  background: var(--error);
+  color: var(--on-error);
+  border: none;
+  border-radius: 8px;
+  padding: 6px 16px;
+  font-size: 13px;
+  font-weight: 700;
+  cursor: pointer;
+}
+.merchant-team-page .team-toolbar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  margin-bottom: 16px;
+}
+.merchant-team-page .team-search {
+  position: relative;
+  flex: 1;
+  max-width: 320px;
+}
+.merchant-team-page .team-search .mk-icon {
+  position: absolute;
+  inset-inline-start: 10px;
+  top: 50%;
+  transform: translateY(-50%);
+  color: var(--text-muted);
+  font-size: 18px;
+  pointer-events: none;
+}
+.merchant-team-page .team-search input {
+  width: 100%;
+  padding: 10px 12px 10px 36px;
+  background: var(--surface-container-lowest);
+  border: 1px solid var(--outline-variant);
+  border-radius: 10px;
+  font-size: 14px;
+  color: var(--text-on-surface);
+  font-family: var(--font-sans);
+}
+.merchant-team-page .team-search input:focus {
+  border-color: var(--primary);
+  outline: none;
+}
+.merchant-team-page .team-table {
+  overflow-x: auto;
+  background: var(--surface-container-lowest);
+  border: 1px solid var(--outline-variant);
+  border-radius: 16px;
+  box-shadow: var(--shadow-sm);
+}
+.merchant-team-page .team-table table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 14px;
+  text-align: start;
+}
+.merchant-team-page .team-table thead th {
+  padding: 12px 24px;
+  background: var(--surface-container-low);
+  border-bottom: 1px solid var(--outline-variant);
+  font-weight: 600;
+  font-size: 13px;
+  color: var(--text-on-surface);
+  text-align: start;
+  white-space: nowrap;
+}
+.merchant-team-page .team-table thead th.actions,
+.merchant-team-page .team-table tbody td.actions {
+  text-align: start;
+}
+.merchant-team-page .team-table tbody td {
+  padding: 14px 24px;
+  border-bottom: 1px solid var(--outline-variant);
+  vertical-align: middle;
+}
+.merchant-team-page .team-table tbody tr:hover {
+  background: color-mix(in srgb, var(--surface-container-low) 50%, transparent);
+}
+.merchant-team-page .team-member-cell {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+.merchant-team-page .team-avatar {
+  width: 32px;
+  height: 32px;
+  flex-shrink: 0;
+  border-radius: 9999px;
+  background: var(--secondary-container);
+  color: var(--on-secondary-container);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-weight: 700;
+  font-size: 12px;
+}
+.merchant-team-page .team-member-name {
+  display: block;
+  font-weight: 500;
+  color: var(--text-on-surface);
+}
+.merchant-team-page .team-member-email {
+  display: block;
+  font-size: 12px;
+  color: var(--text-on-surface-variant);
+}
+.merchant-team-page .team-role-chip {
+  display: inline-flex;
+  align-items: center;
+  padding: 4px 8px;
+  border-radius: 8px;
+  background: var(--surface-container-highest);
+  color: var(--text-on-surface);
+  border: 1px solid var(--outline-variant);
+  font-size: 12px;
+  font-weight: 500;
+}
+.merchant-team-page .team-status {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 4px 10px;
+  border-radius: 9999px;
+  background: var(--surface-container);
+  color: var(--text-on-surface-variant);
+  font-size: 12px;
+  font-weight: 500;
+}
+.merchant-team-page .team-status.is-active {
+  color: var(--primary);
+}
+.merchant-team-page .team-status-dot {
+  width: 6px;
+  height: 6px;
+  border-radius: 9999px;
+  background: var(--text-on-surface-variant);
+}
+.merchant-team-page .team-status.is-active .team-status-dot {
+  background: var(--primary);
+}
+
+@media (max-width: 768px) {
+  .merchant-team-page .team-toolbar {
+    flex-wrap: wrap;
+  }
+  .merchant-team-page .team-search {
+    max-width: none;
+  }
+}

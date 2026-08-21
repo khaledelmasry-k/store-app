@@ -42,8 +42,11 @@ async function login(page: Page, role: 'platform' | 'merchant', email: string, p
   // after hydration. If the login form never renders, sign out and retry.
   await page.waitForTimeout(600)
   if ((await page.locator('button[type="submit"]').count()) === 0) {
-    await page.locator('.topbar-user .user-chip:visible').first().click()
-    await page.getByText('تسجيل الخروج').first().click()
+    const logout = page.locator('.sidebar-logout:visible').first()
+    if ((await logout.count()) === 0) {
+      await page.locator('.sidebar-toggle:visible').first().click()
+    }
+    await page.locator('.sidebar-logout:visible').first().click()
     await page.waitForURL(/\/login/, { timeout: 15000 })
     await page.waitForLoadState('domcontentloaded')
     await page.goto(`/login?role=${role}`, { waitUntil: 'domcontentloaded' })
@@ -55,8 +58,11 @@ async function login(page: Page, role: 'platform' | 'merchant', email: string, p
 }
 
 async function logout(page: Page) {
-  await page.locator('.topbar-user .user-chip:visible').first().click()
-  await page.getByText('تسجيل الخروج').first().click()
+  const logout = page.locator('.sidebar-logout:visible').first()
+  if ((await logout.count()) === 0) {
+    await page.locator('.sidebar-toggle:visible').first().click()
+  }
+  await page.locator('.sidebar-logout:visible').first().click()
   await page.waitForURL(/\/login/, { timeout: 15000 })
   await page.waitForLoadState('domcontentloaded')
   await page.waitForTimeout(500)
@@ -203,8 +209,8 @@ test('trial merchant self-serves: publish + theme + product', async ({ page, bro
 
   // Publish from the dashboard toggle (trialing grant allows it).
   await page.goto('/dashboard', { waitUntil: 'domcontentloaded' })
-  await expect(page.locator('.checklist')).toBeVisible({ timeout: 15000 })
-  await page.locator('.toggle').click()
+  await expect(page.getByRole('button', { name: 'نشر المتجر' })).toBeVisible({ timeout: 15000 })
+  await page.getByRole('button', { name: 'نشر المتجر' }).click()
   await expect.poll(() => storeBySlug(ref).then((s) => s?.data()?.published), { timeout: 15000 }).toBe(true)
 
   // Theme the store on the new Appearance page (auto-saves after debounce).
@@ -375,7 +381,7 @@ test('merchant subscription page shows persisted usage (1020/1500) and countdown
   // Merchant dashboard usage banner too.
   await page.goto('/dashboard', { waitUntil: 'domcontentloaded' })
   await expect(page.getByText(/1,?020 \/ 1,?500 طلب/)).toBeVisible({ timeout: 15000 })
-  await expect(page.getByText('متوسط')).toBeVisible()
+  await expect(page.getByText('متوسط', { exact: true })).toBeVisible()
 })
 
 test('shipping: zones store shows zone fee at checkout and persists shippingFee + snapshot', async ({ page }) => {
@@ -711,7 +717,7 @@ test('copy-link is gated on a real slug: disabled + "غير متاح" without on
 // ─────────────────────────────────────────────────────────────
 test('landing save with empty optional fields works; duplicate slug rejected; duplicate copies get unique slug', async ({ page }) => {
   const { uniq, ref } = ctx()
-  const store = (await storeBySlug(ref))!
+  void storeBySlug(ref)
   const slug = `flow-reg-${uniq}`
 
   // The trialing flow store is on plan-starter, whose default landingPagesLimit
@@ -765,7 +771,7 @@ test('landing save with empty optional fields works; duplicate slug rejected; du
 
 test('landing hero image upload persists to storage + renders on /landing/:slug', async ({ page }) => {
   const { uniq, ref } = ctx()
-  const store = (await storeBySlug(ref))!
+  void storeBySlug(ref)
   const slug = `flow-hero-${uniq}`
 
   await login(page, 'merchant', ctx().email, PASSWORD)

@@ -19,6 +19,18 @@ export interface User extends Partial<FirestoreMeta> {
   active: boolean
   impersonatedBy?: string
   impersonatedUntil?: { seconds: number; nanoseconds: number }
+  addresses?: UserAddress[]
+}
+
+export interface UserAddress {
+  id: string
+  label: string
+  name: string
+  phone: string
+  governorate: string
+  city: string
+  address: string
+  isDefault: boolean
 }
 
 export interface StoreTheme {

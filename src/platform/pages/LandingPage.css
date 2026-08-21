@@ -3479,3 +3479,23 @@ html {
   .landing-stitch-exact .rich-workflow-grid > div { min-height: 85px; padding: 14px; }
   .landing-stitch-exact .rich-workflow-grid span { font-size: 11px; }
 }
+
+/* Legal / informational pages share the public shell. Derived from the
+   approved landing hero rhythm so terms, privacy and contact read as one
+   continuous public experience without inventing a separate design. */
+.landing-stitch-exact .stitch-info-section { padding: 96px 0 128px; background: var(--stitch-page); }
+.landing-stitch-exact .stitch-info-container { max-width: 860px; }
+.landing-stitch-exact .stitch-info-eyebrow { display: inline-block; color: var(--stitch-primary); font-weight: 800; font-size: 14px; margin-bottom: 18px; }
+.landing-stitch-exact .stitch-info-container h1 { margin: 0 0 28px; color: var(--stitch-ink); font-size: clamp(34px, 4vw, 52px); line-height: 1.2; }
+.landing-stitch-exact .stitch-info-container p { margin: 0 0 22px; color: var(--stitch-muted); font-size: 17px; line-height: 2; }
+.landing-stitch-exact .stitch-info-actions { display: flex; align-items: center; gap: 22px; margin-top: 42px; }
+.landing-stitch-exact .stitch-info-actions .btn { min-height: 48px; padding-inline: 25px; border-radius: 8px; box-shadow: none; }
+.landing-stitch-exact .stitch-info-actions .btn:first-child { background: var(--stitch-primary); }
+
+@media (max-width: 760px) {
+  .landing-stitch-exact .stitch-info-section { padding: 64px 0 80px; }
+  .landing-stitch-exact .stitch-info-container h1 { font-size: 34px; }
+  .landing-stitch-exact .stitch-info-container p { font-size: 15px; }
+  .landing-stitch-exact .stitch-info-actions { flex-direction: column; align-items: stretch; gap: 12px; }
+  .landing-stitch-exact .stitch-info-actions .btn { width: 100%; }
+}

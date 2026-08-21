@@ -2,60 +2,107 @@ import { FunctionalComponent } from 'preact'
 import { BrandMark } from '../brand/BrandMark'
 import { Icon } from '../ui/Icon'
 import { AuthTopBar } from './AuthTopBar'
+import './AuthShell.css'
 
-const HIGHLIGHTS = [
-  { icon: 'storefront', label: 'متجر عربي جاهز للبيع' },
-  { icon: 'receipt_long', label: 'طلبات ومخزون في مكان واحد' },
-  { icon: 'trending_up', label: 'ربحية حقيقية عند توفر التكلفة' },
-  { icon: 'workspace_premium', label: 'خطط وحدود واضحة' },
-  { icon: 'link', label: 'روابط بيع قابلة للتتبع' },
-]
+interface AuthShellProps {
+  children: any
+  variant?: 'skeleton' | 'brand'
+}
 
-export const AuthShell: FunctionalComponent<{ children: any }> = ({ children }) => (
-  <div className="auth-screen">
-    <AuthTopBar />
-    <div className="auth-split">
-      <aside className="auth-panel">
-      <div className="auth-panel-top">
-        <BrandMark small />
-        <strong>M&amp;K Store</strong>
+const PANEL_KPIS = ['قيمة الإيرادات', 'عدد الطلبات']
+
+const CHART_BARS = [42, 68, 55, 82, 60, 90, 72]
+
+function SkeletonPanel() {
+  return (
+    <div className="auth-panel-body" aria-hidden="true">
+      <div className="auth-skeleton-dash">
+        <div className="auth-sk-topbar">
+          <span className="auth-sk-dot" />
+          <span className="auth-sk-bar auth-sk-w40" />
+          <span className="auth-sk-avatar" />
+        </div>
+        <div className="auth-sk-kpis">
+          {PANEL_KPIS.map((label) => (
+            <div key={label} className="auth-kpi-tile">
+              <span>{label}</span>
+              <strong>—</strong>
+            </div>
+          ))}
+        </div>
+        <div className="auth-sk-chart">
+          {CHART_BARS.map((h, i) => (
+            <i key={i} className="auth-sk-bar" style={{ height: `${h}%` }} />
+          ))}
+        </div>
       </div>
-
-      <div className="auth-panel-body">
-        <span className="auth-panel-eyebrow">نظام تشغيل التجارة العربية</span>
-        <h2>ادخل إلى مركز قيادة متجرك</h2>
-        <p>
-          نفس الحساب يدير المتجر، الطلبات، المنتجات، العملاء، الاشتراك، والأرباح بدون تبديل أدوات أو نسخ بيانات.
-        </p>
-        <div className="auth-product-mini" aria-hidden="true">
-          <div>
-            <span>طلبات اليوم</span>
-            <strong>24</strong>
-          </div>
-          <div>
-            <span>الربح</span>
-            <strong>493 ج.م</strong>
-          </div>
-          <div>
-            <span>الخطة</span>
-            <strong>GROWTH</strong>
+      <div className="auth-float-row">
+        <div className="auth-float-card">
+          <span>الربح</span>
+          <strong>—</strong>
+          <div className="auth-progress">
+            <i />
           </div>
         </div>
-        <ul className="auth-panel-list">
-          {HIGHLIGHTS.map((h) => (
-            <li key={h.label}>
-              <Icon name={h.icon} ariaHidden />
-              <span>{h.label}</span>
-            </li>
-          ))}
-        </ul>
+        <div className="auth-float-card">
+          <span>عدد الطلبات</span>
+          <strong>—</strong>
+          <div className="auth-progress">
+            <i style={{ width: '44%' }} />
+          </div>
+        </div>
       </div>
-
-        <p className="auth-panel-foot">© {new Date().getFullYear()} M&amp;K Store</p>
-      </aside>
-
-      <main className="auth-main">{children}</main>
+      <div className="auth-float-chip">
+        <Icon name="storefront" ariaHidden />
+        <span>لوحة تحكم متجرك</span>
+      </div>
     </div>
+  )
+}
+
+function BrandPanel() {
+  return (
+    <div className="auth-brand-anchor" aria-hidden="true">
+      <Icon name="storefront" className="auth-brand-icon" ariaHidden />
+      <h1>ابدأ رحلة نمو متجرك اليوم</h1>
+      <p>أنشئ حسابك في دقائق وادخل إلى لوحة تحكم متجرك</p>
+      <ul>
+        <li>
+          <Icon name="check" ariaHidden />
+          لوحة تحكم ذكية
+        </li>
+        <li>
+          <Icon name="check" ariaHidden />
+          تقارير لحظية
+        </li>
+      </ul>
+    </div>
+  )
+}
+
+export const AuthShell: FunctionalComponent<AuthShellProps> = ({ children, variant = 'skeleton' }) => (
+  <div className="auth-screen auth-console">
+    <AuthTopBar />
+    <div className="auth-split">
+      <main className="auth-main">{children}</main>
+      <aside className={`auth-panel${variant === 'brand' ? ' auth-panel--brand' : ''}`}>
+        <div className="auth-panel-top">
+          <BrandMark small />
+          <strong>M&amp;K Store</strong>
+        </div>
+        {variant === 'brand' ? <BrandPanel /> : <SkeletonPanel />}
+      </aside>
+    </div>
+    <footer className="auth-footer">
+      <div className="auth-footer-inner">
+        <span>© {new Date().getFullYear()} M&amp;K Store</span>
+        <nav className="auth-footer-links" aria-label="روابط إضافية">
+          <a href="/privacy">الخصوصية</a>
+          <a href="/terms">الشروط</a>
+          <a href="/contact">تواصل معنا</a>
+        </nav>
+      </div>
+    </footer>
   </div>
 )
 

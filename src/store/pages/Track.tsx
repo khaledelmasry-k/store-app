@@ -2,13 +2,12 @@ import { FunctionalComponent } from 'preact'
 import { useState } from 'preact/hooks'
 import { useStore } from '../../shared/hooks/useStore'
 import { Input } from '../../shared/components/ui/Input'
-import { Card } from '../../shared/components/ui/Card'
-import { Badge } from '../../shared/components/ui/Badge'
 import { Button } from '../../shared/components/ui/Button'
 import { formatCurrency, formatDateTime } from '../../shared/utils/format'
 import { STATUS_LABELS, STATUS_COLORS } from '../../shared/utils/constants'
 import { trackOrderCallable } from '../../shared/services/auth'
 import { OrderTimeline } from '../../shared/components/order/OrderTimeline'
+import { Icon } from '../../shared/components/ui/Icon'
 
 interface TrackedItem {
   name: string
@@ -29,6 +28,11 @@ interface TrackedOrder {
   paymentMethod: string
   customerType?: string
   createdAt: { seconds: number; nanoseconds: number }
+  customerName?: string
+  customerPhone?: string
+  customerAddress?: string
+  customerCity?: string
+  customerGovernorate?: string
 }
 
 export const StoreTrack: FunctionalComponent = () => {
@@ -65,55 +69,91 @@ export const StoreTrack: FunctionalComponent = () => {
 
   return (
     <div className="storefront-page storefront-track">
-      <div className="page-header">
+      <div className="storefront-page-head">
         <h1 className="page-title">تتبع طلبك</h1>
         <p className="page-subtitle">أدخل رقم الطلب ورقم الهاتف للبحث عن طلبك</p>
       </div>
 
-      <Card className="mb-2">
-        <form onSubmit={search}>
-          <div className="grid grid-2">
-            <Input label="رقم الهاتف" value={phone} onChange={setPhone} placeholder="01xxxxxxxxx" required />
-            <Input label="رقم الطلب" value={orderNumber} onChange={setOrderNumber} placeholder="ORD-00001" required />
-          </div>
-          <Button type="submit" loading={loading} icon="search" className="mt-1">تتبع الطلب</Button>
-        </form>
-      </Card>
+      <form onSubmit={search} className="track-form">
+        <div className="form-grid">
+          <Input label="رقم الهاتف" value={phone} onChange={setPhone} placeholder="01xxxxxxxxx" required type="tel" />
+          <Input label="رقم الطلب" value={orderNumber} onChange={setOrderNumber} placeholder="ORD-00001" required />
+        </div>
+        <Button type="submit" loading={loading} icon="search" className="mt-1" block>تتبع الطلب</Button>
+      </form>
 
-      {error && <p className="muted">{error}</p>}
+      {error && <div className="track-error" role="alert"><Icon name="error" /> {error}</div>}
 
-      <div>
-        {orders?.map((o) => (
-          <Card key={o.id} className="mb-2">
-            <div className="flex-between mb-1">
-              <div>
-                <strong className="monospace">{o.orderNumber}</strong>
-                <p className="muted small">{formatDateTime(o.createdAt)}</p>
-              </div>
-              <Badge tone={STATUS_COLORS[o.status as keyof typeof STATUS_COLORS]}>{STATUS_LABELS[o.status as keyof typeof STATUS_LABELS]}</Badge>
-            </div>
-
-            <Card title="تتبع حالة الطلب" className="mb-2">
-              <OrderTimeline order={{ status: o.status as any, statusHistory: o.statusHistory as any }} />
-            </Card>
-
-            <div className="mb-2">
-              {o.items.map((i, idx) => (
-                <div key={idx} className="summary-row">
-                  <span>
-                    {i.name} ×{i.quantity}
-                    {(i.color || i.size) && <span className="muted small"> ({[i.color, i.size].filter(Boolean).join(' • ')})</span>}
-                  </span>
+      {orders && orders.length > 0 && (
+        <div className="track-results">
+          {orders.map((o) => (
+            <article key={o.id} className="track-order-card">
+              <div className="track-order-header">
+                <div>
+                  <p className="track-order-number monospace">{o.orderNumber}</p>
+                  <p className="track-order-date muted small">{formatDateTime(o.createdAt)}</p>
                 </div>
-              ))}
-            </div>
-            <div className="summary-row"><span>الإجمالي الفرعي</span><span>{formatCurrency(o.subtotal)}</span></div>
-            <div className="summary-row"><span>الشحن</span><span>{o.shippingFee > 0 ? formatCurrency(o.shippingFee) : 'مجاني'}</span></div>
-            <div className="summary-row total"><span>الإجمالي</span><span>{formatCurrency(o.totalPrice)}</span></div>
-            <p className="muted small mt-1">طريقة الدفع: {o.paymentMethod === 'cod' ? 'عند الاستلام' : 'تحويل بنكي'}</p>
-          </Card>
-        ))}
-      </div>
+                <span className={`status-badge status-${STATUS_COLORS[o.status as keyof typeof STATUS_COLORS]}`}>
+                  {STATUS_LABELS[o.status as keyof typeof STATUS_LABELS] || o.status}
+                </span>
+              </div>
+
+              <section className="track-timeline-section">
+                <h3 className="section-title">حالة الشحنة</h3>
+                <OrderTimeline order={{ status: o.status as any, statusHistory: o.statusHistory as any }} />
+              </section>
+
+              <section className="track-items-section">
+                <h3 className="section-title">المنتجات</h3>
+                <div className="track-items">
+                  {o.items.map((item, idx) => (
+                    <div key={idx} className="track-item">
+                      <div className="track-item-info">
+                        <strong>{item.name}</strong>
+                        <span className="muted small">الكمية: {item.quantity} {item.color && `• ${item.color}`} {item.size && `• ${item.size}`}</span>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              </section>
+
+              <section className="track-summary-section">
+                <h3 className="section-title">ملخص الطلب</h3>
+                <div className="summary-rows">
+                  <div className="summary-row"><span>المجموع الفرعي</span><span>{formatCurrency(o.subtotal)}</span></div>
+                  <div className="summary-row"><span>الشحن</span><span>{o.shippingFee > 0 ? formatCurrency(o.shippingFee) : 'مجاني'}</span></div>
+                  <div className="summary-row total"><span>الإجمالي</span><span>{formatCurrency(o.totalPrice)}</span></div>
+                </div>
+              </section>
+
+              <section className="track-details-section">
+                <h3 className="section-title">معلومات التوصيل والدفع</h3>
+                <div className="detail-grid">
+                  <div className="detail-item">
+                    <Icon name="location_on" className="detail-icon" />
+                    <div>
+                      <span className="detail-label">عنوان التوصيل</span>
+                      <address className="detail-value">
+                        {o.customerName}<br />
+                        {o.customerAddress}<br />
+                        {o.customerCity}, {o.customerGovernorate}<br />
+                        {o.customerPhone && <a href={`tel:${o.customerPhone}`} className="ltr-text">{o.customerPhone}</a>}
+                      </address>
+                    </div>
+                  </div>
+                  <div className="detail-item">
+                    <Icon name="payments" className="detail-icon" />
+                    <div>
+                      <span className="detail-label">طريقة الدفع</span>
+                      <span className="detail-value">{o.paymentMethod === 'cod' ? 'الدفع عند الاستلام' : 'تحويل بنكي'}</span>
+                    </div>
+                  </div>
+                </div>
+              </section>
+            </article>
+          ))}
+        </div>
+      )}
     </div>
   )
 }

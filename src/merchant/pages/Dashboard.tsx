@@ -1,37 +1,42 @@
 import { FunctionalComponent } from 'preact'
 import { useState } from 'preact/hooks'
 import { Link } from 'wouter'
-import { StatsCard } from '../../shared/components/ui/StatsCard'
-import { Card } from '../../shared/components/ui/Card'
-import { Badge } from '../../shared/components/ui/Badge'
 import { Button } from '../../shared/components/ui/Button'
-import { Table } from '../../shared/components/ui/Table'
-import { Toggle } from '../../shared/components/ui/Toggle'
-import { LineChart } from '../../shared/components/charts/LineChart'
+import { PageHeader } from '../../shared/components/ui/PageHeader'
 import { useStore } from '../../shared/hooks/useStore'
 import { useAuth } from '../../shared/hooks/useAuth'
 import { useCollection } from '../../shared/hooks/useCollection'
 import { useSubscription } from '../../shared/hooks/useSubscription'
 import { useToast } from '../../shared/hooks/useToast'
 import { Loading } from '../../shared/components/ui/Loading'
+import './Dashboard.css'
 import { EmptyState } from '../../shared/components/ui/EmptyState'
-import { UsageCard } from '../../shared/components/subscription/UsageCard'
-import { formatCurrency, timeAgo } from '../../shared/utils/format'
+import { formatCurrency, formatNumber, timeAgo } from '../../shared/utils/format'
+import { getPlanLimit, isPlanLimitUnlimited, usageFrom } from '../../shared/services/subscription'
 import { orderItemRevenue } from '../../shared/utils/pricing'
 import { storePublicUrl } from '../../shared/utils/store-url'
-import { STATUS_LABELS, STATUS_COLORS } from '../../shared/utils/constants'
+import { STATUS_LABELS } from '../../shared/utils/constants'
 import { setStorePublishedCallable } from '../../shared/services/auth'
-import type { Order, Product, ProductCost, StoreLink } from '../../shared/types'
+import type { Order, Product, ProductCost } from '../../shared/types'
 import { Icon } from '../../shared/components/ui/Icon'
-import './Dashboard.css'
-import { InternalPageHeader, WorkspaceSection } from '../components/InternalWorkspace'
-import '../components/InternalWorkspace.css'
 
-interface ChecklistStep {
-  done: boolean
-  label: string
-  hint?: string
-  to?: string
+const SUB_STATUS_LABELS: Record<string, string> = {
+  active: 'نشط',
+  trialing: 'تجربة مجانية',
+  expired: 'منتهي',
+  pending: 'قيد الانتظار',
+  none: 'بدون اشتراك',
+}
+
+/** Order-status pill matching the Stitch tone palette. */
+const STATUS_PILLS: Record<string, { cls: string; icon?: string }> = {
+  NEW: { cls: 'order-pill-new' },
+  CONTACTED: { cls: 'order-pill-contacted' },
+  PROCESSING: { cls: 'order-pill-processing' },
+  SHIPPED: { cls: 'order-pill-shipped' },
+  DELIVERED: { cls: 'order-pill-delivered' },
+  CANCELLED: { cls: 'order-pill-cancelled' },
+  RETURNED: { cls: 'order-pill-returned' },
 }
 
 export const MerchantDashboard: FunctionalComponent = () => {
@@ -47,20 +52,16 @@ export const MerchantDashboard: FunctionalComponent = () => {
   const canProducts = isOwner || perms.includes('products:view')
   const canCustomers = isOwner || perms.includes('customers:view')
   const canAnalytics = isOwner || perms.includes('reports:view')
-  const canLinks = isOwner || perms.includes('sales_links:view')
 
   const ordersRes = useCollection<Order>('orders', { storeId, orderBy: { field: 'createdAt' } }, canOrders)
   const productsRes = useCollection<Product>('products', { storeId }, canProducts)
   const costsRes = useCollection<ProductCost>('productCosts', { storeId }, canProducts)
   const customersRes = useCollection('customers', { storeId }, canCustomers)
-  const analyticsRes = useCollection<any>('analytics', { storeId }, canAnalytics)
-  const linksRes = useCollection<StoreLink>('storeLinks', { storeId }, canLinks)
+  const teamRes = useCollection<any>('team', { storeId }, isOwner)
 
   const orders = ordersRes.data
   const products = productsRes.data
   const customers = customersRes.data
-  const analytics = analyticsRes.data
-  const links = linksRes.data
 
   const subState = useSubscription(isOwner ? storeId : '')
   const subscription = subState.subscription
@@ -68,9 +69,10 @@ export const MerchantDashboard: FunctionalComponent = () => {
   const subStatus = subState.status
   const trialRemaining = subState.trialRemaining
 
-  if (ordersRes.loading || productsRes.loading || costsRes.loading || customersRes.loading || analyticsRes.loading || linksRes.loading) {
+  if (ordersRes.loading || productsRes.loading || costsRes.loading || customersRes.loading || teamRes.loading) {
     return <Loading />
   }
+
   const dayStart = new Date()
   dayStart.setHours(0, 0, 0, 0)
   const dayEnd = new Date()
@@ -82,20 +84,18 @@ export const MerchantDashboard: FunctionalComponent = () => {
     return d >= dayStart && d <= dayEnd
   })
   const todayRevenue = todayOrders.filter((o) => o.status === 'DELIVERED').reduce((s, o) => s + o.totalPrice, 0)
-  const pendingOrders = orders.filter((o) => ['NEW', 'CONTACTED', 'PROCESSING', 'SHIPPED'].includes(o.status))
-  const activeProducts = products.filter((p) => p.active).length
   const lowStock = products.filter((p) => p.stock <= (p.lowStockThreshold ?? 5) && p.active)
 
-  // Gross profit over completed (DELIVERED) orders, computed only over lines
-  // whose product has a configured cost price (private productCosts data).
   const costByProduct = new Map(costsRes.data.map((c) => [c.id, c.costPrice]))
   const hasAnyCost = [...costByProduct.values()].some((c) => typeof c === 'number' && c >= 0)
   let totalProfit = 0
   let deliveredRevenue = 0
   let totalCost = 0
+  let deliveredCount = 0
   for (const o of orders) {
     if (o.status !== 'DELIVERED') continue
     deliveredRevenue += o.totalPrice
+    deliveredCount += 1
     for (const it of o.items) {
       const cost = costByProduct.get(it.productId)
       if (typeof cost !== 'number' || cost < 0) continue
@@ -105,13 +105,7 @@ export const MerchantDashboard: FunctionalComponent = () => {
     }
   }
   const profitMargin = deliveredRevenue > 0 && hasAnyCost ? (totalProfit / deliveredRevenue) * 100 : 0
-
-  const last14 = Array.from({ length: 14 }, (_, i) => {
-    const d = new Date()
-    d.setDate(d.getDate() - (13 - i))
-    return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`
-  })
-  const revenueSeries = last14.map((key) => analytics.filter((a) => a.date === key).reduce((s, a) => s + (a.revenue || 0), 0))
+  const avgOrderValue = deliveredCount > 0 ? deliveredRevenue / deliveredCount : 0
 
   const copyLink = async () => {
     if (!store) return
@@ -141,154 +135,545 @@ export const MerchantDashboard: FunctionalComponent = () => {
     }
   }
 
-  const steps: ChecklistStep[] = [
-    {
-      done: !isOwner || subStatus === 'active',
-      label: isOwner
-        ? subStatus === 'active'
-          ? 'اشتراكك مفعل'
-          : subStatus === 'trialing'
-            ? 'جرب باقتك مجاناً'
-            : 'فعل اشتراكك'
-        : 'اشتراكك مفعل',
-      hint: !isOwner
-        ? undefined
-        : subStatus === 'active'
-          ? undefined
-          : subStatus === 'trialing'
-            ? trialRemaining ? `تجربتك المجانية نشطة — ${trialRemaining}` : 'تجربتك المجانية نشطة'
-            : subStatus === 'expired'
-              ? 'انتهت تجربتك المجانية — فعّل باقتك لاستئناف البيع'
-              : subStatus === 'pending'
-                ? 'بانتظار مراجعة طلب التفعيل'
-                : 'تواصل مع المنصة لتفعيل الباقة',
-      to: '/dashboard/subscription',
-    },
-    { done: activeProducts > 0, label: 'أضف أول منتج', hint: activeProducts === 0 ? 'لا توجد منتجات بعد' : `${activeProducts} منتج`, to: '/dashboard/products' },
-    { done: !!store?.published, label: 'انشر متجرك', hint: store?.published ? 'متجرك منشور' : 'المتجر مسودة حالياً', to: '/dashboard/settings' },
-  ]
-  const allDone = steps.every((s) => s.done)
+  const usage = usageFrom(subscription, plan)
+  const productLimit = getPlanLimit('products', plan)
+  const productUnlimited = isPlanLimitUnlimited('products', plan)
+  const staffLimit = getPlanLimit('staff', plan)
+  const storageLimit = getPlanLimit('storage', plan)
+  const storageUsed = Math.round(Number((store as any)?.storageUsed || 0) / (1024 * 1024))
+
+  const latestOrders = orders.slice(0, 8)
+  const headerActions = (
+    <div className="dashboard-header-actions">
+      {canProducts && (
+        <Link href="/dashboard/products">
+          <Button variant="primary" icon="add">منتج جديد</Button>
+        </Link>
+      )}
+    </div>
+  )
+
+  const statusbarActions = (
+    <div className="dashboard-statusbar-actions">
+      {store && (
+        <Button variant="outline" icon="content_copy" onClick={copyLink} disabled={!storePublicUrl(store)} title={!storePublicUrl(store) ? 'رابط المتجر غير متاح بعد' : undefined}>
+          نسخ الرابط
+        </Button>
+      )}
+      {store && (
+        <a href={`/store/${store.slug}`} target="_blank" rel="noreferrer" className="dashboard-header-link">
+          <Button variant="outline" icon="storefront">عرض المتجر</Button>
+        </a>
+      )}
+    </div>
+  )
+
+  const kpiCards = (
+    <div className="dashboard-kpi-stats">
+      {canOrders && (
+        <div className="dashboard-kpi">
+          <div className="dashboard-kpi-top">
+            <span className="dashboard-kpi-label">الإيرادات</span>
+            <span className="dashboard-kpi-icon"><Icon name="account_balance_wallet" ariaHidden /></span>
+          </div>
+          <div className="dashboard-kpi-value-row">
+            <span className="dashboard-kpi-value">{formatCurrency(todayRevenue)}</span>
+          </div>
+          <div className="dashboard-kpi-caption">اليوم مقارنة بالأمس</div>
+        </div>
+      )}
+      {canOrders && (
+        <div className="dashboard-kpi">
+          <div className="dashboard-kpi-top">
+            <span className="dashboard-kpi-label">الطلبات</span>
+            <span className="dashboard-kpi-icon"><Icon name="shopping_cart" ariaHidden /></span>
+          </div>
+          <div className="dashboard-kpi-value-row">
+            <span className="dashboard-kpi-value">{formatNumber(todayOrders.length)}</span>
+          </div>
+          <div className="dashboard-kpi-caption">اليوم مقارنة بالأمس</div>
+        </div>
+      )}
+      {canOrders && (
+        <div className="dashboard-kpi">
+          <div className="dashboard-kpi-top">
+            <span className="dashboard-kpi-label">الربح الإجمالي</span>
+            <span className="dashboard-kpi-icon"><Icon name="monitoring" ariaHidden /></span>
+          </div>
+          <div className="dashboard-kpi-value-row">
+            <span className="dashboard-kpi-value">{formatCurrency(totalProfit)}</span>
+            {!hasAnyCost && <span className="dashboard-kpi-pill">تكلفة غير مكتملة</span>}
+          </div>
+          <div className="dashboard-kpi-caption">يجب إدخال تكلفة المنتجات</div>
+        </div>
+      )}
+      {canOrders && (
+        <div className="dashboard-kpi">
+          <div className="dashboard-kpi-top">
+            <span className="dashboard-kpi-label">هامش الربح</span>
+            <span className="dashboard-kpi-icon"><Icon name="pie_chart" ariaHidden /></span>
+          </div>
+          <div className="dashboard-kpi-value-row">
+            <span className="dashboard-kpi-value">{`${profitMargin.toFixed(1)}%`}</span>
+          </div>
+          <div className="dashboard-kpi-caption">متوسط الهامش اليوم</div>
+        </div>
+      )}
+      {canCustomers && (
+        <div className="dashboard-kpi">
+          <div className="dashboard-kpi-top">
+            <span className="dashboard-kpi-label">العملاء</span>
+            <span className="dashboard-kpi-icon"><Icon name="group" ariaHidden /></span>
+          </div>
+          <div className="dashboard-kpi-value-row">
+            <span className="dashboard-kpi-value">{formatNumber(customers.length)}</span>
+          </div>
+          <div className="dashboard-kpi-caption">عملاء جدد اليوم</div>
+        </div>
+      )}
+      {canOrders && (
+        <div className="dashboard-kpi">
+          <div className="dashboard-kpi-top">
+            <span className="dashboard-kpi-label">متوسط قيمة الطلب</span>
+            <span className="dashboard-kpi-icon"><Icon name="receipt_long" ariaHidden /></span>
+          </div>
+          <div className="dashboard-kpi-value-row">
+            <span className="dashboard-kpi-value">{formatCurrency(avgOrderValue)}</span>
+          </div>
+          <div className="dashboard-kpi-caption">قيمة السلة المتوسطة</div>
+        </div>
+      )}
+    </div>
+  )
+
+  const profitPanel = canOrders && (
+    <div className="dashboard-panel">
+      <div className="dashboard-panel-head">
+        <h3>تحليل الأرباح</h3>
+        {canAnalytics && <Link href="/dashboard/analytics"><span className="dashboard-panel-link">عرض التقرير المفصل</span></Link>}
+      </div>
+      <div className="dashboard-panel-body dashboard-profit-body">
+        <div className="dashboard-profit-rows">
+          <div className="dashboard-profit-row">
+            <span>الإيرادات</span>
+            <strong>{formatCurrency(deliveredRevenue)}</strong>
+          </div>
+          <div className="dashboard-profit-row">
+            <span>التكلفة</span>
+            <strong>{formatCurrency(totalCost)}</strong>
+          </div>
+          <div className="dashboard-profit-row is-total">
+            <span>الربح الإجمالي</span>
+            <strong>{formatCurrency(totalProfit)}</strong>
+          </div>
+          <div className="dashboard-profit-row is-total">
+            <span>هامش الربح</span>
+            <strong>{`${profitMargin.toFixed(1)}%`}</strong>
+          </div>
+        </div>
+        {!hasAnyCost && (
+          <div className="dashboard-profit-alert">
+            <span className="dashboard-profit-alert-icon"><Icon name="info" ariaHidden /></span>
+            <div>
+              <h4>تكلفة المنتجات غير مكتملة</h4>
+              <p>أدخل تكلفة المنتجات لحساب أرباحك بدقة</p>
+              {canProducts && <Link href="/dashboard/products"><Button variant="primary" icon="inventory_2">إضافة سعر التكلفة</Button></Link>}
+            </div>
+          </div>
+        )}
+      </div>
+    </div>
+  )
+
+  const planPanel = (subStatus === 'active' || subStatus === 'trialing') && (
+    <div className="dashboard-panel dashboard-plan-panel">
+      <div className="dashboard-plan-head">
+        <h3>استهلاك الخطة</h3>
+        {plan && <span className="dashboard-plan-badge">{plan.name}</span>}
+      </div>
+      <div className="dashboard-plan-rows">
+        <div className="dashboard-usage-row">
+          <div className="dashboard-usage-row-top">
+            <span>الطلبات المستخدمة</span>
+            <span>{formatNumber(usage.used)} / {usage.limit > 0 ? formatNumber(usage.limit) : '∞'}</span>
+          </div>
+          <div className="dashboard-usage-bar">
+            <span className="dashboard-usage-bar-fill is-orders" style={{ width: `${usage.percent}%` }} />
+          </div>
+        </div>
+        {canProducts && (
+          <div className="dashboard-usage-row">
+            <div className="dashboard-usage-row-top">
+              <span>المنتجات</span>
+              <span>{formatNumber(products.length)}{productUnlimited || productLimit <= 0 ? '' : ` / ${formatNumber(productLimit)}`}</span>
+            </div>
+            {!(productUnlimited || productLimit <= 0) && (
+              <div className="dashboard-usage-bar">
+                <span className="dashboard-usage-bar-fill is-products" style={{ width: `${Math.min(100, (products.length / productLimit) * 100)}%` }} />
+              </div>
+            )}
+          </div>
+        )}
+        {isOwner && (
+          <div className="dashboard-usage-row">
+            <div className="dashboard-usage-row-top">
+              <span>المساحة التخزينية</span>
+              <span>{formatNumber(storageUsed)} / {storageLimit > 0 ? `${formatNumber(storageLimit)} MB` : '∞'}</span>
+            </div>
+            {storageLimit > 0 && (
+              <div className="dashboard-usage-bar">
+                <span className="dashboard-usage-bar-fill is-storage" style={{ width: `${Math.min(100, (storageUsed / storageLimit) * 100)}%` }} />
+              </div>
+            )}
+          </div>
+        )}
+        {isOwner && staffLimit > 0 && (
+          <div className="dashboard-usage-row">
+            <div className="dashboard-usage-row-top">
+              <span>عدد المستخدمين</span>
+              <span>{formatNumber(teamRes.data.length)} / {formatNumber(staffLimit)}</span>
+            </div>
+            <div className="dashboard-usage-bar">
+              <span className="dashboard-usage-bar-fill is-staff" style={{ width: `${Math.min(100, (teamRes.data.length / staffLimit) * 100)}%` }} />
+            </div>
+          </div>
+        )}
+      </div>
+      {subStatus === 'trialing' && subscription && (
+        <div className="dashboard-trial">
+          <Icon name="hourglass_top" ariaHidden />
+          <span><strong>{trialRemaining || 'قاربت على الانتهاء'}</strong><small>الفترة التجريبية نشطة</small></span>
+        </div>
+      )}
+      <Link href="/dashboard/subscription"><Button variant="outline" block icon="arrow_forward">ترقية الخطة</Button></Link>
+    </div>
+  )
+
+  const inventoryPanel = canProducts && (
+    <div className="dashboard-panel">
+      <div className="dashboard-panel-head">
+        <h3>تنبيهات المخزون</h3>
+        {lowStock.length > 0 && <span className="dashboard-alert-badge">{formatNumber(lowStock.length)} تنبيهات</span>}
+      </div>
+      {lowStock.length > 0 ? (
+        <div className="dashboard-inventory-list">
+          {lowStock.slice(0, 4).map((p) => (
+            <div key={p.id} className="dashboard-inventory-row">
+              <div className="dashboard-inventory-main">
+                <span className="dashboard-inventory-thumb"><Icon name="inventory_2" ariaHidden /></span>
+                <span className="dashboard-inventory-name">{p.name}</span>
+              </div>
+              <span className={`dashboard-inventory-pill${p.stock === 0 ? ' is-empty' : ''}`}>
+                {p.stock === 0 ? 'نفد من المخزون' : 'مخزون منخفض'}
+              </span>
+            </div>
+          ))}
+        </div>
+      ) : (
+        <div className="dashboard-no-alert"><Icon name="check_circle" ariaHidden /><span>لا توجد تنبيهات مخزون</span></div>
+      )}
+    </div>
+  )
+
+  const ordersPanel = (
+    <div className="dashboard-panel">
+      <div className="dashboard-panel-head">
+        <h3>أحدث الطلبات</h3>
+        {canOrders && <Link href="/dashboard/orders"><span className="dashboard-panel-link">عرض الكل</span></Link>}
+      </div>
+      {canOrders ? (
+        orders.length === 0 ? (
+          <EmptyState
+            icon="receipt_long"
+            title="لا توجد طلبات حتى الآن"
+            description="بمجرد أن يقوم العملاء بالشراء من متجرك، ستظهر طلباتهم هنا. ابدأ بإضافة المنتجات لجذب العملاء."
+            action={<Link href="/dashboard/products"><Button variant="primary">ابدأ بإضافة أول منتج</Button></Link>}
+          />
+        ) : (
+          <div className="dashboard-table-wrap">
+            <table className="dashboard-table">
+              <thead>
+                <tr>
+                  <th>رقم الطلب</th>
+                  <th>العميل</th>
+                  <th>التاريخ</th>
+                  <th>الحالة</th>
+                  <th>الإجمالي</th>
+                </tr>
+              </thead>
+              <tbody>
+                {latestOrders.map((o) => {
+                  const pill = STATUS_PILLS[o.status] || { cls: 'order-pill-new' }
+                  return (
+                    <tr key={o.id}>
+                      <td><Link href={`/dashboard/orders/${o.id}`}><span className="monospace dashboard-order-link">{o.orderNumber}</span></Link></td>
+                      <td className="dashboard-cell-muted">{o.customerName}</td>
+                      <td className="dashboard-cell-muted">{timeAgo(o.createdAt)}</td>
+                      <td><span className={`order-pill ${pill.cls}`}>{STATUS_LABELS[o.status as keyof typeof STATUS_LABELS] || o.status}</span></td>
+                      <td>{formatCurrency(o.totalPrice)}</td>
+                    </tr>
+                  )
+                })}
+              </tbody>
+            </table>
+          </div>
+        )
+      ) : (
+        <EmptyState title="صلاحيات غير كافية" description="حسابك لا يملك صلاحية عرض الطلبات. تواصل مع مالك المتجر لتفعيلها." icon="lock" />
+      )}
+    </div>
+  )
 
   return (
-    <div className="merchant-dashboard merchant-dashboard-canonical">
-      <InternalPageHeader
-        eyebrow="لوحة تشغيل المتجر"
-        title={`مرحباً بك في ${store?.name || 'متجرك'}`}
-        subtitle="نظرة عامة على أداء متجرك اليوم"
-        actions={
-          store && (
-            <div className="flex flex-gap-sm flex-wrap">
-              <Button variant="ghost" icon="link" onClick={copyLink} disabled={!storePublicUrl(store)} title={!storePublicUrl(store) ? 'رابط المتجر غير متاح بعد' : undefined}>
-                نسخ الرابط
-              </Button>
-              <a href={`/store/${store.slug}`} target="_blank" rel="noreferrer">
-                <Button variant="outline" icon="store">عرض المتجر</Button>
-              </a>
+    <div className="merchant-dashboard-canonical">
+      {/* ─────────── Desktop composition (Stitch 5ecc1fa6e7f5) ─────────── */}
+      <div className="dashboard-desktop">
+        <PageHeader
+          title="لوحة المتجر"
+          subtitle="نظرة عامة على أداء متجرك اليوم"
+          actions={headerActions}
+        />
+
+        <div className="dashboard-statusbar">
+          <div className="dashboard-statusbar-info">
+            <div className="dashboard-statusbar-item">
+              <span className="dashboard-statusbar-label">حالة المتجر:</span>
+              <span className="dashboard-statusbar-dot" data-published={store?.published} />
+              <span className="dashboard-statusbar-value">{store?.published ? 'منشور' : 'مسودة'}</span>
             </div>
-          )
-        }
-      />
+            <span className="dashboard-statusbar-divider" />
+            <div className="dashboard-statusbar-item">
+              <span className="dashboard-statusbar-label">حالة الاشتراك:</span>
+              <span className="dashboard-statusbar-icon"><Icon name="stars" ariaHidden /></span>
+              <span className="dashboard-statusbar-value">{SUB_STATUS_LABELS[subStatus] || plan?.name || 'الباقة'}</span>
+              {trialRemaining ? <span className="dashboard-statusbar-meta">(تنتهي خلال {trialRemaining})</span> : null}
+            </div>
+          </div>
+          {store && isOwner && (
+            <button type="button" className="dashboard-statusbar-action" onClick={() => togglePublish(!store.published)} disabled={publishing}>
+              {store.published ? 'إيقاف النشر المؤقت' : 'نشر المتجر'}
+            </button>
+          )}
+          {statusbarActions}
+        </div>
 
-      <section className="dashboard-kpi-region" aria-label="مؤشرات الأداء">
-      <div className="dashboard-kpi-region-head"><div><span className="internal-page-eyebrow">ملخص الأداء</span><h2>كيف يسير متجرك اليوم؟</h2></div><span className="muted small">محدث من بيانات متجرك الحالية</span></div>
-      <div className="stats-grid dashboard-kpi-grid">
-        {canOrders && <StatsCard title="طلبات اليوم" value={todayOrders.length} icon="receipt_long" tone="primary" />}
-        {canOrders && <StatsCard title="المبيعات" value={todayRevenue} currency icon="payments" tone="green" />}
-        {canOrders && hasAnyCost && <StatsCard title="إجمالي الأرباح" value={totalProfit} currency icon="trending_up" tone="violet" />}
-        {canOrders && <StatsCard title="طلبات معلقة" value={pendingOrders.length} icon="pending_actions" tone="amber" />}
-        {canProducts && <StatsCard title="المنتجات" value={activeProducts} icon="inventory_2" tone="blue" />}
-        {canCustomers && <StatsCard title="العملاء" value={customers.length} icon="groups" tone="violet" />}
+        <div className="dashboard-grid">
+          <main className="dashboard-grid-main">
+            {kpiCards}
+            {profitPanel}
+            {ordersPanel}
+          </main>
+          <aside className="dashboard-grid-side">
+            {planPanel}
+            {inventoryPanel}
+          </aside>
+        </div>
       </div>
-      </section>
 
-      <div className="dashboard-canonical-grid">
-        <main className="dashboard-canonical-main">
-          {canOrders && (
-            <WorkspaceSection title="الصورة المالية" subtitle="الإيرادات والتكلفة والربح من الطلبات المسلّمة" className="dashboard-profit-workspace">
-            <Card className="dashboard-profit-panel dashboard-profit-card">
-              <div className="dashboard-card-heading">
-                <div>
-                  <span className="eyebrow">تحليل الأرباح</span>
-                  <h2>الصورة المالية لمتجرك</h2>
-                  <p className="muted small">من الطلبات المسلمة وأسعار التكلفة المسجلة فقط.</p>
-                </div>
-                <div className="profit-panel-icon"><Icon name={hasAnyCost ? 'trending_up' : 'analytics'} /></div>
+      {/* ─────────── Mobile composition (Stitch 02784270f5674093) ─────────── */}
+      <div className="dashboard-mobile">
+        <div className="dashboard-mobile-header">
+          <div className="dashboard-mobile-brand">
+            <span className="dashboard-mobile-avatar"><Icon name="store" ariaHidden /></span>
+            <div>
+              <div className="dashboard-mobile-storeline">
+                <span className="dashboard-mobile-storename">{store?.name || 'M&K Store'}</span>
+                <span className="dashboard-mobile-published">{store?.published ? 'منشور' : 'مسودة'}</span>
               </div>
-              {hasAnyCost ? (
-                <div className="dashboard-profit-metrics">
-                  <div><span>الإيرادات</span><strong>{formatCurrency(deliveredRevenue)}</strong></div>
-                  <div><span>التكلفة</span><strong>{formatCurrency(totalCost)}</strong></div>
-                  <div className="is-positive"><span>إجمالي الربح</span><strong>{formatCurrency(totalProfit)}</strong></div>
-                  <div><span>هامش الربح</span><strong>{profitMargin.toFixed(1)}%</strong></div>
+            </div>
+          </div>
+          <button type="button" className="dashboard-mobile-sync" aria-label="تحديث البيانات" onClick={() => window.location.reload()}>
+            <Icon name="sync_alt" ariaHidden />
+          </button>
+        </div>
+
+        <div className="dashboard-mobile-main">
+          <section className="dashboard-mobile-greeting">
+            <h1>كيف أداء متجري الآن؟</h1>
+            <p>نظرة عامة على أداء اليوم</p>
+          </section>
+
+          <section className="dashboard-mobile-kpis">
+            {canOrders && (
+              <div className="dashboard-mobile-kpi">
+                <div className="dashboard-mobile-kpi-top">
+                  <div className="dashboard-mobile-kpi-titles">
+                    <span className="dashboard-mobile-kpi-label">الإيرادات</span>
+                    <span className="dashboard-mobile-kpi-sub">بيانات خاصة بالتاجر</span>
+                  </div>
+                  <span className="dashboard-mobile-kpi-icon"><Icon name="payments" ariaHidden /></span>
                 </div>
-              ) : (
-                <div className="dashboard-profit-empty"><Icon name="analytics" /><p>أضف أسعار التكلفة للمنتجات لعرض الأرباح بدقة.</p><Link href="/dashboard/products"><Button variant="outline" icon="inventory_2">إضافة سعر التكلفة</Button></Link></div>
-              )}
-              {hasAnyCost && <Link href="/dashboard/products" className="dashboard-inline-link">مراجعة تكاليف المنتجات <Icon name="arrow_forward" /></Link>}
-            </Card>
-            </WorkspaceSection>
+                <div className="dashboard-mobile-kpi-value">{formatCurrency(todayRevenue)}</div>
+                <div className="dashboard-mobile-kpi-trend"><Icon name="trending_up" ariaHidden /></div>
+              </div>
+            )}
+            {canOrders && (
+              <div className="dashboard-mobile-kpi">
+                <div className="dashboard-mobile-kpi-top">
+                  <div className="dashboard-mobile-kpi-titles">
+                    <span className="dashboard-mobile-kpi-label">الطلبات</span>
+                    <span className="dashboard-mobile-kpi-sub">بيانات خاصة بالتاجر</span>
+                  </div>
+                  <span className="dashboard-mobile-kpi-icon"><Icon name="shopping_bag" ariaHidden /></span>
+                </div>
+                <div className="dashboard-mobile-kpi-value">{formatNumber(todayOrders.length)}</div>
+                <div className="dashboard-mobile-kpi-trend"><Icon name="trending_up" ariaHidden /></div>
+              </div>
+            )}
+            {canOrders && (
+              <div className="dashboard-mobile-kpi dashboard-mobile-kpi-wide dashboard-mobile-kpi-profit">
+                <div className="dashboard-mobile-kpi-profit-inner">
+                  <div className="dashboard-mobile-kpi-top">
+                    <div className="dashboard-mobile-kpi-titles">
+                      <span className="dashboard-mobile-kpi-label">إجمالي الربح</span>
+                      {!hasAnyCost && <span className="dashboard-mobile-kpi-warn"><Icon name="warning" ariaHidden /> بيانات خاصة بالتاجر</span>}
+                    </div>
+                    <span className="dashboard-mobile-kpi-icon"><Icon name="account_balance_wallet" ariaHidden /></span>
+                  </div>
+                  <div className="dashboard-mobile-kpi-value is-dim">{formatCurrency(totalProfit)}</div>
+                  {canProducts && !hasAnyCost && (
+                    <Link href="/dashboard/products" className="dashboard-mobile-kpi-link"><Icon name="arrow_forward" ariaHidden /> إضافة تكلفة المنتجات</Link>
+                  )}
+                </div>
+              </div>
+            )}
+            {canOrders && (
+              <div className="dashboard-mobile-kpi dashboard-mobile-kpi-wide">
+                <div className="dashboard-mobile-kpi-avg">
+                  <span className="dashboard-mobile-kpi-avg-icon"><Icon name="receipt_long" ariaHidden /></span>
+                  <div className="dashboard-mobile-kpi-titles">
+                    <span className="dashboard-mobile-kpi-label">متوسط قيمة الطلب</span>
+                    <span className="dashboard-mobile-kpi-sub">بيانات خاصة بالتاجر</span>
+                  </div>
+                </div>
+                <div className="dashboard-mobile-kpi-avg-value">{formatCurrency(avgOrderValue)}</div>
+              </div>
+            )}
+          </section>
+
+          <section className="dashboard-quick-actions" aria-label="إجراءات سريعة">
+            {canProducts && (
+              <Link href="/dashboard/products"><button type="button" className="dashboard-quick-btn dashboard-quick-btn-primary"><Icon name="add_circle" ariaHidden /> إضافة منتج</button></Link>
+            )}
+            {store && (
+              <button type="button" className="dashboard-quick-btn" onClick={copyLink}><Icon name="share" ariaHidden /> مشاركة المتجر</button>
+            )}
+            {store && (
+              <a href={`/store/${store.slug}`} target="_blank" rel="noreferrer" className="dashboard-quick-link"><button type="button" className="dashboard-quick-btn"><Icon name="open_in_new" ariaHidden /> فتح المتجر</button></a>
+            )}
+            {canProducts && (
+              <Link href="/dashboard/coupons"><button type="button" className="dashboard-quick-btn"><Icon name="local_offer" ariaHidden /> إنشاء كوبون</button></Link>
+            )}
+          </section>
+
+          {canProducts && (
+            <section className="dashboard-mobile-alert">
+              <span className="dashboard-mobile-alert-icon"><Icon name="inventory_2" ariaHidden /></span>
+              <div>
+                <h3>تنبيهات المخزون</h3>
+                <p>{lowStock.length > 0 ? `${formatNumber(lowStock.length)} منتجات تحتاج إلى إعادة تزويد` : 'لا توجد تنبيهات مخزون حالياً'}</p>
+                <Link href="/dashboard/products"><span className="dashboard-mobile-alert-link">تحديث المخزون</span></Link>
+              </div>
+            </section>
           )}
 
-          {canAnalytics && (
-            <WorkspaceSection title="اتجاه المبيعات" subtitle="آخر 14 يوماً" className="dashboard-chart-workspace">
-            <Card className="dashboard-chart-card">
-              <LineChart values={revenueSeries} height={220} />
-            </Card>
-            </WorkspaceSection>
-          )}
-
-          {canOrders ? (
-            <WorkspaceSection title="أحدث الطلبات" subtitle={`${orders.length} طلب إجمالي`} className="dashboard-orders-workspace">
-            <Card className="dashboard-orders-card">
-              {orders.length === 0 ? (
-                <EmptyState title="لا توجد طلبات بعد" description="عند وصول طلبات من متجرك ستظهر هنا مباشرة." icon="receipt_long" action={store ? <a href={`/store/${store.slug}`} target="_blank" rel="noreferrer"><Button variant="outline" size="sm">عرض متجرك</Button></a> : null} />
+          <section className="dashboard-mobile-orders">
+            <div className="dashboard-mobile-section-head">
+              <h2>أحدث الطلبات</h2>
+              {canOrders && <Link href="/dashboard/orders"><span className="dashboard-panel-link">عرض الكل</span></Link>}
+            </div>
+            {canOrders ? (
+              orders.length === 0 ? (
+                <EmptyState
+                  icon="receipt_long"
+                  title="لا توجد طلبات حتى الآن"
+                  description="بمجرد أن يقوم العملاء بالشراء من متجرك، ستظهر طلباتهم هنا."
+                  action={<Link href="/dashboard/products"><Button variant="primary">ابدأ بإضافة أول منتج</Button></Link>}
+                />
               ) : (
-                <Table cardMode columns={[
-                  { key: 'orderNumber', header: 'الرقم', render: (o: Order) => <Link href={`/dashboard/orders/${o.id}`}><span className="monospace">{o.orderNumber}</span></Link> },
-                  { key: 'customerName', header: 'العميل' },
-                  { key: 'totalPrice', header: 'الإجمالي', render: (o: Order) => formatCurrency(o.totalPrice) },
-                  { key: 'status', header: 'الحالة', render: (o: Order) => <Badge tone={STATUS_COLORS[o.status as keyof typeof STATUS_COLORS]}>{STATUS_LABELS[o.status as keyof typeof STATUS_LABELS] || o.status}</Badge> },
-                  { key: 'createdAt', header: 'التاريخ', render: (o: Order) => <span className="muted">{timeAgo(o.createdAt)}</span> },
-                ]} rows={orders.slice(0, 8)} />
-              )}
-            </Card>
-            </WorkspaceSection>
-          ) : <Card title="أحدث الطلبات"><EmptyState title="صلاحيات غير كافية" description="حسابك لا يملك صلاحية عرض الطلبات. تواصل مع مالك المتجر لتفعيلها." icon="lock" /></Card>}
-        </main>
+                <div className="dashboard-mobile-order-list">
+                  {latestOrders.map((o, i) => {
+                    const pill = STATUS_PILLS[o.status] || { cls: 'order-pill-new' }
+                    return (
+                      <Link key={o.id} href={`/dashboard/orders/${o.id}`} className="dashboard-mobile-order-card">
+                        <div className="dashboard-mobile-order-main">
+                          <span className="dashboard-mobile-order-icon"><Icon name={i % 2 === 0 ? 'package' : 'package_2'} ariaHidden /></span>
+                          <div>
+                            <div className="dashboard-mobile-order-number">{o.orderNumber}</div>
+                            <div className="dashboard-mobile-order-meta">{o.customerName} • {timeAgo(o.createdAt)}</div>
+                          </div>
+                        </div>
+                        <div className="dashboard-mobile-order-side">
+                          <span className={`order-pill ${pill.cls}`}>{STATUS_LABELS[o.status as keyof typeof STATUS_LABELS] || o.status}</span>
+                          <span className="dashboard-mobile-order-amount">{formatCurrency(o.totalPrice)}</span>
+                        </div>
+                      </Link>
+                    )
+                  })}
+                </div>
+              )
+            ) : (
+              <EmptyState title="صلاحيات غير كافية" description="حسابك لا يملك صلاحية عرض الطلبات." icon="lock" />
+            )}
+          </section>
 
-        <aside className="dashboard-canonical-side">
-          <Card title="حالة المتجر" className="dashboard-store-status-card">
-            <div className="dashboard-status-line"><span className="dashboard-status-dot" data-published={store?.published ? 'true' : 'false'} /><div><strong>{store?.published ? 'متجرك منشور' : 'المتجر مسودة'}</strong><small>{store?.published ? 'يمكنه استقبال الطلبات' : 'انشر المتجر لبدء البيع'}</small></div></div>
-            {store && isOwner && <div className="dashboard-status-actions"><Toggle checked={!!store.published} onChange={togglePublish} disabled={publishing} label="منشور" /><Link href="/dashboard/themes"><Button variant="ghost" size="sm" icon="palette">المظهر</Button></Link></div>}
-            {store && <div className="dashboard-store-link" dir="ltr">{storePublicUrl(store) || 'رابط المتجر غير متاح'}</div>}
-            <div className="dashboard-action-row"><Button variant="soft" size="sm" icon="link" onClick={copyLink} disabled={!storePublicUrl(store)}>نسخ الرابط</Button>{store && <a href={`/store/${store.slug}`} target="_blank" rel="noreferrer"><Button variant="outline" size="sm" icon="store">فتح المتجر</Button></a>}</div>
-          </Card>
-
-          {(subStatus === 'active' || subStatus === 'trialing') && <Card title="استخدام الخطة" className="dashboard-usage-card" actions={<Link href="/dashboard/subscription"><Button variant="ghost" size="sm" icon="arrow_forward">التفاصيل</Button></Link>}>
-            {subStatus === 'trialing' && subscription && <div className="dashboard-trial"><Icon name="hourglass_top" /><span><strong>{trialRemaining || 'قاربت على الانتهاء'}</strong><small>الفترة التجريبية نشطة</small></span></div>}
-            <UsageCard subscription={subscription} plan={plan} title="الطلبات" compact />
-          </Card>}
-
-          <Card title="إجراءات سريعة" className="dashboard-quick-actions">
-            {canProducts && <Link href="/dashboard/products"><Icon name="add" /><span>إضافة منتج</span><Icon name="arrow_forward" /></Link>}
-            {canOrders && <Link href="/dashboard/orders"><Icon name="receipt_long" /><span>مراجعة الطلبات</span><Icon name="arrow_forward" /></Link>}
-            {canAnalytics && <Link href="/dashboard/analytics"><Icon name="analytics" /><span>عرض التحليلات</span><Icon name="arrow_forward" /></Link>}
-          </Card>
-
-          {canProducts && <Card title="تنبيهات المخزون" className="dashboard-inventory-card" actions={<Link href="/dashboard/products"><Button variant="ghost" size="sm" icon="arrow_forward">إدارة</Button></Link>}>
-            {lowStock.length > 0 ? lowStock.slice(0, 4).map((p) => <div key={p.id} className="dashboard-inventory-row"><span>{p.name}</span><Badge tone={p.stock === 0 ? 'red' : 'amber'}>{p.stock === 0 ? 'نفد المخزون' : `متبقي ${p.stock}`}</Badge></div>) : <div className="dashboard-no-alert"><Icon name="check_circle" /><span>لا توجد تنبيهات مخزون</span></div>}
-          </Card>}
-        </aside>
+          {(subStatus === 'active' || subStatus === 'trialing') && (
+            <section className="dashboard-mobile-usage">
+              <h2>استهلاك الباقة</h2>
+              <div className="dashboard-mobile-usage-card">
+                <div className="dashboard-usage-row">
+                  <div className="dashboard-usage-row-top">
+                    <span>الطلبات المستنفدة</span>
+                    <span>{formatNumber(usage.used)} / {usage.limit > 0 ? formatNumber(usage.limit) : '∞'}</span>
+                  </div>
+                  <div className="dashboard-usage-bar">
+                    <span className="dashboard-usage-bar-fill is-orders" style={{ width: `${usage.percent}%` }} />
+                  </div>
+                </div>
+                {canProducts && (
+                  <div className="dashboard-usage-row">
+                    <div className="dashboard-usage-row-top">
+                      <span>المنتجات المضافة</span>
+                      <span>{formatNumber(products.length)}{productUnlimited || productLimit <= 0 ? '' : ` / ${formatNumber(productLimit)}`}</span>
+                    </div>
+                    {!(productUnlimited || productLimit <= 0) && (
+                      <div className="dashboard-usage-bar">
+                        <span className="dashboard-usage-bar-fill is-products" style={{ width: `${Math.min(100, (products.length / productLimit) * 100)}%` }} />
+                      </div>
+                    )}
+                  </div>
+                )}
+                {isOwner && (
+                  <div className="dashboard-usage-row">
+                    <div className="dashboard-usage-row-top">
+                      <span>المساحة المستخدمة</span>
+                      <span>{formatNumber(storageUsed)} / {storageLimit > 0 ? `${formatNumber(storageLimit)} MB` : '∞'}</span>
+                    </div>
+                    {storageLimit > 0 && (
+                      <div className="dashboard-usage-bar">
+                        <span className="dashboard-usage-bar-fill is-storage" style={{ width: `${Math.min(100, (storageUsed / storageLimit) * 100)}%` }} />
+                      </div>
+                    )}
+                  </div>
+                )}
+                {isOwner && staffLimit > 0 && (
+                  <div className="dashboard-usage-row">
+                    <div className="dashboard-usage-row-top">
+                      <span>الفريق</span>
+                      <span>{formatNumber(teamRes.data.length)} / {formatNumber(staffLimit)}</span>
+                    </div>
+                    <div className="dashboard-usage-bar">
+                      <span className="dashboard-usage-bar-fill is-staff" style={{ width: `${Math.min(100, (teamRes.data.length / staffLimit) * 100)}%` }} />
+                    </div>
+                  </div>
+                )}
+              </div>
+            </section>
+          )}
+        </div>
       </div>
-
-      {!allDone && <Card title="خطوات إطلاق المتجر" subtitle="أكمل الخطوات التالية لبدء البيع" className="dashboard-launch-card">
-        <div className="checklist dashboard-checklist">{steps.map((s, i) => <div key={i} className={`checklist-item ${s.done ? 'checklist-item--done' : ''}`}><span className={`checklist-mark ${s.done ? 'checklist-mark--done' : ''}`}>{s.done ? <Icon name="check" /> : i + 1}</span><div className="grow"><div className="font-semibold">{s.label}</div>{s.hint && <div className="muted small">{s.hint}</div>}</div>{!s.done && s.to && <Link href={s.to}><Button variant="soft" size="sm" icon="arrow_forward">ابدأ</Button></Link>}</div>)}</div>
-      </Card>}
-
-      {canLinks && links.length > 0 && <Card title="أداء روابط البيع" subtitle="أفضل الروابط حسب الإيرادات" className="dashboard-links-card">
-        <Table cardMode columns={[{ key: 'title', header: 'الرابط' }, { key: 'visits', header: 'الزيارات', render: (l: StoreLink) => <Badge>{l.visits || 0}</Badge> }, { key: 'ordersCount', header: 'الطلبات', render: (l: StoreLink) => <Badge tone="indigo">{l.ordersCount || 0}</Badge> }, { key: 'totalRevenue', header: 'الإيرادات', render: (l: StoreLink) => formatCurrency(l.totalRevenue || 0) }]} rows={[...links].sort((a, b) => (b.totalRevenue || 0) - (a.totalRevenue || 0)).slice(0, 5)} />
-      </Card>}
     </div>
   )
 }
+
 export default MerchantDashboard

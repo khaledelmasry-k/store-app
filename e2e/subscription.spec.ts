@@ -22,9 +22,13 @@ async function login(page: Page, role: 'platform' | 'merchant', email: string, p
   // The auth guard redirects an already-authenticated session away from /login
   // after hydration. If the login form never renders, sign out and retry.
   const loginEmail = page.locator('input[type="email"]')
-  const accountTrigger = page.locator('.topbar-user .user-chip:visible').first()
+  const accountTrigger = page.locator('.sidebar-logout:visible').first()
   await expect(loginEmail.or(accountTrigger)).toBeVisible({ timeout: 15000 })
   if (!(await loginEmail.isVisible())) {
+    const logout = page.locator('.sidebar-logout:visible').first()
+    if ((await logout.count()) === 0) {
+      await page.locator('.sidebar-toggle:visible').first().click()
+    }
     await accountTrigger.click()
     const logoutButton = page.getByRole('button', { name: 'تسجيل الخروج', exact: true }).last()
     await expect(logoutButton).toBeVisible({ timeout: 5000 })
@@ -194,8 +198,8 @@ test('expired merchant cannot publish (server-enforced)', async ({ page }) => {
 
   await login(page, 'merchant', email, password)
   await page.goto('/dashboard', { waitUntil: 'domcontentloaded' })
-  await expect(page.locator('.checklist')).toBeVisible({ timeout: 15000 })
-  await page.locator('.toggle').click()
+  await expect(page.getByRole('button', { name: 'نشر المتجر' })).toBeVisible({ timeout: 15000 })
+  await page.getByRole('button', { name: 'نشر المتجر' }).click()
   await expect(page.getByText('فشل تحديث حالة النشر')).toBeVisible({ timeout: 15000 })
   const storeSnap = await db.collection('stores').doc(storeId).get()
   expect(storeSnap.data()!.published).toBe(false)

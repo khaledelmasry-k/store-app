@@ -1,21 +1,32 @@
 import { FunctionalComponent, Fragment } from 'preact'
 import { useState } from 'preact/hooks'
 import { PageHeader } from '../../shared/components/ui/PageHeader'
-import { Card } from '../../shared/components/ui/Card'
-import { Table } from '../../shared/components/ui/Table'
-import { Badge } from '../../shared/components/ui/Badge'
 import { Button } from '../../shared/components/ui/Button'
 import { Modal } from '../../shared/components/ui/Modal'
 import { Input } from '../../shared/components/ui/Input'
 import { Select } from '../../shared/components/ui/Select'
 import { Tabs } from '../../shared/components/ui/Tabs'
+import { EmptyState } from '../../shared/components/ui/EmptyState'
 import { useStore } from '../../shared/hooks/useStore'
 import { useCollection } from '../../shared/hooks/useCollection'
 import { useToast } from '../../shared/hooks/useToast'
 import { inviteStaffCallable } from '../../shared/services/auth'
 import { formatDate } from '../../shared/utils/format'
+import { useSubscription } from '../../shared/hooks/useSubscription'
+import { getPlanLimit } from '../../shared/services/subscription'
 import { RolesTab } from './Roles'
 import type { TeamMember, RoleDef } from '../../shared/types'
+import { Icon } from '../../shared/components/ui/Icon'
+import './Team.css'
+
+const initials = (name: string) =>
+  name
+    .split(/\s+/)
+    .filter(Boolean)
+    .slice(0, 2)
+    .map((w) => w[0] || '')
+    .join('')
+    .toUpperCase()
 
 export const MerchantTeam: FunctionalComponent = () => {
   const { store } = useStore()
@@ -24,14 +35,22 @@ export const MerchantTeam: FunctionalComponent = () => {
   const team = teamRes.data
   const rolesRes = useCollection<RoleDef>('roles', { storeId })
   const roles = rolesRes.data
+  const { plan } = useSubscription(storeId)
+  const staffLimit = getPlanLimit('staff', plan)
+  const staffFull = staffLimit > 0 && team.length >= staffLimit
   const toast = useToast()
   const [tab, setTab] = useState('members')
   const [open, setOpen] = useState(false)
+  const [query, setQuery] = useState('')
   const [email, setEmail] = useState('')
   const [name, setName] = useState('')
   const [roleId, setRoleId] = useState('')
   const [loading, setLoading] = useState(false)
   const [credentials, setCredentials] = useState<{ email: string; password: string } | null>(null)
+
+  const filtered = team.filter(
+    (m) => (m.name || '').includes(query) || (m.email || '').includes(query),
+  )
 
   const invite = async () => {
     if (!email || !name || !roleId) {
@@ -62,37 +81,93 @@ export const MerchantTeam: FunctionalComponent = () => {
   return (
     <div className="merchant-operations merchant-team-page">
       <PageHeader
-        title="الفريق والصلاحيات"
-        subtitle={tab === 'members' ? `إدارة أعضاء فريقك ودعوة موظفين (${team.length} عضو)` : `إدارة الأدوار والصلاحيات (${roles.length} دور)`}
+        title="إدارة الفريق والأدوار"
+        subtitle={tab === 'members' ? `قم بإدارة وصول الموظفين وصلاحياتهم داخل المتجر (${team.length} عضو)` : `إدارة الأدوار والصلاحيات (${roles.length} دور)`}
         actions={
           tab === 'members' ? (
-            <Button icon="person_add" onClick={() => setOpen(true)}>دعوة عضو</Button>
+            <Button icon="person_add" disabled={staffFull} onClick={() => setOpen(true)}>دعوة عضو</Button>
           ) : undefined
         }
       />
 
+      {staffFull && (
+        <div className="team-limit-banner">
+          <Icon name="warning" ariaHidden />
+          <div>
+            <h4>تم بلوغ الحد الأقصى للموظفين</h4>
+            <p>لقد وصلت إلى الحد الأقصى لعدد الموظفين المسموح به في باقتك الحالية ({staffLimit} موظف).</p>
+          </div>
+          <a href="/dashboard/subscription"><button type="button" className="team-limit-upgrade">ترقية</button></a>
+        </div>
+      )}
+
       <Tabs
         tabs={[
           { key: 'members', label: 'الأعضاء', count: team.length },
-          { key: 'roles', label: 'الأدوار والصلاحيات', count: roles.length },
+          { key: 'roles', label: 'الأدوار', count: roles.length },
         ]}
         active={tab}
         onChange={setTab}
       />
 
       {tab === 'members' ? (
-        <Card title="الأعضاء">
-          <Table cardMode
-            columns={[
-              { key: 'name', header: 'الاسم' },
-              { key: 'email', header: 'البريد' },
-              { key: 'role', header: 'الدور', render: (m: TeamMember) => <Badge tone="indigo">{(roles.find((r: any) => r.id === m.role) as any)?.name || m.role}</Badge> },
-              { key: 'active', header: 'الحالة', render: (m: TeamMember) => <Badge tone={m.active ? 'green' : 'slate'}>{m.active ? 'نشط' : 'موقوف'}</Badge> },
-              { key: 'createdAt', header: 'الانضمام', render: (m: TeamMember) => <span className="muted">{formatDate(m.createdAt)}</span> },
-            ]}
-            rows={team}
-          />
-        </Card>
+        <Fragment>
+          <div className="team-toolbar">
+            <div className="team-search">
+              <Icon name="search" ariaHidden />
+              <input type="text" placeholder="ابحث بالاسم أو البريد..." value={query} onInput={(e) => setQuery((e.target as HTMLInputElement).value)} aria-label="بحث في الفريق" />
+            </div>
+            <Button icon="person_add" disabled={staffFull} onClick={() => setOpen(true)}>إضافة عضو</Button>
+          </div>
+
+          {teamRes.loading ? (
+            <div className="loading-screen"><span className="spinner spinner-lg" /></div>
+          ) : filtered.length === 0 ? (
+            <EmptyState icon="group_add" title={query ? 'لا توجد نتائج' : 'لا يوجد أعضاء بعد'} description={query ? 'جرّب بحثاً آخر.' : 'ادعُ أول عضو للفريق للبدء.'} />
+          ) : (
+            <div className="team-table">
+              <table>
+                <thead>
+                  <tr>
+                    <th>العضو</th>
+                    <th>الدور</th>
+                    <th>الحالة</th>
+                    <th>تاريخ الانضمام</th>
+                    <th className="actions">إجراءات</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {filtered.map((m) => (
+                    <tr key={m.id}>
+                      <td>
+                        <span className="team-member-cell">
+                          <span className="team-avatar">{initials(m.name || m.email || '?')}</span>
+                          <span>
+                            <span className="team-member-name">{m.name || '—'}</span>
+                            <span className="team-member-email">{m.email}</span>
+                          </span>
+                        </span>
+                      </td>
+                      <td>
+                        <span className="team-role-chip">{(roles.find((r: any) => r.id === m.role) as any)?.name || m.role}</span>
+                      </td>
+                      <td>
+                        <span className={`team-status${m.active ? ' is-active' : ''}`}>
+                          <span className="team-status-dot" />
+                          {m.active ? 'نشط' : 'موقوف'}
+                        </span>
+                      </td>
+                      <td><span className="muted">{formatDate(m.createdAt)}</span></td>
+                      <td className="actions">
+                        <button className="icon-btn" title="تعديل"><Icon name="edit" /></button>
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          )}
+        </Fragment>
       ) : (
         <RolesTab />
       )}

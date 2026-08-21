@@ -7,7 +7,7 @@ export interface CollectionResult<T> {
   error: Error | null
 }
 
-export function useCollection<T>(path: string, params: ListParams = {}, enabled = true): CollectionResult<T> {
+export function useCollection<T>(path: string, params: ListParams = {}, enabled = true, deps: unknown[] = []): CollectionResult<T> {
   const [data, setData] = useState<T[]>([])
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<Error | null>(null)
@@ -47,7 +47,8 @@ export function useCollection<T>(path: string, params: ListParams = {}, enabled 
       cancelled = true
       unsub?.()
     }
-  }, [path, enabled, JSON.stringify(params)])
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [path, enabled, JSON.stringify(params), ...deps])
 
   if (enabled && !initializedRef.current && data.length === 0 && !error) {
     return { data, loading: true, error: null }

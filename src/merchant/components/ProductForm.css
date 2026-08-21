@@ -1,0 +1,469 @@
+/* ────────────────────────────────────────────────────────────────────────────
+   ProductForm — Stitch V3 editor presentation (Phase 5)
+   Loaded after index.css: section cards override the legacy "uppercase rule"
+   headers; every interactive control is rounded 12px with outline-variant
+   borders, consistent with the dashboard/orders language.
+   ──────────────────────────────────────────────────────────────────────────── */
+
+.merchant-product-form-canonical {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+}
+
+/* Editor header (Stitch: breadcrumb + «نشط / منشور» toggle) */
+.merchant-product-form-canonical .product-editor-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  padding: 4px 4px 12px;
+}
+.merchant-product-form-canonical .product-editor-breadcrumb {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  font-size: 13px;
+  color: var(--on-surface-variant);
+  min-width: 0;
+}
+.merchant-product-form-canonical .product-editor-breadcrumb .mk-icon {
+  font-size: 16px;
+  color: var(--outline);
+}
+.merchant-product-form-canonical .product-editor-breadcrumb span {
+  color: var(--on-surface);
+  font-weight: 600;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.merchant-product-form-canonical .product-editor-crumb {
+  background: none;
+  border: none;
+  padding: 0;
+  font: inherit;
+  color: var(--on-surface-variant);
+  cursor: pointer;
+  transition: color 0.15s;
+  white-space: nowrap;
+}
+.merchant-product-form-canonical .product-editor-crumb:hover {
+  color: var(--primary);
+}
+.merchant-product-form-canonical .product-editor-publish-toggle {
+  flex-shrink: 0;
+}
+.merchant-product-form-canonical .product-editor-publish-toggle .toggle-label {
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--on-surface);
+}
+.merchant-product-form-canonical .product-editor-publish-toggle .toggle-track {
+  background: var(--primary);
+}
+
+/* ── Section cards ────────────────────────────────────────────────────────── */
+.merchant-product-form-canonical .product-form-section {
+  background: var(--surface-container-lowest);
+  border: 1px solid var(--outline-variant);
+  border-radius: 12px;
+  overflow: hidden;
+  box-shadow: 0 1px 2px rgba(20, 27, 43, 0.05);
+  margin: 0;
+  padding: 0;
+  font-size: 13px;
+  font-weight: 400;
+  color: var(--on-surface);
+  text-transform: none;
+  letter-spacing: normal;
+}
+.merchant-product-form-canonical .product-form-section-head {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 12px 16px;
+  border-bottom: 1px solid var(--outline-variant);
+  background: var(--surface-container-low);
+}
+.merchant-product-form-canonical .product-form-section-head h3 {
+  margin: 0;
+  font-size: 15px;
+  font-weight: 700;
+  color: var(--on-surface);
+}
+.merchant-product-form-canonical .product-form-section-icon {
+  font-size: 18px;
+  color: var(--primary);
+}
+.merchant-product-form-canonical .product-form-section-body {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+  padding: 16px;
+}
+
+/* ── Controls inside the editor ───────────────────────────────────────────── */
+.merchant-product-form-canonical .input,
+.merchant-product-form-canonical textarea.input,
+.merchant-product-form-canonical select.input {
+  border-radius: 12px !important;
+  border-color: var(--outline-variant);
+  background: var(--surface-container-lowest);
+  color: var(--on-surface);
+}
+.merchant-product-form-canonical .input::placeholder {
+  color: var(--outline);
+}
+.merchant-product-form-canonical .input:focus,
+.merchant-product-form-canonical textarea.input:focus,
+.merchant-product-form-canonical select.input:focus {
+  border-color: var(--primary) !important;
+  box-shadow: 0 0 0 3px color-mix(in srgb, var(--primary) 18%, transparent) !important;
+}
+.merchant-product-form-canonical .field {
+  margin: 0;
+}
+.merchant-product-form-canonical .field-label {
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--on-surface);
+}
+.merchant-product-form-canonical .field-hint {
+  font-size: 12px;
+  color: var(--on-surface-variant);
+}
+
+/* Error banner — M3 error-container */
+.merchant-product-form-canonical .form-error-banner {
+  background: var(--error-container);
+  color: var(--on-error-container);
+  border: 1px solid color-mix(in srgb, var(--error) 35%, transparent);
+  border-radius: 12px;
+  padding: 10px 14px;
+  font-size: 13px;
+  font-weight: 600;
+}
+
+/* Feature-lock banner (warning container) */
+.merchant-product-form-canonical .feature-lock-banner {
+  display: flex;
+  align-items: flex-start;
+  gap: 10px;
+  padding: 12px 14px;
+  background: var(--tertiary-container);
+  border: 1px solid color-mix(in srgb, var(--tertiary) 30%, transparent);
+  border-radius: 12px;
+  margin: 0;
+}
+.merchant-product-form-canonical .feature-lock-banner .feature-lock-icon {
+  color: var(--on-tertiary-container);
+}
+.merchant-product-form-canonical .feature-lock-banner strong {
+  display: block;
+  color: var(--on-surface);
+  font-size: 13px;
+}
+.merchant-product-form-canonical .feature-lock-banner p {
+  color: var(--on-surface-variant);
+}
+.merchant-product-form-canonical .feature-lock-banner .feature-lock-cta {
+  color: var(--primary);
+  font-weight: 700;
+  text-decoration: none;
+}
+.merchant-product-form-canonical .feature-lock-banner .feature-lock-cta:hover {
+  text-decoration: underline;
+}
+
+/* Profit summary — tonal panel */
+.merchant-product-form-canonical .cost-profit-summary {
+  gap: 8px;
+  padding: 14px 16px;
+  border: 1px solid var(--outline-variant);
+  border-radius: 12px;
+  background: var(--surface-container-low);
+  margin-top: 0;
+}
+.merchant-product-form-canonical .cost-profit-summary-head {
+  padding-bottom: 8px;
+  border-bottom: 1px dashed var(--outline-variant);
+}
+.merchant-product-form-canonical .cost-profit-summary-title {
+  font-size: 13px;
+  font-weight: 700;
+  color: var(--on-surface);
+}
+.merchant-product-form-canonical .cost-profit-summary.positive .cost-profit-summary-title .mk-icon {
+  color: var(--success);
+}
+.merchant-product-form-canonical .cost-profit-summary.negative .cost-profit-summary-title .mk-icon {
+  color: var(--error);
+}
+.merchant-product-form-canonical .cost-profit-summary-margin {
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--on-surface-variant);
+}
+.merchant-product-form-canonical .cost-profit-summary-row {
+  font-size: 13px;
+  color: var(--on-surface-variant);
+}
+.merchant-product-form-canonical .cost-profit-summary-row strong {
+  color: var(--on-surface);
+}
+.merchant-product-form-canonical .cost-profit-summary-row.is-profit strong {
+  color: var(--success);
+  font-size: 15px;
+}
+.merchant-product-form-canonical .cost-profit-summary.negative .cost-profit-summary-row.is-profit strong {
+  color: var(--error);
+}
+.merchant-product-form-canonical .cost-profit-tiers {
+  border-top: 1px dashed var(--outline-variant);
+}
+.merchant-product-form-canonical .cost-profit-tiers-title {
+  font-size: 12px;
+  font-weight: 700;
+  color: var(--on-surface-variant);
+}
+
+/* ── Media gallery ────────────────────────────────────────────────────────── */
+.merchant-product-form-canonical .image-upload-empty {
+  gap: 6px;
+  padding: 40px 16px;
+  border: 2px dashed var(--outline-variant);
+  border-radius: 12px;
+  background: var(--surface-container-lowest);
+  cursor: pointer;
+  transition: border-color 0.15s, background 0.15s;
+}
+.merchant-product-form-canonical .image-upload-empty:hover {
+  border-color: var(--primary);
+  background: var(--surface-container-low);
+}
+.merchant-product-form-canonical .image-upload-empty .mk-icon {
+  font-size: 40px;
+  color: var(--primary);
+  margin-bottom: 4px;
+}
+.merchant-product-form-canonical .image-upload-empty strong {
+  font-size: 14px;
+  font-weight: 600;
+  color: var(--on-surface);
+}
+.merchant-product-form-canonical .image-gallery-grid {
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  gap: 12px;
+}
+.merchant-product-form-canonical .image-tile {
+  border: 1px solid var(--outline-variant);
+  border-radius: 12px;
+  background: var(--surface-container-low);
+  aspect-ratio: 1;
+}
+.merchant-product-form-canonical .image-tile-add {
+  border: 1.5px dashed var(--outline-variant);
+  border-radius: 12px;
+  color: var(--on-surface-variant);
+  background: transparent;
+}
+.merchant-product-form-canonical .image-tile-add:hover {
+  border-color: var(--primary);
+  color: var(--primary);
+  background: color-mix(in srgb, var(--primary) 6%, transparent);
+}
+.merchant-product-form-canonical .image-tile-primary {
+  background: rgba(20, 27, 43, 0.78);
+  color: #fff;
+  font-size: 11px;
+  padding: 2px 8px;
+  border-radius: 999px;
+}
+
+/* ── Quantity tiers editor ────────────────────────────────────────────────── */
+.merchant-product-form-canonical .qty-tier-editor {
+  border: 1px solid var(--outline-variant);
+  border-radius: 12px;
+  background: var(--surface-container-lowest);
+  padding: 12px;
+}
+.merchant-product-form-canonical .qty-tier-editor-title {
+  font-size: 13px;
+  font-weight: 700;
+  color: var(--on-surface);
+}
+.merchant-product-form-canonical .qty-tier-editor-list {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+.merchant-product-form-canonical .qty-tier-editor-row {
+  display: grid;
+  grid-template-columns: 48px 1fr 1fr 36px;
+  gap: 10px;
+  align-items: end;
+  padding: 10px;
+  border: 1px solid var(--outline-variant);
+  border-radius: 10px;
+  background: var(--surface-container-low);
+}
+.merchant-product-form-canonical .qty-tier-editor-row .field-label {
+  font-size: 11px;
+}
+.merchant-product-form-canonical .qty-tier-editor-row .input {
+  border-radius: 10px !important;
+}
+.merchant-product-form-canonical .qty-tier-editor .btn-icon-only {
+  border-radius: 10px;
+  color: var(--on-surface-variant);
+}
+.merchant-product-form-canonical .qty-tier-editor .btn-icon-only:hover {
+  color: var(--error);
+  background: color-mix(in srgb, var(--error) 10%, transparent);
+}
+
+/* ── Color manager ────────────────────────────────────────────────────────── */
+.merchant-product-form-canonical .color-presets {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+.merchant-product-form-canonical .color-preset-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 6px 12px;
+  border: 1px solid var(--outline-variant);
+  border-radius: 999px;
+  background: var(--surface-container-lowest);
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--on-surface);
+  cursor: pointer;
+  transition: border-color 0.15s, background 0.15s;
+}
+.merchant-product-form-canonical .color-preset-chip:hover {
+  border-color: var(--primary);
+  color: var(--primary);
+}
+.merchant-product-form-canonical .color-preset-swatch {
+  width: 14px;
+  height: 14px;
+  border-radius: 50%;
+  border: 1px solid var(--outline-variant);
+  display: inline-block;
+}
+.merchant-product-form-canonical .color-row {
+  padding: 10px 12px;
+  border: 1px solid var(--outline-variant);
+  border-radius: 10px;
+  background: var(--surface-container-lowest);
+}
+
+/* ── Variant matrix ───────────────────────────────────────────────────────── */
+.merchant-product-form-canonical .size-chips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  align-items: center;
+}
+.merchant-product-form-canonical .size-preset-chip,
+.merchant-product-form-canonical .size-chip {
+  padding: 6px 12px;
+  border: 1px solid var(--outline-variant);
+  border-radius: 999px;
+  background: var(--surface-container-lowest);
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--on-surface);
+}
+.merchant-product-form-canonical .size-input {
+  border-radius: 12px !important;
+}
+.merchant-product-form-canonical .size-chip-remove {
+  color: var(--on-surface-variant);
+}
+.merchant-product-form-canonical .size-chip-remove:hover {
+  color: var(--error);
+}
+.merchant-product-form-canonical .variant-table,
+.merchant-product-form-canonical .variant-grid {
+  border: 1px solid var(--outline-variant);
+  border-radius: 12px;
+  overflow: hidden;
+  background: var(--surface-container-lowest);
+}
+.merchant-product-form-canonical .variant-cell,
+.merchant-product-form-canonical .variant-cell-head {
+  padding: 10px 12px;
+  border-bottom: 1px solid var(--outline-variant);
+}
+.merchant-product-form-canonical .variant-cell-head {
+  background: var(--surface-container-low);
+  font-size: 12px;
+  font-weight: 700;
+  color: var(--on-surface-variant);
+}
+.merchant-product-form-canonical .variant-cell .input {
+  border-radius: 10px !important;
+}
+
+/* ── Action bar ───────────────────────────────────────────────────────────── */
+.merchant-product-form-canonical .product-form-actions {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+  gap: 10px;
+  margin-top: 2px;
+  padding: 14px 16px;
+  border: 1px solid var(--outline-variant);
+  border-radius: 12px;
+  background: var(--surface-container-low);
+  position: sticky;
+  bottom: 12px;
+  z-index: 5;
+}
+.merchant-product-form-canonical .product-form-actions .btn {
+  border-radius: 10px;
+  font-weight: 700;
+}
+.merchant-product-form-canonical .product-form-actions .btn-ghost {
+  color: var(--on-surface-variant);
+}
+.merchant-product-form-canonical .product-form-actions .btn-ghost:hover {
+  background: var(--surface-container-high);
+  color: var(--on-surface);
+}
+.merchant-product-form-canonical .product-form-actions .btn-outline {
+  border-color: var(--outline-variant);
+  color: var(--primary);
+}
+.merchant-product-form-canonical .product-form-actions .btn-soft {
+  background: var(--surface-container-high);
+  color: var(--primary);
+}
+.merchant-product-form-canonical .product-form-actions .btn-soft:hover {
+  background: color-mix(in srgb, var(--primary) 14%, var(--surface-container-high));
+}
+.merchant-product-form-canonical .product-form-actions .btn-primary {
+  background: var(--primary);
+}
+
+/* ── Mobile ───────────────────────────────────────────────────────────────── */
+@media (max-width: 640px) {
+  .merchant-product-form-canonical .image-gallery-grid {
+    grid-template-columns: repeat(3, 1fr);
+  }
+  .merchant-product-form-canonical .qty-tier-editor-row {
+    grid-template-columns: 1fr 1fr;
+    align-items: center;
+  }
+  .merchant-product-form-canonical .product-editor-header {
+    align-items: flex-start;
+  }
+  .merchant-product-form-canonical .product-editor-publish-toggle .toggle-label {
+    display: none;
+  }
+}

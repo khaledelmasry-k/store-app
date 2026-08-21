@@ -21,6 +21,7 @@ import { formatCurrency } from '../../shared/utils/format'
 import { GOVER_EG } from '../../shared/utils/constants'
 import type { ShippingProvider, ShippingZone } from '../../shared/types'
 import { Icon } from '../../shared/components/ui/Icon'
+import './Shipping.css'
 
 type ZoneDraft = {
   id?: string
@@ -96,6 +97,27 @@ export const MerchantShipping: FunctionalComponent = () => {
     } catch (err: any) {
       toast.push('تعذر حفظ إعدادات الشحن', err?.message || 'حدث خطأ غير متوقع', 'error')
     }
+  }
+
+
+  const formatPolicy = (before: string, after: string) => {
+    const el = document.getElementById('shipping-policy-textarea') as HTMLTextAreaElement | null
+    if (!el) return
+    const { selectionStart: st, selectionEnd: en, value } = el
+    const sel = value.slice(st, en)
+    const next = value.slice(0, st) + before + sel + after + value.slice(en)
+    persistShipping({ refusedPolicy: next })
+    requestAnimationFrame(() => { el.focus(); el.setSelectionRange(st + before.length, en + before.length) })
+  }
+
+  const formatList = (prefix: string) => {
+    const el = document.getElementById('shipping-policy-textarea') as HTMLTextAreaElement | null
+    if (!el) return
+    const { selectionStart: st, selectionEnd: en, value } = el
+    const lines = value.slice(st, en).split('\n')
+    const next = value.slice(0, st) + lines.map((l, i) => (prefix ? `${prefix}${l}` : `${i + 1}. ${l}`)).join('\n') + value.slice(en)
+    persistShipping({ refusedPolicy: next })
+    requestAnimationFrame(() => el.focus())
   }
 
   const submitZone = async () => {
@@ -197,43 +219,91 @@ export const MerchantShipping: FunctionalComponent = () => {
             <StatsCard title="شركات التوصيل" value={activeProviders} icon="local_shipping" tone="indigo" />
           </div>
 
-          <Card title="إعدادات الشحن العامة" className="mt-2">
-            <div className="field">
-              <Toggle checked={!!cfg.enabled} onChange={(v) => persistShipping({ enabled: v })} label="تفعيل الشحن والتوصيل" />
-            </div>
-            <div className="field mt-1">
-              <span className="field-label">نموذج الشحن</span>
-              <div className="flex">
-                <button type="button" className={`btn ${cfg.model === 'flat' ? 'btn-primary' : 'btn-outline'}`} onClick={() => persistShipping({ model: 'flat' })}>سعر موحد</button>
-                <button type="button" className={`btn ${cfg.model === 'zones' ? 'btn-primary' : 'btn-outline'}`} onClick={() => persistShipping({ model: 'zones' })}>حسب المنطقة</button>
-              </div>
-            </div>
-            {cfg.model === 'flat' && (
-              <Input label="سعر الشحن الموحد" type="number" value={String(cfg.flatFee ?? '')} onChange={(v) => persistShipping({ flatFee: Number(v) })} />
-            )}
-            <Input label="شحن مجاني عند الطلب بقيمة (اختياري)" type="number" value={cfg.freeAbove ? String(cfg.freeAbove) : ''} onChange={(v) => persistShipping({ freeAbove: v === '' ? undefined : Number(v) })} />
-            <div className="field">
-              <div className="flex-between">
-                <div>
-                  <span className="field-label">سياسة الرفض والاسترجاع</span>
-                  <div className="muted small">تُعرض للعميل عند إتمام الطلب في حال تفعيلها</div>
+          <div className="shipping-settings-grid">
+            <div className="shipping-settings-main">
+              <Card title="تفعيل الشحن" className="mt-2" titleIcon="local_shipping">
+                <div className="field">
+                  <Toggle checked={!!cfg.enabled} onChange={(v) => persistShipping({ enabled: v })} label="تفعيل الشحن والتوصيل" />
+                  <div className="muted small">السماح للعملاء باختيار خيارات الشحن عند إتمام الطلب</div>
                 </div>
-                <Toggle checked={cfg.refusedPolicyEnabled !== false} onChange={(v) => persistShipping({ refusedPolicyEnabled: v })} label="تفعيل" />
-              </div>
-              {cfg.refusedPolicyEnabled !== false && (
-                <>
-                  <textarea className="input" rows={2} value={cfg.refusedPolicy || ''} onChange={(e) => persistShipping({ refusedPolicy: (e.target as HTMLTextAreaElement).value })} placeholder="رسوم الرفض أو شروط الاسترجاع تظهر للعميل عند إتمام الطلب" />
-                  <div className="shipping-preview mt-1">
-                    <span className="field-label small">معاينة للعميل</span>
-                    <p className="muted small">{cfg.refusedPolicy ? cfg.refusedPolicy : 'سيتم إخفاء السياسة — اكتب نصاً إلزامياً أو فعّل السياسة'}</p>
+              </Card>
+
+              <Card title="استراتيجية تسعير الشحن" className="mt-2">
+                <div className="field">
+                  <span className="field-label">نموذج التسعير</span>
+                  <div className="shipping-model-grid">
+                    <button type="button" className={`shipping-model-card${cfg.model === 'flat' ? ' is-active' : ''}`} onClick={() => persistShipping({ model: 'flat' })}>
+                      <span className="shipping-model-body">
+                        <span className="shipping-model-title">سعر ثابت</span>
+                        <span className="shipping-model-sub">تكلفة موحدة لجميع الطلبات</span>
+                      </span>
+                      <Icon name="check_circle" ariaHidden />
+                    </button>
+                    <button type="button" className={`shipping-model-card${cfg.model === 'zones' ? ' is-active' : ''}`} onClick={() => persistShipping({ model: 'zones' })}>
+                      <span className="shipping-model-body">
+                        <span className="shipping-model-title">حسب المنطقة</span>
+                        <span className="shipping-model-sub">تخصيص الأسعار حسب المنطقة الجغرافية</span>
+                      </span>
+                      <Icon name="check_circle" ariaHidden />
+                    </button>
                   </div>
-                </>
-              )}
+                </div>
+                <div className="shipping-fee-grid">
+                  {cfg.model === 'flat' && (
+                    <div className="field">
+                      <span className="field-label">رسوم الشحن الثابتة</span>
+                      <div className="input-with-unit">
+                        <input className="input" type="number" min="0" value={cfg.flatFee ?? ''} onChange={(e) => persistShipping({ flatFee: Number((e.target as HTMLInputElement).value || 0) })} />
+                        <span className="input-unit">ج.م</span>
+                      </div>
+                    </div>
+                  )}
+                  <div className="field">
+                    <span className="field-label">شحن مجاني للطلبات فوق <span className="field-label-optional">(اختياري)</span></span>
+                    <div className="input-with-unit">
+                      <input className="input" type="number" min="0" value={cfg.freeAbove ? String(cfg.freeAbove) : ''} onChange={(e) => { const v = (e.target as HTMLInputElement).value; persistShipping({ freeAbove: v === '' ? undefined : Number(v) }) }} />
+                      <span className="input-unit">ج.م</span>
+                    </div>
+                  </div>
+                </div>
+              </Card>
+
+              <Card title="سياسة الشحن والاسترجاع" className="mt-2" titleIcon="policy" titleIconTone="secondary">
+                <div className="muted small mb-1">تظهر هذه المعلومات للعملاء في صفحة إتمام الطلب</div>
+                <div className="shipping-policy-editor">
+                  <div className="shipping-policy-toolbar">
+                    <button type="button" title="عريض" onClick={() => formatPolicy('**', '**')}><Icon name="format_bold" ariaHidden /></button>
+                    <button type="button" title="مائل" onClick={() => formatPolicy('_', '_')}><Icon name="format_italic" ariaHidden /></button>
+                    <button type="button" title="تسطير" onClick={() => formatPolicy('__', '__')}><Icon name="format_underlined" ariaHidden /></button>
+                    <span className="shipping-policy-sep" />
+                    <button type="button" title="قائمة نقطية" onClick={() => formatList('- ')}><Icon name="format_list_bulleted" ariaHidden /></button>
+                    <button type="button" title="قائمة مرقمة" onClick={() => formatList('')}><Icon name="format_list_numbered" ariaHidden /></button>
+                  </div>
+                  <textarea className="shipping-policy-textarea" id="shipping-policy-textarea" rows={7} value={cfg.refusedPolicy || ''} onChange={(e) => persistShipping({ refusedPolicy: (e.target as HTMLTextAreaElement).value })} placeholder="اكتب سياسة الشحن والاسترجاع هنا..." />
+                </div>
+                <div className="flex flex-end mt-1">
+                  <Button icon="save" loading={savingCfg} onClick={saveConfig}>حفظ التغييرات</Button>
+                </div>
+              </Card>
             </div>
-            <div className="flex flex-end mt-1">
-              <Button icon="save" loading={savingCfg} onClick={saveConfig}>حفظ الإعدادات</Button>
+
+            <div className="shipping-settings-side">
+              <div className="shipping-preview-card">
+                <h4 className="shipping-preview-head"><Icon name="visibility" ariaHidden /> معاينة إتمام الطلب</h4>
+                <div className="shipping-preview-sheet">
+                  <div className="shipping-preview-row"><span>الإجمالي الفرعي</span><span>450 ج.م</span></div>
+                  <div className="shipping-preview-row"><span className="muted small">الشحن ({cfg.model === 'flat' ? 'سعر ثابت' : 'حسب المنطقة'})</span><span className="font-medium">{cfg.model === 'flat' ? `${formatCurrency(cfg.flatFee || 0)}` : '—'}</span></div>
+                  <div className="shipping-preview-total"><span>الإجمالي</span><span>{formatCurrency(450 + (cfg.model === 'flat' ? Number(cfg.flatFee || 0) : 0))}</span></div>
+                  {cfg.model === 'flat' && !!cfg.freeAbove && Number(cfg.freeAbove) > 450 && (
+                    <div className="shipping-free-hint">
+                      <Icon name="local_shipping" ariaHidden />
+                      <span>أضف منتجات بقيمة {formatCurrency(Number(cfg.freeAbove) - 450)} للحصول على شحن مجاني</span>
+                    </div>
+                  )}
+                </div>
+              </div>
             </div>
-          </Card>
+          </div>
         </div>
       )}
 

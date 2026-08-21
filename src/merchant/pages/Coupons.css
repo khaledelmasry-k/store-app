@@ -1,0 +1,106 @@
+.merchant-coupons-page .coupon-locked-banner {
+  display: flex;
+  align-items: center;
+  gap: 16px;
+  padding: 20px 24px;
+  background: var(--surface-container-lowest);
+  border: 1px solid var(--outline-variant);
+  border-radius: 16px;
+  box-shadow: var(--shadow-sm);
+  margin-bottom: 16px;
+}
+.merchant-coupons-page .coupon-locked-banner .coupon-locked-icon {
+  width: 44px;
+  height: 44px;
+  flex-shrink: 0;
+  border-radius: 9999px;
+  background: color-mix(in srgb, var(--secondary) 12%, transparent);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: var(--secondary);
+}
+.merchant-coupons-page .coupon-locked-banner strong {
+  font-size: 15px;
+  font-weight: 700;
+}
+.merchant-coupons-page .coupon-locked-banner p {
+  margin: 2px 0 0;
+  font-size: 13px;
+  color: var(--text-on-surface-variant);
+}
+.merchant-coupons-page .coupon-locked-banner > a {
+  margin-inline-start: auto;
+}
+.merchant-coupons-page .coupons-table {
+  overflow-x: auto;
+}
+.merchant-coupons-page .coupons-table table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 14px;
+}
+.merchant-coupons-page .coupons-table thead th {
+  padding: 14px 24px;
+  text-align: start;
+  font-size: 12px;
+  font-weight: 500;
+  color: var(--text-on-surface-variant);
+  background: var(--surface-container-low);
+  border-bottom: 1px solid var(--outline-variant);
+  white-space: nowrap;
+}
+.merchant-coupons-page .coupons-table thead th.center,
+.merchant-coupons-page .coupons-table tbody td.center {
+  text-align: center;
+}
+.merchant-coupons-page .coupons-table thead th.actions,
+.merchant-coupons-page .coupons-table tbody td.actions {
+  text-align: start;
+}
+.merchant-coupons-page .coupons-table tbody td {
+  padding: 14px 24px;
+  border-bottom: 1px solid var(--outline-variant);
+  vertical-align: middle;
+}
+.merchant-coupons-page .coupons-table tbody tr:hover {
+  background: color-mix(in srgb, var(--surface-container-low) 50%, transparent);
+}
+.merchant-coupons-page .coupon-usage {
+  display: inline-flex;
+  align-items: center;
+  gap: 10px;
+}
+.merchant-coupons-page .coupon-usage-track {
+  width: 96px;
+  height: 6px;
+  border-radius: 9999px;
+  background: var(--surface-container);
+  overflow: hidden;
+}
+.merchant-coupons-page .coupon-usage-fill {
+  display: block;
+  height: 100%;
+  border-radius: 9999px;
+  background: var(--primary);
+}
+.merchant-coupons-page .coupon-modal-toggle {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding-top: 12px;
+  border-top: 1px solid var(--outline-variant);
+  font-size: 14px;
+  font-weight: 500;
+  margin-top: 16px;
+}
+
+@media (max-width: 768px) {
+  .merchant-coupons-page .coupon-locked-banner {
+    flex-wrap: wrap;
+  }
+  .merchant-coupons-page .coupon-locked-banner > a {
+    margin-inline-start: 0;
+    width: 100%;
+  }
+}

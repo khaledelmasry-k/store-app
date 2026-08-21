@@ -16,12 +16,14 @@ import { Textarea } from '../../shared/components/ui/Textarea'
 import { Select } from '../../shared/components/ui/Select'
 import { Toggle } from '../../shared/components/ui/Toggle'
 import { Button } from '../../shared/components/ui/Button'
+import { SectionHeader } from '../../shared/components/ui/SectionHeader'
 import { ImageGalleryUploader } from './ImageGalleryUploader'
 import { ColorManager } from './ColorManager'
 import { VariantMatrix } from './VariantMatrix'
 import { QuantityTiersEditor } from './QuantityTiersEditor'
 import { validateQuantityTiers, lineProfit, profitMargin, piecesLabel } from '../../shared/utils/pricing'
 import { Icon } from '../../shared/components/ui/Icon'
+import './ProductForm.css'
 
 interface Props {
   storeId: string
@@ -83,6 +85,17 @@ function draftFrom(initial?: Product | null): Draft {
   }
 }
 
+/**
+ * Stitch editor section card: white surface, 12px radius, icon header with a
+ * divider rail (matching the dashboard/orders panel language).
+ */
+const Section: FunctionalComponent<{ title: string; id: string; icon: string; children?: any }> = ({ title, id, children }) => (
+  <section className="product-form-section" id={id}>
+    <SectionHeader title={title} />
+    <div className="product-form-section-body">{children}</div>
+  </section>
+)
+
 export const ProductForm: FunctionalComponent<Props> = ({ storeId, initial, categories, onClose, onSaved }) => {
   const toast = useToast()
   const { plan } = useSubscription(storeId)
@@ -99,6 +112,10 @@ export const ProductForm: FunctionalComponent<Props> = ({ storeId, initial, cate
   const [draft, setDraft] = useState<Draft>(() => draftFrom(initial))
   const [savingAction, setSavingAction] = useState<'draft' | 'save' | 'publish' | null>(null)
   const [error, setError] = useState('')
+  // A blocked attempt at a plan-locked mode freezes saves for this drawer
+  // session: even after the merchant reverts the field, the product must not
+  // be written while the lock banner is still up.
+  const [lockAttempt, setLockAttempt] = useState(false)
 
   // Private cost price — loaded from the separate `productCosts` collection so
   // it never travels through the public `products` document.
@@ -155,6 +172,10 @@ export const ProductForm: FunctionalComponent<Props> = ({ storeId, initial, cate
   }
 
   const save = async (action: 'draft' | 'save' | 'publish', activeOverride?: boolean) => {
+    if (lockAttempt) {
+      setError('ميزة التسعير حسب الكمية تتطلب ترقية الباقة')
+      return
+    }
     if (!draft.name.trim()) {
       setError('اسم المنتج مطلوب')
       return
@@ -211,36 +232,22 @@ export const ProductForm: FunctionalComponent<Props> = ({ storeId, initial, cate
     }
   }
 
-  const section = (title: string, id: string, icon: string) => (
-    <div className="product-form-section" id={id} role="heading" aria-level={3}>
-      <Icon name={icon} ariaHidden />
-      <span>{title}</span>
-    </div>
-  )
-
   const lockedFeatures: string[] = []
   if (qtyLocked) lockedFeatures.push('التسعير حسب الكمية')
   if (variantLocked) lockedFeatures.push('المخزون حسب المقاس/اللون')
 
   return (
-    <div className="product-form commerce-editor merchant-product-editor">
-      <aside className="commerce-editor-rail" aria-label="أقسام المنتج">
-        <a href="#product-basic"><Icon name="edit_note" ariaHidden />معلومات</a>
-        <a href="#product-pricing"><Icon name="payments" ariaHidden />تسعير</a>
-        <a href="#product-stock"><Icon name="inventory" ariaHidden />مخزون</a>
-        <a href="#product-media"><Icon name="photo_library" ariaHidden />صور</a>
-        <a href="#product-variants"><Icon name="tune" ariaHidden />متغيرات</a>
-        <a href="#product-publish"><Icon name="storefront" ariaHidden />نشر</a>
-      </aside>
-      <div className="commerce-editor-main">
-      <header className="product-editor-main-header">
-        <div>
-          <span className="internal-page-eyebrow">مساحة تحرير المنتج</span>
-          <h2>{initial ? 'تعديل المنتج' : 'إضافة منتج جديد'}</h2>
-          <p>نظّم بيانات المنتج، التسعير، المتغيرات والنشر من نفس المساحة.</p>
+    <div className="product-form merchant-product-form-canonical">
+      <div className="product-editor-header">
+        <div className="product-editor-breadcrumb">
+          <button type="button" className="product-editor-crumb" onClick={onClose}>المنتجات</button>
+          <Icon name="chevron_left" ariaHidden />
+          <span>{initial ? 'تعديل المنتج' : 'إضافة منتج جديد'}</span>
         </div>
-        <span className="product-editor-state">{draft.active ? 'منشور' : 'مسودة'}</span>
-      </header>
+        <div className="product-editor-publish-toggle">
+          <Toggle checked={draft.active} onChange={(v) => set({ active: v })} label="نشط / منشور" />
+        </div>
+      </div>
       {error && <div className="form-error-banner">{error}</div>}
 
       {lockedFeatures.length > 0 && (
@@ -256,25 +263,25 @@ export const ProductForm: FunctionalComponent<Props> = ({ storeId, initial, cate
         </div>
       )}
 
-      {section('معلومات المنتج', 'product-basic', 'edit_note')}
-      <div className="grid grid-2">
+      <Section title="المعلومات الأساسية" id="product-basic" icon="info">
         <Input label="اسم المنتج" value={draft.name} onChange={(v) => set({ name: v })} required />
-        <Input label="SKU" value={draft.sku} onChange={(v) => set({ sku: v })} />
-      </div>
-      <Textarea label="الوصف" value={draft.description} onChange={(v) => set({ description: v })} rows={3} />
-      <Select
-        label="الفئة"
-        value={draft.categoryId}
-        onChange={(v) => set({ categoryId: v })}
-        options={[{ value: '', label: 'بدون فئة' }, ...categories.map((c) => ({ value: c.id, label: c.name }))]}
-      />
+        <div className="grid grid-2">
+          <Input label="SKU" value={draft.sku} onChange={(v) => set({ sku: v })} />
+          <Select
+            label="الفئة"
+            value={draft.categoryId}
+            onChange={(v) => set({ categoryId: v })}
+            options={[{ value: '', label: 'بدون فئة' }, ...categories.map((c) => ({ value: c.id, label: c.name }))]}
+          />
+        </div>
+        <Textarea label="الوصف" value={draft.description} onChange={(v) => set({ description: v })} rows={3} />
+      </Section>
 
-      {section('التسعير والتكلفة', 'product-pricing', 'payments')}
-      <div className="grid grid-2">
-        <Input label="السعر" type="number" value={draft.price} onChange={(v) => set({ price: v })} required />
-        <Input label="السعر قبل الخصم" type="number" value={draft.oldPrice} onChange={(v) => set({ oldPrice: v })} />
-      </div>
-      <div className="field mt-1">
+      <Section title="التسعير والتكلفة" id="product-pricing" icon="payments">
+        <div className="grid grid-2">
+          <Input label="السعر" type="number" value={draft.price} onChange={(v) => set({ price: v })} required />
+          <Input label="السعر قبل الخصم" type="number" value={draft.oldPrice} onChange={(v) => set({ oldPrice: v })} />
+        </div>
         <Input
           label="سعر التكلفة"
           type="number"
@@ -283,8 +290,7 @@ export const ProductForm: FunctionalComponent<Props> = ({ storeId, initial, cate
           onChange={setCostPrice}
           hint="سعر التكلفة خاص بك ولن يظهر للعملاء."
         />
-      </div>
-      <div className="field mt-1">
+        <ProfitSummary draft={draft} costPrice={costPrice} />
         <Select
           label="طريقة التسعير"
           value={draft.pricingMode}
@@ -292,6 +298,7 @@ export const ProductForm: FunctionalComponent<Props> = ({ storeId, initial, cate
             const mode = v === 'quantity' ? 'quantity' : 'standard'
             if (mode === 'quantity' && qtyLocked) {
               setError('ميزة التسعير حسب الكمية تتطلب ترقية الباقة')
+              setLockAttempt(true)
               return
             }
             set({ pricingMode: mode })
@@ -302,11 +309,9 @@ export const ProductForm: FunctionalComponent<Props> = ({ storeId, initial, cate
           ]}
           hint={draft.pricingMode === 'quantity' ? 'العميل يختار باقة محددة بعدد قطع معين بسعر إجمالي ثابت' : qtyLocked ? 'التسعير حسب الكمية يتطلب ترقية الباقة' : undefined}
         />
-      </div>
-      {draft.pricingMode === 'quantity' && (
-        <>
-          <QuantityTiersEditor tiers={draft.quantityTiers} onChange={(quantityTiers) => set({ quantityTiers })} />
-          <div className="field mt-1">
+        {draft.pricingMode === 'quantity' && (
+          <Fragment>
+            <QuantityTiersEditor tiers={draft.quantityTiers} onChange={(quantityTiers) => set({ quantityTiers })} />
             <Select
               label="سياسة السعر عند تجاوز أعلى باقة"
               value={draft.quantityPricingStrategy}
@@ -318,73 +323,67 @@ export const ProductForm: FunctionalComponent<Props> = ({ storeId, initial, cate
               ]}
               hint="ماذا يحدث لو طلب العميل عدداً أكبر من أكبر باقة معروضة؟"
             />
-          </div>
-        </>
-      )}
+          </Fragment>
+        )}
+      </Section>
 
-      <ProfitSummary draft={draft} costPrice={costPrice} />
-
-      {section('المخزون', 'product-stock', 'inventory')}
-      <div className="grid grid-2">
-        <Input
-          label={draft.variants.length > 0 ? 'المخزون (يُحسب تلقائياً من المتغيرات)' : 'المخزون'}
-          type="number"
-          value={draft.variants.length > 0 ? String(draft.variants.reduce((s, v) => s + (v.stock || 0), 0)) : draft.stock}
-          onChange={(v) => set({ stock: v })}
-          disabled={draft.variants.length > 0}
-        />
-        <Input label="حد التنبيه المنخفض" type="number" value={draft.lowStockThreshold} onChange={(v) => set({ lowStockThreshold: v })} />
-      </div>
-
-      {section('صور المنتج', 'product-media', 'photo_library')}
-      <ImageGalleryUploader storeId={storeId} productId={getProductId()} images={draft.images} onChange={(images) => set({ images })} />
-
-      {section('الألوان', 'product-colors', 'palette')}
-      <ColorManager
-        storeId={storeId}
-        productId={getProductId()}
-        colors={draft.colorOptions}
-        images={draft.images}
-        onChange={(colorOptions) => set({ colorOptions })}
-        onImageUploaded={(url, colorId) =>
-          setDraft((prev) => {
-            const index = prev.images.length
-            return {
-              ...prev,
-              images: [...prev.images, url],
-              colorOptions: prev.colorOptions.map((c) => (c.id === colorId ? { ...c, imageIndex: index } : c)),
-            }
-          })
-        }
-      />
-
-      {section('المقاسات والمتغيرات', 'product-variants', 'tune')}
-      {variantLocked && draft.variants.length > 0 && (
-        <div className="form-error-banner mb-1">
-          المخزون حسب المقاس/اللون غير متوفر في باقتك الحالية — رقِّ باقتك لحفظ المتغيرات.
+      <Section title="المخزون" id="product-stock" icon="inventory">
+        <div className="grid grid-2">
+          <Input
+            label={draft.variants.length > 0 ? 'المخزون (يُحسب تلقائياً من المتغيرات)' : 'المخزون'}
+            type="number"
+            value={draft.variants.length > 0 ? String(draft.variants.reduce((s, v) => s + (v.stock || 0), 0)) : draft.stock}
+            onChange={(v) => set({ stock: v })}
+            disabled={draft.variants.length > 0}
+          />
+          <Input label="حد التنبيه المنخفض" type="number" value={draft.lowStockThreshold} onChange={(v) => set({ lowStockThreshold: v })} />
         </div>
-      )}
-      <VariantMatrix
-        colors={draft.colorOptions}
-        sizes={draft.sizes}
-        variants={draft.variants}
-        onSizesChange={(sizes) => set({ sizes })}
-        onVariantsChange={(variants) => set({ variants })}
-      />
+      </Section>
 
-      {section('النشر', 'product-publish', 'storefront')}
-      <div className="field">
-        <Toggle checked={draft.active} onChange={(v) => set({ active: v })} label="منشور في المتجر" />
-      </div>
+      <Section title="الألوان" id="product-colors" icon="palette">
+        <ColorManager
+          storeId={storeId}
+          productId={getProductId()}
+          colors={draft.colorOptions}
+          images={draft.images}
+          onChange={(colorOptions) => set({ colorOptions })}
+          onImageUploaded={(url, colorId) =>
+            setDraft((prev) => {
+              const index = prev.images.length
+              return {
+                ...prev,
+                images: [...prev.images, url],
+                colorOptions: prev.colorOptions.map((c) => (c.id === colorId ? { ...c, imageIndex: index } : c)),
+              }
+            })
+          }
+        />
+      </Section>
+
+      <Section title="المقاسات والمتغيرات" id="product-variants" icon="tune">
+        {variantLocked && draft.variants.length > 0 && (
+          <div className="form-error-banner mb-1">
+            المخزون حسب المقاس/اللون غير متوفر في باقتك الحالية — رقِّ باقتك لحفظ المتغيرات.
+          </div>
+        )}
+        <VariantMatrix
+          colors={draft.colorOptions}
+          sizes={draft.sizes}
+          variants={draft.variants}
+          onSizesChange={(sizes) => set({ sizes })}
+          onVariantsChange={(variants) => set({ variants })}
+        />
+      </Section>
+
+      <Section title="الوسائط" id="product-media" icon="photo_library">
+        <ImageGalleryUploader storeId={storeId} productId={getProductId()} images={draft.images} onChange={(images) => set({ images })} />
+      </Section>
 
       <div className="product-form-actions">
-        <Fragment>
-          <Button variant="ghost" onClick={onClose}>إلغاء</Button>
-          <Button variant="outline" icon="save" onClick={() => save('draft', false)} loading={savingAction === 'draft'}>حفظ كمسودة</Button>
-          <Button icon="save" onClick={() => save('save')} loading={savingAction === 'save'}>حفظ المنتج</Button>
-          <Button variant="soft" icon="rocket_launch" onClick={() => save('publish', true)} loading={savingAction === 'publish'}>حفظ ونشر</Button>
-        </Fragment>
-      </div>
+        <Button variant="ghost" onClick={onClose}>إلغاء</Button>
+        <Button variant="outline" icon="save" onClick={() => save('draft', false)} loading={savingAction === 'draft'}>حفظ كمسودة</Button>
+        <Button variant="soft" icon="save" onClick={() => save('save')} loading={savingAction === 'save'}>حفظ المنتج</Button>
+        <Button icon="rocket_launch" onClick={() => save('publish', true)} loading={savingAction === 'publish'}>حفظ ونشر</Button>
       </div>
     </div>
   )

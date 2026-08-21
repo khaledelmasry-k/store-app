@@ -34,6 +34,12 @@ test('merchant orders table collapses to cards below 768px', async ({ page }) =>
   await page.locator('button[type="submit"]').click()
   await page.waitForURL(/\/dashboard/, { timeout: 15000 })
   await page.goto('/dashboard/orders', { waitUntil: 'domcontentloaded' })
+  // Below 768px the table auto-collapses to cards; on larger screens the
+  // table view is the default and "بطاقات" switches to the card layout.
+  if ((page.viewportSize()?.width ?? 0) >= 768) {
+    await expect(page.locator('.table-toolbar')).toBeVisible({ timeout: 15000 })
+    await page.getByRole('button', { name: 'بطاقات' }).click()
+  }
   await expect(page.locator('.card-table-card').first()).toBeVisible({ timeout: 15000 })
   await expect(page.locator('.table')).toHaveCount(0)
   const overflow = await noHScroll(page)

@@ -1,0 +1,471 @@
+/* ────────────────────────────────────────────────────────────────────────────
+   Subscription — Stitch V3 "Merchant Subscription & Billing" (Phase 11)
+   Direct structure migration: plan chip, orders-limit alert banner, current
+   plan card (status dot + price + renewal), monthly usage rows with progress
+   bars, plan comparison grid, payment/activation sections preserved.
+   ──────────────────────────────────────────────────────────────────────────── */
+
+.merchant-subscription-page {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+}
+
+/* ── Plan chip (header action) ────────────────────────────────────────────── */
+.subscription-plan-chip {
+  display: inline-flex;
+  align-items: center;
+  padding: 4px 12px;
+  border-radius: 8px;
+  background: var(--primary-container);
+  color: var(--on-primary-container);
+  font-size: 12px;
+  font-weight: 700;
+}
+
+/* ── Orders limit banner ──────────────────────────────────────────────────── */
+.subscription-limit-banner {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  background: var(--error-container);
+  color: var(--on-error-container);
+  border: 1px solid color-mix(in srgb, var(--error) 20%, transparent);
+  border-radius: 14px;
+  padding: 16px;
+  box-shadow: 0 1px 2px rgba(20, 27, 43, 0.06);
+  flex-wrap: wrap;
+}
+.subscription-limit-icon {
+  flex-shrink: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+.subscription-limit-icon .mk-icon {
+  font-size: 20px;
+}
+.subscription-limit-text {
+  flex: 1;
+  min-width: 200px;
+}
+.subscription-limit-title {
+  margin: 0;
+  font-size: 14px;
+  font-weight: 700;
+}
+.subscription-limit-sub {
+  margin: 3px 0 0;
+  font-size: 12px;
+  opacity: 0.9;
+}
+.subscription-limit-cta {
+  padding: 9px 18px;
+  border-radius: 10px;
+  background: var(--error);
+  color: var(--on-error);
+  border: 0;
+  font-size: 13px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: opacity 0.15s;
+}
+.subscription-limit-cta:hover {
+  opacity: 0.9;
+}
+
+/* ── Current plan card ────────────────────────────────────────────────────── */
+.subscription-current-card {
+  background: var(--surface-container-lowest);
+  border: 1px solid var(--outline-variant);
+  border-radius: 14px;
+  padding: 20px;
+  box-shadow: 0 1px 2px rgba(20, 27, 43, 0.05);
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+}
+.subscription-current-head {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 12px;
+  flex-wrap: wrap;
+}
+.subscription-current-label {
+  display: block;
+  font-size: 12px;
+  font-weight: 500;
+  color: var(--on-surface-variant);
+  margin-bottom: 4px;
+}
+.subscription-current-name {
+  margin: 0;
+  font-size: 24px;
+  font-weight: 800;
+  color: var(--primary);
+}
+.subscription-status-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 6px 12px;
+  border-radius: 8px;
+  background: var(--surface-container);
+  font-size: 13px;
+  font-weight: 700;
+  color: var(--secondary);
+}
+.subscription-status-dot {
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: var(--secondary);
+  display: block;
+}
+.subscription-current-price-row {
+  display: flex;
+  align-items: flex-end;
+  justify-content: space-between;
+  gap: 12px;
+  flex-wrap: wrap;
+}
+.subscription-current-price {
+  display: flex;
+  align-items: baseline;
+  gap: 4px;
+}
+.subscription-price-amount {
+  font-size: 22px;
+  font-weight: 800;
+  color: var(--on-surface);
+}
+.subscription-price-period {
+  font-size: 12px;
+  color: var(--on-surface-variant);
+}
+.subscription-launch-note {
+  margin: 4px 0 0;
+  font-size: 12px;
+  color: var(--secondary);
+  font-weight: 500;
+}
+.subscription-renewal {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  gap: 2px;
+}
+.subscription-renewal-label {
+  font-size: 10px;
+  color: var(--on-surface-variant);
+}
+.subscription-renewal-date {
+  font-size: 14px;
+  font-weight: 500;
+  color: var(--on-surface);
+}
+.subscription-current-actions {
+  display: flex;
+  gap: 10px;
+  border-top: 1px solid var(--outline-variant);
+  padding-top: 14px;
+}
+.subscription-current-actions .btn {
+  flex: 1;
+  justify-content: center;
+}
+
+/* ── Usage section ────────────────────────────────────────────────────────── */
+.subscription-usage-section {
+  background: var(--surface-container-lowest);
+  border: 1px solid var(--outline-variant);
+  border-radius: 14px;
+  padding: 20px;
+  box-shadow: 0 1px 2px rgba(20, 27, 43, 0.05);
+}
+.subscription-section-head {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 12px;
+  margin-bottom: 16px;
+  padding: 0 2px;
+}
+.subscription-section-head h3 {
+  margin: 0;
+  font-size: 17px;
+  font-weight: 700;
+  color: var(--on-surface);
+}
+.subscription-section-note {
+  font-size: 12px;
+  color: var(--on-surface-variant);
+}
+.subscription-usage-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(240px, 1fr));
+  gap: 12px;
+}
+.subscription-usage-row {
+  background: var(--surface-container-lowest);
+  border: 1px solid var(--outline-variant);
+  border-radius: 12px;
+  padding: 14px;
+}
+.subscription-usage-row.is-reached {
+  border-color: color-mix(in srgb, var(--error) 30%, transparent);
+  background: color-mix(in srgb, var(--error-container) 12%, transparent);
+}
+.subscription-usage-meta {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  margin-bottom: 10px;
+}
+.subscription-usage-label {
+  font-size: 13px;
+  font-weight: 500;
+  color: var(--on-surface);
+}
+.subscription-usage-count {
+  font-size: 12px;
+  font-weight: 700;
+  color: var(--on-surface-variant);
+  font-variant-numeric: tabular-nums;
+}
+.subscription-usage-count.is-error {
+  color: var(--error);
+}
+.subscription-usage-track {
+  width: 100%;
+  height: 6px;
+  background: var(--surface-container-high);
+  border-radius: 999px;
+  overflow: hidden;
+}
+.subscription-usage-fill {
+  height: 100%;
+  border-radius: 999px;
+  transition: width 0.4s ease;
+}
+.subscription-usage-fill.is-primary {
+  background: var(--primary);
+}
+.subscription-usage-fill.is-secondary {
+  background: var(--secondary);
+}
+.subscription-usage-fill.is-error {
+  background: var(--error);
+}
+.subscription-usage-warn {
+  margin: 8px 0 0;
+  font-size: 11px;
+  font-weight: 600;
+  color: var(--error);
+}
+.subscription-usage-sub {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-top: 6px;
+}
+.subscription-usage-sub strong {
+  font-size: 11.5px;
+  color: var(--muted);
+}
+.subscription-features {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-top: 16px;
+  padding-top: 14px;
+  border-top: 1px solid var(--outline-variant);
+}
+.subscription-feature-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  padding: 5px 12px;
+  border-radius: 999px;
+  background: var(--surface-container);
+  color: var(--on-surface-variant);
+  font-size: 12px;
+  font-weight: 500;
+}
+.subscription-feature-icon {
+  font-size: 14px;
+  color: var(--primary);
+}
+
+/* ── Plans comparison ─────────────────────────────────────────────────────── */
+.subscription-plans-section {
+  margin-top: 4px;
+}
+.subscription-plans-section .grid-3 {
+  align-items: stretch;
+}
+
+/* ── Responsive ───────────────────────────────────────────────────────────── */
+@media (max-width: 640px) {
+  .subscription-current-actions {
+    flex-direction: column;
+  }
+  .subscription-renewal {
+    align-items: flex-start;
+  }
+}
+/* ── Stitch subscription composition ─────────────────────────────────────── */
+.merchant-subscription-page .subscription-summary {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 24px;
+  flex-wrap: wrap;
+  background: var(--surface-container-lowest);
+  border: 1px solid var(--outline-variant);
+  border-radius: 12px;
+  box-shadow: var(--shadow-sm);
+  padding: 28px;
+  margin-bottom: 16px;
+}
+.subscription-summary-label {
+  font-size: 14px;
+  font-weight: 500;
+  color: var(--text-on-surface-variant);
+  display: block;
+  margin-bottom: 4px;
+}
+.subscription-summary-plan {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  font-size: 26px;
+  font-weight: 700;
+  color: var(--text-on-surface);
+  text-transform: uppercase;
+  margin-bottom: 16px;
+}
+.subscription-summary-rows {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(160px, 1fr));
+  gap: 12px 32px;
+}
+.subscription-summary-rows > div {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+.subscription-summary-rows span {
+  font-size: 13px;
+  color: var(--text-on-surface-variant);
+}
+.subscription-summary-rows b {
+  font-size: 14px;
+  font-weight: 600;
+  color: var(--text-on-surface);
+}
+.subscription-summary-actions {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  align-items: stretch;
+}
+@media (max-width: 720px) {
+  .subscription-summary-actions { flex-direction: row; width: 100%; }
+}
+/* Usage stack (Stitch tracks) */
+.subscription-usage-stack { display: flex; flex-direction: column; gap: 20px; }
+.subscription-usage-item { display: flex; flex-direction: column; gap: 8px; }
+.subscription-usage-meta {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+}
+.subscription-usage-label { font-size: 14px; font-weight: 500; color: var(--text-on-surface); }
+.subscription-usage-count { font-size: 13px; color: var(--text-on-surface-variant); }
+.subscription-usage-count.is-error { color: var(--error); font-weight: 600; }
+.subscription-usage-track {
+  width: 100%;
+  height: 8px;
+  background: var(--surface-container-high);
+  border-radius: 9999px;
+  overflow: hidden;
+}
+.subscription-usage-fill { height: 100%; border-radius: 9999px; transition: width 0.3s; }
+.subscription-usage-fill.is-primary { background: var(--primary); }
+.subscription-usage-fill.is-secondary { background: var(--secondary); }
+.subscription-usage-fill.is-amber { background: #f59e0b; }
+.subscription-usage-fill.is-error { background: var(--error); }
+.subscription-usage-remaining {
+  font-size: 12px;
+  color: var(--text-on-surface-variant);
+  margin: 0;
+  display: flex;
+  align-items: center;
+  gap: 4px;
+}
+.subscription-usage-remaining.is-error { color: var(--error); }
+.subscription-usage-remaining .mk-icon { font-size: 14px; }
+/* Plans section (Stitch header + segmented) */
+.plans-section { margin-top: 28px; }
+.plans-section-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  flex-wrap: wrap;
+  margin-bottom: 24px;
+}
+.plans-section-head h2 {
+  font-size: 20px;
+  font-weight: 700;
+  color: var(--text-on-surface);
+  margin: 0;
+}
+.plans-section-head p {
+  font-size: 13px;
+  color: var(--text-on-surface-variant);
+  margin: 4px 0 0;
+}
+.plans-billing-segmented {
+  display: inline-flex;
+  align-items: center;
+  gap: 2px;
+  background: var(--surface-container-low);
+  border: 1px solid color-mix(in srgb, var(--outline-variant) 50%, transparent);
+  border-radius: 10px;
+  padding: 4px;
+}
+.plans-billing-btn {
+  padding: 7px 16px;
+  font-size: 13px;
+  font-weight: 500;
+  color: var(--text-on-surface-variant);
+  background: transparent;
+  border: none;
+  border-radius: 7px;
+  cursor: pointer;
+  font-family: var(--font-sans);
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  white-space: nowrap;
+  transition: background 0.15s, color 0.15s, box-shadow 0.15s;
+}
+.plans-billing-btn:hover { color: var(--text-on-surface); }
+.plans-billing-btn.is-active {
+  background: var(--surface-container-lowest);
+  color: var(--text-on-surface);
+  box-shadow: var(--shadow-sm);
+  border: 1px solid color-mix(in srgb, var(--outline-variant) 30%, transparent);
+}
+.plans-save-badge {
+  font-size: 11px;
+  color: var(--primary);
+  background: color-mix(in srgb, var(--primary) 10%, transparent);
+  padding: 2px 6px;
+  border-radius: 4px;
+}

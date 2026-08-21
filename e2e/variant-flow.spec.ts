@@ -99,8 +99,11 @@ async function login(page: Page, role: 'platform' | 'merchant', email: string, p
   await page.goto(`/login?role=${role}`, { waitUntil: 'domcontentloaded' })
   await page.waitForTimeout(400)
   if ((await page.locator('button[type="submit"]').count()) === 0) {
-    await page.locator('.user-chip').first().click()
-    await page.getByText('تسجيل الخروج').first().click()
+    const logout = page.locator('.sidebar-logout:visible').first()
+    if ((await logout.count()) === 0) {
+      await page.locator('.sidebar-toggle:visible').first().click()
+    }
+    await page.locator('.sidebar-logout:visible').first().click()
     await page.waitForURL(/\/login/, { timeout: 15000 })
     await page.goto(`/login?role=${role}`, { waitUntil: 'domcontentloaded' })
   }

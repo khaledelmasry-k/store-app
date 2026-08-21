@@ -344,7 +344,7 @@ export const NAV_GROUPS: Record<'platform' | 'dashboard', NavGroup[]> = {
   ],
   dashboard: [
     {
-      id: 'main',
+      id: 'home',
       label: 'الرئيسية',
       icon: 'space_dashboard',
       items: [
@@ -364,12 +364,12 @@ export const NAV_GROUPS: Record<'platform' | 'dashboard', NavGroup[]> = {
     },
     {
       id: 'marketing',
-      label: 'التسويق',
+      label: 'التسويق والمبيعات',
       icon: 'campaign',
       items: [
-        { to: '/dashboard/coupons', label: 'كوبونات', icon: 'sell', permission: 'coupons:manage' },
         { to: '/dashboard/store-links', label: 'روابط البيع', icon: 'link', permission: 'sales_links:view' },
         { to: '/dashboard/landing-pages', label: 'صفحات الهبوط', icon: 'web', permission: 'landing:manage' },
+        { to: '/dashboard/coupons', label: 'الكوبونات', icon: 'sell', permission: 'coupons:manage' },
       ],
     },
     {
@@ -381,15 +381,29 @@ export const NAV_GROUPS: Record<'platform' | 'dashboard', NavGroup[]> = {
       ],
     },
     {
-      id: 'settings',
-      label: 'الإعدادات',
+      id: 'manage',
+      label: 'إدارة المتجر',
       icon: 'settings',
       items: [
-        { to: '/dashboard/settings', label: 'إعدادات المتجر', icon: 'settings', permission: 'settings:edit' },
         { to: '/dashboard/themes', label: 'المظهر والقالب', icon: 'palette', permission: 'settings:edit' },
         { to: '/dashboard/shipping', label: 'الشحن والتوصيل', icon: 'local_shipping', permission: 'settings:edit' },
-        { to: '/dashboard/team', label: 'الفريق والصلاحيات', icon: 'group_add', permission: 'team:view' },
-        { to: '/dashboard/subscription', label: 'الاشتراك', icon: 'card_membership', permission: 'settings:view' },
+        { to: '/dashboard/settings', label: 'إعدادات المتجر', icon: 'settings', permission: 'settings:edit' },
+      ],
+    },
+    {
+      id: 'team',
+      label: 'الفريق',
+      icon: 'group_add',
+      items: [
+        { to: '/dashboard/team', label: 'الفريق والأدوار', icon: 'group_add', permission: 'team:view' },
+      ],
+    },
+    {
+      id: 'account',
+      label: 'الاشتراك والحساب',
+      icon: 'card_membership',
+      items: [
+        { to: '/dashboard/subscription', label: 'الاشتراك والخطة', icon: 'card_membership', permission: 'settings:view' },
         { to: '/dashboard/notifications', label: 'الإشعارات', icon: 'notifications', permission: 'settings:view' },
         { to: '/dashboard/tickets', label: 'تذاكر الدعم', icon: 'support_agent', permission: 'settings:view' },
       ],

@@ -9,7 +9,7 @@ interface Props {
 
 export const PageHeader: FunctionalComponent<Props> = ({ title, subtitle, actions, breadcrumb }) => (
   <div className="page-header">
-    <div>
+    <div className="page-header-copy">
       {breadcrumb && <div className="breadcrumb">{breadcrumb}</div>}
       <h1 className="page-title">{title}</h1>
       {subtitle && <p className="page-subtitle">{subtitle}</p>}

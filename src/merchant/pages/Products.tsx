@@ -1,7 +1,6 @@
 import { FunctionalComponent, Fragment } from 'preact'
 import { useState } from 'preact/hooks'
 import { Card } from '../../shared/components/ui/Card'
-import { StatsCard } from '../../shared/components/ui/StatsCard'
 import { Badge } from '../../shared/components/ui/Badge'
 import { Button } from '../../shared/components/ui/Button'
 import { Modal } from '../../shared/components/ui/Modal'
@@ -10,6 +9,7 @@ import { Search } from '../../shared/components/ui/Search'
 import { Select } from '../../shared/components/ui/Select'
 import { ConfirmDialog } from '../../shared/components/ui/ConfirmDialog'
 import { EmptyState } from '../../shared/components/ui/EmptyState'
+import { Loading } from '../../shared/components/ui/Loading'
 import { Table } from '../../shared/components/ui/Table'
 import { Tabs } from '../../shared/components/ui/Tabs'
 import { Drawer } from '../../shared/components/ui/Drawer'
@@ -29,8 +29,10 @@ import { LimitRaiser } from '../components/LimitRaiser'
 import { Icon } from '../../shared/components/ui/Icon'
 import { ProductForm } from '../components/ProductForm'
 import { SmartImage } from '../../shared/components/ui/SmartImage'
-import { InternalPageHeader, WorkspaceSection } from '../components/InternalWorkspace'
-import '../components/InternalWorkspace.css'
+import { PageHeader } from '../../shared/components/ui/PageHeader'
+import { StatsCard } from '../../shared/components/ui/StatsCard'
+import { SectionHeader } from '../../shared/components/ui/SectionHeader'
+import './Products.css'
 
 interface VariantStockCellProps {
   product: Product
@@ -64,10 +66,22 @@ function VariantStockCell({ product }: VariantStockCellProps) {
   )
 }
 
+interface InventoryKpiProps {
+  label: string
+  icon: string
+  value: number
+  caption: string
+}
+
+const InventoryKpi: FunctionalComponent<InventoryKpiProps> = ({ label, icon, value, caption }) => (
+  <StatsCard title={label} value={value} icon={icon} tone="primary" changeLabel={caption} />
+)
+
 export const MerchantProducts: FunctionalComponent = () => {
   const { store } = useStore()
   const storeId = store?.id || ''
-  const productsRes = useCollection<Product>('products', { storeId, orderBy: { field: 'createdAt' } })
+  const [retryKey, setRetryKey] = useState(0)
+  const productsRes = useCollection<Product>('products', { storeId, orderBy: { field: 'createdAt' } }, true, [retryKey])
   const products = productsRes.data
   const costsRes = useCollection<ProductCost>('productCosts', { storeId })
   const costs = costsRes.data
@@ -82,6 +96,8 @@ export const MerchantProducts: FunctionalComponent = () => {
   const sub = useSubscription(storeId)
   const productLimit = Number(sub.plan?.productLimit || 0)
   const atProductLimit = productLimit > 0 && products.length >= productLimit
+  const hasPlanLimit = productLimit > 0
+  const planUsagePct = hasPlanLimit ? Math.min(100, Math.round((products.length / productLimit) * 100)) : 0
 
   const [tab, setTab] = useState<'products' | 'inventory'>('products')
 
@@ -107,7 +123,7 @@ export const MerchantProducts: FunctionalComponent = () => {
   }
 
   const filtered = products.filter((p) => {
-    const matchesQuery = p.name.includes(query) || (p.sku || '').includes(query)
+    const matchesQuery = (p.name || "").includes(query) || (p.sku || "").includes(query)
     const matchesStatus = !statusFilter || (statusFilter === 'active' ? p.active : !p.active)
     const matchesCategory = !categoryFilter || p.categoryId === categoryFilter
     return matchesQuery && matchesStatus && matchesCategory
@@ -128,7 +144,7 @@ export const MerchantProducts: FunctionalComponent = () => {
   }
 
   const inventoryFiltered = products.filter((p) => {
-    const matchesQuery = p.name.includes(stockQuery) || (p.sku || '').includes(stockQuery)
+    const matchesQuery = (p.name || "").includes(stockQuery) || (p.sku || "").includes(stockQuery)
     const matchesStock = stockFilter === 'all' || (stockFilter === 'low' ? isLow(p) : isOutOfStock(p))
     return matchesQuery && matchesStock
   })
@@ -221,13 +237,33 @@ export const MerchantProducts: FunctionalComponent = () => {
   )
 
   return (
-    <div className="merchant-operations merchant-products-page">
-      <InternalPageHeader
-        eyebrow="كتالوج المتجر"
+    <div className="merchant-operations merchant-products-page products-page-canonical">
+      <PageHeader
+        breadcrumb="كتالوج المتجر"
         title="المنتجات والمخزون"
         subtitle={tab === 'products' ? `${products.length} منتج` : `${lowCount} منخفض • ${outCount} نفد المخزون`}
         actions={<Button icon="add" onClick={openCreate}>منتج جديد</Button>}
       />
+
+      {hasPlanLimit && (
+        <div className="products-usage-bar">
+          <div className="products-usage-head">
+            <span>المنتجات المستخدمة من حد الخطة</span>
+            <strong>{products.length} / {productLimit}</strong>
+          </div>
+          <div className="products-usage-track">
+            <div className="products-usage-fill" style={{ width: `${planUsagePct}%` }} />
+          </div>
+        </div>
+      )}
+
+      {productsRes.error && (
+        <div className="products-error-banner">
+          <Icon name="error" ariaHidden />
+          <span>فشل في تحميل بعض البيانات. يرجى المحاولة مرة أخرى.</span>
+          <button type="button" onClick={() => setRetryKey((k) => k + 1)}>إعادة المحاولة</button>
+        </div>
+      )}
 
       {atProductLimit && (
         <div className="mt-2 mb-2">
@@ -249,8 +285,9 @@ export const MerchantProducts: FunctionalComponent = () => {
 
       {tab === 'products' ? (
         <Fragment>
-          <WorkspaceSection title="كتالوج المنتجات" subtitle="إدارة الأسعار والنشر والمخزون من مساحة عمل واحدة" className="products-catalog-workspace">
-          <div className="toolbar workspace-toolbar">
+          <SectionHeader title="كتالوج المنتجات" subtitle="إدارة الأسعار والنشر والمخزون من مساحة عمل واحدة" />
+          <Card className="mt-1 products-tab-card">
+            <div className="products-toolbar mb-2">
             <Search value={query} onChange={setQuery} placeholder="بحث باسم المنتج أو SKU..." />
             <Select
               value={statusFilter}
@@ -266,8 +303,9 @@ export const MerchantProducts: FunctionalComponent = () => {
             />
           </div>
 
-          <Card>
-            {filtered.length === 0 ? (
+          {productsRes.loading ? (
+            <Loading variant="table" />
+          ) : filtered.length === 0 ? (
               <EmptyState
                 title="لا توجد منتجات"
                 description={query ? 'لا توجد نتائج تطابق بحثك.' : 'أضف منتجاتك للبدء.'}
@@ -291,23 +329,63 @@ export const MerchantProducts: FunctionalComponent = () => {
                     </span>
                   ) },
                 ]}
-                rows={filtered}
+rows={filtered}
               />
             )}
           </Card>
-          </WorkspaceSection>
+
+          {productsRes.loading ? null : filtered.length === 0 ? null : (
+            <div className="products-mobile-cards">
+              {filtered.map((p) => {
+                const cat = categories.find((c) => c.id === p.categoryId)?.name
+                const qty = variantStock(p)
+                const low = isLow(p)
+                return (
+                  <div key={p.id} className="pcard" onClick={() => openEdit(p)}>
+                    <SmartImage src={p.images?.[0]} alt={p.name} className="pcard-thumb" placeholderClassName="product-thumb" />
+                    <div className="pcard-body">
+                      <div className="pcard-top">
+                        <div className="pcard-info">
+                          <h3>{p.name}</h3>
+                          <div className="pcard-chips">
+                            {p.sku && <span className="pcard-sku">{p.sku}</span>}
+                            {cat && <span className="pcard-cat">{cat}</span>}
+                          </div>
+                        </div>
+                        <span className={`pcard-status${p.active ? ' is-on' : ''}`}>
+                          <span className="pcard-status-dot" />
+                          {p.active ? 'منشور' : 'مسودة'}
+                        </span>
+                      </div>
+                      <div className="pcard-bottom">
+                        <div>
+                          <span className="pcard-label">السعر</span>
+                          <span className="pcard-price">{formatCurrency(p.price)}</span>
+                        </div>
+                        <div className="pcard-qty">
+                          <span className={`pcard-qty-label${low ? ' is-warn' : ''}`}>{low ? <Icon name="warning" ariaHidden /> : <span className="pcard-qty-spacer">.</span>}</span>
+                          <span className="pcard-qty-value"><span className="pcard-qty-unit">كمية: </span>{qty}</span>
+                        </div>
+                        <Toggle checked={p.active} onChange={() => toggleActive(p)} />
+                      </div>
+                    </div>
+                  </div>
+                )
+              })}
+            </div>
+          )}
         </Fragment>
       ) : (
         <Fragment>
-          <div className="stats-grid">
-            <StatsCard title="إجمالي المنتجات" value={products.length} icon="inventory_2" tone="primary" />
-            <StatsCard title="منخفض المخزون" value={lowCount} icon="warning" tone="amber" />
-            <StatsCard title="نفد المخزون" value={outCount} icon="cancel" tone="red" />
+          <div className="stat-grid">
+            <InventoryKpi label="إجمالي المنتجات" icon="inventory_2" value={products.length} caption="منتجات كتالوجك" />
+            <InventoryKpi label="منخفض المخزون" icon="warning" value={lowCount} caption="تحتاج إعادة تعبئة" />
+            <InventoryKpi label="نفد المخزون" icon="cancel" value={outCount} caption="غير متاحة للشراء حالياً" />
           </div>
 
-          <WorkspaceSection title="حالة المخزون" subtitle="راجع التنبيهات والمخزون حسب المتغيرات" className="products-inventory-workspace">
-            <Card>
-            <div className="toolbar workspace-toolbar">
+          <SectionHeader title="حالة المخزون" subtitle="راجع التنبيهات والمخزون حسب المتغيرات" />
+          <Card className="mt-1">
+            <div className="products-toolbar mb-2">
               <Search value={stockQuery} onChange={setStockQuery} placeholder="بحث بالاسم أو SKU..." />
               <Select
                 value={stockFilter}
@@ -320,7 +398,9 @@ export const MerchantProducts: FunctionalComponent = () => {
                 ]}
               />
             </div>
-            {inventoryFiltered.length === 0 ? (
+            {productsRes.loading || costsRes.loading ? (
+              <Loading variant="table" />
+            ) : inventoryFiltered.length === 0 ? (
               <EmptyState icon="inventory_2" title="لا توجد منتجات" description={stockQuery ? 'لا توجد نتائج للبحث' : 'أضف منتجاتك من تبويب المنتجات للبدء.'} />
             ) : (
               <Table cardMode
@@ -339,8 +419,7 @@ export const MerchantProducts: FunctionalComponent = () => {
                 rows={inventoryFiltered}
               />
             )}
-            </Card>
-          </WorkspaceSection>
+          </Card>
         </Fragment>
       )}
 

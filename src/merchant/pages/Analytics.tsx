@@ -1,17 +1,16 @@
-import { FunctionalComponent, Fragment } from 'preact'
-import { useState } from 'preact/hooks'
-import { InternalPageHeader, WorkspaceSection } from '../components/InternalWorkspace'
-import '../components/InternalWorkspace.css'
-import { Card } from '../../shared/components/ui/Card'
+import { FunctionalComponent } from 'preact'
+import { useState, useMemo } from 'preact/hooks'
+import { PageHeader } from '../../shared/components/ui/PageHeader'
 import { StatsCard } from '../../shared/components/ui/StatsCard'
-import { Table } from '../../shared/components/ui/Table'
+import { Card } from '../../shared/components/ui/Card'
+import { ChartCard } from '../../shared/components/ui/ChartCard'
 import { Badge } from '../../shared/components/ui/Badge'
+import { Table } from '../../shared/components/ui/Table'
 import { Button } from '../../shared/components/ui/Button'
-import { Select } from '../../shared/components/ui/Select'
 import { Loading } from '../../shared/components/ui/Loading'
 import { EmptyState } from '../../shared/components/ui/EmptyState'
-import { LineChart } from '../../shared/components/charts/LineChart'
 import { DonutChart } from '../../shared/components/charts/DonutChart'
+import { Icon } from '../../shared/components/ui/Icon'
 import { useStore } from '../../shared/hooks/useStore'
 import { useAuth } from '../../shared/hooks/useAuth'
 import { useCollection } from '../../shared/hooks/useCollection'
@@ -21,7 +20,18 @@ import { STATUS_LABELS, STATUS_COLORS } from '../../shared/utils/constants'
 import { formatCurrency, formatDateTime, downloadFile, deliveredRevenue } from '../../shared/utils/format'
 import { orderItemRevenue } from '../../shared/utils/pricing'
 import { csvEscape } from '../../shared/utils/validators'
-import type { Order, ProductCost } from '../../shared/types'
+import type { Order, ProductCost, Product } from '../../shared/types'
+import './Analytics.css'
+
+const PERIODS = [
+  { value: 'today', label: 'اليوم' },
+  { value: 'yesterday', label: 'أمس' },
+  { value: '7', label: '7 أيام' },
+  { value: '30', label: '30 يوماً' },
+  { value: '90', label: '90 يوماً' },
+] as const
+
+type Period = (typeof PERIODS)[number]['value']
 
 export const MerchantAnalytics: FunctionalComponent = () => {
   const { store } = useStore()
@@ -37,12 +47,21 @@ export const MerchantAnalytics: FunctionalComponent = () => {
   const customers = customersRes.data
   const analyticsRes = useCollection<any>('analytics', { storeId })
   const analytics = analyticsRes.data
+  const productsRes = useCollection<Product>('products', { storeId })
+  const products = productsRes.data
   const costsRes = useCollection<ProductCost>('productCosts', { storeId }, !!storeId)
-  const costByProduct = new Map(costsRes.data.map((c) => [c.id, c.costPrice]))
+  const costByProduct = useMemo(() => new Map(costsRes.data.map((c) => [c.id, c.costPrice])), [costsRes.data])
   const toast = useToast()
-  const [status, setStatus] = useState('')
+  const [period, setPeriod] = useState<Period>('30')
+  const [bannerDismissed, setBannerDismissed] = useState(false)
 
-  const revenue = deliveredRevenue(orders)
+  const periodDays = period === 'today' || period === 'yesterday' ? 1 : Number(period)
+  const periodOffset = period === 'yesterday' ? 1 : 0
+  const dateKeys = Array.from({ length: periodDays }, (_, i) => {
+    const d = new Date()
+    d.setDate(d.getDate() - periodOffset - (periodDays - 1 - i))
+    return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`
+  })
   const profitForOrder = (o: Order): number | null => {
     let hasCost = false
     let profit = 0
@@ -59,13 +78,22 @@ export const MerchantAnalytics: FunctionalComponent = () => {
     .reduce((sum, o) => sum + (profitForOrder(o) ?? 0), 0)
   const hasAnyCost = costsRes.data.some((c) => typeof c.costPrice === 'number' && c.costPrice >= 0)
   const conversion = customers.length ? orders.length / Math.max(customers.length, 1) : 0
+  const revenue = deliveredRevenue(orders)
 
-  const last30 = Array.from({ length: 30 }, (_, i) => {
-    const d = new Date()
-    d.setDate(d.getDate() - (29 - i))
+  const prevDateKeys = dateKeys.map((key) => {
+    const d = new Date(`${key}T00:00:00`)
+    d.setDate(d.getDate() - periodDays)
     return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`
   })
-  const revenueSeries = last30.map((key) => analytics.filter((a) => a.date === key).reduce((s, a) => s + (a.revenue || 0), 0))
+  const revenueSeries = dateKeys.map((key) => analytics.filter((a) => a.date === key).reduce((s, a) => s + (a.revenue || 0), 0))
+  const prevRevenue = prevDateKeys.reduce((s, key) => s + analytics.filter((a) => a.date === key).reduce((p, a) => p + (a.revenue || 0), 0), 0)
+  const prevOrders = orders.filter((o) => {
+    const t = o.createdAt
+    if (!t || !('seconds' in t)) return false
+    const d = new Date(t.seconds * 1000)
+    return d.getTime() > Date.now() - periodDays * 2 * 86400000 && d.getTime() <= Date.now() - periodDays * 86400000
+  }).length
+  const deltaRevenue = prevRevenue > 0 ? ((revenue - prevRevenue) / prevRevenue) * 100 : null
 
   const statusData = (Object.keys(STATUS_LABELS) as (keyof typeof STATUS_LABELS)[]).map((statusKey) => ({
     label: STATUS_LABELS[statusKey],
@@ -73,11 +101,38 @@ export const MerchantAnalytics: FunctionalComponent = () => {
     color: `var(--${STATUS_COLORS[statusKey]})`,
   }))
 
-  const filtered = status ? orders.filter((o) => o.status === status) : orders
+  const productRevenue = useMemo(() => {
+    const map = new Map<string, { name: string; revenue: number; orders: number }>()
+    for (const o of orders) {
+      if (o.status !== 'DELIVERED') continue
+      for (const it of o.items) {
+        const existing = map.get(it.productId) || { name: it.name, revenue: 0, orders: 0 }
+        existing.revenue += orderItemRevenue(it)
+        existing.orders += it.quantity || 1
+        map.set(it.productId, existing)
+      }
+    }
+    return map
+  }, [orders])
+
+  const topProducts = useMemo(() => [...productRevenue.entries()]
+    .sort((a, b) => b[1].revenue - a[1].revenue)
+    .slice(0, 5), [productRevenue])
+  const stockByProduct = useMemo(() => new Map(products.map((p) => [p.id, p.stock ?? 0])), [products])
+
+  const margin = revenue > 0 && hasAnyCost ? Math.max(0, Math.min(100, (deliveredProfit / revenue) * 100)) : 0
+  const aov = orders.length ? revenue / orders.length : 0
+  const maxBar = Math.max(...revenueSeries, 1)
+  const last14Series = Array.from({ length: 14 }, (_, i) => {
+    const d = new Date()
+    d.setDate(d.getDate() - (13 - i))
+    const key = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`
+    return analytics.filter((a) => a.date === key).reduce((s, a) => s + (a.revenue || 0), 0)
+  })
 
   const exportCsv = () => {
     const header = ['orderNumber', 'customerName', 'phone', 'governorate', 'city', 'address', 'totalPrice', 'status', 'createdAt']
-    const lines = filtered.map((o) =>
+    const lines = orders.map((o) =>
       [o.orderNumber, o.customerName, o.phone, o.governorate, o.city, o.address, o.totalPrice, o.status, o.createdAt ? formatDateTime(o.createdAt) : '']
         .map(csvEscape)
         .join(','),
@@ -86,100 +141,147 @@ export const MerchantAnalytics: FunctionalComponent = () => {
     toast.push('تم تصدير الطلبات')
   }
 
-  if (ordersRes.loading || costsRes.loading) return <Loading />
+  if (ordersRes.loading || costsRes.loading || productsRes.loading) return <Loading variant="screen" message="جاري تحميل التقارير..." />
 
   return (
     <div className="merchant-operations merchant-analytics-page">
-      <InternalPageHeader
-        eyebrow="مركز الأداء"
+      <PageHeader
+        breadcrumb="مركز الأداء"
         title="التحليلات والتقارير"
-        subtitle="مؤشرات الأداء على مدار 30 يوماً"
-        actions={<Button variant="outline" icon="download" onClick={exportCsv}>تصدير CSV</Button>}
+        subtitle={`مؤشرات الأداء على مدار ${periodDays} يوماً`}
+        actions={
+          <div className="flex flex-gap-sm flex-wrap">
+            <div className="analytics-period-segmented">
+              {PERIODS.map((p) => (
+                <button
+                  key={p.value}
+                  type="button"
+                  className={period === p.value ? 'is-active' : ''}
+                  onClick={() => setPeriod(p.value)}
+                >
+                  {p.label}
+                </button>
+              ))}
+            </div>
+            <Button variant="outline" icon="download" onClick={exportCsv}>تصدير CSV</Button>
+          </div>
+        }
       />
 
-      <WorkspaceSection title="مؤشرات الأداء" subtitle="ملخص الإيرادات والطلبات والعملاء للفترة الحالية" className="analytics-kpi-workspace">
-      <div className="stats-grid">
-        <StatsCard title="الإيرادات" value={revenue} currency icon="payments" tone="green" />
-        {hasAnyCost && <StatsCard title="الربح الإجمالي" value={deliveredProfit} currency icon="trending_up" tone="violet" />}
-        <StatsCard title="الطلبات" value={orders.length} icon="receipt_long" tone="blue" />
-        {canCustomers ? (
-          <Fragment>
-            <StatsCard title="العملاء" value={customers.length} icon="groups" tone="primary" />
-            <StatsCard title="معدل الطلبات/عميل" value={conversion.toFixed(2)} icon="trending_up" tone="amber" />
-          </Fragment>
+      {(ordersRes.error || analyticsRes.error) && !bannerDismissed && (
+        <div className="analytics-error-banner">
+          <Icon name="error" ariaHidden />
+          <span>فشل في تحميل بعض البيانات، يرجى إعادة المحاولة.</span>
+          <button type="button" onClick={() => setBannerDismissed(true)} aria-label="إغلاق"><Icon name="close" ariaHidden /></button>
+        </div>
+      )}
+
+      <div className="stat-grid">
+        <StatsCard
+          title="الإيرادات الإجمالية"
+          value={revenue}
+          currency
+          icon="payments"
+          tone="primary"
+          change={deltaRevenue ?? undefined}
+          changeLabel={deltaRevenue == null ? 'لا توجد بيانات للفترة السابقة' : 'مقارنة بالفترة السابقة'}
+        />
+        <StatsCard
+          title="الأرباح المحققة"
+          value={hasAnyCost ? deliveredProfit : 0}
+          currency
+          icon="trending_up"
+          tone="green"
+          changeLabel={!hasAnyCost ? 'بيانات التكلفة غير مكتملة' : 'من الطلبات المسلّمة'}
+        />
+        <StatsCard title="الهامش" value={hasAnyCost && revenue > 0 ? `${margin.toFixed(1)}%` : '—'} icon="analytics" tone="indigo" changeLabel="Target: 30%" />
+        <StatsCard title="الطلبات" value={orders.length} icon="receipt_long" tone="amber" changeLabel={orders.length - prevOrders > 0 ? `+${orders.length - prevOrders} عن السابق` : `${orders.length - prevOrders} عن السابق`} />
+        <StatsCard title="العملاء الجدد" value={canCustomers ? customers.length : '—'} icon="groups" tone="violet" />
+        <StatsCard title="متوسط الطلب (AOV)" value={aov} currency icon="payments" tone="blue" />
+      </div>
+
+      <div className="chart-grid">
+        <ChartCard title="اتجاه المبيعات اليومية" subtitle={`${periodDays} يوم`}>
+          <div className="analytics-bars">
+            {revenueSeries.map((v, i) => (
+              <div key={i} className="analytics-bar-col" title={`${dateKeys[i]} — ${formatCurrency(v)}`}>
+                <div className="analytics-bar" style={{ height: `${Math.max(2, (v / maxBar) * 100)}%` }} />
+                <span className="analytics-bar-label">{new Date(dateKeys[i] + 'T00:00:00').toLocaleDateString('ar-EG', { day: 'numeric', month: 'short' })}</span>
+              </div>
+            ))}
+          </div>
+        </ChartCard>
+
+        <ChartCard title="حالة الطلبات" subtitle={`${orders.length} طلب`}>
+          <DonutChart data={statusData} />
+        </ChartCard>
+
+        <ChartCard title="معدل التحويل" subtitle="طلبات لكل عميل خلال آخر 14 يوماً">
+          <div className="analytics-conversion-value">{canCustomers && customers.length ? `${(conversion * 100).toFixed(1)}%` : '—'}</div>
+          <div className="analytics-bars is-compact">
+            {last14Series.map((v, i) => (
+              <div key={i} className="analytics-bar-col" title={`${formatCurrency(v)}`}>
+                <div className="analytics-bar" style={{ height: `${Math.max(2, (v / Math.max(...last14Series, 1)) * 100)}%` }} />
+              </div>
+            ))}
+          </div>
+        </ChartCard>
+
+        {hasAdvancedReports ? (
+          <Card title="أفضل المنتجات مبيعاً" subtitle="حسب الإيرادات" className="chart-wide">
+            {topProducts.length === 0 ? (
+              <EmptyState icon="inventory" title="لا توجد مبيعات مسلمة بعد" description="ستظهر المنتجات الأكثر مبيعاً هنا بعد استلام أول طلب." />
+            ) : (
+              <Table
+                cardMode
+                columns={[
+                  { key: 'name', header: 'المنتج', render: (p: any) => <span className="font-semibold">{p.name}</span> },
+                  { key: 'orders', header: 'الكمية المباعة', render: (p: any) => <span className="monospace" dir="ltr">{p.orders}</span> },
+                  { key: 'revenue', header: 'الإيرادات', render: (p: any) => <span className="font-semibold" dir="ltr">{formatCurrency(p.revenue)}</span> },
+                  { key: 'stock', header: 'حالة المخزون', render: (p: any) => {
+                    const stock = stockByProduct.get(p.id)
+                    const out = typeof stock === 'number' && stock <= 0
+                    return <Badge tone={out ? 'red' : 'green'}>{out ? 'نفذ المخزون' : 'متوفر'}</Badge>
+                  } },
+                ]}
+                rows={topProducts.map(([productId, p]) => ({ id: productId, name: p.name, orders: p.orders, revenue: p.revenue }))}
+              />
+            )}
+          </Card>
         ) : (
-          <StatsCard title="العملاء" value="—" icon="groups" tone="primary" />
+          <Card className="chart-wide">
+            <EmptyState
+              icon="lock"
+              title="التقارير المتقدمة"
+              description="هذه الميزة متاحة بدايةً من خطة Growth. يمكنك متابعة المؤشرات الأساسية هنا، وترقية الخطة لفتح التحليلات المتقدمة ورؤى المبيعات."
+              action={<a href="/dashboard/subscription"><Button variant="primary">ترقية الخطة</Button></a>}
+            />
+          </Card>
         )}
       </div>
-      </WorkspaceSection>
 
-      <div className="analytics-chart-grid">
-        <Card title="الإيرادات (30 يوم)">
-          <LineChart values={revenueSeries} height={240} />
-        </Card>
-        <Card title="توزيع الطلبات" subtitle={`${orders.length} طلب`}>
-          <DonutChart data={statusData} />
-        </Card>
-      </div>
-
-      {!hasAdvancedReports && (
-        <Card className="locked-feature-card mb-2">
-          <EmptyState
-            icon="lock"
-            title="التقارير المتقدمة"
-            description="هذه الميزة متاحة بدايةً من خطة Growth. يمكنك متابعة المؤشرات الأساسية هنا، وترقية الخطة لفتح التحليلات المتقدمة ورؤى المبيعات."
-            action={<a href="/dashboard/subscription"><Button icon="workspace_premium">ترقية الخطة</Button></a>}
-          />
-        </Card>
-      )}
-
-      {hasAdvancedReports && (
-        <Card className="advanced-insights-card mb-2" title="رؤى المبيعات المتقدمة" subtitle="متاحة ضمن خطة Growth وما بعدها">
-          <div className="grid grid-3">
-            <div className="insight-tile">
-              <span>متوسط قيمة الطلب</span>
-              <strong>{formatCurrency(orders.length ? revenue / orders.length : 0)}</strong>
-            </div>
-            <div className="insight-tile">
-              <span>الربح من الطلبات المسلمة</span>
-              <strong>{hasAnyCost ? formatCurrency(deliveredProfit) : 'تكلفة غير مكتملة'}</strong>
-            </div>
-            <div className="insight-tile">
-              <span>معدل الطلبات لكل عميل</span>
-              <strong>{conversion.toFixed(2)}</strong>
-            </div>
-          </div>
-        </Card>
-      )}
-
-      <WorkspaceSection
+      <Card
         title="تفاصيل الطلبات"
-        subtitle={`${filtered.length} طلب • ${formatCurrency(filtered.reduce((s, o) => s + o.totalPrice, 0))}`}
-        actions={
-          <Select
-            value={status}
-            onChange={setStatus}
-            placeholder="كل الحالات"
-            options={[{ value: '', label: 'كل الحالات' }, ...Object.entries(STATUS_LABELS).map(([k, v]) => ({ value: k, label: v }))]}
-          />
-        }
+        subtitle={`${orders.length} طلب • ${formatCurrency(orders.reduce((s, o) => s + o.totalPrice, 0))}`}
+        actions={<Button variant="outline" icon="download" onClick={exportCsv}>تصدير CSV</Button>}
       >
-        <Table cardMode
+        <Table
+          cardMode
           columns={[
-            { key: 'orderNumber', header: 'الرقم', render: (o: Order) => <span className="monospace">{o.orderNumber}</span> },
+            { key: 'orderNumber', header: 'الرقم', render: (o: Order) => <span className="monospace font-semibold">{o.orderNumber}</span> },
             { key: 'customerName', header: 'العميل' },
             { key: 'totalPrice', header: 'الإجمالي', render: (o: Order) => formatCurrency(o.totalPrice) },
             { key: 'profit', header: 'الربح', render: (o: Order) => {
               const profit = profitForOrder(o)
-              if (profit == null) return <span className="profit-chip is-missing">تكلفة غير مكتملة</span>
-              return <span className={`profit-chip${profit < 0 ? ' is-negative' : ''}`}>{formatCurrency(profit)}</span>
+              if (profit == null) return <Badge tone="slate">تكلفة غير مكتملة</Badge>
+              return <Badge tone={profit < 0 ? 'red' : 'green'}>{formatCurrency(profit)}</Badge>
             } },
-            { key: 'status', header: 'الحالة', render: (o: Order) => <Badge tone={(STATUS_COLORS as any)[o.status] || 'slate'}>{STATUS_LABELS[o.status as keyof typeof STATUS_LABELS] || o.status}</Badge> },
+            { key: 'status', header: 'الحالة', render: (o: Order) => <Badge tone={STATUS_COLORS[o.status as keyof typeof STATUS_COLORS] || 'slate'}>{STATUS_LABELS[o.status as keyof typeof STATUS_LABELS] || o.status}</Badge> },
             { key: 'createdAt', header: 'التاريخ', render: (o: Order) => <span className="muted">{formatDateTime(o.createdAt)}</span> },
           ]}
-          rows={filtered.slice(0, 100)}
+          rows={orders.slice(0, 50)}
         />
-      </WorkspaceSection>
+      </Card>
     </div>
   )
 }

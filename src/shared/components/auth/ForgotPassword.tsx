@@ -4,8 +4,6 @@ import { Link } from 'wouter'
 import { resetPassword } from '../../services/auth'
 import { useToast } from '../../hooks/useToast'
 import { Button } from '../ui/Button'
-import { Input } from '../ui/Input'
-import { BrandMark } from '../brand/BrandMark'
 import { AuthShell } from './AuthShell'
 import { isEmailValid } from '../../utils/validators'
 import { Icon } from '../ui/Icon'
@@ -40,38 +38,59 @@ export const ForgotPassword: FunctionalComponent = () => {
   return (
     <AuthShell>
       <div className="auth-card">
-        <div className="auth-brand">
-          <BrandMark />
-          <span>منصة M&amp;K</span>
+        <div className="auth-forgot-head">
+          <div className="auth-forgot-icon">
+            <Icon name="storefront" />
+          </div>
+          <h1 className="auth-title">M&amp;K Store</h1>
         </div>
-        <h1 className="auth-title">نسيت كلمة المرور؟</h1>
         {sent ? (
-          <div className="order-confirmed mt-2">
-            <div className="big-check"><Icon name="mark_email_read" /></div>
-            <p className="auth-subtitle">تم إرسال رابط إعادة تعيين كلمة المرور إلى <strong>{email}</strong>.</p>
-            <Link href="/login"><Button variant="outline">العودة لتسجيل الدخول</Button></Link>
+          <div className="auth-status-card">
+            <div className="auth-status-icon">
+              <Icon name="mark_email_read" />
+            </div>
+            <span className="auth-status-badge">
+              <i className="auth-status-pulse" />
+              تم الإرسال
+            </span>
+            <h2 className="auth-title">تم إرسال الرابط بنجاح</h2>
+            <p className="auth-subtitle">لقد أرسلنا تعليمات إعادة تعيين كلمة المرور إلى <strong>{email}</strong>. يرجى التحقق من صندوق الوارد الخاص بك.</p>
+            <Link href="/login">
+              <Button variant="outline" block>العودة لتسجيل الدخول</Button>
+            </Link>
+            <button type="button" className="auth-retry" onClick={() => { setSent(false); setEmail('') }}>
+              لم تستلم البريد؟ حاول مرة أخرى
+            </button>
           </div>
         ) : (
           <>
-            <p className="auth-subtitle">أدخل بريدك الإلكتروني وسنرسل لك رابطاً لإعادة تعيين كلمة المرور.</p>
-            <form onSubmit={onSubmit}>
-              <Input
-                label="البريد الإلكتروني"
-                type="email"
-                value={email}
-                onChange={setEmail}
-                required
-                placeholder="you@example.com"
-                autoComplete="email"
-              />
+            <h2 className="auth-title">نسيت كلمة المرور</h2>
+            <p className="auth-subtitle">أدخل بريدك الإلكتروني المسجل لدينا وسنرسل لك رابطاً لإعادة تعيين كلمة المرور الخاصة بك.</p>
+            <form onSubmit={onSubmit} className="auth-form">
+              <div className="auth-form-field">
+                <label htmlFor="forgot-email">البريد الإلكتروني</label>
+                <div className="auth-input-wrap">
+                  <Icon name="mark_email_unread" className="auth-input-icon" ariaHidden />
+                  <input
+                    id="forgot-email"
+                    type="email"
+                    value={email}
+                    onInput={(e) => setEmail((e.target as HTMLInputElement).value)}
+                    required
+                    placeholder="you@example.com"
+                    autoComplete="email"
+                  />
+                </div>
+              </div>
               {error && <p className="field-error">{error}</p>}
-              <Button type="submit" block loading={loading}>
-                إرسال رابط التعيين
+              <Button type="submit" block loading={loading} icon="arrow_forward">
+                إرسال رابط إعادة التعيين
               </Button>
             </form>
-            <p className="auth-switch">
-              تذكرت كلمة المرور؟ <Link href="/login">تسجيل الدخول</Link>
-            </p>
+            <Link href="/login" className="auth-back-link">
+              <Icon name="arrow_back" ariaHidden />
+              العودة لتسجيل الدخول
+            </Link>
           </>
         )}
       </div>

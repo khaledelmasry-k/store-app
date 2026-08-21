@@ -1,10 +1,8 @@
 import { FunctionalComponent } from 'preact'
 import { useEffect, useRef, useState } from 'preact/hooks'
-import { InternalPageHeader } from '../components/InternalWorkspace'
-import '../components/InternalWorkspace.css'
-import { Card } from '../../shared/components/ui/Card'
+import { PageHeader } from '../../shared/components/ui/PageHeader'
+import './Themes.css'
 import { Button } from '../../shared/components/ui/Button'
-import { Badge } from '../../shared/components/ui/Badge'
 import { Toggle } from '../../shared/components/ui/Toggle'
 import { Loading } from '../../shared/components/ui/Loading'
 import { SmartImage } from '../../shared/components/ui/SmartImage'
@@ -28,20 +26,24 @@ export const MerchantThemes: FunctionalComponent = () => {
   const [applying, setApplying] = useState<string | null>(null)
   const [logoUploading, setLogoUploading] = useState(false)
   const [heroUploading, setHeroUploading] = useState(false)
+  const [device, setDevice] = useState<'desktop' | 'mobile'>('desktop')
   const logoInputRef = useRef<HTMLInputElement>(null)
   const heroInputRef = useRef<HTMLInputElement>(null)
   const saveTimer = useRef<ReturnType<typeof setTimeout> | null>(null)
+  const undoStack = useRef<StoreTheme[]>([])
+  const redoStack = useRef<StoreTheme[]>([])
 
   useEffect(() => {
-    if (!store) return
+    const theme = store?.theme
+    if (!theme) return
     setThemeForm({
-      primary: store.theme?.primary || '#0b766e',
-      secondary: store.theme?.secondary || '#c78a25',
-      darkMode: !!store.theme?.darkMode,
-      template: store.theme?.template || 'modern',
-      imageFit: store.theme?.imageFit || 'contain',
+      primary: theme.primary || '#0b766e',
+      secondary: theme.secondary || '#c78a25',
+      darkMode: !!theme.darkMode,
+      template: theme.template || 'modern',
+      imageFit: theme.imageFit || 'contain',
     })
-  }, [store?.id, store?.theme?.primary, store?.theme?.secondary, store?.theme?.darkMode, store?.theme?.template, store?.theme?.imageFit])
+  }, [store?.theme])
 
   const persistTheme = async (next: StoreTheme) => {
     if (!store) return
@@ -57,9 +59,44 @@ export const MerchantThemes: FunctionalComponent = () => {
 
   const updateTheme = (patch: Partial<StoreTheme>) => {
     const next = { ...themeForm, ...patch }
+    undoStack.current.push(themeForm)
+    if (undoStack.current.length > 20) undoStack.current.shift()
+    redoStack.current = []
     setThemeForm(next)
     if (saveTimer.current) clearTimeout(saveTimer.current)
     saveTimer.current = setTimeout(() => persistTheme(next), 600)
+  }
+
+  const undoTheme = () => {
+    const prev = undoStack.current.pop()
+    if (!prev) return
+    redoStack.current.push(themeForm)
+    setThemeForm(prev)
+    if (saveTimer.current) clearTimeout(saveTimer.current)
+    saveTimer.current = setTimeout(() => persistTheme(prev), 600)
+  }
+
+  const redoTheme = () => {
+    const next = redoStack.current.pop()
+    if (!next) return
+    undoStack.current.push(themeForm)
+    setThemeForm(next)
+    if (saveTimer.current) clearTimeout(saveTimer.current)
+    saveTimer.current = setTimeout(() => persistTheme(next), 600)
+  }
+
+  const saveNow = async () => {
+    if (!store) return
+    if (saveTimer.current) clearTimeout(saveTimer.current)
+    setSavingTheme(true)
+    try {
+      await storesService.update(store.id, { theme: themeForm })
+      toast.push('تم حفظ التغييرات', undefined, 'success')
+    } catch (err: any) {
+      toast.push('فشل حفظ المظهر', err?.message || 'حدث خطأ غير متوقع', 'error')
+    } finally {
+      setSavingTheme(false)
+    }
   }
 
   const applyTemplate = async (id: string) => {
@@ -174,217 +211,221 @@ export const MerchantThemes: FunctionalComponent = () => {
 
   if (!store) return <Loading />
 
+  const logoKind = storeLogoKind(store.logo)
+  const logoPreset = logoKind === 'preset' ? presetFromLogo(store.logo) : null
+
   return (
     <div className="merchant-operations merchant-themes-page">
-      <InternalPageHeader eyebrow="استوديو المتجر" title="المظهر والقالب" subtitle="عدّل هوية متجرك وشاهد المعاينة الحية قبل فتحه للزوار" />
+      <PageHeader
+        breadcrumb="استوديو المتجر"
+        title="استوديو التصميم"
+        subtitle="عدّل مظهر متجرك وشاهد المعاينة فوراً"
+        actions={
+          <div className="theme-header-meta">
+            <span className={`theme-save-state${savingTheme ? ' is-saving' : ''}`}>
+              <Icon name="check_circle" ariaHidden />
+              {savingTheme ? 'جارٍ الحفظ...' : 'تم حفظ التغييرات'}
+            </span>
+            <div className="theme-history">
+              <button type="button" className="theme-history-btn" onClick={undoTheme} disabled={!undoStack.current.length} title="تراجع" aria-label="تراجع"><Icon name="undo" ariaHidden /></button>
+              <button type="button" className="theme-history-btn" onClick={redoTheme} disabled={!redoStack.current.length} title="إعادة" aria-label="إعادة"><Icon name="redo" ariaHidden /></button>
+              <button type="button" className="theme-history-btn lg:hidden" onClick={() => setDevice(device === 'desktop' ? 'mobile' : 'desktop')} title="الأجهزة" aria-label="الأجهزة"><Icon name="devices" ariaHidden /></button>
+            </div>
+            <a href={`/store/${store.slug}`} target="_blank" rel="noreferrer" className="theme-header-preview">
+              <Button variant="outline" icon="visibility" size="sm">معاينة</Button>
+            </a>
+            <Button size="sm" icon="save" onClick={saveNow} loading={savingTheme}>حفظ التغييرات</Button>
+          </div>
+        }
+      />
 
       <div className="theme-studio">
         <section className="theme-studio-controls">
-      <Card title="اختر قالب متجرك" subtitle="تصميمات جاهزة تظهر في صفحة متجرك للزوار" className="mb-2">
-        <div className="theme-gallery">
-          {STORE_TEMPLATES.map((tpl) => {
-            const active = themeForm.template === tpl.id
-            const preview = { primary: tpl.defaultPrimary, secondary: tpl.defaultSecondary }
-            return (
-              <div key={tpl.id} className={`theme-card${active ? ' theme-card--active' : ''}`}>
-                {active && <Badge tone="green">نشط</Badge>}
-                <ThemePreview tpl={tpl} colors={preview} />
-                <div className="theme-card-body">
-                  <div className="theme-card-title">
-                    <strong>{tpl.name}</strong>
-                    <span className="muted small">{tpl.eyebrow}</span>
+          <div className="theme-section">
+            <div className="theme-section-head">
+              <h3>قوالب التصميم</h3>
+              <span className="theme-section-sub">اختر الهيكل العام لمتجرك</span>
+            </div>
+            <div className="theme-tpl-grid theme-gallery">
+              {STORE_TEMPLATES.map((tpl) => {
+                const active = themeForm.template === tpl.id
+                const preview = { primary: tpl.defaultPrimary, secondary: tpl.defaultSecondary }
+                return (
+                  <div
+                    key={tpl.id}
+                    className={`theme-tpl-card theme-card${active ? ' theme-card--active is-active' : ''}`}
+                    onClick={() => applyTemplate(tpl.id)}
+                    title={tpl.description}
+                  >
+                    {active && <span className="theme-tpl-badge">القالب الحالي</span>}
+                    <ThemePreview tpl={tpl} colors={preview} />
+                    <div className="theme-tpl-foot">
+                      <span className="theme-tpl-name">{tpl.name}</span>
+                      {active ? (
+                        <Button variant="soft" size="sm" icon="check" disabled>القالب الحالي</Button>
+                      ) : (
+                        <Button size="sm" icon="check" loading={applying === tpl.id} onClick={(e) => { e.stopPropagation(); applyTemplate(tpl.id) }}>تطبيق</Button>
+                      )}
+                    </div>
                   </div>
-                  <p className="muted small">{tpl.description}</p>
-                  <div className="theme-card-actions">
-                    {active ? (
-                      <Button variant="soft" size="sm" icon="check" disabled>القالب الحالي</Button>
-                    ) : (
-                      <Button size="sm" icon="check" loading={applying === tpl.id} onClick={() => applyTemplate(tpl.id)}>تطبيق</Button>
-                    )}
-                    {store && (
-                      <a href={`/store/${store.slug}`} target="_blank" rel="noreferrer">
-                        <Button variant="ghost" size="sm" icon="store">معاينة</Button>
-                      </a>
-                    )}
-                  </div>
-                </div>
-              </div>
-            )
-          })}
-        </div>
-      </Card>
+                )
+              })}
+            </div>
+          </div>
 
-      <div className="grid grid-2 mb-2">
-        <Card title="ألوان المتجر" subtitle="تظهر على الأزرار والروابط والعناصر الرئيسية">
-          <div>
-            <span className="field-label">اللون الأساسي</span>
+          <div className="theme-section">
+            <div className="theme-section-head">
+              <h3>الألوان</h3>
+              <span className="theme-section-sub">تخصيص هوية الألوان لمتجرك</span>
+            </div>
+            <span className="theme-color-label">الألوان الأساسية</span>
             <div className="swatch-row">
               {PRIMARY_SWATCHES.map((c) => (
                 <button
                   key={c}
                   type="button"
-                  className="swatch"
-                  style={{ background: c, borderColor: themeForm.primary === c ? 'var(--text)' : 'transparent' }}
+                  className={`swatch theme-swatch${themeForm.primary === c ? ' is-active' : ''}`}
+                  style={{ background: c }}
                   onClick={() => updateTheme({ primary: c })}
                   title={c}
                 />
               ))}
-              <label className="swatch swatch--custom" title="لون مخصص">
+              <label className="swatch swatch--custom theme-swatch-custom" title="لون مخصص">
                 <input type="color" value={themeForm.primary} onChange={(e: any) => updateTheme({ primary: e.currentTarget.value })} />
                 <Icon name="palette" />
               </label>
             </div>
-          </div>
-          <div className="mt-1">
-            <span className="field-label">اللون الثانوي</span>
+            <span className="theme-color-label">الألوان الثانوية (الخلفيات)</span>
             <div className="swatch-row">
               {SECONDARY_SWATCHES.map((c) => (
                 <button
                   key={c}
                   type="button"
-                  className="swatch"
-                  style={{ background: c, borderColor: themeForm.secondary === c ? 'var(--text)' : 'transparent' }}
+                  className={`swatch theme-swatch${themeForm.secondary === c ? ' is-active' : ''}`}
+                  style={{ background: c }}
                   onClick={() => updateTheme({ secondary: c })}
                   title={c}
                 />
               ))}
-              <label className="swatch swatch--custom" title="لون مخصص">
+              <label className="swatch swatch--custom theme-swatch-custom" title="لون مخصص">
                 <input type="color" value={themeForm.secondary} onChange={(e: any) => updateTheme({ secondary: e.currentTarget.value })} />
                 <Icon name="palette" />
               </label>
             </div>
           </div>
 
-          <div className="flex-between mt-2">
-            <div>
-              <span className="font-semibold">الوضع الداكن لمتجرك</span>
-              <div className="muted small">يتحكم في مظهر صفحة المتجر للزوار</div>
-            </div>
-            <Toggle checked={themeForm.darkMode} onChange={(v) => updateTheme({ darkMode: v })} label="داكن" />
-          </div>
-
-          <div className="field mt-2">
-            <span className="field-label">عرض صور المنتجات</span>
-            <div className="flex">
-              <button type="button" className={`btn ${themeForm.imageFit !== 'cover' ? 'btn-primary' : 'btn-outline'}`} onClick={() => updateTheme({ imageFit: 'contain' })}>كما هي (بدون قص)</button>
-              <button type="button" className={`btn ${themeForm.imageFit === 'cover' ? 'btn-primary' : 'btn-outline'}`} onClick={() => updateTheme({ imageFit: 'cover' })}>قص لملء الإطار</button>
-            </div>
-            <div className="muted small mt-1">تؤثر على الصورة الرئيسية في صفحة المنتج — "كما هي" تعرض الصورة كاملة دون قص</div>
-          </div>
-
-          <div className="theme-preview mt-2" style={{ background: themeForm.darkMode ? '#0f172a' : '#f8fafc' }}>
-            <div className="theme-preview-brand">
-              <span className="theme-preview-logo" style={{ background: themeForm.primary }} />
-              <strong style={{ color: themeForm.darkMode ? '#f1f5f9' : '#0f172a' }}>معاينة المتجر</strong>
-            </div>
-            <div className="theme-preview-actions">
-              <span className="theme-preview-btn" style={{ background: themeForm.primary }}>تسوق الآن</span>
-              <span className="theme-preview-btn theme-preview-btn--soft" style={{ background: `${themeForm.primary}1f`, color: themeForm.primary }}>عرض المنتجات</span>
-            </div>
-            <div className="theme-preview-badges">
-              <span className="theme-preview-badge" style={{ color: themeForm.primary }}>قوي — عملي</span>
-            </div>
-          </div>
-
-          <div className="flex flex-end mt-2">
-            <span className="muted small">{savingTheme ? 'جارٍ الحفظ...' : 'يُحفظ تلقائياً أثناء التعديل'}</span>
-          </div>
-        </Card>
-
-        <div className="grid grid-2" style={{ gridTemplateColumns: '1fr 1.6fr' }}>
-        <Card title="شعار المتجر" subtitle="يظهر في رأس صفحة متجرك وتذييلها">
-          <div className="logo-field">
-            <div className="logo-preview">
-              {storeLogoKind(store.logo) === 'preset' ? (
-                (() => {
-                  const preset = presetFromLogo(store.logo)
-                  return preset ? (
-                    <span className="logo-preview-preset"><Icon name={preset.icon} /></span>
-                  ) : (
-                    <span className="logo-preview-placeholder"><Icon name="storefront" /></span>
-                  )
-                })()
-              ) : store.logo ? (
-                <SmartImage src={store.logo} alt={store.name} className="logo-preview-img" placeholderClassName="logo-preview-placeholder" />
-              ) : (
-                <span className="logo-preview-placeholder"><Icon name="storefront" /></span>
-              )}
-            </div>
-            <p className="muted small mb-2">اختر شعاراً جاهزاً من المنصة أو ارفع شعاراً مخصصاً — JPG، PNG أو WebP حتى 5 ميجابايت</p>
-
-            <span className="field-label">شعارات جاهزة</span>
-            <div className="preset-logo-grid">
-              {STORE_LOGO_PRESETS.map((p) => {
-                const active = storeLogoKind(store.logo) === 'preset' && presetFromLogo(store.logo)?.id === p.id
-                return (
-                  <button
-                    key={p.id}
-                    type="button"
-                    className={`preset-logo-item${active ? ' preset-logo-item--active' : ''}`}
-                    title={p.name}
-                    onClick={() => selectPreset(p.id)}
-                  >
-                    <span className="preset-logo-icon"><Icon name={p.icon} /></span>
-                    <span className="preset-logo-name">{p.name}</span>
-                  </button>
-                )
-              })}
+          <div className="theme-section">
+            <div className="theme-section-head">
+              <h3>الهوية والصور</h3>
+              <span className="theme-section-sub">الشعار وصورة العرض الرئيسية</span>
             </div>
 
-            <div className="flex flex-gap-sm flex-wrap mt-2">
-              <Button variant="outline" size="sm" icon="add_photo_alternate" onClick={pickLogo} loading={logoUploading}>رفع شعار</Button>
-              {store.logo && (
-                <Button variant="ghost" size="sm" icon="delete" onClick={removeLogo}>إزالة</Button>
-              )}
+            <span className="theme-color-label">شعار المتجر</span>
+            <div className="logo-field">
+            <div className="theme-upload-box">
+              <div className="theme-upload-preview logo-preview">
+                {logoKind === 'preset' && logoPreset ? (
+                  <span className="theme-upload-icon"><Icon name={logoPreset.icon} ariaHidden /></span>
+                ) : store.logo ? (
+                  <SmartImage src={store.logo} alt={store.name} className="theme-upload-img" placeholderClassName="theme-upload-icon" />
+                ) : (
+                  <span className="theme-upload-icon"><Icon name="storefront" ariaHidden /></span>
+                )}
+              </div>
+              <div className="theme-upload-body">
+                <div className="theme-upload-actions">
+                  <Button variant="outline" size="sm" icon="add_photo_alternate" onClick={pickLogo} loading={logoUploading}>رفع شعار</Button>
+                  {store.logo && <Button variant="ghost" size="sm" icon="delete" onClick={removeLogo}>إزالة</Button>}
+                </div>
+                <span className="theme-upload-hint">JPG، PNG أو WebP حتى 5 ميجابايت</span>
+              </div>
             </div>
             <input ref={logoInputRef} type="file" accept="image/jpeg,image/png,image/webp" hidden onChange={onLogoChosen} />
-          </div>
-        </Card>
-
-        <Card title="صورة الغلاف (Hero)" subtitle="تظهر أعلى صفحة متجرك الرئيسية — بأبعاد مستعرضة">
-          <div className="logo-field">
-            <div className="hero-preview">
-              {store.heroImage ? (
-                <SmartImage src={store.heroImage} alt={store.name} className="hero-preview-img" placeholderClassName="hero-preview-img" />
-              ) : (
-                <div className="hero-preview-placeholder"><Icon name="image" /><span className="muted small">لا توجد صورة — سيُستخدم تدرّج اللون الافتراضي</span></div>
-              )}
+            <div className="theme-presets">
+              <span className="theme-color-label">شعارات جاهزة</span>
+              <div className="preset-logo-grid">
+                {STORE_LOGO_PRESETS.map((p) => {
+                  const active = logoKind === 'preset' && logoPreset?.id === p.id
+                  return (
+                    <button
+                      key={p.id}
+                      type="button"
+                      className={`preset-logo-item${active ? ' preset-logo-item--active' : ''}`}
+                      title={p.name}
+                      onClick={() => selectPreset(p.id)}
+                    >
+                      <span className="preset-logo-icon"><Icon name={p.icon} /></span>
+                      <span className="preset-logo-name">{p.name}</span>
+                    </button>
+                  )
+                })}
+              </div>
             </div>
-            <p className="muted small mb-2">JPG، PNG أو WebP — حتى 5 ميجابايت، أبعاد واسعة (مثل 1200×400)</p>
-            <div className="flex flex-gap-sm flex-wrap">
+            </div>
+
+            <span className="theme-color-label">صورة الغلاف (Hero)</span>
+            <div className="theme-upload-box">
+              <div className="theme-upload-preview is-wide">
+                {store.heroImage ? (
+                  <SmartImage src={store.heroImage} alt={store.name} className="theme-upload-img" placeholderClassName="theme-upload-icon" />
+                ) : (
+                  <span className="theme-upload-icon"><Icon name="image" ariaHidden /><small>لا توجد صورة — سيُستخدم تدرّج اللون الافتراضي</small></span>
+                )}
+              </div>
+              <div className="theme-upload-body">
+                <div className="theme-upload-actions">
                   <Button variant="outline" size="sm" icon="add_photo_alternate" onClick={pickHero} loading={heroUploading}>رفع صورة الغلاف</Button>
-              {store.heroImage && (
-                <Button variant="ghost" size="sm" icon="delete" onClick={removeHero}>إزالة</Button>
-              )}
+                  {store.heroImage && <Button variant="ghost" size="sm" icon="delete" onClick={removeHero}>إزالة</Button>}
+                </div>
+                <span className="theme-upload-hint">JPG، PNG أو WebP — حتى 5 ميجابايت، أبعاد واسعة (مثل 1200×400)</span>
+              </div>
             </div>
             <input ref={heroInputRef} type="file" accept="image/jpeg,image/png,image/webp" hidden onChange={onHeroChosen} />
           </div>
-        </Card>
-      </div>
-      </div>
-        </section>
-        <aside className="theme-studio-preview" style={{ '--theme-preview-primary': themeForm.primary, '--theme-preview-secondary': themeForm.secondary } as any}>
-          <div className="theme-device">
-            <div className="theme-device-top">
-              <span />
-              <span />
-              <span />
+
+          <div className="theme-section">
+            <div className="theme-section-head">
+              <h3>إعدادات إضافية</h3>
             </div>
-            <div className={`theme-device-screen${themeForm.darkMode ? ' is-dark' : ''}`}>
-              <div className="theme-device-nav">
-                <strong>{store.name}</strong>
-                <small>متجر مباشر</small>
+            <div className="theme-setting-row">
+              <div>
+                <span className="theme-setting-title">الوضع الداكن</span>
+                <span className="theme-setting-sub">تفعيل الثيم الداكن للمتجر</span>
               </div>
-              <div className="theme-device-hero">
-                <span>واجهة المتجر</span>
-                <h3>{store.seoTitle || store.name}</h3>
-                <p>{store.description || 'منتجات مختارة، عروض واضحة، وتجربة شراء سهلة.'}</p>
-                <b>تسوق الآن</b>
+              <Toggle checked={themeForm.darkMode} onChange={(v) => updateTheme({ darkMode: v })} />
+            </div>
+            <span className="theme-color-label">طريقة عرض صور المنتجات</span>
+            <div className="theme-segmented">
+              <button type="button" className={`theme-segmented-btn${themeForm.imageFit !== 'cover' ? ' is-active' : ''}`} onClick={() => updateTheme({ imageFit: 'contain' })}>كما هي (بدون قص)</button>
+              <button type="button" className={`theme-segmented-btn${themeForm.imageFit === 'cover' ? ' is-active' : ''}`} onClick={() => updateTheme({ imageFit: 'cover' })}>قص لملء الإطار</button>
+            </div>
+            <span className="theme-upload-hint">تؤثر على الصورة الرئيسية في صفحة المنتج — "كما هي" تعرض الصورة كاملة دون قص</span>
+          </div>
+        </section>
+
+        <aside className="theme-studio-preview">
+          <div className="theme-preview-toolbar">
+            <span className="theme-preview-label">المعاينة المباشرة</span>
+            <div className="theme-device-toggle">
+              <button type="button" className={`theme-device-btn${device === 'desktop' ? ' is-active' : ''}`} onClick={() => setDevice('desktop')} title="حاسوب"><Icon name="web" ariaHidden /></button>
+              <button type="button" className={`theme-device-btn${device === 'mobile' ? ' is-active' : ''}`} onClick={() => setDevice('mobile')} title="جوال"><Icon name="smartphone" ariaHidden /></button>
+            </div>
+          </div>
+          <div className="theme-preview-stage">
+            <div className={`theme-preview-frame${device === 'mobile' ? ' is-mobile' : ''}${themeForm.darkMode ? ' is-dark' : ''}`} style={{ '--tp-primary': themeForm.primary, '--tp-secondary': themeForm.secondary } as any}>
+              <div className="tp-bar">
+                <span className="tp-logo" style={{ background: themeForm.primary }} />
+                <span className="tp-name">{store.name}</span>
+                <nav className="tp-nav-links"><span>الرئيسية</span><span>المنتجات</span><span>العروض</span><span>تواصل معنا</span></nav>
+                <span className="tp-icons"><i className="tp-search" /><i className="tp-cart" /></span>
               </div>
-              <div className="theme-device-products">
-                <span />
-                <span />
-                <span />
+              <div className="tp-hero">
+                <b>{store.seoTitle || store.name}</b>
+                <i>{store.description || 'منتجات مختارة، عروض واضحة، وتجربة شراء سهلة.'}</i>
+                <em>تسوق الآن</em>
+              </div>
+              <div className="tp-grid">
+                <span className="tp-card" /><span className="tp-card" /><span className="tp-card" />
               </div>
             </div>
           </div>
@@ -400,7 +441,7 @@ export const MerchantThemes: FunctionalComponent = () => {
 
 function ThemePreview({ tpl, colors }: { tpl: { name: string; cssClass: string }; colors: { primary: string; secondary: string } }) {
   return (
-    <div className={`theme-preview-frame ${tpl.cssClass}`} style={{ '--tp-primary': colors.primary, '--tp-secondary': colors.secondary } as any}>
+    <div className={`theme-preview-frame tp-mini ${tpl.cssClass}`} style={{ '--tp-primary': colors.primary, '--tp-secondary': colors.secondary } as any}>
       <div className="tp-bar">
         <span className="tp-logo" />
         <span className="tp-name">{tpl.name}</span>

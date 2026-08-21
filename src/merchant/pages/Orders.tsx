@@ -1,15 +1,11 @@
 import { FunctionalComponent } from 'preact'
 import { useState } from 'preact/hooks'
-import { Card } from '../../shared/components/ui/Card'
+import { Icon } from '../../shared/components/ui/Icon'
+import { PageHeader } from '../../shared/components/ui/PageHeader'
 import { StatsCard } from '../../shared/components/ui/StatsCard'
-import { Table } from '../../shared/components/ui/Table'
-import { Badge } from '../../shared/components/ui/Badge'
-import { Button } from '../../shared/components/ui/Button'
-import { FilterBar } from '../../shared/components/ui/FilterBar'
 import { Pagination } from '../../shared/components/ui/Pagination'
 import { EmptyState } from '../../shared/components/ui/EmptyState'
 import { Loading } from '../../shared/components/ui/Loading'
-import { Select } from '../../shared/components/ui/Select'
 import { useStore } from '../../shared/hooks/useStore'
 import { useCollection } from '../../shared/hooks/useCollection'
 import { Link } from 'wouter'
@@ -17,8 +13,27 @@ import { formatCurrency, timeAgo } from '../../shared/utils/format'
 import { orderItemRevenue } from '../../shared/utils/pricing'
 import { STATUS_LABELS, STATUS_COLORS } from '../../shared/utils/constants'
 import type { Order, ProductCost } from '../../shared/types'
-import { InternalPageHeader, WorkspaceSection } from '../components/InternalWorkspace'
-import '../components/InternalWorkspace.css'
+import './Orders.css'
+
+const PILL_TONES: Record<string, string> = {
+  green: 'tone-green',
+  red: 'tone-red',
+  amber: 'tone-amber',
+  slate: 'tone-slate',
+  indigo: 'tone-indigo',
+  blue: 'tone-blue',
+  purple: 'tone-purple',
+}
+
+const PAYMENT_ICONS: Record<string, string> = {
+  cod: 'local_shipping',
+  bank: 'account_balance',
+}
+
+const PAYMENT_LABELS: Record<string, string> = {
+  cod: 'الدفع عند الاستلام',
+  bank: 'تحويل بنكي',
+}
 
 export const MerchantOrders: FunctionalComponent = () => {
   const { store } = useStore()
@@ -34,16 +49,15 @@ export const MerchantOrders: FunctionalComponent = () => {
   const [page, setPage] = useState(1)
   const PAGE_SIZE = 10
 
-  const paymentOptions = [
-    { value: 'cod', label: 'الدفع عند الاستلام' },
-    { value: 'bank', label: 'تحويل بنكي' },
-  ]
+  const statusCounts = Object.fromEntries(
+    Object.keys(STATUS_LABELS).map((k) => [k, orders.filter((o) => o.status === k).length])
+  )
 
   const filtered = orders
     .filter((o) =>
-      (o.customerName.includes(query) || o.orderNumber.includes(query) || o.phone.includes(query)) &&
+      (((o.customerName || "").includes(query) || (o.orderNumber || "").includes(query) || (o.phone || "").includes(query)) &&
       (!status || o.status === status) &&
-      (!payment || o.paymentMethod === payment)
+      (!payment || o.paymentMethod === payment))
     )
     .sort((a, b) => {
       if (sort === 'newest') return (b.createdAt?.seconds || 0) - (a.createdAt?.seconds || 0)
@@ -70,75 +84,137 @@ export const MerchantOrders: FunctionalComponent = () => {
   const totalProfit = orders
     .filter((o) => o.status === 'DELIVERED')
     .reduce((sum, o) => sum + (orderProfit(o) ?? 0), 0)
-  const hasAnyCost = costsRes.data.some((c) => typeof c.costPrice === 'number' && c.costPrice >= 0)
+  
+  if (ordersRes.loading || costsRes.loading) return <Loading variant="screen" message="جاري تحميل الطلبات..." />
 
-  if (ordersRes.loading || costsRes.loading) return <Loading />
+  const filtersActive = !!query || !!status || !!payment
 
   return (
     <div className="merchant-operations merchant-orders-page">
-      <InternalPageHeader eyebrow="تشغيل المتجر" title="الطلبات" subtitle={`${orders.length} طلب — تابع الحالات والقيمة والربح من مساحة عمل واحدة`} />
+      <PageHeader
+        breadcrumb="تشغيل المتجر"
+        title="الطلبات"
+        subtitle={`${orders.length} طلب — الربح يظهر للتاجر فقط بناءً على تكلفة المنتجات المسجلة`}
+      />
 
       <div className="stats-grid">
-        <StatsCard title="إجمالي الطلبات" value={orders.length} icon="receipt_long" tone="primary" />
-        <StatsCard title="المبلغ" value={totalRevenue} currency icon="payments" tone="green" />
-        {hasAnyCost && <StatsCard title="الربح" value={totalProfit} currency icon="trending_up" tone="violet" />}
-        <StatsCard title="معلقة" value={pendingCount} icon="pending_actions" tone="amber" />
+        <StatsCard title="إجمالي الطلبات" value={orders.length} icon="shopping_bag" tone="primary" />
+        <StatsCard title="المبيعات المستلمة" value={totalRevenue} currency icon="payments" tone="green" />
+        <StatsCard title="إجمالي الربح" value={totalProfit} currency icon="trending_up" tone="indigo" changeLabel="يعتمد على تكلفة المنتجات المسجلة" />
+        <StatsCard title="الطلبات المعلقة" value={pendingCount} icon="pending_actions" tone="amber" />
       </div>
 
-      <WorkspaceSection title="سجل الطلبات" subtitle="ابحث وفلتر الطلبات ثم افتح التفاصيل التشغيلية" className="orders-workspace">
-      <Card>
-        <FilterBar
-          search={query}
-          onSearch={(q) => { setQuery(q); setPage(1) }}
-          searchPlaceholder="بحث برقم الطلب أو العميل..."
-          segments={[{ label: 'كل', value: '' }, ...Object.entries(STATUS_LABELS).map(([k, v]) => ({ label: v, value: k }))]}
-          activeSegment={status}
-          onSegmentChange={(s) => { setStatus(s); setPage(1) }}
-          actions={
-            <div className="flex gap-1">
-              <Select value={sort} onChange={(v) => setSort(v)} placeholder="الترتيب" options={[
-                { value: 'newest', label: 'الأحدث' },
-                { value: 'oldest', label: 'الأقدم' },
-                { value: 'total', label: 'الأعلى قيمة' },
-              ]} />
-              <Select value={payment} onChange={(v) => { setPayment(v); setPage(1) }} placeholder="طريقة الدفع" options={[{ value: '', label: 'كل الطرق' }, ...paymentOptions]} />
+      <div className="orders-toolbar">
+        <div className="orders-toolbar-row">
+          <div className="orders-search">
+            <Icon name="search" ariaHidden />
+            <input type="text" placeholder="البحث برقم الطلب، اسم العميل، الهاتف..." value={query} onInput={(e) => { setQuery((e.target as HTMLInputElement).value); setPage(1) }} aria-label="بحث في الطلبات" />
+          </div>
+          <div className="orders-toolbar-actions">
+            <div className="orders-select">
+              <select value={payment} onChange={(e) => { setPayment((e.target as HTMLSelectElement).value); setPage(1) }} aria-label="طريقة الدفع">
+                <option value="">طريقة الدفع: الكل</option>
+                <option value="cod">الدفع عند الاستلام</option>
+                <option value="bank">تحويل بنكي</option>
+              </select>
+              <Icon name="expand_more" ariaHidden />
             </div>
-          }
+            <div className="orders-select">
+              <select value={sort} onChange={(e) => setSort((e.target as HTMLSelectElement).value)} aria-label="الترتيب">
+                <option value="newest">الأحدث</option>
+                <option value="oldest">الأقدم</option>
+                <option value="total">الأعلى قيمة</option>
+              </select>
+              <Icon name="expand_more" ariaHidden />
+            </div>
+          </div>
+        </div>
+
+        <div className="orders-status-pills">
+          <button type="button" className={!status ? 'is-active' : ''} onClick={() => { setStatus(''); setPage(1) }}>الكل</button>
+          {Object.entries(STATUS_LABELS).map(([k, v]) => (
+            <button type="button" key={k} className={status === k ? 'is-active' : ''} onClick={() => { setStatus(status === k ? '' : k); setPage(1) }}>
+              {v} ({statusCounts[k] || 0})
+            </button>
+          ))}
+        </div>
+      </div>
+
+      {filtered.length === 0 ? (
+        <EmptyState
+          icon="archive"
+          title="لا توجد طلبات"
+          description={filtersActive ? 'لا توجد نتائج تطابق البحث والفلترة.' : 'عندما يقوم العملاء بالشراء من متجرك، ستظهر طلباتهم هنا لإدارتها.'}
         />
-        {filtered.length === 0 ? (
-          <EmptyState icon="receipt_long" title="لا توجد طلبات" description={query ? 'لا توجد نتائج تطابق بحثك.' : 'الطلبات ستظهر هنا فور وصولها.'} />
-        ) : (
-          <Table cardMode
-            columns={[
-              { key: 'orderNumber', header: 'الرقم', render: (o: Order) => <Link href={`/dashboard/orders/${o.id}`}><span className="monospace">{o.orderNumber}</span></Link> },
-              { key: 'customerName', header: 'العميل' },
-               { key: 'phone', header: 'الهاتف' },
-               { key: 'items', header: 'المنتجات', render: (o: Order) => <ProductsCell items={o.items} /> },
-               { key: 'totalPrice', header: 'الإجمالي', render: (o: Order) => formatCurrency(o.totalPrice) },
-              { key: 'profit', header: 'الربح', render: (o: Order) => {
-                const profit = orderProfit(o)
-                if (profit == null) return <span className="profit-chip is-missing">تكلفة غير مكتملة</span>
-                return <span className={`profit-chip${profit < 0 ? ' is-negative' : ''}`}>{formatCurrency(profit)}</span>
-              } },
-              { key: 'paymentMethod', header: 'الدفع', render: (o: Order) => <Badge tone="blue">{o.paymentMethod === 'cod' ? 'عند الاستلام' : 'تحويل بنكي'}</Badge> },
-              { key: 'status', header: 'الحالة', render: (o: Order) => <Badge tone={STATUS_COLORS[o.status]}>{STATUS_LABELS[o.status]}</Badge> },
-              { key: 'createdAt', header: 'التاريخ', render: (o: Order) => <span className="muted">{timeAgo(o.createdAt)}</span> },
-              { key: 'actions', header: '', render: (o: Order) => <Link href={`/dashboard/orders/${o.id}`}><Button variant="ghost" size="sm" icon="arrow_forward_ios" /></Link> },
-            ]}
-            rows={rows}
-          />
-        )}
-        {filtered.length > PAGE_SIZE && (
-          <Pagination
-            page={page}
-            totalPages={totalPages}
-            pageSize={PAGE_SIZE}
-            total={filtered.length}
-            onPageChange={(p) => { setPage(p); window.scrollTo(0, 0) }}
-          />
-        )}
-      </Card>
-      </WorkspaceSection>
+      ) : (
+        <div className="orders-table">
+          <div className="orders-table-scroll">
+            <table>
+              <thead>
+                <tr>
+                  <th className="check-col"><input type="checkbox" aria-label="تحديد الكل" /></th>
+                  <th>الرقم</th>
+                  <th>العميل</th>
+                  <th>المنتجات</th>
+                  <th>الإجمالي</th>
+                  <th>الربح</th>
+                  <th>الدفع</th>
+                  <th>الحالة</th>
+                  <th>التاريخ</th>
+                  <th className="actions-col">الإجراءات</th>
+                </tr>
+              </thead>
+              <tbody>
+                {rows.map((o) => {
+                  const profit = orderProfit(o)
+                  const tone = STATUS_COLORS[o.status as keyof typeof STATUS_COLORS] || 'slate'
+                  return (
+                    <tr key={o.id} className="order-row" onClick={() => (window.location.href = `/dashboard/orders/${o.id}`)}>
+                      <td className="check-col"><input type="checkbox" aria-label={`تحديد ${o.orderNumber}`} /></td>
+                      <td><Link href={`/dashboard/orders/${o.id}`} className="order-number">{o.orderNumber}</Link></td>
+                      <td>
+                        <div className="order-customer">
+                          <span className="order-customer-name">{o.customerName || '—'}</span>
+                          {o.phone && <span className="order-customer-phone">{o.phone}</span>}
+                        </div>
+                      </td>
+                      <td><ProductsCell items={o.items} /></td>
+                      <td><span className="order-total">{formatCurrency(o.totalPrice)}</span></td>
+                      <td>
+                        {profit == null ? (
+                          <span className="order-cost-chip">تكلفة غير مكتملة</span>
+                        ) : (
+                          <span className={`order-profit ${profit < 0 ? 'is-negative' : ''}`}>{formatCurrency(profit)}</span>
+                        )}
+                      </td>
+                      <td>
+                        <span className="order-payment-chip">
+                          <Icon name={PAYMENT_ICONS[o.paymentMethod] || 'payments'} ariaHidden />
+                          {PAYMENT_LABELS[o.paymentMethod] || o.paymentMethod || '—'}
+                        </span>
+                      </td>
+                      <td>
+                        <span className={`order-status-pill ${PILL_TONES[tone] || ''}`}>
+                          <span className="order-status-dot" />
+                          {STATUS_LABELS[o.status] || o.status}
+                        </span>
+                      </td>
+                      <td><span className="order-date">{timeAgo(o.createdAt)}</span></td>
+                      <td className="actions-col">
+                        <span className="order-actions">
+                          <Link href={`/dashboard/orders/${o.id}`} title="عرض التفاصيل" className="icon-btn"><Icon name="visibility" /></Link>
+                          <Link href={`/dashboard/orders/${o.id}`} title="تعديل" className="icon-btn"><Icon name="edit" /></Link>
+                        </span>
+                      </td>
+                    </tr>
+                  )
+                })}
+              </tbody>
+            </table>
+          </div>
+          <Pagination page={page} totalPages={totalPages} total={filtered.length} pageSize={PAGE_SIZE} onPageChange={(p) => { setPage(p); window.scrollTo(0, 0) }} />
+        </div>
+      )}
     </div>
   )
 }
@@ -148,8 +224,8 @@ function ProductsCell({ items }: { items: Order['items'] }) {
   if (list.length === 0) return <span className="muted small">—</span>
   const total = list.reduce((s, i) => s + (i.quantity || 0), 0)
   return (
-    <div className="flex flex-col" style={{ lineHeight: 1.3 }}>
-      <span className="muted small" title={list.map((i) => i.name).join('، ')} style={{ maxWidth: 160, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{list[0].name}</span>
+    <div className="order-products">
+      <span className="order-products-name" title={list.map((i) => i.name).join('، ')}>{list[0].name}</span>
       <span className="muted small">{total} قطعة</span>
     </div>
   )

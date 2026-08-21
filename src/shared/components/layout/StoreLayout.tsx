@@ -3,17 +3,13 @@ import { useEffect, useState } from 'preact/hooks'
 import { Link, useLocation } from 'wouter'
 import { useAuth } from '../../hooks/useAuth'
 import { setSeo } from '../../utils/seo'
-import { useCart } from '../../hooks/useCart'
 import { useStore } from '../../hooks/useStore'
-import { logout } from '../../services/auth'
-import { Dropdown } from '../ui/Dropdown'
-import { Avatar } from '../ui/Avatar'
 import { MerchantLogo } from '../brand/MerchantLogo'
-import { useTheme } from '../../hooks/useTheme'
 import { getTemplate } from '../../utils/themes'
 import { contrastFor, hexToRgba, shadeHex } from '../../utils/color'
 import type { CSSProperties } from 'preact/compat'
 import { Icon } from '../ui/Icon'
+import { StorefrontHeader } from '../../../store/components/StorefrontHeader'
 
 interface Props {
   children?: any
@@ -34,16 +30,31 @@ export function themeStyleFor(primary?: string, secondary?: string): CSSProperti
 export const StoreLayout: FunctionalComponent<Props> = ({ children }) => {
   const { store } = useStore()
   const { user } = useAuth()
-  const cart = useCart()
-  const theme = useTheme()
-  const [, setLocation] = useLocation()
+  const [location, setLocation] = useLocation()
   const [menuOpen, setMenuOpen] = useState(false)
   const [q, setQ] = useState('')
+
+  const [storeDarkPref, setStoreDarkPref] = useState(() => {
+    const saved = localStorage.getItem('mk-store-theme')
+    if (saved === 'dark' || saved === 'light') return saved === 'dark'
+    return !!store?.theme?.darkMode
+  })
+  const toggleStoreDark = () => setStoreDarkPref((v) => {
+    const next = !v
+    localStorage.setItem('mk-store-theme', next ? 'dark' : 'light')
+    return next
+  })
+  useEffect(() => {
+    setStoreDarkPref((prev) => {
+      const saved = localStorage.getItem('mk-store-theme')
+      return saved === null ? !!store?.theme?.darkMode : prev
+    })
+  }, [store?.id, store?.theme?.darkMode])
 
   const slug = store?.slug
   const base = `/store/${slug}`
   const templateClass = getTemplate(store?.theme?.template).cssClass
-  const storeDark = !!store?.theme?.darkMode ? ' store-dark' : ''
+  const storeDark = storeDarkPref ? ' store-dark' : ''
 
   // SEO: title, description, OG, Twitter, and canonical for the storefront.
   useEffect(() => {
@@ -77,11 +88,18 @@ export const StoreLayout: FunctionalComponent<Props> = ({ children }) => {
     )
   }
 
-  const nav = [
+  const isHome = location === base || location === `${base}/`
+  const isCatalog = location.startsWith(`${base}/catalog`)
+  const isProduct = location.startsWith(`${base}/product`)
+
+  const showSearch = isHome || isCatalog
+
+  // Navigation matches Stitch home: Home, Catalog, Track Order.
+  // Account lives in the header person icon, not the nav.
+  const navItems = [
     { to: base, label: 'الرئيسية' },
-    { to: `${base}/catalog`, label: 'المنتجات' },
+    { to: `${base}/catalog`, label: isProduct ? 'التصنيفات' : 'المنتجات' },
     { to: `${base}/track`, label: 'تتبع طلب' },
-    { to: `${base}/account`, label: 'حسابي' },
   ]
 
   const submitSearch = (e: Event) => {
@@ -90,86 +108,29 @@ export const StoreLayout: FunctionalComponent<Props> = ({ children }) => {
     setLocation(q ? `${base}/catalog?q=${encodeURIComponent(q)}` : `${base}/catalog`)
   }
 
-  const navLinks = (onClick?: () => void) =>
-    nav.map((n) => (
-      <Link key={n.to} href={n.to} className="store-nav-link" onClick={onClick}>
-        {n.label}
-      </Link>
-    ))
-
   return (
     <div className={`store-shell store-shell--v3 ${templateClass}${storeDark}`} style={themeStyleFor(store?.theme?.primary, store?.theme?.secondary)}>
-      <header className="store-header">
-        <div className="store-header-start">
-          <button type="button" className="icon-btn store-menu-btn" onClick={() => setMenuOpen(!menuOpen)} title="القائمة">
-            <Icon name={menuOpen ? 'close' : 'menu'} />
-          </button>
-          <Link href={base} className="store-brand">
-            <MerchantLogo store={store} variant="header" />
-          </Link>
-        </div>
-        <nav className="store-nav">{navLinks()}</nav>
-        <form className="store-search" onSubmit={submitSearch}>
-          <Icon name="search" className="store-search-icon" />
-          <input
-            className="store-search-input"
-            value={q}
-            onInput={(e: any) => setQ(e.currentTarget.value)}
-            placeholder="ابحث عن منتج..."
-          />
-        </form>
-        <div className="store-actions">
-          <button type="button" className="icon-btn" onClick={theme.toggle} title="تغيير الوضع">
-            <Icon name={theme.theme === 'dark' ? 'light_mode' : 'dark_mode'} />
-          </button>
-          <Link href={`${base}/cart`} className="icon-btn cart-btn" title="السلة">
-            <Icon name="shopping_cart" />
-            {cart.count > 0 && <span className="cart-badge">{cart.count}</span>}
-          </Link>
-          {user && user.role === 'customer' ? (
-            <Dropdown
-              align="left"
-              trigger={
-                <button type="button" className="user-chip">
-                  <Avatar name={user.name} size="sm" />
-                  <span>{user.name.split(' ')[0]}</span>
-                </button>
-              }
-              items={[
-                { label: 'حسابي', icon: 'account_circle', onClick: () => (window.location.href = `${base}/account`) },
-                { label: 'تسجيل الخروج', icon: 'logout', danger: true, onClick: () => logout().then(() => window.location.reload()) },
-              ]}
-            />
-          ) : (
-            <Link href={`${base}/login`} className="btn btn-outline btn-sm">
-              تسجيل الدخول
-            </Link>
-          )}
-        </div>
-      </header>
+      <StorefrontHeader
+        base={base}
+        navItems={navItems}
+        location={location}
+        menuOpen={menuOpen}
+        onMenuToggle={setMenuOpen}
+        q={q}
+        onQChange={setQ}
+        onSearchSubmit={submitSearch}
+        showSearch={showSearch}
+        storeDark={storeDarkPref}
+        onToggleDark={toggleStoreDark}
+      />
 
-      {menuOpen && (
-        <div className="store-mobile-menu">
-          <form className="store-search" onSubmit={submitSearch}>
-            <Icon name="search" className="store-search-icon" />
-            <input
-              className="store-search-input"
-              value={q}
-              onInput={(e: any) => setQ(e.currentTarget.value)}
-              placeholder="ابحث عن منتج..."
-            />
-          </form>
-          <nav className="store-nav store-nav--mobile">{navLinks(() => setMenuOpen(false))}</nav>
-        </div>
-      )}
+      <main className="store-content" role="main">{children}</main>
 
-      <main className="store-content">{children}</main>
-
-      <footer className="store-footer">
+      <footer className="store-footer" role="contentinfo">
         <div className="store-footer-grid">
-          <div>
+          <div className="store-footer-brand-section">
             <div className="store-footer-brand">
-               <MerchantLogo store={store} variant="footer" />
+              <MerchantLogo store={store} variant="footer" />
             </div>
             <p className="muted small">{store?.description || 'متجرك على منصة M&K'}</p>
           </div>
@@ -183,7 +144,13 @@ export const StoreLayout: FunctionalComponent<Props> = ({ children }) => {
             <h4>الحساب</h4>
             <Link href={`${base}/account`} className="store-footer-link">حسابي</Link>
             <Link href={`${base}/cart`} className="store-footer-link">سلة التسوق</Link>
-            {store?.phone && <span className="muted small">{store.phone}</span>}
+            {store?.phone && <span className="muted small ltr-text">{store.phone}</span>}
+          </div>
+          <div>
+            <h4>الدعم</h4>
+            <Link href={`${base}/track`} className="store-footer-link">تتبع الطلب</Link>
+            <Link href="#" className="store-footer-link">سياسة الاسترجاع</Link>
+            <Link href="#" className="store-footer-link">تواصل معنا</Link>
           </div>
         </div>
         <div className="store-footer-bottom">

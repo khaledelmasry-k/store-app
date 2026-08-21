@@ -1,0 +1,308 @@
+.merchant-orders-page .orders-toolbar {
+  background: var(--surface-container-lowest);
+  border: 1px solid var(--outline-variant);
+  border-radius: 16px;
+  padding: 16px;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  box-shadow: var(--shadow-sm);
+  margin-bottom: 16px;
+}
+.merchant-orders-page .orders-toolbar-row {
+  display: flex;
+  gap: 12px;
+  align-items: center;
+  justify-content: space-between;
+  flex-wrap: wrap;
+}
+.merchant-orders-page .orders-search {
+  position: relative;
+  flex: 1;
+  max-width: 384px;
+}
+.merchant-orders-page .orders-search .mk-icon {
+  position: absolute;
+  inset-inline-end: 12px;
+  top: 50%;
+  transform: translateY(-50%);
+  color: var(--text-on-surface-variant);
+  font-size: 18px;
+  pointer-events: none;
+}
+.merchant-orders-page .orders-search input {
+  width: 100%;
+  padding: 10px 38px 10px 12px;
+  background: var(--surface);
+  border: 1px solid var(--outline-variant);
+  border-radius: 10px;
+  font-size: 14px;
+  color: var(--text-on-surface);
+  font-family: var(--font-sans);
+  transition: border-color 0.15s, box-shadow 0.15s;
+}
+.merchant-orders-page .orders-search input:focus {
+  border-color: var(--primary);
+  outline: none;
+  box-shadow: 0 0 0 2px color-mix(in srgb, var(--primary) 20%, transparent);
+}
+.merchant-orders-page .orders-toolbar-actions {
+  display: flex;
+  gap: 8px;
+}
+.merchant-orders-page .orders-select {
+  position: relative;
+}
+.merchant-orders-page .orders-select select {
+  appearance: none;
+  background: var(--surface);
+  border: 1px solid var(--outline-variant);
+  border-radius: 10px;
+  padding: 10px 34px 10px 14px;
+  font-size: 13px;
+  color: var(--text-on-surface);
+  cursor: pointer;
+  font-family: var(--font-sans);
+}
+.merchant-orders-page .orders-select select:focus {
+  outline: none;
+  border-color: var(--primary);
+}
+.merchant-orders-page .orders-select .mk-icon {
+  position: absolute;
+  inset-inline-start: 10px;
+  top: 50%;
+  transform: translateY(-50%);
+  color: var(--text-on-surface-variant);
+  font-size: 20px;
+  pointer-events: none;
+}
+.merchant-orders-page .orders-status-pills {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  overflow-x: auto;
+  padding-bottom: 2px;
+}
+.merchant-orders-page .orders-status-pills button {
+  white-space: nowrap;
+  padding: 6px 16px;
+  border-radius: 9999px;
+  font-size: 13px;
+  font-weight: 500;
+  background: transparent;
+  border: 1px solid var(--outline-variant);
+  color: var(--text-on-surface-variant);
+  cursor: pointer;
+  font-family: var(--font-sans);
+  transition: background 0.15s, color 0.15s;
+}
+.merchant-orders-page .orders-status-pills button:hover {
+  background: var(--surface-container-low);
+}
+.merchant-orders-page .orders-status-pills button.is-active {
+  background: var(--primary-container);
+  color: var(--on-primary-container);
+  border-color: transparent;
+  font-weight: 700;
+}
+.merchant-orders-page .orders-table {
+  background: var(--surface-container-lowest);
+  border: 1px solid var(--outline-variant);
+  border-radius: 16px;
+  overflow: hidden;
+  box-shadow: var(--shadow-sm);
+}
+.merchant-orders-page .orders-table-scroll {
+  overflow-x: auto;
+}
+.merchant-orders-page .orders-table table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 14px;
+  text-align: start;
+  white-space: nowrap;
+}
+.merchant-orders-page .orders-table thead th {
+  padding: 12px 16px;
+  background: var(--surface-container);
+  border-bottom: 1px solid var(--outline-variant);
+  font-weight: 600;
+  font-size: 13px;
+  color: var(--text-on-surface);
+  text-align: start;
+}
+.merchant-orders-page .orders-table thead th.check-col,
+.merchant-orders-page .orders-table tbody td.check-col {
+  width: 48px;
+  text-align: center;
+}
+.merchant-orders-page .orders-table thead th.actions-col,
+.merchant-orders-page .orders-table tbody td.actions-col {
+  text-align: center;
+}
+.merchant-orders-page .orders-table tbody td {
+  padding: 14px 16px;
+  border-bottom: 1px solid var(--outline-variant);
+  vertical-align: middle;
+}
+.merchant-orders-page .orders-table tbody tr {
+  cursor: pointer;
+  transition: background 0.15s;
+}
+.merchant-orders-page .orders-table tbody tr:hover {
+  background: var(--surface-container-low);
+}
+.merchant-orders-page .orders-table input[type='checkbox'] {
+  width: 16px;
+  height: 16px;
+  border: 1px solid var(--outline-variant);
+  border-radius: 4px;
+  accent-color: var(--primary);
+  cursor: pointer;
+}
+.merchant-orders-page .order-number {
+  font-weight: 600;
+  color: var(--primary);
+  font-family: var(--font-display);
+  text-decoration: none;
+}
+.merchant-orders-page .order-number:hover {
+  text-decoration: underline;
+}
+.merchant-orders-page .order-customer {
+  display: flex;
+  flex-direction: column;
+}
+.merchant-orders-page .order-customer-name {
+  font-weight: 500;
+  color: var(--text-on-background);
+}
+.merchant-orders-page .order-customer-phone {
+  font-size: 12px;
+  color: var(--text-on-surface-variant);
+  direction: ltr;
+  text-align: start;
+  font-family: var(--font-display);
+}
+.merchant-orders-page .order-total {
+  font-weight: 600;
+  font-family: var(--font-display);
+  color: var(--text-on-background);
+}
+.merchant-orders-page .order-cost-chip {
+  display: inline-flex;
+  align-items: center;
+  padding: 2px 8px;
+  border-radius: 6px;
+  font-size: 11px;
+  font-weight: 500;
+  background: var(--surface-container);
+  color: var(--text-on-surface-variant);
+  border: 1px solid var(--outline-variant);
+}
+.merchant-orders-page .order-profit {
+  font-weight: 600;
+  font-family: var(--font-display);
+  color: var(--tertiary-container);
+}
+.merchant-orders-page .order-profit.is-negative {
+  color: var(--error);
+}
+.merchant-orders-page .order-payment-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 4px 10px;
+  border-radius: 8px;
+  background: var(--surface-container-high);
+  color: var(--text-on-surface);
+  font-size: 12px;
+  font-weight: 500;
+}
+.merchant-orders-page .order-payment-chip .mk-icon {
+  font-size: 14px;
+}
+.merchant-orders-page .order-status-pill {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 4px 10px;
+  border-radius: 9999px;
+  font-size: 12px;
+  font-weight: 500;
+  background: var(--surface-container-high);
+  color: var(--text-on-surface);
+}
+.merchant-orders-page .order-status-pill.tone-green {
+  background: var(--success-soft);
+  color: var(--success);
+}
+.merchant-orders-page .order-status-pill.tone-red {
+  background: var(--error-container);
+  color: var(--error);
+}
+.merchant-orders-page .order-status-pill.tone-amber {
+  background: color-mix(in srgb, var(--warning) 15%, var(--surface-container-lowest));
+  color: var(--warning);
+}
+.merchant-orders-page .order-status-pill.tone-indigo,
+.merchant-orders-page .order-status-pill.tone-blue,
+.merchant-orders-page .order-status-pill.tone-purple {
+  background: var(--primary-container);
+  color: var(--on-primary-container);
+}
+.merchant-orders-page .order-status-pill.tone-slate {
+  background: var(--surface-container-high);
+  color: var(--text-on-surface);
+}
+.merchant-orders-page .order-status-dot {
+  width: 6px;
+  height: 6px;
+  border-radius: 9999px;
+  background: currentColor;
+}
+.merchant-orders-page .order-date {
+  font-size: 12px;
+  color: var(--text-on-surface-variant);
+}
+.merchant-orders-page .order-products {
+  display: flex;
+  flex-direction: column;
+  font-size: 13px;
+  color: var(--text-on-surface-variant);
+}
+.merchant-orders-page .order-products-name {
+  max-width: 180px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.merchant-orders-page .order-actions {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  opacity: 0;
+  transition: opacity 0.15s;
+}
+.merchant-orders-page .orders-table tbody tr:hover .order-actions {
+  opacity: 1;
+}
+
+@media (max-width: 768px) {
+  .merchant-orders-page .orders-search {
+    max-width: none;
+    flex-basis: 100%;
+  }
+  .merchant-orders-page .orders-toolbar-actions {
+    width: 100%;
+  }
+  .merchant-orders-page .orders-select {
+    flex: 1;
+  }
+  .merchant-orders-page .orders-select select {
+    width: 100%;
+  }
+  .merchant-orders-page .order-actions {
+    opacity: 1;
+  }
+}

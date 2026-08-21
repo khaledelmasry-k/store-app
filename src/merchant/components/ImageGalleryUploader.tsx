@@ -112,8 +112,8 @@ export const ImageGalleryUploader: FunctionalComponent<Props> = ({ storeId, prod
       {images.length === 0 && uploading.length === 0 && (
         <button type="button" className="image-upload-empty" onClick={() => pickFiles()}>
           <Icon name="add_photo_alternate" />
-          <strong>إضافة صور</strong>
-          <span className="muted small">JPG، PNG، WebP أو GIF — حتى 5 ميجابايت</span>
+          <strong>اسحب وأفلت الصور هنا، أو انقر للاستعراض</strong>
+          <span className="muted small">يدعم JPG، PNG، WebP أو GIF — حتى 5 ميجابايت</span>
         </button>
       )}
 

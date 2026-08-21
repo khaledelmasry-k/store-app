@@ -1,9 +1,7 @@
-import { FunctionalComponent, Fragment } from 'preact'
+import { FunctionalComponent } from 'preact'
 import { useState } from 'preact/hooks'
 import { Link, useLocation } from 'wouter'
 import { Button } from '../ui/Button'
-import { Input } from '../ui/Input'
-import { BrandMark } from '../brand/BrandMark'
 import { AuthShell } from './AuthShell'
 import { registerMerchant } from '../../services/auth'
 import { useToast } from '../../hooks/useToast'
@@ -16,11 +14,19 @@ import { PricingCard } from '../subscription/PricingCard'
 import { CANONICAL_PLANS } from '../../plans/catalog'
 
 const STEPS = [
-  { key: 'account', label: 'إنشاء الحساب', icon: 'person' },
-  { key: 'plan', label: 'اختيار الباقة', icon: 'workspace_premium' },
-  { key: 'store', label: 'إعداد المتجر', icon: 'store' },
-  { key: 'done', label: 'تم', icon: 'check_circle' },
+  { key: 'account', label: 'إنشاء الحساب' },
+  { key: 'plan', label: 'اختيار الباقة' },
+  { key: 'store', label: 'إعداد المتجر' },
+  { key: 'done', label: 'تم' },
 ]
+
+const PASSWORD_RULES = [
+  { label: '6 أحرف على الأقل', test: (p: string) => p.length >= 6 },
+  { label: 'حرف كبير', test: (p: string) => /[A-Z]/.test(p) },
+  { label: 'رقم واحد', test: (p: string) => /\d/.test(p) },
+]
+
+const STRENGTH_SEGMENTS = [0, 1, 2, 3, 4]
 
 export const Register:FunctionalComponent = () => {
   const [loc] = useLocation()
@@ -35,6 +41,7 @@ export const Register:FunctionalComponent = () => {
   const toast = useToast()
   const [step, setStep] = useState(0)
   const [form, setForm] = useState({ email: '', password: '', name: '', phone: '', storeName: '', storeRef: '' })
+  const [showPassword, setShowPassword] = useState(false)
   const [error, setError] = useState('')
   const [loading, setLoading] = useState(false)
   const [done, setDone] = useState(false)
@@ -85,42 +92,38 @@ export const Register:FunctionalComponent = () => {
 
   if (done) {
     return (
-      <AuthShell>
+      <AuthShell variant="brand">
         <div className="auth-card">
-          <div className="order-confirmed">
-            <div className="big-check"><Icon name="check" /></div>
+          <div className="auth-status-card">
+            <div className="auth-status-icon">
+              <Icon name="check_circle" />
+            </div>
             <h1 className="auth-title">تم إنشاء حسابك بنجاح</h1>
             <p className="auth-subtitle">يمكنك الآن الدخول مباشرة وتجربة {selectedPlan?.name || 'باقتك'} مجاناً، والبدء في إعداد متجرك فوراً.</p>
-            <Link href="/login?role=merchant"><Button variant="outline">تسجيل الدخول</Button></Link>
+            <Link href="/login?role=merchant">
+              <Button variant="outline" block>تسجيل الدخول</Button>
+            </Link>
           </div>
         </div>
       </AuthShell>
     )
   }
 
-  return (
-    <AuthShell>
-      <div className="auth-card">
-        <div className="auth-brand">
-          <BrandMark />
-          <span>منصة M&amp;K</span>
-        </div>
+  const strength = PASSWORD_RULES.reduce((n, r) => n + (r.test(form.password) ? 1 : 0), 0)
 
-        <div className="auth-stepper">
+  return (
+    <AuthShell variant="brand">
+      <div className="auth-card auth-card--wizard">
+        <ol className="auth-stepper" aria-label="خطوات إنشاء الحساب">
           {STEPS.map((s, i) => (
-            <Fragment key={s.key}>
-              <div className="auth-step">
-                <div className={`auth-step-dot${i <= step ? (i < step ? ' auth-step-dot--done' : ' auth-step-dot--active') : ''}`}>
-                  {i < step ? <Icon name="check" /> : i + 1}
-                </div>
-                <span className={`auth-step-label${i <= step ? ' auth-step-label--active' : ''}`}>{s.label}</span>
+            <li key={s.key} className={`auth-step${i < step ? ' auth-step--done' : ''}`}>
+              <div className={`auth-step-dot${i < step ? ' auth-step-dot--done' : i === step ? ' auth-step-dot--active' : ''}`}>
+                {i < step ? <Icon name="check" /> : i + 1}
               </div>
-              {i < STEPS.length - 1 && (
-                <div className={`auth-step-line${i < step ? ' auth-step-line--done' : ''}`} />
-              )}
-            </Fragment>
+              <span className={`auth-step-label${i <= step ? ' auth-step-label--active' : ''}`}>{s.label}</span>
+            </li>
           ))}
-        </div>
+        </ol>
 
         {plans.length > 0 && (
           <div className="register-plan-strip" aria-label="اختيار الباقة">
@@ -144,15 +147,104 @@ export const Register:FunctionalComponent = () => {
 
         {step === 0 && (
           <>
-            <h1 className="auth-title">إنشاء الحساب</h1>
-            <p className="auth-subtitle">أدخل بياناتك للبدء</p>
-            <form onSubmit={submit}>
-              <Input label="الاسم الكامل" value={form.name} onChange={(v) => setForm({ ...form, name: v })} required />
-              <Input label="رقم الهاتف" type="tel" value={form.phone} onChange={(v) => setForm({ ...form, phone: v })} required placeholder="01xxxxxxxxx" autoComplete="tel" />
-              <Input label="البريد الإلكتروني" type="email" value={form.email} onChange={(v) => setForm({ ...form, email: v })} required placeholder="you@example.com" autoComplete="email" />
-              <Input label="كلمة المرور" type="password" value={form.password} onChange={(v) => setForm({ ...form, password: v })} required placeholder="••••••••" autoComplete="new-password" />
+            <h1 className="auth-title">إنشاء حساب جديد</h1>
+            <p className="auth-subtitle">أدخل تفاصيلك للبدء في استخدام المنصة</p>
+            <form onSubmit={submit} className="auth-form">
+              <div className="auth-form-field">
+                <label htmlFor="reg-name">الاسم الكامل</label>
+                <div className="auth-input-wrap">
+                  <Icon name="person" className="auth-input-icon" ariaHidden />
+                  <input
+                    id="reg-name"
+                    value={form.name}
+                    onInput={(e) => setForm({ ...form, name: (e.target as HTMLInputElement).value })}
+                    required
+                    placeholder="محمد أحمد"
+                    autoComplete="name"
+                  />
+                </div>
+              </div>
+              <div className="auth-form-field">
+                <label htmlFor="reg-phone">رقم الهاتف</label>
+                <div className="auth-input-wrap">
+                  <Icon name="smartphone" className="auth-input-icon" ariaHidden />
+                  <input
+                    id="reg-phone"
+                    type="tel"
+                    value={form.phone}
+                    onInput={(e) => setForm({ ...form, phone: (e.target as HTMLInputElement).value })}
+                    required
+                    placeholder="01xxxxxxxxx"
+                    autoComplete="tel"
+                  />
+                </div>
+              </div>
+              <div className="auth-form-field">
+                <label htmlFor="reg-email">البريد الإلكتروني</label>
+                <div className="auth-input-wrap">
+                  <Icon name="mark_email_unread" className="auth-input-icon" ariaHidden />
+                  <input
+                    id="reg-email"
+                    type="email"
+                    value={form.email}
+                    onInput={(e) => setForm({ ...form, email: (e.target as HTMLInputElement).value })}
+                    required
+                    placeholder="you@example.com"
+                    autoComplete="email"
+                  />
+                </div>
+              </div>
+              <div className="auth-form-field">
+                <label htmlFor="reg-password">كلمة المرور</label>
+                <div className="auth-input-wrap">
+                  <Icon name="lock" className="auth-input-icon" ariaHidden />
+                  <input
+                    id="reg-password"
+                    type={showPassword ? 'text' : 'password'}
+                    value={form.password}
+                    onInput={(e) => setForm({ ...form, password: (e.target as HTMLInputElement).value })}
+                    required
+                    placeholder="••••••••"
+                    autoComplete="new-password"
+                  />
+                  <button
+                    type="button"
+                    className="auth-vis-toggle"
+                    aria-label={showPassword ? 'إخفاء كلمة المرور' : 'إظهار كلمة المرور'}
+                    onClick={() => setShowPassword(!showPassword)}
+                  >
+                    <Icon name={showPassword ? 'visibility_off' : 'visibility'} ariaHidden />
+                  </button>
+                </div>
+                <div className={`auth-strength auth-strength--${strength}`} aria-hidden="true">
+                  {STRENGTH_SEGMENTS.map((i) => (
+                    <i key={i} />
+                  ))}
+                </div>
+                <ul className="auth-criteria">
+                  {PASSWORD_RULES.map((r) => {
+                    const ok = r.test(form.password)
+                    return (
+                      <li key={r.label} className={ok ? 'is-ok' : ''}>
+                        <Icon name={ok ? 'check' : 'check_circle'} ariaHidden />
+                        <span>{r.label}</span>
+                      </li>
+                    )
+                  })}
+                </ul>
+              </div>
               {error && <p className="field-error">{error}</p>}
+              <label className="auth-terms">
+                <input type="checkbox" />
+                <span>
+                  أوافق على <a href="/terms">شروط الاستخدام</a> و<a href="/privacy">سياسة الخصوصية</a>
+                </span>
+              </label>
               <Button type="button" block onClick={next} icon="arrow_forward">التالي</Button>
+              <p className="auth-security-note">
+                <Icon name="shield" ariaHidden />
+                بياناتك محمية ومشفرة بأعلى معايير الأمان
+              </p>
             </form>
           </>
         )}
@@ -186,8 +278,8 @@ export const Register:FunctionalComponent = () => {
                 />
               ))}
             </div>
-            <div className="flex flex-gap-md">
-              <Button variant="ghost" onClick={prev}>السابق</Button>
+            <div className="auth-step-actions">
+              <Button variant="outline" onClick={prev}>السابق</Button>
               <Button onClick={next} icon="arrow_forward">التالي</Button>
             </div>
           </>
@@ -197,13 +289,35 @@ export const Register:FunctionalComponent = () => {
           <>
             <h1 className="auth-title">إعداد المتجر</h1>
             <p className="auth-subtitle">أدخل بيانات متجرك</p>
-            <form onSubmit={submit}>
-              <Input label="اسم المتجر" value={form.storeName} onChange={(v) => setForm({ ...form, storeName: v })} required />
-              <Input label="الرابط المختصر" value={form.storeRef} onChange={(v) => setForm({ ...form, storeRef: v })} hint="اتركه فارغاً لاستخدام اسم المتجر" />
+            <form onSubmit={submit} className="auth-form">
+              <div className="auth-form-field">
+                <label htmlFor="store-name">اسم المتجر</label>
+                <div className="auth-input-wrap">
+                  <Icon name="storefront" className="auth-input-icon" ariaHidden />
+                  <input
+                    id="store-name"
+                    value={form.storeName}
+                    onInput={(e) => setForm({ ...form, storeName: (e.target as HTMLInputElement).value })}
+                    required
+                  />
+                </div>
+              </div>
+              <div className="auth-form-field">
+                <label htmlFor="store-ref">الرابط المختصر</label>
+                <div className="auth-input-wrap">
+                  <Icon name="link" className="auth-input-icon" ariaHidden />
+                  <input
+                    id="store-ref"
+                    value={form.storeRef}
+                    onInput={(e) => setForm({ ...form, storeRef: (e.target as HTMLInputElement).value })}
+                  />
+                </div>
+                <span className="auth-hint">اتركه فارغاً لاستخدام اسم المتجر</span>
+              </div>
               {error && <p className="field-error">{error}</p>}
-              <div className="flex flex-gap-md">
-                <Button variant="ghost" type="button" onClick={prev}>السابق</Button>
-                <Button type="submit" block loading={loading} icon="check">إنشاء الحساب</Button>
+              <div className="auth-step-actions">
+                <Button variant="outline" type="button" onClick={prev}>السابق</Button>
+                <Button type="submit" loading={loading} icon="check">إنشاء الحساب</Button>
               </div>
             </form>
           </>
