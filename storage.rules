@@ -75,9 +75,9 @@ service firebase.storage {
       allow delete: if ownsTenant(storeId);
     }
 
-    // Fallback — everything else requires platform admin
+    // Fallback — never expose unclassified/internal objects publicly.
     match /{allPaths=**} {
-      allow read: if true;
+      allow read: if isAdmin();
       allow write: if isAdmin();
     }
   }
