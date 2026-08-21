@@ -164,7 +164,7 @@ function inStore(resource) {
     // (registerMerchant), update by owner/admin
     // ─────────────────────────────────────────────────────────────
     match /stores/{id} {
-      allow read: if true;
+      allow read: if isAdminOrStore(id) || isPlatformAdmin();
       allow create: if isPlatformAdmin(); // merchants create stores via registerMerchant callable
       // Merchants (owners) can edit store settings directly, but publishing is managed
       // by the setStorePublished callable (which enforces the subscription
@@ -182,7 +182,7 @@ function inStore(resource) {
     // is null, and canWriteProducts already scopes writes to the caller's own store).
     // ─────────────────────────────────────────────────────────────
 match /products/{id} {
-       allow read: if true;
+       allow read: if isAdminOrStore(resource.data.storeId) || isPlatformAdmin();
        allow create: if canWriteProducts(request.resource.data.storeId);
        allow update: if canWriteProducts(request.resource.data.storeId)
          && request.resource.data.storeId == resource.data.storeId;
@@ -207,7 +207,7 @@ match /products/{id} {
      }
 
      match /categories/{id} {
-       allow read: if true;
+       allow read: if isAdminOrStore(resource.data.storeId) || isPlatformAdmin();
        allow create: if canWriteProducts(request.resource.data.storeId);
        allow update: if canWriteProducts(request.resource.data.storeId)
          && request.resource.data.storeId == resource.data.storeId;
@@ -223,7 +223,11 @@ match /orders/{id} {
        allow read: if canReadOrders(resource.data.storeId) || isSameUser(resource.data.customerId);
        allow create: if false; // only via createOrder callable
        allow update: if canWriteOrders(resource.data.storeId)
-         && request.resource.data.storeId == resource.data.storeId;
+         && request.resource.data.storeId == resource.data.storeId
+         && request.resource.data.diff(resource.data).affectedKeys().hasOnly([
+           'status', 'statusHistory', 'stockRestored', 'updatedAt',
+           'activeShipmentId', 'shipmentCompanyId', 'shipmentStatus'
+         ]);
        allow delete: if isPlatformAdmin();
      }
 
@@ -289,6 +293,23 @@ match /orders/{id} {
       allow update: if canWriteSettings(request.resource.data.storeId)
         && request.resource.data.storeId == resource.data.storeId;
       allow delete: if canWriteSettings(resource.data.storeId);
+    }
+
+    match /publicStores/{storeId} {
+      allow read: if resource.data.published == true && resource.data.active == true;
+      allow write: if false;
+      match /products/{productId} {
+        allow read: if get(/databases/$(database)/documents/publicStores/$(storeId)).data.published == true
+          && get(/databases/$(database)/documents/publicStores/$(storeId)).data.active == true
+          && resource.data.active == true;
+        allow write: if false;
+      }
+      match /categories/{categoryId} {
+        allow read: if get(/databases/$(database)/documents/publicStores/$(storeId)).data.published == true
+          && get(/databases/$(database)/documents/publicStores/$(storeId)).data.active == true
+          && resource.data.active == true;
+        allow write: if false;
+      }
     }
 
     // Platform-managed carrier marketplace. Active company profiles are safe

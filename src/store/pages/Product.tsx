@@ -24,7 +24,7 @@ interface Props {
 
 export const StoreProduct: FunctionalComponent<Props> = ({ id }) => {
   const { store } = useStore()
-  const { data: product, loading } = useDocument<Product>('products', id)
+  const { data: product, loading } = useDocument<Product>(store?.id ? `publicStores/${store.id}/products` : 'publicStores/__none__/products', id)
   const cart = useCart()
   const toast = useToast()
   const { user } = useAuth()

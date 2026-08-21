@@ -25,12 +25,11 @@ export const StoreCatalog: FunctionalComponent = () => {
   const [page, setPage] = useState(1)
   const perPage = 20
 
-  const productsRes = useCollection<Product>('products', {
-    storeId: store?.id || '',
+  const productsRes = useCollection<Product>(store?.id ? `publicStores/${store.id}/products` : 'publicStores/__none__/products', {
     where: { active: { value: true } },
   })
   const products = productsRes.data
-  const categoriesRes = useCollection<Category>('categories', { storeId: store?.id || '' })
+  const categoriesRes = useCollection<Category>(store?.id ? `publicStores/${store.id}/categories` : 'publicStores/__none__/categories')
   const categories = categoriesRes.data
 
   const filtered = products

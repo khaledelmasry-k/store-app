@@ -29,9 +29,9 @@ export const StoreHome: FunctionalComponent = () => {
   const { store } = useStore()
   const [heroFailed, setHeroFailed] = useState(false)
   useEffect(() => setHeroFailed(false), [store?.id, store?.heroImage])
-  const productsRes = useCollection<Product>('products', { storeId: store?.id || '', where: { active: { value: true } } })
+  const productsRes = useCollection<Product>(store?.id ? `publicStores/${store.id}/products` : 'publicStores/__none__/products', { where: { active: { value: true } } })
   const products = productsRes.data
-  const categoriesRes = useCollection<Category>('categories', { storeId: store?.id || '' })
+  const categoriesRes = useCollection<Category>(store?.id ? `publicStores/${store.id}/categories` : 'publicStores/__none__/categories')
   const categories = categoriesRes.data
 
   const featured = products.filter((p) => p.featured).slice(0, 4)

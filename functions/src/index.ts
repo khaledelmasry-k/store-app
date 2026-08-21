@@ -3,6 +3,7 @@ import { FieldValue, Timestamp, type DocumentReference } from 'firebase-admin/fi
 import { onCall, HttpsError, type CallableRequest } from 'firebase-functions/v2/https'
 import { onObjectFinalized, onObjectDeleted } from 'firebase-functions/v2/storage'
 import { onSchedule } from 'firebase-functions/v2/scheduler'
+import { onDocumentWritten } from 'firebase-functions/v2/firestore'
 import { CANONICAL_PLANS } from './planCatalog'
 
 admin.initializeApp()
@@ -15,6 +16,43 @@ const STORAGE_BUCKET =
 
 const db = admin.firestore()
 const auth = admin.auth()
+
+function publicStoreData(data: any) {
+  if (!data) return null
+  return { name: data.name || '', slug: data.slug || '', logo: data.logo || null, hero: data.hero || null, heroImage: data.heroImage || null, description: data.description || '', seoTitle: data.seoTitle || null, seoDescription: data.seoDescription || null, theme: data.theme || {}, currency: data.currency || 'SAR', phone: data.publicPhone || data.phone || null, published: data.published === true, active: data.active !== false, updatedAt: now() }
+}
+
+function publicProductData(data: any) {
+  if (!data) return null
+  return { storeId: data.storeId, name: data.name || '', description: data.description || '', images: data.images || [], price: Number(data.price || 0), oldPrice: data.oldPrice == null ? null : Number(data.oldPrice), active: data.active === true, featured: data.featured === true, categoryId: data.categoryId || null, variants: (data.variants || []).map((v: any) => ({ id: v.id, color: v.color, size: v.size, stock: Number(v.stock || 0), price: v.price == null ? undefined : Number(v.price) })), colors: data.colors || [], sizes: data.sizes || [], colorOptions: data.colorOptions || [], pricingMode: data.pricingMode || 'unit', quantityTiers: data.quantityTiers || [], quantityPricingStrategy: data.quantityPricingStrategy || 'cap', updatedAt: now() }
+}
+
+export const projectStorePublicData = onDocumentWritten('stores/{storeId}', async (event) => {
+  const ref = db.doc(`publicStores/${event.params.storeId}`)
+  if (!event.data?.after.exists) return ref.delete()
+  return ref.set(publicStoreData(event.data.after.data())!, { merge: true })
+})
+
+export const projectProductPublicData = onDocumentWritten('products/{productId}', async (event) => {
+  const after = event.data?.after
+  const before = event.data?.before.data()
+  const storeId = after?.exists ? after.data()?.storeId : before?.storeId
+  if (!storeId) return
+  const ref = db.doc(`publicStores/${storeId}/products/${event.params.productId}`)
+  if (!after?.exists || after.data()?.active !== true) return ref.delete()
+  return ref.set(publicProductData(after.data())!, { merge: true })
+})
+
+export const projectCategoryPublicData = onDocumentWritten('categories/{categoryId}', async (event) => {
+  const after = event.data?.after
+  const before = event.data?.before.data()
+  const storeId = after?.exists ? after.data()?.storeId : before?.storeId
+  if (!storeId) return
+  const ref = db.doc(`publicStores/${storeId}/categories/${event.params.categoryId}`)
+  if (!after?.exists || after.data()?.active === false) return ref.delete()
+  const data = after.data() || {}
+  return ref.set({ storeId, name: data.name || '', image: data.image || null, active: true, sortOrder: Number(data.sortOrder || 0), updatedAt: now() }, { merge: true })
+})
 
 // ─────────────────────────────────────────────────────────────
 // Helpers
@@ -272,6 +310,23 @@ async function assertStoreAccess(request: CallableRequest, storeId: string, perm
     return
   }
   throw new HttpsError('permission-denied', 'صلاحيات غير كافية')
+}
+
+const ORDER_TRANSITIONS: Record<string, string[]> = {
+  NEW: ['CONTACTED', 'PROCESSING', 'CANCELLED'],
+  CONTACTED: ['PROCESSING', 'CANCELLED'],
+  PROCESSING: ['SHIPPED', 'CANCELLED'],
+  SHIPPED: ['DELIVERED', 'RETURNED'],
+  DELIVERED: ['RETURNED'],
+  CANCELLED: [],
+  RETURNED: [],
+}
+
+function assertOrderTransition(from: string, to: string) {
+  if (from === to) return
+  if (!(ORDER_TRANSITIONS[from] || []).includes(to)) {
+    throw new HttpsError('failed-precondition', `لا يمكن نقل الطلب من ${from} إلى ${to}`)
+  }
 }
 
 async function bumpAnalytics(storeId: string, opts: { totalPrice?: number; status?: string; countOrder?: boolean; revenueDelta?: number }) {
@@ -1699,6 +1754,19 @@ export const getPublicStoreStatus = onCall(async (request: CallableRequest<{ slu
   return { purchasable, reason: purchasable ? 'ok' : 'subscription_required' }
 })
 
+export const getPublicStore = onCall(async (request: CallableRequest<{ slug?: string }>) => {
+  const { slug } = request.data || {}
+  if (!slug) throw new HttpsError('invalid-argument', 'slug مطلوب')
+  const snap = await db.collection('publicStores').where('slug', '==', String(slug)).limit(1).get()
+  if (!snap.empty) return { id: snap.docs[0].id, ...snap.docs[0].data() }
+  // Safe server-side fallback while projections catch up after a write; no
+  // internal document is ever exposed to the browser.
+  const internal = await db.collection('stores').where('slug', '==', String(slug)).limit(1).get()
+  if (internal.empty) throw new HttpsError('not-found', 'المتجر غير موجود')
+  const data = publicStoreData(internal.docs[0].data())!
+  return { id: internal.docs[0].id, ...data }
+})
+
 // ─────────────────────────────────────────────────────────────
 // 4i. setStorePublished — publish/unpublish a store through a callable so the
 //     EXPIRED restriction can be enforced server-side (rules cannot query the
@@ -2266,6 +2334,133 @@ export const getPlatformOverview = onCall(async (request: CallableRequest) => {
 })
 
 // ─────────────────────────────────────────────────────────────
+// Shipment marketplace — quotes, immutable attempts, and verified reviews.
+// ─────────────────────────────────────────────────────────────
+function carrierRate(company: any, governorate: string) {
+  const entries = Object.entries(company?.ratesByZone || {}) as Array<[string, any]>
+  const match = entries.find(([zone, rate]) => zone === governorate || (Array.isArray(rate?.governorates) && rate.governorates.includes(governorate)))
+  return match ? { zoneId: match[0], rate: match[1] } : null
+}
+
+export const quoteShipment = onCall(async (request: CallableRequest<{ storeId?: string; orderId?: string; governorate?: string }>) => {
+  if (!request.auth) throw new HttpsError('unauthenticated', 'يجب تسجيل الدخول')
+  const { storeId, orderId, governorate } = request.data || {}
+  if (!storeId || !governorate) throw new HttpsError('invalid-argument', 'storeId و governorate مطلوبان')
+  await assertStoreAccess(request, storeId, ['orders:view', 'orders:edit'])
+  const order = orderId ? (await db.doc(`orders/${orderId}`).get()).data() : null
+  if (orderId && (!order || order.storeId !== storeId)) throw new HttpsError('not-found', 'الطلب غير موجود')
+  const companies = await db.collection('shippingCompanies').where('status', '==', 'active').get()
+  return companies.docs.map((doc) => {
+    const company = doc.data()
+    const found = carrierRate(company, governorate)
+    if (!found) return null
+    const rate = found.rate || {}
+    return { shippingCompanyId: doc.id, shippingCompanyName: company.name, zoneId: found.zoneId, deliveryPrice: Number(rate.deliveryPrice || 0), returnPrice: Number(rate.returnPrice || 0), codFee: Number(rate.codFee || 0), additionalFees: Number(rate.additionalFees || 0), estimatedDays: rate.estimatedDays || null, averageRating: Number(company.averageRating || 0), reviewsCount: Number(company.reviewsCount || 0), completedShipments: Number(company.completedShipments || 0), deliverySuccessRate: Number(company.deliverySuccessRate || 0) }
+  }).filter(Boolean)
+})
+
+export const assignShipment = onCall(async (request: CallableRequest<{ orderId?: string; shippingCompanyId?: string; idempotencyKey?: string }>) => {
+  if (!request.auth) throw new HttpsError('unauthenticated', 'يجب تسجيل الدخول')
+  const { orderId, shippingCompanyId, idempotencyKey } = request.data || {}
+  if (!orderId || !shippingCompanyId) throw new HttpsError('invalid-argument', 'orderId و shippingCompanyId مطلوبان')
+  const orderRef = db.doc(`orders/${orderId}`)
+  const result = await db.runTransaction(async (tx) => {
+    const orderSnap = await tx.get(orderRef)
+    if (!orderSnap.exists) throw new HttpsError('not-found', 'الطلب غير موجود')
+    const order = orderSnap.data()!
+    await assertStoreAccess(request, order.storeId, ['orders:edit', 'orders:status'])
+    if (['CANCELLED', 'DELIVERED', 'RETURNED'].includes(String(order.status))) throw new HttpsError('failed-precondition', 'الطلب غير قابل للإسناد')
+    if (idempotencyKey) {
+      const existing = await tx.get(db.collection('shipments').where('storeId', '==', order.storeId).where('idempotencyKey', '==', idempotencyKey).limit(1))
+      if (!existing.empty) return { id: existing.docs[0].id, ...existing.docs[0].data(), idempotent: true }
+    }
+    const companyRef = db.doc(`shippingCompanies/${shippingCompanyId}`)
+    const companySnap = await tx.get(companyRef)
+    if (!companySnap.exists || companySnap.data()?.status !== 'active') throw new HttpsError('failed-precondition', 'شركة الشحن غير متاحة')
+    const company = companySnap.data()!
+    const found = carrierRate(company, order.customer?.governorate || order.governorate || '')
+    if (!found) throw new HttpsError('failed-precondition', 'شركة الشحن لا تغطي وجهة الطلب')
+    const rate = found.rate || {}
+    const oldId = order.activeShipmentId
+    if (oldId) {
+      const oldRef = db.doc(`shipments/${oldId}`)
+      const oldSnap = await tx.get(oldRef)
+      if (oldSnap.exists && !['CREATED', 'ASSIGNED', 'READY'].includes(String(oldSnap.data()?.status))) throw new HttpsError('failed-precondition', 'لا يمكن إعادة الإسناد بعد الاستلام')
+      if (oldSnap.exists) tx.update(oldRef, { status: 'REPLACED', replacedAt: now(), updatedAt: now() })
+    }
+    const shipmentRef = db.collection('shipments').doc()
+    const snapshot = { shippingCompanyId, shippingCompanyName: company.name, zoneId: found.zoneId, customerShippingFee: Number(order.shippingFee || 0), carrierShippingCost: Number(rate.deliveryPrice || 0), carrierReturnCost: Number(rate.returnPrice || 0), codFee: Number(rate.codFee || 0), additionalFees: Number(rate.additionalFees || 0), rateId: rate.rateId || found.zoneId, rateVersion: rate.rateVersion || 1, currency: order.currency || 'SAR', quotedAt: Timestamp.now(), metricsSnapshot: { averageRating: Number(company.averageRating || 0), reviewsCount: Number(company.reviewsCount || 0), deliverySuccessRate: Number(company.deliverySuccessRate || 0), completedShipments: Number(company.completedShipments || 0) }, scoringConfigVersion: 'shipping-v1' }
+    tx.set(shipmentRef, { id: shipmentRef.id, storeId: order.storeId, orderId, merchantId: order.ownerId || null, status: 'ASSIGNED', active: true, shippingCompanyId, shippingCompanyName: company.name, priceSnapshot: snapshot, customerShippingFee: snapshot.customerShippingFee, carrierShippingCost: snapshot.carrierShippingCost, carrierReturnCost: snapshot.carrierReturnCost, idempotencyKey: idempotencyKey || null, createdAt: now(), updatedAt: now() })
+    tx.update(orderRef, { activeShipmentId: shipmentRef.id, shipmentCompanyId: shippingCompanyId, shipmentStatus: 'ASSIGNED', updatedAt: now() })
+    return { id: shipmentRef.id, orderId, ...snapshot }
+  })
+  return { ok: true, shipment: result }
+})
+
+export const submitShippingReview = onCall(async (request: CallableRequest<any>) => {
+  if (!request.auth) throw new HttpsError('unauthenticated', 'يجب تسجيل الدخول')
+  const { shipmentId, overallRating, pickupSpeed, deliverySpeed, reliability, shipmentCondition, supportQuality, comment } = request.data || {}
+  if (!shipmentId) throw new HttpsError('invalid-argument', 'shipmentId مطلوب')
+  const shipmentRef = db.doc(`shipments/${shipmentId}`)
+  return db.runTransaction(async (tx) => {
+    const shipmentSnap = await tx.get(shipmentRef)
+    if (!shipmentSnap.exists) throw new HttpsError('not-found', 'الشحنة غير موجودة')
+    const shipment = shipmentSnap.data()!
+    await assertStoreAccess(request, shipment.storeId, 'orders:view')
+    if (!['DELIVERED', 'RETURNED_TO_SENDER'].includes(String(shipment.status))) throw new HttpsError('failed-precondition', 'المراجعة متاحة بعد اكتمال الشحنة فقط')
+    const values = { overallRating, pickupSpeed, deliverySpeed, reliability, shipmentCondition, supportQuality }
+    for (const value of Object.values(values)) if (!Number.isInteger(value) || Number(value) < 1 || Number(value) > 5) throw new HttpsError('invalid-argument', 'التقييمات يجب أن تكون من 1 إلى 5')
+    const reviewRef = db.doc(`shippingCompanyReviews/${shipmentId}`)
+    const existing = await tx.get(reviewRef)
+    if (existing.exists) throw new HttpsError('already-exists', 'تمت مراجعة هذه الشحنة مسبقاً')
+    tx.create(reviewRef, { id: shipmentId, merchantId: request.auth!.uid, storeId: shipment.storeId, shipmentId, orderId: shipment.orderId, shippingCompanyId: shipment.shippingCompanyId, overallRating, pickupSpeed, deliverySpeed, reliability, shipmentCondition, supportQuality, comment: String(comment || '').slice(0, 2000), submittedAt: now(), verified: true, moderation: { hidden: false }, createdAt: now() })
+    const companyRef = db.doc(`shippingCompanies/${shipment.shippingCompanyId}`)
+    const companySnap = await tx.get(companyRef)
+    if (companySnap.exists) {
+      const c = companySnap.data() || {}
+      const count = Number(c.reviewsCount || 0)
+      const average = Number(c.averageRating || 0)
+      tx.update(companyRef, { averageRating: (average * count + Number(overallRating)) / (count + 1), reviewsCount: count + 1, updatedAt: now() })
+    }
+    return { ok: true, reviewId: shipmentId }
+  })
+})
+
+export const updateShipmentStatus = onCall(async (request: CallableRequest<{ shipmentId?: string; status?: string }>) => {
+  if (!request.auth) throw new HttpsError('unauthenticated', 'يجب تسجيل الدخول')
+  const { shipmentId, status } = request.data || {}
+  if (!shipmentId || !status) throw new HttpsError('invalid-argument', 'shipmentId و status مطلوبان')
+  const allowed = ['ASSIGNED', 'READY', 'PICKED_UP', 'IN_TRANSIT', 'DELIVERED', 'RETURNED_TO_SENDER', 'CANCELLED', 'REPLACED']
+  if (!allowed.includes(status)) throw new HttpsError('invalid-argument', 'حالة شحنة غير صالحة')
+  const shipmentRef = db.doc(`shipments/${shipmentId}`)
+  await db.runTransaction(async (tx) => {
+    const snap = await tx.get(shipmentRef)
+    if (!snap.exists) throw new HttpsError('not-found', 'الشحنة غير موجودة')
+    const shipment = snap.data()!
+    await assertStoreAccess(request, shipment.storeId, ['orders:edit', 'orders:status'])
+    if (shipment.status === status) return
+    if (['PICKED_UP', 'IN_TRANSIT', 'DELIVERED', 'RETURNED_TO_SENDER'].includes(String(shipment.status))) {
+      if (status === 'CANCELLED' || status === 'REPLACED') throw new HttpsError('failed-precondition', 'لا يمكن إلغاء شحنة بعد الاستلام')
+    }
+    if (status === 'DELIVERED' || status === 'RETURNED_TO_SENDER') {
+      const companyRef = db.doc(`shippingCompanies/${shipment.shippingCompanyId}`)
+      const companySnap = await tx.get(companyRef)
+      if (companySnap.exists && !['DELIVERED', 'RETURNED_TO_SENDER'].includes(String(shipment.status))) {
+        const c = companySnap.data() || {}
+        const completed = Number(c.completedShipments || 0)
+        const success = Number(c.deliverySuccessRate || 0)
+        tx.update(companyRef, { completedShipments: completed + 1, deliverySuccessRate: (success * completed + (status === 'DELIVERED' ? 100 : 0)) / (completed + 1), updatedAt: now() })
+      }
+    }
+    tx.update(shipmentRef, { status, active: !['CANCELLED', 'REPLACED', 'DELIVERED', 'RETURNED_TO_SENDER'].includes(status), updatedAt: now(), ...(status === 'DELIVERED' || status === 'RETURNED_TO_SENDER' ? { completedAt: now() } : {}) })
+    if (['PICKED_UP', 'IN_TRANSIT'].includes(status)) tx.update(db.doc(`orders/${shipment.orderId}`), { status: 'SHIPPED', shipmentStatus: status, updatedAt: now() })
+    if (status === 'DELIVERED') tx.update(db.doc(`orders/${shipment.orderId}`), { status: 'DELIVERED', shipmentStatus: status, updatedAt: now() })
+    if (status === 'RETURNED_TO_SENDER') tx.update(db.doc(`orders/${shipment.orderId}`), { status: 'RETURNED', shipmentStatus: status, updatedAt: now() })
+  })
+  return { ok: true, status }
+})
+
+// ─────────────────────────────────────────────────────────────
 // 5. updateOrderStatus — restore stock on CANCELLED/RETURNED
 // ─────────────────────────────────────────────────────────────
 export const updateOrderStatus = onCall(async (request: CallableRequest<{ orderId?: string; status?: string }>) => {
@@ -2287,6 +2482,9 @@ export const updateOrderStatus = onCall(async (request: CallableRequest<{ orderI
   } else {
     await assertStoreAccess(request, order.storeId, ['orders:edit', 'orders:status', 'orders:cancel'])
   }
+
+  assertOrderTransition(String(order.status || 'NEW'), status)
+  if (String(order.status || 'NEW') === status) return { ok: true, changed: false, status }
 
   // Durable idempotency for stock restoration: a cancelled/returned order must
   // restore exactly once, no matter which path crosses into a cancelled state.

@@ -1,13 +1,11 @@
 import { FunctionalComponent } from 'preact'
 import { useEffect, useState } from 'preact/hooks'
 import { useLocation, useSearch } from 'wouter'
-import { collection, query, where, onSnapshot, limit as limitQuery, type QuerySnapshot } from 'firebase/firestore'
-import { db } from '../../firebase'
 import { StoreContext } from '../../contexts/store-context'
 import { useAuth } from '../../hooks/useAuth'
 import { Loading } from '../ui/Loading'
 import { EmptyState } from '../ui/EmptyState'
-import { recordStoreLinkVisitCallable, getPublicStoreStatusCallable } from '../../services/auth'
+import { recordStoreLinkVisitCallable, getPublicStoreStatusCallable, getPublicStoreCallable } from '../../services/auth'
 import { parseStoreLocation } from '../../utils/store-route'
 import { StoreUnavailable } from '../../../store/components/StoreUnavailable'
 import type { Store, PublicStoreStatus } from '../../types'
@@ -65,28 +63,21 @@ export const StoreSlugLoader: FunctionalComponent<Props> = ({ children }) => {
     setError(null)
     setStore(null)
 
-    const q = query(collection(db, 'stores'), where('slug', '==', slug), limitQuery(1))
-
-    const unsub = onSnapshot(
-      q,
-      (snap: QuerySnapshot) => {
-        if (!snap.empty) {
-          const doc = snap.docs[0]
-          setStore({ id: doc.id, ...doc.data() } as unknown as Store)
-        } else {
-          setStore(null)
-          setError('store_not_found')
-        }
+    let cancelled = false
+    getPublicStoreCallable({ slug })
+      .then((res) => {
+        if (cancelled) return
+        setStore(res.data as Store)
         setLoading(false)
-      },
-      (err) => {
+      })
+      .catch((err) => {
+        if (cancelled) return
         console.error('StoreSlugLoader error:', err)
-        setError(err.message)
+        setStore(null)
+        setError(err?.code === 'functions/not-found' ? 'store_not_found' : 'store_unavailable')
         setLoading(false)
-      },
-    )
-
-    return () => unsub()
+      })
+    return () => { cancelled = true }
   }, [slug])
 
   useEffect(() => {

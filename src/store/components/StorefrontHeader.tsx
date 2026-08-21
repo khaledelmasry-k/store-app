@@ -91,7 +91,7 @@ export const StorefrontHeader: FunctionalComponent<Props> = ({
 
   return (
     <>
-      <header className={`storefront-header${scrolled ? ' storefront-header--scrolled' : ''}`}>
+      <header className={`storefront-header store-header${scrolled ? ' storefront-header--scrolled' : ''}`}>
         <div className="storefront-header-inner">
           <button
             type="button"

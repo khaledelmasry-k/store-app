@@ -72,6 +72,22 @@ export function updateOrderStatusCallable(input: Record<string, unknown>) {
   return fn(input)
 }
 
+export function quoteShipmentCallable(input: Record<string, unknown>) {
+  return httpsCallable(getFunctions(), 'quoteShipment')(input)
+}
+
+export function assignShipmentCallable(input: Record<string, unknown>) {
+  return httpsCallable(getFunctions(), 'assignShipment')(input)
+}
+
+export function submitShippingReviewCallable(input: Record<string, unknown>) {
+  return httpsCallable(getFunctions(), 'submitShippingReview')(input)
+}
+
+export function updateShipmentStatusCallable(input: Record<string, unknown>) {
+  return httpsCallable(getFunctions(), 'updateShipmentStatus')(input)
+}
+
 export function generateOrderNumberCallable(input: Record<string, unknown>) {
   const functions = getFunctions()
   const fn = httpsCallable(functions, 'generateOrderNumber')
@@ -147,6 +163,10 @@ export function quoteCouponCallable(input: { storeId: string; code: string; subt
   const functions = getFunctions()
   const fn = httpsCallable(functions, 'quoteCoupon')
   return fn(input)
+}
+
+export function getPublicStoreCallable(input: { slug: string }) {
+  return httpsCallable(getFunctions(), 'getPublicStore')(input)
 }
 
 export function inviteStaffCallable(input: Record<string, unknown>) {
