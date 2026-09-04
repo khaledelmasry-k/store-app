@@ -20,28 +20,23 @@ export function useCollection<T>(path: string, params: ListParams = {}, enabled 
       return
     }
 
-    let unsub: (() => void) | undefined
     let cancelled = false
+    let unsub: (() => void) | undefined
 
     setLoading(true)
     setError(null)
 
-    unsub = subscribeCollection<T>(
-      path,
-      params,
-      (items) => {
-        if (cancelled) return
-        setData(items)
-        setLoading(false)
-        initializedRef.current = true
-      },
-      (err) => {
-        if (cancelled) return
-        setError(err)
-        setLoading(false)
-        initializedRef.current = true
-      },
-    )
+    unsub = subscribeCollection<T>(path, params, (items) => {
+      if (cancelled) return
+      setData(items)
+      setLoading(false)
+      initializedRef.current = true
+    }, (err) => {
+      if (cancelled) return
+      setError(err)
+      setLoading(false)
+      initializedRef.current = true
+    })
 
     return () => {
       cancelled = true
@@ -50,8 +45,6 @@ export function useCollection<T>(path: string, params: ListParams = {}, enabled 
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [path, enabled, JSON.stringify(params), ...deps])
 
-  if (enabled && !initializedRef.current && data.length === 0 && !error) {
-    return { data, loading: true, error: null }
-  }
+  if (enabled && !initializedRef.current && data.length === 0 && !error) return { data, loading: true, error: null }
   return { data, loading, error }
 }

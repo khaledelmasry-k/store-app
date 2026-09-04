@@ -166,6 +166,24 @@
 
 .dashboard-panel-link:hover { text-decoration: underline; }
 
+/* ─────────── Shipping operations ─────────── */
+.dashboard-shipping-overview .dashboard-panel-head > div { min-width: 0; }
+.dashboard-shipping-subtitle { margin: 4px 0 0; color: var(--text-on-surface-variant); font-size: 12px; }
+.dashboard-shipping-cards { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 12px; padding: 20px 24px; }
+.dashboard-shipping-card { display: flex; align-items: center; gap: 10px; min-width: 0; padding: 14px; border: 1px solid var(--outline-variant); border-radius: 10px; background: var(--surface-container-low); color: var(--text-on-surface); text-decoration: none; transition: border-color .15s ease, transform .15s ease; }
+.dashboard-shipping-card:hover { border-color: var(--primary); transform: translateY(-1px); }
+.dashboard-shipping-card-icon { display: inline-flex; flex: 0 0 auto; align-items: center; justify-content: center; width: 34px; height: 34px; border-radius: 9px; background: var(--surface-container-highest); color: var(--primary); }
+.dashboard-shipping-card-copy { display: grid; gap: 2px; min-width: 0; }
+.dashboard-shipping-card-copy b { font-family: var(--font-display); font-size: 22px; line-height: 1; }
+.dashboard-shipping-card-copy small { color: var(--text-on-surface-variant); font-size: 12px; white-space: nowrap; }
+.dashboard-shipping-card.is-delivered .dashboard-shipping-card-icon { color: var(--success); }
+.dashboard-shipping-card.is-transit .dashboard-shipping-card-icon { color: var(--primary); }
+.dashboard-shipping-card.is-returned .dashboard-shipping-card-icon { color: var(--tertiary); }
+.dashboard-shipping-card.is-failed .dashboard-shipping-card-icon { color: var(--error); }
+.dashboard-shipping-note { display: flex; align-items: flex-start; gap: 8px; margin: 0 24px 20px; padding: 11px 12px; border-radius: 8px; background: var(--secondary-container); color: var(--on-secondary-container); font-size: 12px; line-height: 1.7; }
+.dashboard-shipping-note .icon { flex: 0 0 auto; margin-top: 2px; }
+.dashboard-shipping-note strong { font-weight: 700; }
+
 /* ─────────── Profit analysis (Stitch row list + inline alert) ─────────── */
 .dashboard-profit-body { padding: 24px; } /* Stitch p-6 */
 
@@ -474,6 +492,14 @@
   }
 
   .dashboard-mobile-kpi-avg-value { color: var(--text-on-surface); font-family: var(--font-display); font-size: 18px; font-weight: 700; margin-top: 8px; }
+
+  .dashboard-mobile-shipping { display: grid; gap: 12px; }
+  .dashboard-mobile-shipping .dashboard-mobile-section-head { margin-bottom: 0; }
+  .dashboard-mobile-shipping-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 10px; }
+  .dashboard-mobile-shipping-grid a { display: grid; gap: 3px; padding: 14px; border: 1px solid var(--surface-container-highest); border-radius: 8px; background: var(--surface-container-lowest); color: var(--text-on-surface); text-decoration: none; }
+  .dashboard-mobile-shipping-grid span { font-family: var(--font-display); font-size: 22px; font-weight: 700; }
+  .dashboard-mobile-shipping-grid small { color: var(--text-on-surface-variant); font-size: 12px; }
+  .dashboard-mobile-shipping > p { display: flex; align-items: flex-start; gap: 7px; margin: 0; padding: 10px 12px; border-radius: 8px; background: var(--secondary-container); color: var(--on-secondary-container); font-size: 12px; }
 
   /* Quick actions (Stitch horizontal pill row) */
   .dashboard-quick-actions { display: flex; align-items: center; gap: 12px; overflow-x: auto; padding-bottom: 2px; -webkit-overflow-scrolling: touch; }

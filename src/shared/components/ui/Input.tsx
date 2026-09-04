@@ -5,6 +5,7 @@ interface Props {
   label?: string
   error?: string
   hint?: string
+  helper?: string
   type?: string
   min?: number | string
   step?: number | string
@@ -21,6 +22,7 @@ export const Input: FunctionalComponent<Props> = ({
   label,
   error,
   hint,
+  helper,
   type = 'text',
   min,
   step,
@@ -46,8 +48,9 @@ export const Input: FunctionalComponent<Props> = ({
       required={required}
       autoComplete={autoComplete}
       onInput={(e) => onChange?.((e.target as HTMLInputElement).value)}
+      onChange={(e) => onChange?.((e.target as HTMLInputElement).value)}
     />
-    {hint && !error && <span className="field-hint">{hint}</span>}
+    {(hint || helper) && !error && <span className="field-hint">{hint || helper}</span>}
     {error && <span className="field-error">{error}</span>}
   </label>
 )

@@ -20,35 +20,51 @@ export function formatNumber(value: number): string {
   return new Intl.NumberFormat('en-US').format(value || 0)
 }
 
-export function formatDate(input: { seconds: number; nanoseconds: number } | string | number | Date | undefined | null): string {
-  if (!input) return '—'
-  const d = typeof input === 'object' && 'seconds' in input
-    ? new Date(input.seconds * 1000)
-    : new Date(input as string | number | Date)
-  if (Number.isNaN(d.getTime())) return '—'
+export type DateLike = { seconds?: number; nanoseconds?: number; _seconds?: number; _nanoseconds?: number; toDate?: () => Date; toMillis?: () => number } | string | number | Date | undefined | null
+
+/** Normalize Firestore and browser date representations without unsafe `in` checks. */
+export function normalizeDate(input: DateLike): Date | null {
+  if (input == null) return null
+  if (input instanceof Date) return Number.isNaN(input.getTime()) ? null : input
+  if (typeof input === 'number' || typeof input === 'string') {
+    const date = new Date(input)
+    return Number.isNaN(date.getTime()) ? null : date
+  }
+  if (typeof input !== 'object') return null
+  try {
+    if (typeof input.toDate === 'function') {
+      const date = input.toDate(); return date instanceof Date && !Number.isNaN(date.getTime()) ? date : null
+    }
+    if (typeof input.toMillis === 'function') {
+      const date = new Date(input.toMillis()); return Number.isNaN(date.getTime()) ? null : date
+    }
+    const seconds = typeof input.seconds === 'number' ? input.seconds : input._seconds
+    if (typeof seconds === 'number') {
+      const date = new Date(seconds * 1000); return Number.isNaN(date.getTime()) ? null : date
+    }
+  } catch { return null }
+  return null
+}
+
+export function formatArabicDateTime(input: DateLike): string {
+  const d = normalizeDate(input)
+  if (!d) return '—'
+  return d.toLocaleString('ar-EG', { year: 'numeric', month: 'long', day: 'numeric', hour: '2-digit', minute: '2-digit' })
+}
+
+export function formatDate(input: DateLike): string {
+  const d = normalizeDate(input)
+  if (!d) return '—'
   return d.toLocaleDateString('ar-EG', { year: 'numeric', month: 'short', day: 'numeric' })
 }
 
-export function formatDateTime(input: { seconds: number; nanoseconds: number } | string | number | Date | undefined | null): string {
-  if (!input) return '—'
-  const d = typeof input === 'object' && 'seconds' in input
-    ? new Date(input.seconds * 1000)
-    : new Date(input as string | number | Date)
-  if (Number.isNaN(d.getTime())) return '—'
-  return d.toLocaleString('ar-EG', {
-    year: 'numeric',
-    month: 'short',
-    day: 'numeric',
-    hour: '2-digit',
-    minute: '2-digit',
-  })
+export function formatDateTime(input: DateLike): string {
+  return formatArabicDateTime(input)
 }
 
 export function timeAgo(input: { seconds: number; nanoseconds: number } | string | number | Date | undefined | null): string {
-  if (!input) return '—'
-  const d = typeof input === 'object' && 'seconds' in input
-    ? new Date(input.seconds * 1000)
-    : new Date(input as string | number | Date)
+  const d = normalizeDate(input)
+  if (!d) return '—'
   const diff = Date.now() - d.getTime()
   const mins = Math.floor(diff / 60000)
   if (mins < 1) return 'الآن'

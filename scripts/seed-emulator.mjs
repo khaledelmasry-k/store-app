@@ -1,7 +1,9 @@
 // Dev-only seed for the Firebase local emulators.
 // Run with emulators up:  firebase emulators:exec --project mk-store-app "node scripts/seed-emulator.mjs"
-// Wipes and recreates plans, admin, and demo merchants so every dashboard has
-// realistic data. Never runs against production.
+// Seeds plans, admin, and demo merchants in the local emulator. A clean
+// emulator is naturally deterministic; an existing emulator is converged
+// without deleting historical subscriptions. Set SEED_RESET=true only when a
+// caller explicitly wants a disposable reset.
 import admin from 'firebase-admin'
 import { dirname, join } from 'node:path'
 import { fileURLToPath } from 'node:url'
@@ -21,11 +23,22 @@ const auth = admin.auth()
 const ts = admin.firestore.FieldValue.serverTimestamp
 const inc = admin.firestore.FieldValue.increment
 
+// Emulator-only identities. Passwords are consumed by this seed script only;
+// they are never written to Firestore or bundled into the application.
+export const DEV_ACCOUNTS = Object.freeze({
+  superAdmin: { uid: 'seed-admin', email: 'khaaledelmasry@gmail.com', password: 'Admin12345', name: 'مدير المنصة' },
+  superAdminAlias: { uid: 'seed-admin-legacy', email: 'admin@mk.store', password: 'Admin12345', name: 'مدير المنصة (توافق محلي)' },
+  merchant: { uid: 'seed-owner-malek', email: 'malek@test.com', password: 'Owner12345', name: 'مالك المتجر' },
+  staff: { uid: 'seed-staff-a', email: 'staff@test.com', password: 'Staff12345', name: 'موظف المتجر' },
+  customer: { uid: 'seed-customer', email: 'customer@test.com', password: 'Customer12345', name: 'عميل تجريبي' },
+})
+
 const COLLECTIONS = [
   'plans', 'users', 'stores', 'subscriptions', 'orders', 'products', 'customers',
   'analytics', 'transactions', 'payments', 'coupons', 'categories', 'storeLinks',
   'notifications', 'auditLogs', 'shipping', 'team', 'roles', 'invitations',
-  'landingPages', 'subscriptionPayments', 'productCosts', 'orderCosts', 'publicStores',
+  'landingPages', 'subscriptionPayments', 'subscriptionChangeRequests', 'storePurchaseRequests', 'productCosts', 'orderCosts', 'publicStores',
+  'shippingCompanies', 'shipments', 'shippingCompanyReviews',
 ]
 
 async function wipe() {
@@ -42,6 +55,8 @@ async function createPlan(id, name, priceMonthly, productLimit, orderLimitPerMon
     id,
     name,
     slug: opts.slug || id,
+    billingModel: opts.billingModel === 'one_time' ? 'one_time' : 'subscription',
+    oneTimePrice: opts.billingModel === 'one_time' ? Number(opts.oneTimePrice || 0) : 0,
     description,
     priceMonthly,
     priceYearly: opts.priceYearly ?? Math.round(priceMonthly * 10),
@@ -63,17 +78,20 @@ async function createPlan(id, name, priceMonthly, productLimit, orderLimitPerMon
     quantityPricing: !!opts.quantityPricing,
     variantInventory: !!opts.variantInventory,
     coupons: !!opts.coupons,
-    abandonedCart: !!opts.abandonedCart,
     analytics: opts.analytics !== undefined ? !!opts.analytics : true,
-    advancedReports: !!opts.advancedReports,
-    customDomain: !!opts.customDomain,
-    apiAccess: !!opts.apiAccess,
-    removeBranding: !!opts.removeBranding,
-    prioritySupport: !!opts.prioritySupport,
+    abandonedCart: false,
+    advancedReports: false,
+    customDomain: false,
+    apiAccess: false,
+    removeBranding: false,
+    prioritySupport: false,
      storeLimit: opts.storeLimit ?? 1,
      unlimitedProducts: !!opts.unlimitedProducts,
      unlimitedSalesLinks: !!opts.unlimitedSalesLinks,
      active: opts.active !== false,
+     isPurchasable: opts.isPurchasable !== false,
+     archived: opts.archived === true,
+     status: opts.status || (opts.archived ? 'archived' : 'active'),
     createdAt: ts(),
     updatedAt: ts(),
     createdBy: 'seed',
@@ -85,11 +103,43 @@ async function createUser(uid, email, password, name, role, storeIds = [], activ
     await auth.createUser({ uid, email, password, displayName: name, disabled: !active })
   } catch (e) {
     if (e.code !== 'auth/uid-already-exists') throw e
+    await auth.updateUser(uid, { email, password, displayName: name, disabled: !active, emailVerified: true })
   }
+  await auth.updateUser(uid, { email, displayName: name, disabled: !active, emailVerified: true }).catch(() => {})
   await db.collection('users').doc(uid).set({
     uid, email, name, role, storeIds, active,
     createdAt: ts(), updatedAt: ts(), createdBy: 'seed',
-  })
+  }, { merge: true })
+  return uid
+}
+
+async function ensureMalekIdentity(password = DEV_ACCOUNTS.merchant.password) {
+  const canonicalUid = DEV_ACCOUNTS.merchant.uid
+  let byEmail = null
+  try { byEmail = await auth.getUserByEmail(DEV_ACCOUNTS.merchant.email) } catch (e) { if (e.code !== 'auth/user-not-found') throw e }
+  let byUid = null
+  try { byUid = await auth.getUser(canonicalUid) } catch (e) { if (e.code !== 'auth/user-not-found') throw e }
+  const uid = byEmail?.uid || byUid?.uid || canonicalUid
+  if (byEmail && byUid && byEmail.uid !== byUid.uid) {
+    await auth.deleteUser(byUid.uid).catch(() => {})
+    await db.collection('users').doc(byUid.uid).delete().catch(() => {})
+  }
+  await createUser(uid, DEV_ACCOUNTS.merchant.email, password, DEV_ACCOUNTS.merchant.name, 'merchant', ['malek-store'], true)
+  return uid
+}
+
+async function ensureIdentity(account, role, storeIds = [], active = true) {
+  let byEmail = null
+  try { byEmail = await auth.getUserByEmail(account.email) } catch (e) { if (e.code !== 'auth/user-not-found') throw e }
+  let byUid = null
+  try { byUid = await auth.getUser(account.uid) } catch (e) { if (e.code !== 'auth/user-not-found') throw e }
+  const uid = byEmail?.uid || byUid?.uid || account.uid
+  if (byEmail && byUid && byEmail.uid !== byUid.uid) {
+    await auth.deleteUser(byUid.uid).catch(() => {})
+    await db.collection('users').doc(byUid.uid).delete().catch(() => {})
+  }
+  await createUser(uid, account.email, account.password, account.name, role, storeIds, active)
+  return uid
 }
 
 async function createStore(storeId, ref, name, ownerId, opts = {}) {
@@ -115,6 +165,15 @@ async function createStore(storeId, ref, name, ownerId, opts = {}) {
 }
 
 async function createSubscription(storeId, planId, status, opts = {}) {
+  const existing = await db.collection('subscriptions').where('storeId', '==', storeId).get()
+  const existingDoc = existing.docs.find((d) => d.data()?.planId === planId && d.data()?.status === status)
+  if (existingDoc) {
+    const existingId = existingDoc.id
+    if (status === 'active' || status === 'trialing') {
+      await db.collection('stores').doc(storeId).set({ activeSubscriptionId: existingId, updatedAt: ts() }, { merge: true })
+    }
+    return existingId
+  }
   const sub = {
     storeId,
     planId,
@@ -170,9 +229,9 @@ async function rebuildPublicProjections() {
       if (p.active !== true) await ref.delete()
       else await ref.set({
         storeId: storeDoc.id, name: p.name || '', description: p.description || '', images: p.images || [],
-        price: Number(p.price || 0), oldPrice: p.oldPrice == null ? null : Number(p.oldPrice), active: true,
+        price: Number(p.price || 0), oldPrice: p.oldPrice == null ? null : Number(p.oldPrice), stock: Number(p.stock || 0), active: true,
         featured: p.featured === true, categoryId: p.categoryId || null,
-        variants: (p.variants || []).map((v) => ({ id: v.id, color: v.color, size: v.size, stock: Number(v.stock || 0), price: v.price == null ? undefined : v.price })),
+        variants: (p.variants || []).map((v) => ({ id: v.id, ...(v.color == null ? {} : { color: v.color }), ...(v.size == null ? {} : { size: v.size }), stock: Number(v.stock || 0), ...(v.price == null ? {} : { price: v.price }) })),
         colors: p.colors || [], sizes: p.sizes || [], colorOptions: p.colorOptions || [],
         pricingMode: p.pricingMode || 'unit', quantityTiers: p.quantityTiers || [],
         quantityPricingStrategy: p.quantityPricingStrategy || 'cap', updatedAt: ts(),
@@ -323,24 +382,32 @@ async function createShipping(storeId, name, governorates, fee, opts = {}) {
 
 async function main() {
   console.log(`Seeding project "${projectId}" (emulator)...`)
-  await wipe()
-  console.log('Wiped existing data.')
+  if (process.env.SEED_RESET === 'true') {
+    await wipe()
+    console.log('Wiped existing data (explicit SEED_RESET=true).')
+  } else {
+    console.log('Preserving existing emulator data and historical subscriptions.')
+  }
 
-  // Plans — the M&K Store catalog (Egyptian EGP, monthly/yearly). Prices/limits are
+  // Plans — the Matjari catalog (Egyptian EGP, recurring + one-time). Prices/limits are
   // the single source of truth; 0 product/salesLinks limits = unlimited (handled via
   // the explicit unlimitedProducts/unlimitedSalesLinks flags below). Storage is in MB.
-  // Feature flags (quantityPricing, variantInventory, ...) gate advanced product modes;
-  // the Free plan has none of them and keeps no trial. Each plan advertises its public
-  // store link ('رابط متجرك') so the pricing cards communicate that capability.
-  await createPlan('plan-free', 'FREE', 0, 50, 50, 'للبداية بمتجر أساسي وحدود واضحة', ['واجهة متجر أساسية', 'إدارة المنتجات', 'الطلبات', 'العملاء', 'لوحة تحكم أساسية', 'تخصيص أساسي'], { priceYearly: 0, trialDays: 0, landingPagesLimit: 0, salesLinksLimit: 0, staffLimit: 1, storageLimit: 200, slug: 'free', sortOrder: 0, unlimitedProducts: false, unlimitedSalesLinks: false, analytics: true })
-  await createPlan('plan-starter', 'STARTER', 399, 500, 300, 'للمتاجر التي بدأت البيع وتحتاج أدوات تسويق أساسية', ['كل مزايا Free', 'نطاق مخصص', 'كوبونات', 'روابط بيع', 'تقارير أساسية', 'تخصيص المتجر', 'تنبيهات المخزون'], { priceYearly: 3990, launchPrice: 0, launchEnabled: false, landingPagesLimit: 1, salesLinksLimit: 10, staffLimit: 3, storageLimit: 1024, slug: 'starter', sortOrder: 1, unlimitedProducts: false, unlimitedSalesLinks: false, variantInventory: true, coupons: true, analytics: true, customDomain: true })
-  await createPlan('plan-growth', 'GROWTH', 749, 2000, 1500, 'للمتاجر النامية التي تحتاج تقارير وتحليلات أفضل', ['كل مزايا Starter', 'تقارير متقدمة', 'تحليلات متقدمة', 'رؤى مبيعات متقدمة', 'تخصيص أوسع', 'دعم أولوية عند توفره'], { priceYearly: 7490, launchPrice: 0, launchEnabled: false, landingPagesLimit: 5, salesLinksLimit: 50, staffLimit: 10, storageLimit: 5120, slug: 'growth', isPopular: true, sortOrder: 2, unlimitedProducts: false, unlimitedSalesLinks: false, quantityPricing: true, variantInventory: true, coupons: true, abandonedCart: true, analytics: true, advancedReports: true, customDomain: true, prioritySupport: true })
-  await createPlan('plan-business', 'BUSINESS', 1099, 5000, 3500, 'للمتاجر التشغيلية التي تحتاج فريقاً أكبر وحدوداً أعلى', ['كل مزايا Growth', 'صلاحيات فريق متقدمة', 'تحليلات محسنة', 'حدود تشغيل أكبر', 'دعم أولوية', 'أدوات تاجر متقدمة'], { priceYearly: 10990, launchPrice: 0, launchEnabled: false, landingPagesLimit: 10, salesLinksLimit: 100, staffLimit: 20, storageLimit: 10240, slug: 'business', sortOrder: 3, unlimitedProducts: false, unlimitedSalesLinks: false, quantityPricing: true, variantInventory: true, coupons: true, abandonedCart: true, analytics: true, advancedReports: true, customDomain: true, prioritySupport: true })
-  await createPlan('plan-pro', 'PRO', 1499, 0, 10000, 'للمتاجر الكبيرة التي تحتاج حدوداً أعلى وربطاً برمجياً', ['كل مزايا Business', 'وصول API عند توفره', 'أعلى حدود استخدام', 'تقارير متقدمة', 'قدرات فريق متقدمة', 'دعم مميز'], { priceYearly: 14990, launchPrice: 0, launchEnabled: false, landingPagesLimit: 20, salesLinksLimit: 0, staffLimit: 50, storageLimit: 20480, slug: 'pro', sortOrder: 4, unlimitedProducts: true, unlimitedSalesLinks: true, quantityPricing: true, variantInventory: true, coupons: true, abandonedCart: true, analytics: true, advancedReports: true, customDomain: true, apiAccess: true, prioritySupport: true })
+  // Feature flags gate only implemented capabilities; unimplemented legacy flags
+  // are explicitly reset to false by createPlan below.
+  await createPlan('plan-free', 'FREE', 0, 50, 50, 'للبداية بمتجر أساسي وحدود واضحة', ['واجهة متجر أساسية', 'إدارة المنتجات', 'الطلبات', 'العملاء', 'لوحة تحكم أساسية', 'تخصيص أساسي', 'تحليلات أساسية'], { billingModel: 'subscription', oneTimePrice: 0, priceYearly: 0, trialDays: 0, landingPagesLimit: 0, salesLinksLimit: 0, staffLimit: 1, storageLimit: 200, slug: 'free', sortOrder: 0, unlimitedProducts: false, unlimitedSalesLinks: false, analytics: true })
+  await createPlan('plan-starter', 'STARTER', 399, 500, 300, 'للمتاجر التي بدأت البيع وتحتاج أدوات تسويق أساسية', ['كل مزايا Free', 'كوبونات', 'روابط بيع', 'صفحة هبوط واحدة', 'تخصيص المتجر', 'تنبيهات المخزون'], { priceYearly: 3990, launchPrice: 0, launchEnabled: false, landingPagesLimit: 1, salesLinksLimit: 10, staffLimit: 3, storageLimit: 1024, slug: 'starter', sortOrder: 1, unlimitedProducts: false, unlimitedSalesLinks: false, variantInventory: true, coupons: true, analytics: true })
+  await createPlan('plan-growth', 'GROWTH', 749, 2000, 1500, 'للمتاجر النامية التي تحتاج أدوات تشغيل أوسع', ['كل مزايا Starter', 'تسعير بالكمية', 'حدود تشغيل أعلى', 'صفحات هبوط متعددة', 'روابط بيع موسعة'], { priceYearly: 7490, launchPrice: 0, launchEnabled: false, landingPagesLimit: 5, salesLinksLimit: 50, staffLimit: 10, storageLimit: 5120, slug: 'growth', isPopular: true, sortOrder: 2, unlimitedProducts: false, unlimitedSalesLinks: false, quantityPricing: true, variantInventory: true, coupons: true, analytics: true })
+  await createPlan('plan-business', 'BUSINESS', 1099, 5000, 3500, 'للمتاجر التشغيلية التي تحتاج فريقاً أكبر وحدوداً أعلى', ['كل مزايا Growth', 'فريق أكبر', 'حدود تشغيل أكبر', 'تخزين موسع', 'أدوات تشغيل متقدمة'], { priceYearly: 10990, launchPrice: 0, launchEnabled: false, landingPagesLimit: 10, salesLinksLimit: 100, staffLimit: 20, storageLimit: 10240, slug: 'business', sortOrder: 3, unlimitedProducts: false, unlimitedSalesLinks: false, quantityPricing: true, variantInventory: true, coupons: true, analytics: true })
+  await createPlan('plan-pro', 'PRO', 1499, 0, 10000, 'للمتاجر الكبيرة التي تحتاج حدوداً أعلى', ['كل مزايا Business', 'أعلى حدود استخدام', 'منتجات غير محدودة', 'روابط بيع غير محدودة'], { priceYearly: 14990, launchPrice: 0, launchEnabled: false, landingPagesLimit: 20, salesLinksLimit: 0, staffLimit: 50, storageLimit: 20480, slug: 'pro', sortOrder: 4, unlimitedProducts: true, unlimitedSalesLinks: true, quantityPricing: true, variantInventory: true, coupons: true, analytics: true })
+  await createPlan('plan-lifetime', 'LIFETIME', 0, 1000, 5000, 'ملكية أساسية للمتجر بدفعة واحدة، بحدود واضحة', ['ملكية أساسية غير منتهية', 'واجهة متجر', 'إدارة المنتجات والطلبات', 'كوبونات', 'تحليلات أساسية'], { billingModel: 'one_time', oneTimePrice: 4999, priceMonthly: 0, priceYearly: 0, landingPagesLimit: 3, salesLinksLimit: 50, staffLimit: 5, storageLimit: 5120, slug: 'lifetime', sortOrder: 5, unlimitedProducts: false, unlimitedSalesLinks: false, variantInventory: true, coupons: true, analytics: true, trialDays: 0 })
+  await createPlan('plan-pro-legacy-1500', 'PRO (Legacy)', 1500, 0, 10000, 'لقطة تاريخية للاشتراكات القديمة — غير متاحة للشراء', ['اشتراك تاريخي'], { priceYearly: 15000, slug: 'pro-legacy-1500', sortOrder: 99, active: false, isPurchasable: false, archived: true, status: 'archived', unlimitedProducts: true, unlimitedSalesLinks: true })
 
   // Platform admin
-  const adminUid = 'seed-admin'
-  await createUser(adminUid, 'admin@mk.store', 'Admin12345', 'مدير المنصة', 'superAdmin', [])
+  const adminUid = await ensureIdentity(DEV_ACCOUNTS.superAdmin, 'superAdmin', [])
+  await ensureIdentity(DEV_ACCOUNTS.superAdminAlias, 'superAdmin', [])
+  const staffUid = await ensureIdentity(DEV_ACCOUNTS.staff, 'staff', ['store-a'])
+  await db.collection('users').doc(staffUid).set({ permissions: ['products:view', 'orders:view', 'customers:view'], updatedAt: ts() }, { merge: true })
+  await ensureIdentity(DEV_ACCOUNTS.customer, 'customer', [])
 
   // Store A — TEST active growth plan, published, moderate usage
   const aUid = 'seed-owner-a'
@@ -425,6 +492,57 @@ async function main() {
     quantityPricingStrategy: 'cap',
     costPrice: 310,
   })
+
+  // Platform carrier fixture used to exercise the real list → detail → order
+  // shipping flow in the local emulator. This uses the existing
+  // ShippingCompany/Shipment models and is idempotent.
+  const carrierId = 'carrier-bosta-local'
+  await db.collection('shippingCompanies').doc(carrierId).set({
+    id: carrierId,
+    name: 'بوستة للشحن',
+    status: 'active',
+    zones: ['القاهرة الكبرى', 'الإسكندرية والساحل'],
+    ratesByZone: {
+      'القاهرة الكبرى': { deliveryPrice: 40, returnPrice: 20, codFee: 5, additionalFees: 0, estimatedDays: '2-4 أيام' },
+      'الإسكندرية والساحل': { deliveryPrice: 50, returnPrice: 25, codFee: 5, additionalFees: 0, estimatedDays: '2-5 أيام' },
+    },
+    services: ['COD', 'تتبع الشحنة'],
+    averageRating: 4.6,
+    reviewsCount: 1,
+    completedShipments: 1,
+    deliverySuccessRate: 1,
+    createdAt: ts(),
+    updatedAt: ts(),
+    createdBy: 'seed',
+  }, { merge: true })
+  const carrierOrder = (await db.collection('orders').where('storeId', '==', 'store-a').where('orderNumber', '==', 'ORD-00003').limit(1).get()).docs[0]
+  if (carrierOrder) {
+    await db.collection('shipments').doc(`shipment-${carrierOrder.id}`).set({
+      id: `shipment-${carrierOrder.id}`,
+      storeId: 'store-a',
+      orderId: carrierOrder.id,
+      active: true,
+      status: 'SHIPPED',
+      shippingCompanyId: carrierId,
+      shippingCompanyName: 'بوستة للشحن',
+      trackingNumber: 'BOSTA-LOCAL-0003',
+      customerShippingFee: 40,
+      carrierShippingCost: 40,
+      priceSnapshot: {
+        shippingCompanyId: carrierId,
+        shippingCompanyName: 'بوستة للشحن',
+        zoneId: 'القاهرة الكبرى',
+        deliveryPrice: 40,
+        returnPrice: 20,
+        codFee: 5,
+        additionalFees: 0,
+        quotedAt: admin.firestore.Timestamp.fromDate(new Date()),
+      },
+      createdAt: ts(),
+      updatedAt: ts(),
+      createdBy: 'seed',
+    }, { merge: true })
+  }
   await createCustomer('store-a', 'أحمد حسن', '01000000001', 3, 640)
   await createCustomer('store-a', 'سارة أحمد', '01000000002', 2, 470)
   await createCustomer('store-a', 'منى خليل', '01000000004', 1, 320)
@@ -601,7 +719,10 @@ async function main() {
     yearlyPriceSnapshot: 3990,
     ordersUsed: 5,
   })
-  await db.collection('subscriptionPayments').add({
+  // Keep the trial activation request deterministic across converging seed
+  // runs. Using add() here created a new document every time while reusing the
+  // same embedded id, which produced duplicate rows and unstable UI keys.
+  await db.collection('subscriptionPayments').doc('seed-pay-c1').set({
     id: 'seed-pay-c1',
     subscriptionId: cSubId,
     storeId: 'store-c',
@@ -617,7 +738,7 @@ async function main() {
     createdAt: admin.firestore.Timestamp.fromDate(new Date(Date.now() - 86400000)),
     updatedAt: admin.firestore.Timestamp.fromDate(new Date(Date.now() - 86400000)),
     createdBy: cUid,
-  })
+  }, { merge: true })
 
   // Store D — TEST trial expired (data preserved, storefront gated)
   const dUid = 'seed-owner-d'
@@ -758,9 +879,9 @@ async function main() {
   await createProduct('store-i', iCat, 'منتج بريزيت', 120, 40, 'منتج بدون صورة', { featured: true })
 
   // Malek Store — deterministic local fixture used by storefront and
-  // merchant smoke checks. It is a FREE store, not a fabricated paid tenant.
-  const malekUid = 'seed-owner-malek'
-  await createUser(malekUid, 'malek@mk.store', 'Owner12345', 'مالك المتجر', 'merchant', ['malek-store'])
+  // Keep the historical paid snapshot used by the local Malek fixture. Never
+  // replace an existing valid subscription with a newly-created FREE record.
+  const malekUid = await ensureMalekIdentity('Owner12345')
   await createStore('malek-store', 'malek-store', 'Malek Store', malekUid, {
     published: true,
     primary: '#3525cd',
@@ -769,8 +890,13 @@ async function main() {
     seoTitle: 'Malek Store',
     seoDescription: 'متجر تجريبي محلي للتحقق من مسار المتجر العام.',
   })
-  await createSubscription('malek-store', 'plan-free', 'active', {
-    planName: 'FREE',
+  const malekSubs = (await db.collection('subscriptions').where('storeId', '==', 'malek-store').get()).docs
+  const existingMalek = malekSubs
+    .map((d) => ({ id: d.id, data: d.data() }))
+    .filter((s) => s.data.status === 'active' || s.data.status === 'trialing')
+    .sort((a, b) => Number(b.data.normalPriceSnapshot || 0) - Number(a.data.normalPriceSnapshot || 0) || (b.data.createdAt?.seconds || 0) - (a.data.createdAt?.seconds || 0))[0]
+  const malekSubId = existingMalek?.id || await createSubscription('malek-store', 'plan-pro-legacy-1500', 'active', {
+    planName: 'PRO (Legacy)',
     startedAt: new Date(),
     currentPeriodStart: new Date(),
     currentPeriodEnd: new Date(Date.now() + 30 * 86400000),
@@ -778,22 +904,84 @@ async function main() {
     approvedBy: adminUid,
     ordersUsed: 0,
     periodNumber: 1,
+    normalPriceSnapshot: 1500,
+    launchPriceSnapshot: 1500,
+    yearlyPriceSnapshot: 15000,
   })
+  await db.collection('stores').doc('malek-store').set({ activeSubscriptionId: malekSubId, updatedAt: ts() }, { merge: true })
   const malekCat = await createCategory('malek-store', 'منتجات', 'products', 1)
   await createProduct('malek-store', malekCat, 'منتج مالك التجريبي', 120, 25, 'منتج متاح في المتجر المحلي.', { featured: true })
+
+  // Dedicated local-only QA identities. These are deliberately separate from
+  // the historical seed accounts above so visual/functional testing cannot
+  // alter an existing fixture. The emulator hosts are forced at the top of
+  // this script; no production Firebase endpoint is contacted.
+  const qaPassword = 'MatjariQA123!'
+  const qaMerchants = [
+    { uid: 'qa-free', email: 'qa.free@matjari.test', name: 'QA Free', storeId: 'qa-free-store', planId: 'plan-free', status: 'active', published: true },
+    { uid: 'qa-trial', email: 'qa.trial@matjari.test', name: 'QA Trial', storeId: 'qa-trial-store', planId: 'plan-growth', status: 'trialing', published: false, trialDays: 2 },
+    { uid: 'qa-active', email: 'qa.active@matjari.test', name: 'QA Active', storeId: 'qa-active-store', planId: 'plan-business', status: 'active', published: true },
+    { uid: 'qa-expired', email: 'qa.expired@matjari.test', name: 'QA Expired', storeId: 'qa-expired-store', planId: 'plan-growth', status: 'expired', published: false, trialDays: -2 },
+    { uid: 'qa-lifetime', email: 'qa.lifetime@matjari.test', name: 'QA Lifetime', storeId: 'qa-lifetime-store', planId: 'plan-lifetime', status: 'active', published: true },
+  ]
+  for (const qa of qaMerchants) {
+    await createUser(qa.uid, qa.email, qaPassword, qa.name, 'merchant', [qa.storeId], true)
+    await createStore(qa.storeId, qa.storeId.replace('-store', ''), `QA — ${qa.name}`, qa.uid, {
+      isTestMerchant: true,
+      published: qa.published,
+      description: 'بيانات اختبار محلية فقط.',
+      primary: '#4f46e5',
+      secondary: '#f59e0b',
+    })
+    const now = Date.now()
+    const trialEndsAt = qa.trialDays == null ? undefined : new Date(now + qa.trialDays * 86400000)
+    const trialStartedAt = qa.trialDays == null ? undefined : new Date(now - 86400000)
+    const subId = await createSubscription(qa.storeId, qa.planId, qa.status, {
+      planName: qa.planId.replace('plan-', '').toUpperCase(),
+      ...(trialEndsAt ? { trialEndsAt, trialStartedAt } : {}),
+      startedAt: new Date(now - 7 * 86400000),
+      currentPeriodStart: new Date(now - 7 * 86400000),
+      currentPeriodEnd: new Date(now + 23 * 86400000),
+      normalPriceSnapshot: qa.planId === 'plan-lifetime' ? 4999 : undefined,
+    })
+    await db.collection('stores').doc(qa.storeId).set({ activeSubscriptionId: subId }, { merge: true })
+    const catId = await createCategory(qa.storeId, 'منتجات QA', 'qa-products', 1)
+    const featuredId = await createProduct(qa.storeId, catId, `منتج مميز — ${qa.name}`, 749, 18, 'منتج اختبار مميز مع خيارات.', {
+      featured: true,
+      compareAtPrice: 899,
+      variants: [{ id: 'qa-red-m', name: 'أحمر / M', color: 'أحمر', size: 'M', sku: 'QA-RED-M', price: 749, stock: 8 }, { id: 'qa-blue-l', name: 'أزرق / L', color: 'أزرق', size: 'L', sku: 'QA-BLUE-L', price: 749, stock: 10 }],
+      quantityTiers: [{ minQuantity: 2, price: 699 }, { minQuantity: 3, price: 649 }],
+    })
+    await createProduct(qa.storeId, catId, 'منتج مسودة QA', 299, 0, 'منتج غير منشور للاختبار.', { active: false })
+    await createProductCost(qa.storeId, featuredId, 320)
+    await createCustomer(qa.storeId, 'عميل QA', '01000000000', 2, 1498)
+    await createOrder(qa.storeId, 'qa-orders', `QA-${qa.storeId}`, featuredId, 'عميل QA', '01000000000', 749, 'DELIVERED', 2, { productName: `منتج مميز — ${qa.name}`, costPrice: 320 })
+    await seedAnalytics(qa.storeId, 3, 2247, 7)
+    await createShipping(qa.storeId, 'القاهرة', ['القاهرة', 'الجيزة'], 40, { freeAbove: 800 })
+  }
+  await ensureIdentity({ uid: 'qa-admin', email: 'qa.admin@matjari.test', password: qaPassword, name: 'QA SuperAdmin' }, 'superAdmin', [])
+  const qaAudit = [
+    { action: 'plan_changed', entity: 'subscriptions', createdAt: '2026-08-24T18:20:00.000Z' },
+    { action: 'payment_approved', entity: 'subscriptionPayments', createdAt: { seconds: 1787595600, nanoseconds: 0 } },
+    { action: 'promotion_stopped', entity: 'platformPromotions', createdAt: { _seconds: 1787509200, _nanoseconds: 0 } },
+    { action: 'merchant_suspended', entity: 'stores', createdAt: null },
+  ]
+  for (const entry of qaAudit) await db.collection('auditLogs').add({ ...entry, actorId: 'qa-admin', actorEmail: 'qa.admin@matjari.test', metadata: {}, createdBy: 'qa-seed' })
 
   // Firestore triggers do not replay historical seed writes. Rebuild the
   // safe public projections explicitly so a clean emulator starts usable.
   await rebuildPublicProjections()
 
   console.log('Seed complete:')
-  console.log('  admin     -> admin@mk.store / Admin12345')
+  console.log('  admin     -> khaaledelmasry@gmail.com / Admin12345 (canonical SuperAdmin; admin@mk.store is a compatibility alias)')
   console.log('  store A   -> owner@a.store / Owner12345 (published, moderate usage, paid growth)')
   console.log('  store B   -> owner@b.store / Owner12345 (published, near limit, paid starter)')
   console.log('  store C   -> owner@c.store / Owner12345 (trialing + pending activation request)')
   console.log('  store D   -> owner@d.store / Owner12345 (trial expired — storefront gated)')
   console.log('  store E   -> owner@e.store / Owner12345 (pending legacy subscription)')
-  console.log('  malek     -> malek@mk.store / Owner12345 (published FREE storefront)')
+  console.log('  staff     -> staff@test.com / Staff12345 (store-a restricted staff)')
+  console.log('  customer  -> customer@test.com / Customer12345 (storefront test customer)')
+  console.log('  malek     -> malek@test.com / Owner12345 (published legacy paid storefront, 1500 EGP snapshot)')
   process.exit(0)
 }
 

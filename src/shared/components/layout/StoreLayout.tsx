@@ -10,6 +10,8 @@ import { contrastFor, hexToRgba, shadeHex } from '../../utils/color'
 import type { CSSProperties } from 'preact/compat'
 import { Icon } from '../ui/Icon'
 import { StorefrontHeader } from '../../../store/components/StorefrontHeader'
+import { storeBaseUrl } from '../../utils/store-url'
+import './StorefrontShell.css'
 
 interface Props {
   children?: any
@@ -27,7 +29,7 @@ export function themeStyleFor(primary?: string, secondary?: string): CSSProperti
   } as CSSProperties
 }
 
-export const StoreLayout: FunctionalComponent<Props> = ({ children }) => {
+export const StorefrontShell: FunctionalComponent<Props> = ({ children }) => {
   const { store } = useStore()
   const { user } = useAuth()
   const [location, setLocation] = useLocation()
@@ -53,31 +55,34 @@ export const StoreLayout: FunctionalComponent<Props> = ({ children }) => {
 
   const slug = store?.slug
   const base = `/store/${slug}`
-  const templateClass = getTemplate(store?.theme?.template).cssClass
+  const template = getTemplate(store?.theme?.template)
+  const templateClass = `${template.cssClass} theme-header-${template.layout.header} theme-hero-${template.layout.hero} theme-grid-${template.layout.productGrid} theme-card-${template.layout.productCard} theme-home-${template.layout.homeSections} theme-footer-${template.layout.footer} theme-product-${template.layout.productPage}`
   const storeDark = storeDarkPref ? ' store-dark' : ''
 
   // SEO: title, description, OG, Twitter, and canonical for the storefront.
   useEffect(() => {
     if (!store?.name) return
-    const title = store.seoTitle || `${store.name} — متجر M&K`
-    const description = store.seoDescription || store.description || `تسوق من ${store.name} على منصة M&K`
+    const title = store.seoTitle || `${store.name} — متجر متجري`
+    const description = store.seoDescription || store.description || `تسوق من ${store.name} على منصة متجري`
     setSeo({
       title,
       description,
       type: 'website',
-      url: `${window.location.origin}/store/${store.slug}`,
-      image: store.logo || store.heroImage || null,
+      url: `${storeBaseUrl()}/store/${store.slug}`,
+      image: store.logo || store.heroImage || store.hero || null,
     })
-  }, [store?.name, store?.slug, store?.seoTitle, store?.seoDescription, store?.description, store?.logo, store?.heroImage])
+  }, [store?.name, store?.slug, store?.seoTitle, store?.seoDescription, store?.description, store?.logo, store?.heroImage, store?.hero])
 
   const canPreview =
-    !!user && (user.role === 'superAdmin' || (user.role === 'merchant' || user.role === 'staff') && (user.storeIds || []).includes(store?.id || ''))
+    new URLSearchParams(window.location.search).get('preview') === '1'
+      && !!user
+      && (user.role === 'superAdmin' || (user.role === 'merchant' || user.role === 'staff') && (user.storeIds || []).includes(store?.id || ''))
 
   // Unpublished stores show a coming-soon page to everyone except the owner,
   // store staff, and platform admins. Purchases are rejected server-side too.
-  if (store && !store.published && !canPreview) {
+  if (store && (store.storeStatus || (store.published ? 'published' : 'draft')) !== 'published' && !canPreview) {
     return (
-      <div className={`store-shell store-shell--v3 ${templateClass}${storeDark}`} style={themeStyleFor(store.theme?.primary, store.theme?.secondary)}>
+      <div className={`storefront-shell store-shell store-shell--v3 ${templateClass}${storeDark}`} style={themeStyleFor(store.theme?.primary, store.theme?.secondary)}>
         <div className="store-coming-soon">
           <Icon name="storefront" className="store-brand-mark" />
           <h1>{store.name}</h1>
@@ -109,7 +114,7 @@ export const StoreLayout: FunctionalComponent<Props> = ({ children }) => {
   }
 
   return (
-    <div className={`store-shell store-shell--v3 ${templateClass}${storeDark}`} style={themeStyleFor(store?.theme?.primary, store?.theme?.secondary)}>
+    <div className={`storefront-shell store-shell store-shell--v3 ${templateClass}${storeDark}`} style={themeStyleFor(store?.theme?.primary, store?.theme?.secondary)}>
       <StorefrontHeader
         base={base}
         navItems={navItems}
@@ -132,7 +137,7 @@ export const StoreLayout: FunctionalComponent<Props> = ({ children }) => {
             <div className="store-footer-brand">
               <MerchantLogo store={store} variant="footer" />
             </div>
-            <p className="muted small">{store?.description || 'متجرك على منصة M&K'}</p>
+            <p className="muted small">{store?.description || 'متجرك على منصة متجري'}</p>
           </div>
           <div>
             <h4>روابط سريعة</h4>
@@ -154,9 +159,12 @@ export const StoreLayout: FunctionalComponent<Props> = ({ children }) => {
           </div>
         </div>
         <div className="store-footer-bottom">
-          <p>© {new Date().getFullYear()} {store?.name || 'M&K'} — جميع الحقوق محفوظة</p>
+          <p>© {new Date().getFullYear()} {store?.name || 'متجري'} — جميع الحقوق محفوظة</p>
         </div>
       </footer>
     </div>
   )
 }
+
+/** Backwards-compatible name for non-router imports; ownership is StorefrontShell. */
+export const StoreLayout = StorefrontShell

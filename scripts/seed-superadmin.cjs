@@ -1,10 +1,9 @@
 // Seed script: creates the first platform admin (and a default plan) in the
-// Firebase Emulator (or production if run with `firebase deploy` scope).
+// Firebase Emulator only.
 //
 //   node scripts/seed-superadmin.mjs <uid> <email>
 //
-// Requires the Functions/Emulator environment OR a service account. Run from
-// `firebase emulators:exec 'node scripts/seed-superadmin.mjs ...'`.
+// Run from `firebase emulators:exec 'node scripts/seed-superadmin.cjs ...'`.
 
 const admin = require('firebase-admin')
 
@@ -16,14 +15,22 @@ if (!uid || !email) {
   process.exit(1)
 }
 
-const service = process.env.FIRESTORE_EMULATOR_HOST
-  ? undefined
-  : JSON.parse(process.env.GOOGLE_APPLICATION_CREDENTIALS_JSON || '{}')
+if (!process.env.FIRESTORE_EMULATOR_HOST) {
+  console.error('Refusing to seed: FIRESTORE_EMULATOR_HOST is not set. This script is emulator-only.')
+  process.exit(1)
+}
+
+// A production project can expose the same Admin SDK API as the emulator. Do
+// not rely on the project ID alone (the local emulator intentionally uses the
+// default project ID); require an explicitly local emulator host as well.
+const firestoreHost = process.env.FIRESTORE_EMULATOR_HOST.split(':')[0]
+if (!['localhost', '127.0.0.1'].includes(firestoreHost)) {
+  console.error('Refusing to seed: FIRESTORE_EMULATOR_HOST must point to localhost or 127.0.0.1.')
+  process.exit(1)
+}
 
 admin.initializeApp({
-  credential: service
-    ? admin.credential.applicationDefault()
-    : undefined,
+  projectId: process.env.GCLOUD_PROJECT || 'mk-store-app',
 })
 
 const db = admin.firestore()

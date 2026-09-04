@@ -7,6 +7,7 @@ import { Button } from '../../shared/components/ui/Button'
 import { Badge } from '../../shared/components/ui/Badge'
 import { formatCurrency, formatDateTime } from '../../shared/utils/format'
 import { STATUS_LABELS, STATUS_COLORS } from '../../shared/utils/constants'
+import { visibleOrderStatusLabel, visibleOrderStatusTone } from '../../shared/utils/order-status'
 import { OrderTimeline } from '../../shared/components/order/OrderTimeline'
 import { Icon } from '../../shared/components/ui/Icon'
 import type { Order } from '../../shared/types'
@@ -39,7 +40,7 @@ export const StoreOrderDetails: FunctionalComponent<Props> = ({ id }) => {
     )
   }
 
-  const statusTone = STATUS_COLORS[order.status as keyof typeof STATUS_COLORS] || 'gray'
+  const statusTone = visibleOrderStatusTone(order)
 
   return (
     <div className="storefront-page storefront-order-details">
@@ -59,7 +60,7 @@ export const StoreOrderDetails: FunctionalComponent<Props> = ({ id }) => {
                 <h1 className="order-number monospace">{order.orderNumber}</h1>
                 <p className="order-date muted">{formatDateTime(order.createdAt)}</p>
               </div>
-              <Badge tone={statusTone}>{STATUS_LABELS[order.status] || order.status}</Badge>
+              <Badge tone={statusTone as any}>{visibleOrderStatusLabel(order)}</Badge>
             </div>
             <OrderTimeline order={order} />
           </div>

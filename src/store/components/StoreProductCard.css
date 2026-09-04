@@ -17,6 +17,28 @@
   box-shadow: 0 1px 2px color-mix(in srgb, var(--foreground) 4%, transparent);
   transition: box-shadow var(--motion-fast, 140ms) ease;
 }
+/* Structural template variants share the same commerce actions/data but use
+   distinct merchandising treatments. */
+.spc-card--minimal { border-radius: 8px; box-shadow: none; border-color: color-mix(in srgb, var(--border) 65%, transparent); }
+.spc-card--minimal .spc-media { aspect-ratio: 1 / 1.18; }
+.spc-card--minimal .spc-body { padding-inline: 4px; }
+.spc-card--bold { border-radius: 18px; border-width: 2px; box-shadow: 0 12px 28px color-mix(in srgb, var(--primary) 12%, transparent); }
+.spc-card--bold .spc-media { aspect-ratio: 1 / 1; }
+.spc-card--bold .spc-price { font-size: 1.1rem; font-weight: 800; }
+.spc-card--bold .spc-add-btn--mobile { border-radius: 8px; font-weight: 800; }
+.spc-card--elegant { border-radius: 22px; border-color: color-mix(in srgb, var(--border) 55%, var(--primary)); box-shadow: 0 8px 26px color-mix(in srgb, var(--primary) 7%, transparent); }
+.spc-card--elegant .spc-media { aspect-ratio: 3 / 4; }
+.spc-card--elegant .spc-body { padding: 18px 8px; text-align: center; }
+.spc-card--elegant .spc-price-row { justify-content: center; }
+.spc-card--market { border-radius: 6px; box-shadow: 0 1px 5px rgba(20, 30, 20, .12); }
+.spc-card--market .spc-media { aspect-ratio: 1 / 1; }
+.spc-card--market .spc-body { padding: 10px; }
+.spc-card--market .spc-price { font-size: 1.15rem; font-weight: 900; }
+.spc-card--market .spc-market-label { display: block; margin-bottom: 4px; color: var(--primary); font-size: 10px; font-weight: 800; }
+.spc-card--showcase { border: 0; border-radius: 0; background: transparent; box-shadow: none; }
+.spc-card--showcase .spc-media { aspect-ratio: 4 / 5; border-radius: 18px; }
+.spc-card--showcase .spc-body { padding: 14px 2px; }
+.spc-card--showcase .spc-title { font-size: 1.05rem; }
 .spc-card:hover {
   box-shadow: 0 8px 24px color-mix(in srgb, var(--foreground) 10%, transparent);
 }

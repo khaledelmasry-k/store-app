@@ -52,6 +52,8 @@ export const couponsService = {
 }
 
 export const shippingService = {
+  // Compatibility-only zone CRUD for stores that have not migrated to a
+  // platform provider. New checkout never calls this service.
   list: (storeId: string) => listDocs<ShippingZone>(shippingPath, { storeId, orderBy: { field: 'name' } }),
   create: (storeId: string, data: Omit<ShippingZone, 'id' | 'storeId'>) => createDoc<ShippingZone>(shippingPath, { ...data, storeId }),
   update: (id: string, data: Record<string, unknown>) => updateDocById(shippingPath, id, data),
@@ -59,6 +61,7 @@ export const shippingService = {
 }
 
 export const shippingMarketplaceService = {
+  // Historical marketplace reads; active UI uses shippingProviders callables.
   companies: () => listDocs<ShippingCompany>(shippingCompaniesPath, { orderBy: { field: 'name' } }),
   shipments: (storeId: string) => listDocs<Shipment>(shipmentsPath, { storeId, orderBy: { field: 'createdAt' } }),
   reviews: (merchantId: string) => listDocs<ShippingCompanyReview>(shippingReviewsPath, { where: { merchantId: { value: merchantId } }, orderBy: { field: 'createdAt' } }),

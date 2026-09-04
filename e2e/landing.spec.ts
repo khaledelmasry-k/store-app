@@ -1,7 +1,7 @@
 import { test, expect, type Page } from '@playwright/test'
 
 // Read-only landing page checks. Runs on every project (1440/1024/390/360/430)
-// against the seeded emulator data (5 canonical plans) served by vite preview on :4173.
+// against the seeded emulator data (6 canonical offers) served by vite preview on :4173.
 
 async function noHScroll(page: Page) {
   return page.evaluate(() => document.documentElement.scrollWidth - document.documentElement.clientWidth)
@@ -16,43 +16,44 @@ async function forceReveal(page: Page) {
   await page.waitForTimeout(700)
 }
 
-test('renders hero, nav anchors, features, steps, sales, faq', async ({ page }) => {
-  await page.goto('/', { waitUntil: 'domcontentloaded' })
+test('renders the reference-inspired Matjari landing structure', async ({ page }) => {
+  await page.goto('/', { waitUntil: 'commit' })
 
   // Hero
-  await expect(page.getByRole('heading', { level: 1 })).toHaveText(/ابنِ متجرك\.\s*أدر مبيعاتك\.\s*كبّر تجارتك\./)
-  await expect(page.locator('.stitch-release-pill')).toContainText('الإصدار 3.0 متاح الآن')
-  await expect(page.locator('.landing-brand')).toContainText('M&K Store')
-  await expect(page.locator('.landing-header .brand-mark')).toHaveCount(1)
-  await expect(page.locator('.stitch-footer-band .brand-mark')).toHaveCount(1)
+  await expect(page.getByRole('heading', { level: 1 })).toContainText('تجارتك الإلكترونية')
+  await expect(page.locator('.stitch-release-pill')).toContainText('منصة متكاملة')
+  await expect(page.locator('.landing-brand .landing-primary-logo')).toHaveCount(1)
+  await expect(page.locator('.stitch-footer-band .landing-footer-logo')).toHaveCount(1)
 
   // Nav anchors (desktop links + mobile menu target)
-  for (const label of ['المميزات', 'الأسعار', 'حلول الأعمال', 'عن المتجر']) {
+  for (const label of ['المميزات', 'الحلول', 'الأسعار', 'كيف تعمل', 'الأسئلة الشائعة', 'تواصل معنا']) {
     await expect(page.locator('.landing-nav-link', { hasText: label })).toHaveCount(1)
   }
-  await expect(page.locator('.landing-nav-btn-primary', { hasText: 'ابدأ الآن مجاناً' })).toHaveCount(1)
+  await expect(page.locator('.landing-nav-btn-primary', { hasText: 'ابدأ مجانًا' })).toHaveCount(1)
   await expect(page.locator('.landing-nav-btn-ghost', { hasText: 'تسجيل الدخول' })).toHaveCount(1)
 
   // Sections
-  await expect(page.locator('.stitch-capability-card')).toHaveCount(4)
-  await expect(page.locator('.stitch-rich-overview')).toHaveCount(1)
-  await expect(page.locator('.stitch-rich-feature')).toHaveCount(5)
-  await expect(page.locator('.rich-workflow-grid > div')).toHaveCount(8)
-  await expect(page.locator('.rich-links-preview .rich-link-row')).toHaveCount(4)
+  await expect(page.locator('.stitch-capability-card')).toHaveCount(6)
+  await expect(page.locator('.landing-stats .landing-stat')).toHaveCount(4)
+  await expect(page.locator('.landing-steps-grid .landing-step')).toHaveCount(3)
+  // The hero now uses the dedicated commerce illustration; the live dashboard
+  // mockup remains in the solutions section below.
+  await expect(page.locator('.landing-hero-visual')).toHaveCount(1)
+  await expect(page.locator('.landing-hero-visual')).toHaveCount(1)
   await expect(page.locator('.rich-faq-list details')).toHaveCount(4)
-  await expect(page.locator('.rich-storefront-preview')).toBeVisible()
 })
 
 test('pricing shows real seeded plans with limits and plan-scoped CTAs', async ({ page }) => {
-  await page.goto('/', { waitUntil: 'domcontentloaded' })
+  await page.goto('/', { waitUntil: 'commit' })
   await expect(page.locator('#pricing')).toBeVisible({ timeout: 15000 })
-  // Free + Starter + Growth + Business + Pro — rendered by the shared PricingCard.
-  await expect(page.locator('.mk-pricing-card')).toHaveCount(5, { timeout: 15000 })
+  // Five recurring subscription cards are the primary grid. Lifetime is a
+  // separate launch-offer section and is intentionally not a sixth plan card.
+  await expect(page.locator('.stitch-pricing-grid .mk-pricing-card')).toHaveCount(5, { timeout: 15000 })
 
   // Each plan renders as a `.stitch-plan-wrap` wrapping the PricingCard plus a
   // single plan-scoped link.
   const cardByName = (name: string) =>
-    page.locator('.mk-pricing-card').filter({ has: page.locator('.mk-pricing-name', { hasText: name }) })
+    page.locator('.stitch-pricing-grid .mk-pricing-card').filter({ has: page.locator('.mk-pricing-name', { hasText: name }) })
   const colByName = (name: string) =>
     page.locator('.stitch-plan-wrap').filter({ has: page.locator('.mk-pricing-name', { hasText: name }) })
 
@@ -93,16 +94,66 @@ test('pricing shows real seeded plans with limits and plan-scoped CTAs', async (
   await expect(cardByName('PRO')).toContainText('20 GB تخزين')
   await expect(colByName('PRO').locator('.stitch-plan-link')).toHaveAttribute('href', '/register?plan=plan-pro')
 
+  const lifetime = page.locator('.stitch-lifetime-offer')
+  await expect(lifetime).toContainText('امتلك متجرك')
+  await expect(lifetime).toContainText(/(?:4,999|٤٬٩٩٩)/)
+  await expect(lifetime).toContainText('دفعة واحدة')
+  await expect(lifetime).toContainText('حق استخدام دائم')
+  await expect(lifetime.locator('a.stitch-offer-cta')).toHaveAttribute('href', '/register?offer=lifetime')
+
   // Each card has exactly ONE primary CTA (no duplicate "ابدأ الآن" buttons).
   await expect(page.locator('.stitch-plan-wrap .stitch-plan-link')).toHaveCount(5)
+  await expect(page.locator('.stitch-enterprise-offer')).toContainText('Enterprise')
 
   // Featured plan is النمو (isPopular), rendered as a single badge.
   await expect(page.locator('.mk-pricing-badge')).toHaveCount(1)
   await expect(growth.locator('.mk-pricing-badge')).toContainText('الأكثر شعبية')
 })
 
+test('registration keeps Lifetime as a dedicated handoff', async ({ page }) => {
+  await page.goto('/register', { waitUntil: 'domcontentloaded' })
+  await expect(page.locator('.register-plan-strip .register-plan-pill')).toHaveCount(5, { timeout: 15000 })
+
+  await page.goto('/register?offer=lifetime', { waitUntil: 'domcontentloaded' })
+  const lifetime = page.getByTestId('lifetime-registration-offer')
+  await expect(lifetime).toBeVisible({ timeout: 15000 })
+  await expect(lifetime).toContainText('امتلك متجرك')
+  await expect(lifetime).toContainText(/(?:4,999|٤٬٩٩٩)/)
+  await expect(lifetime).toContainText('دفعة واحدة')
+  await expect(lifetime).toContainText('1,000 منتج')
+  await expect(page.locator('.register-plan-strip')).toHaveCount(0)
+})
+
+test('mobile registration plan selection uses full-width cards without adjacent clipping', async ({ page }) => {
+  test.skip((page.viewportSize()?.width || 0) > 640, 'phone layout only')
+  const viewportWidth = page.viewportSize()!.width
+  await page.goto('/register', { waitUntil: 'domcontentloaded' })
+  await expect(page.locator('.register-plan-pill')).toHaveCount(5, { timeout: 15000 })
+
+  for (const planName of ['FREE', 'STARTER', 'GROWTH', 'BUSINESS', 'PRO']) {
+    if (planName !== 'FREE') {
+      await page.goto('/register', { waitUntil: 'domcontentloaded' })
+      await expect(page.locator('.register-plan-pill')).toHaveCount(5, { timeout: 15000 })
+    }
+    await page.locator('.register-plan-pill').filter({ hasText: planName }).click()
+    const selectedSummary = page.locator('.register-selected-plan-summary')
+    await expect(selectedSummary).toHaveCount(1)
+    await expect(selectedSummary).toContainText(planName)
+    await selectedSummary.getByRole('button').click()
+    const selected = page.locator('.mk-pricing-card--selected')
+    await expect(selected).toHaveCount(1)
+    await selected.scrollIntoViewIfNeeded()
+    const box = await selected.boundingBox()
+    expect(box).not.toBeNull()
+    expect(box!.x).toBeGreaterThanOrEqual(0)
+    expect(box!.x + box!.width).toBeLessThanOrEqual(viewportWidth)
+    await selectedSummary.getByRole('button').click()
+    expect(await noHScroll(page)).toBeLessThan(2)
+  }
+})
+
 test('faq toggles expand/collapse with aria state', async ({ page }) => {
-  await page.goto('/', { waitUntil: 'domcontentloaded' })
+  await page.goto('/', { waitUntil: 'commit' })
   const first = page.locator('.rich-faq-list details').first()
   const btn = first.locator('summary')
 
@@ -116,7 +167,7 @@ test('faq toggles expand/collapse with aria state', async ({ page }) => {
 })
 
 test('nav works: mobile menu toggles, desktop links visible', async ({ page }) => {
-  await page.goto('/', { waitUntil: 'domcontentloaded' })
+  await page.goto('/', { waitUntil: 'commit' })
   const toggle = page.locator('.landing-menu-toggle')
   await expect(toggle).toBeAttached()
 
@@ -124,8 +175,8 @@ test('nav works: mobile menu toggles, desktop links visible', async ({ page }) =
     await expect(page.locator('.landing-nav')).not.toHaveClass(/open/)
     await toggle.click()
     await expect(page.locator('.landing-nav')).toHaveClass(/open/)
-    await expect(page.locator('.landing-nav .landing-nav-link')).toHaveCount(4)
-    await expect(page.locator('.landing-nav .landing-nav-btn')).toHaveCount(3)
+    await expect(page.locator('.landing-nav .landing-nav-link')).toHaveCount(6)
+    await expect(page.locator('.landing-nav .landing-nav-btn')).toHaveCount(2)
     await toggle.click()
     await expect(page.locator('.landing-nav')).not.toHaveClass(/open/)
   } else {
@@ -134,29 +185,26 @@ test('nav works: mobile menu toggles, desktop links visible', async ({ page }) =
 })
 
 test('no horizontal overflow on the landing page', async ({ page }) => {
-  await page.goto('/', { waitUntil: 'domcontentloaded' })
+  await page.goto('/', { waitUntil: 'commit' })
   const overflow = await noHScroll(page)
   expect(overflow).toBeLessThan(20)
 })
 
 test('visual & style sanity: fonts, mockup, equal-height cards, reveal', async ({ page }) => {
-  await page.goto('/', { waitUntil: 'domcontentloaded' })
+  await page.goto('/', { waitUntil: 'commit' })
   await page.evaluate(() => (document as any).fonts?.ready)
 
-  // IBM Plex Sans Arabic actually loads and applies to the page.
+  // Cairo is the single Arabic-first family used across the application.
   const family = await page.locator('.landing').evaluate((el) => getComputedStyle(el as HTMLElement).fontFamily)
-  expect(family).toContain('IBM Plex Sans Arabic')
-  expect(await page.evaluate(() => document.fonts.check('700 16px "IBM Plex Sans Arabic"'))).toBe(true)
+  expect(family).toContain('Cairo')
 
-  // Hero product showcase is a CSS composition and must not leak fake merchant data.
-  await expect(page.locator('.stitch-hero-visual')).toBeVisible()
-  await expect(page.locator('.stitch-dashboard-tabs span')).toHaveCount(4)
-  await expect(page.locator('.stitch-order-float')).toBeVisible()
-  await expect(page.locator('.stitch-profit-float')).toBeVisible()
+  // Hero product showcase is a CSS composition and must not leak real merchant data.
+  await expect(page.locator('.landing-hero-visual').first()).toBeVisible()
+  await expect(page.locator('.landing-hero-visual img')).toHaveCount(1)
   await expect(page.locator('.landing')).not.toContainText('بيت الشاي')
 
   // Every feature card renders a decorative visual.
-  await expect(page.locator('.stitch-capability-card .stitch-capability-icon')).toHaveCount(4)
+  await expect(page.locator('.stitch-capability-card .stitch-capability-icon')).toHaveCount(6)
 
   // Feature cards in the same grid row share the same height (P5.1 alignment).
   const featureRows = await page.locator('.stitch-capability-card').evaluateAll((els) => {
@@ -192,14 +240,12 @@ test('visual & style sanity: fonts, mockup, equal-height cards, reveal', async (
     expect(Math.max(...ctaBottoms) - Math.min(...ctaBottoms)).toBeLessThanOrEqual(1)
   }
 
-  // The current approved composition renders rich sections directly.
-  await forceReveal(page)
-  await expect(page.locator('.stitch-rich-feature').last()).toBeVisible()
+  await expect(page.locator('.landing-final-cta')).toBeVisible()
 })
 
 test('prefers-reduced-motion: reveal visible and smooth-scroll disabled', async ({ page }) => {
   await page.emulateMedia({ reducedMotion: 'reduce' })
-  await page.goto('/', { waitUntil: 'domcontentloaded' })
+  await page.goto('/', { waitUntil: 'commit' })
   await page.evaluate(() => (document as any).fonts?.ready)
 
   await expect(page.locator('.stitch-hero')).toBeVisible()
@@ -212,7 +258,7 @@ test('auth pages render the split shell with no overflow', async ({ page }) => {
     await page.goto(path, { waitUntil: 'domcontentloaded' })
     await expect(page.locator('.auth-split')).toBeVisible()
     await expect(page.locator('.auth-panel')).toBeVisible()
-    await expect(page.locator('.auth-panel-top')).toContainText('M&K Store')
+    await expect(page.locator('.auth-panel-top .auth-panel-logo')).toHaveAttribute('aria-label', /Matjari/)
     await expect(page.locator('.auth-card')).toBeVisible()
     const overflow = await noHScroll(page)
     expect(overflow).toBeLessThan(20)
@@ -233,7 +279,7 @@ test('captures auth page screenshots at the project viewport', async ({ page }) 
 })
 
 test('captures landing screenshots at the project viewport', async ({ page }) => {
-  await page.goto('/', { waitUntil: 'domcontentloaded' })
+  await page.goto('/', { waitUntil: 'commit' })
   await forceReveal(page)
   const w = page.viewportSize()!.width
   await page.screenshot({ path: `e2e/shots/landing-${w}.png`, fullPage: true })
@@ -241,7 +287,7 @@ test('captures landing screenshots at the project viewport', async ({ page }) =>
   // Desktop project also records the 1024 tablet layout.
   if (w >= 1440) {
     await page.setViewportSize({ width: 1024, height: 800 })
-    await page.goto('/', { waitUntil: 'domcontentloaded' })
+    await page.goto('/', { waitUntil: 'commit' })
     await forceReveal(page)
     await page.screenshot({ path: 'e2e/shots/landing-1024.png', fullPage: true })
   }

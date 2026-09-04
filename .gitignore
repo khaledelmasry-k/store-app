@@ -3,6 +3,9 @@ dist/
 functions/lib/
 .env*
 !.env.production
+!.env.staging.example
+functions/.secret.local
+!functions/.secret.local.example
 server/prisma/dev.db
 server/prisma/dev.db-journal
 backups/

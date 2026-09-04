@@ -11,8 +11,10 @@ import { Avatar } from '../../shared/components/ui/Avatar'
 import { Input } from '../../shared/components/ui/Input'
 import { Select } from '../../shared/components/ui/Select'
 import { Badge } from '../../shared/components/ui/Badge'
+import { SmartImage } from '../../shared/components/ui/SmartImage'
 import { formatCurrency, formatDateTime } from '../../shared/utils/format'
-import { STATUS_LABELS, STATUS_COLORS } from '../../shared/utils/constants'
+import { EGYPT_CITIES_BY_GOVERNORATE, GOVER_EG, STATUS_LABELS, STATUS_COLORS } from '../../shared/utils/constants'
+import { visibleOrderStatusLabel, visibleOrderStatusTone } from '../../shared/utils/order-status'
 import { logout, resetPassword } from '../../shared/services/auth'
 import { useToast } from '../../shared/hooks/useToast'
 import { Icon } from '../../shared/components/ui/Icon'
@@ -26,9 +28,7 @@ const NAV_ITEMS = [
   { id: 'security', label: 'الأمان', icon: 'shield' },
 ] as const
 
-const GOVERNORATES = ['القاهرة', 'الإسكندرية', 'الجيزة', 'القليوبية', 'المنوفية', 'الغربية', 'الدقهلية', 'كفر الشيخ', 'الشرقية', 'دمياط', 'بورسعيد', 'الإسماعيلية', 'السويس', 'شمال سيناء', 'جنوب سيناء', 'البحر الأحمر', 'الفيوم', 'بني سويف', 'المنيا', 'أسيوط', 'سوهاج', 'قنا', 'الأقصر', 'أسوان', 'الوادي الجديد', 'مطروح', 'البحيرة', 'كفر الشيخ'] as const
-
-const GOVERNORATE_OPTIONS = [{ value: '', label: 'اختر المحافظة' }, ...GOVERNORATES.map(g => ({ value: g, label: g }))]
+const GOVERNORATE_OPTIONS = [{ value: '', label: 'اختر المحافظة' }, ...GOVER_EG.map(g => ({ value: g, label: g }))]
 
 export const StoreAccount: FunctionalComponent = () => {
   const { store } = useStore()
@@ -179,7 +179,7 @@ if (!user || user.role !== 'customer') {
                         <span className="order-row-date muted small">{formatDateTime(o.createdAt)}</span>
                       </div>
                       <div className="order-row-status">
-                        <Badge tone={STATUS_COLORS[o.status as keyof typeof STATUS_COLORS]}>{STATUS_LABELS[o.status as keyof typeof STATUS_LABELS] || o.status}</Badge>
+                        <Badge tone={visibleOrderStatusTone(o) as any}>{visibleOrderStatusLabel(o)}</Badge>
                         <span className="order-row-total">{formatCurrency(o.totalPrice)}</span>
                       </div>
                     </Link>
@@ -217,7 +217,7 @@ if (!user || user.role !== 'customer') {
                         <td><Link href={`/store/${store?.slug}/account/orders/${o.id}`} className="monospace">{o.orderNumber}</Link></td>
                         <td>{formatDateTime(o.createdAt)}</td>
                         <td>{formatCurrency(o.totalPrice)}</td>
-                        <td><Badge tone={STATUS_COLORS[o.status as keyof typeof STATUS_COLORS]}>{STATUS_LABELS[o.status as keyof typeof STATUS_LABELS] || o.status}</Badge></td>
+                        <td><Badge tone={visibleOrderStatusTone(o) as any}>{visibleOrderStatusLabel(o)}</Badge></td>
                         <td><Link href={`/store/${store?.slug}/account/orders/${o.id}`} className="btn btn-sm btn-outline">التفاصيل</Link></td>
                       </tr>
                     ))}
@@ -275,8 +275,10 @@ if (!user || user.role !== 'customer') {
                 <Input label="رقم الهاتف" value={newAddress.phone} onChange={(v) => setNewAddress({ ...newAddress, phone: v })} placeholder="01xxxxxxxxx" type="tel" />
               </div>
               <div className="form-grid">
-                <Select label="المحافظة" value={newAddress.governorate} onChange={(v) => setNewAddress({ ...newAddress, governorate: v })} placeholder="اختر المحافظة" options={GOVERNORATE_OPTIONS} />
-                <Input label="المدينة" value={newAddress.city} onChange={(v) => setNewAddress({ ...newAddress, city: v })} placeholder="المدينة" />
+                <Select label="المحافظة" value={newAddress.governorate} onChange={(v) => setNewAddress({ ...newAddress, governorate: v, city: '' })} placeholder="اختر المحافظة" options={GOVERNORATE_OPTIONS} />
+                {newAddress.governorate && EGYPT_CITIES_BY_GOVERNORATE[newAddress.governorate]?.length
+                  ? <Select label="المدينة" value={newAddress.city} onChange={(v) => setNewAddress({ ...newAddress, city: v })} placeholder="اختر المدينة" options={EGYPT_CITIES_BY_GOVERNORATE[newAddress.governorate].map((city) => ({ value: city, label: city }))} />
+                  : <Input label="المدينة" value={newAddress.city} onChange={(v) => setNewAddress({ ...newAddress, city: v })} placeholder="المدينة" />}
               </div>
               <Input label="العنوان بالتفصيل" value={newAddress.address} onChange={(v) => setNewAddress({ ...newAddress, address: v })} placeholder="الشارع، المبنى، الشقة" />
               <label className="checkbox-label">
@@ -295,7 +297,7 @@ if (!user || user.role !== 'customer') {
               <div className="wishlist-grid">
                 {wishlistProducts.map((product) => (
                   <Link key={product.id} href={`/store/${store?.slug}/product/${product.id}`} className="wishlist-card">
-                    {product.images?.[0] && <img src={product.images[0]} alt="" className="wishlist-card-image" />}
+                    <SmartImage src={product.images?.[0]} alt={product.name} className="wishlist-card-image" fallback="product" />
                     <span className="wishlist-card-name">{product.name}</span>
                     <span className="wishlist-card-price">{formatCurrency(product.price, store?.currency)}</span>
                   </Link>

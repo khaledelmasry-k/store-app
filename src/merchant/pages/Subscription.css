@@ -330,6 +330,10 @@
   padding: 28px;
   margin-bottom: 16px;
 }
+.subscription-summary-main {
+  flex: 1 1 0;
+  min-width: 0;
+}
 .subscription-summary-label {
   font-size: 14px;
   font-weight: 500;
@@ -469,3 +473,7 @@
   padding: 2px 6px;
   border-radius: 4px;
 }
+.subscription-offer-callout { display: flex; flex-direction: column; gap: 8px; margin-block-end: 18px; padding: 14px 16px; border: 1px solid color-mix(in srgb, var(--primary) 25%, transparent); border-radius: 14px; background: color-mix(in srgb, var(--primary) 7%, var(--surface-container-lowest)); }
+.subscription-offer-callout > strong { color: var(--primary); }
+.subscription-offer-callout > div { display: flex; align-items: center; gap: 14px; flex-wrap: wrap; }
+.subscription-offer-callout b { color: var(--text-on-surface); }

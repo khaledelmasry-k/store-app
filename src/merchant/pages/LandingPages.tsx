@@ -16,8 +16,9 @@ import { EmptyState } from '../../shared/components/ui/EmptyState'
 import { Loading } from '../../shared/components/ui/Loading'
 import { useStore } from '../../shared/hooks/useStore'
 import { useCollection } from '../../shared/hooks/useCollection'
+import { useSubscription } from '../../shared/hooks/useSubscription'
 import { useToast } from '../../shared/hooks/useToast'
-import { landingPagesService, landingSlugTaken, uniqueLandingSlug } from '../../shared/services/system'
+import { landingPagesService } from '../../shared/services/system'
 import { createLandingPageCallable } from '../../shared/services/auth'
 import { slugify, formatCurrency } from '../../shared/utils/format'
 import { storeBaseUrl } from '../../shared/utils/store-url'
@@ -120,6 +121,7 @@ export const MerchantLandingPages: FunctionalComponent = () => {
   const productsRes = useCollection<Product>('products', { storeId })
   const pages = pagesRes.data || []
   const products = productsRes.data || []
+  const { resourceUsage } = useSubscription(storeId)
   const toast = useToast()
   const [open, setOpen] = useState(false)
   const [deleteTarget, setDeleteTarget] = useState<LandingPage | null>(null)
@@ -127,7 +129,8 @@ export const MerchantLandingPages: FunctionalComponent = () => {
   const [query, setQuery] = useState('')
   const [statusFilter, setStatusFilter] = useState('')
 
-  if (pagesRes.loading || productsRes.loading) return <Loading />
+  if (!store) return <Loading message="جارٍ تحميل بيانات المتجر..." />
+  if (pagesRes.loading || productsRes.loading) return <Loading message="جارٍ تحميل صفحات الهبوط..." />
 
   const publicUrl = (slug: string) => `${storeBaseUrl()}/landing/${slug}`
 
@@ -142,11 +145,6 @@ export const MerchantLandingPages: FunctionalComponent = () => {
       return
     }
     const slug = (form.slug.trim() || slugify(form.title) || 'page').toLowerCase()
-    const slugTaken = await landingSlugTaken(slug, form.id)
-    if (slugTaken) {
-      toast.push('رابط الصفحة مستخدم مسبقاً', 'اختر رابطاً آخر أو اتركه فارغاً ليُنشأ تلقائياً', 'error')
-      return
-    }
     const payload: Omit<LandingPage, 'id' | 'storeId'> = {
       slug,
       title: form.title.trim(),
@@ -197,13 +195,26 @@ export const MerchantLandingPages: FunctionalComponent = () => {
       setOpen(false)
       setForm(emptyDraft())
     } catch (err: any) {
-      toast.push('فشل حفظ الصفحة', err?.message || 'حدث خطأ غير متوقع', 'error')
+      const message = String(err?.message || '')
+      if (message.includes('مستخدم') || message.includes('already-exists')) {
+        toast.push('رابط الصفحة مستخدم مسبقاً', 'اختر رابطاً آخر أو اتركه فارغاً ليُنشأ تلقائياً', 'error')
+      } else {
+        toast.push('فشل حفظ الصفحة', message || 'حدث خطأ غير متوقع', 'error')
+      }
     }
   }
 
   const duplicate = async (p: LandingPage) => {
     const payload = draftFromPage(p)
-    payload.slug = await uniqueLandingSlug(`${p.slug || slugify(p.title) || 'page'}-copy`, p.id)
+    // Public/global slug queries are intentionally not readable from the
+    // merchant client. Generate a collision-resistant copy candidate locally;
+    // the createLandingPage callable remains the authority that validates the
+    // global slug and rejects any rare collision transactionally.
+    const copyBase = `${p.slug || slugify(p.title) || 'page'}-copy`
+    const suffix = typeof crypto !== 'undefined' && typeof crypto.randomUUID === 'function'
+      ? crypto.randomUUID().slice(0, 8)
+      : Math.random().toString(36).slice(2, 10)
+    payload.slug = `${copyBase}-${suffix}`
     payload.title = `${p.title} (نسخة)`
     payload.status = 'draft'
     try {
@@ -273,6 +284,8 @@ export const MerchantLandingPages: FunctionalComponent = () => {
   const totalPublished = pages.filter((p) => p.status === 'published' && p.active).length
   const totalViews = pages.reduce((s, p) => s + (p.views || 0), 0)
   const totalRevenue = pages.reduce((s, p) => s + (p.totalRevenue || 0), 0)
+  const pageUsage = resourceUsage?.landingPages
+  const pageLimitReached = Boolean(pageUsage && pageUsage.limit > 0 && pageUsage.used >= pageUsage.limit)
 
   const productName = (id?: string | null) => products.find((p) => p.id === id)?.name || 'غير محدد'
   const templateName = (id?: string) => STORE_TEMPLATES.find((t) => t.id === id)?.name || 'مودرن'
@@ -284,7 +297,7 @@ export const MerchantLandingPages: FunctionalComponent = () => {
 
   return (
     <div className="merchant-operations merchant-landing-pages-page">
-      <PageHeader title="صفحات الهبوط" subtitle={`${pages.length} صفحة`} actions={<Button icon="add" onClick={() => openEditor()}>صفحة جديدة</Button>} />
+      <PageHeader title="صفحات الهبوط" subtitle={`${pageUsage?.used ?? pages.length}${pageUsage?.limit ? ` / ${pageUsage.limit}` : ''} صفحة`} actions={<Button icon="add" disabled={pageLimitReached} onClick={() => openEditor()}>صفحة جديدة</Button>} />
 
       <div className="stats-grid">
         <StatsCard title="إجمالي الصفحات" value={pages.length} icon="layers" tone="primary" />

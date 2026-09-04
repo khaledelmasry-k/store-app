@@ -3,8 +3,8 @@ import { useEffect, useRef, useState } from 'preact/hooks'
 import { Link } from 'wouter'
 import type { Category, ColorOption, Product, ProductCost, ProductVariant, QuantityPricingStrategy, QuantityTier } from '../../shared/types'
 import { legacyVariantId } from '../../shared/types'
-import { productsService, productCostsService } from '../../shared/services/products'
-import { createProductCallable } from '../../shared/services/auth'
+import { productCostsService } from '../../shared/services/products'
+import { createProductCallable, updateProductCallable } from '../../shared/services/auth'
 import { useToast } from '../../shared/hooks/useToast'
 import { useSubscription } from '../../shared/hooks/useSubscription'
 import { useDocument } from '../../shared/hooks/useDocument'
@@ -50,13 +50,14 @@ interface Draft {
   sizes: string[]
   variants: ProductVariant[]
   active: boolean
+  isFeatured: boolean
 }
 
 function draftFrom(initial?: Product | null): Draft {
   if (!initial) {
     return {
       name: '', sku: '', description: '', categoryId: '', price: '', oldPrice: '', stock: '0',
-      lowStockThreshold: '5', pricingMode: 'standard', quantityTiers: [], quantityPricingStrategy: 'cap', images: [], colorOptions: [], sizes: [], variants: [], active: true,
+      lowStockThreshold: '5', pricingMode: 'standard', quantityTiers: [], quantityPricingStrategy: 'cap', images: [], colorOptions: [], sizes: [], variants: [], active: true, isFeatured: false,
     }
   }
   const colorOptions: ColorOption[] =
@@ -82,6 +83,7 @@ function draftFrom(initial?: Product | null): Draft {
     sizes: [...(initial.sizes || [])],
     variants: (initial.variants || []).map((v) => ({ ...v })),
     active: initial.active ?? true,
+    isFeatured: initial.isFeatured ?? initial.featured ?? false,
   }
 }
 
@@ -120,9 +122,11 @@ export const ProductForm: FunctionalComponent<Props> = ({ storeId, initial, cate
   // Private cost price — loaded from the separate `productCosts` collection so
   // it never travels through the public `products` document.
   const [costPrice, setCostPrice] = useState('')
+  const [estimatedAdCost, setEstimatedAdCost] = useState('0')
   const { data: costDoc } = useDocument<ProductCost>('productCosts', initial?.id || null)
   useEffect(() => {
     if (costDoc && typeof costDoc.costPrice === 'number') setCostPrice(String(costDoc.costPrice))
+    if (costDoc && typeof costDoc.estimatedAdCostPerSale === 'number') setEstimatedAdCost(String(costDoc.estimatedAdCostPerSale))
   }, [costDoc])
 
   const set = (patch: Partial<Draft>) => setDraft((prev) => ({ ...prev, ...patch }))
@@ -168,6 +172,7 @@ export const ProductForm: FunctionalComponent<Props> = ({ storeId, initial, cate
       stock: variants.length > 0 ? variantTotal : Number(draft.stock || 0),
       lowStockThreshold: Number(draft.lowStockThreshold || 5),
       active: draft.active,
+      isFeatured: draft.isFeatured,
     }
   }
 
@@ -198,12 +203,17 @@ export const ProductForm: FunctionalComponent<Props> = ({ storeId, initial, cate
         return
       }
     }
+    const adCostNum = estimatedAdCost === '' ? 0 : Number(estimatedAdCost)
+    if (!Number.isFinite(adCostNum) || adCostNum < 0) {
+      setError('أدخل تكلفة إعلان صحيحة (قيمة 0 أو أكثر)')
+      return
+    }
     setError('')
     setSavingAction(action)
     try {
       const data = { ...buildData(), active: activeOverride ?? draft.active }
       if (initial) {
-        await productsService.update(initial.id, data)
+        await updateProductCallable({ storeId, productId: initial.id, data })
         toast.push('تم تحديث المنتج')
       } else {
         const productId = getProductId()
@@ -213,8 +223,8 @@ export const ProductForm: FunctionalComponent<Props> = ({ storeId, initial, cate
       // Persist the private cost price separately from the public product doc.
       const productId = getProductId()
       const costNum = costPrice === '' ? null : Number(costPrice)
-      if (costNum != null && Number.isFinite(costNum)) {
-        await productCostsService.set(productId, storeId, { costPrice: costNum })
+      if ((costNum != null && Number.isFinite(costNum)) || adCostNum > 0) {
+        await productCostsService.set(productId, storeId, { costPrice: costNum ?? 0, estimatedAdCostPerSale: adCostNum, estimatedAdCostMode: 'per_order' })
       } else if (initial) {
         try {
           await productCostsService.remove(initial.id)
@@ -246,6 +256,8 @@ export const ProductForm: FunctionalComponent<Props> = ({ storeId, initial, cate
         </div>
         <div className="product-editor-publish-toggle">
           <Toggle checked={draft.active} onChange={(v) => set({ active: v })} label="نشط / منشور" />
+          <Toggle checked={draft.isFeatured} onChange={(v) => set({ isFeatured: v })} label="منتج مميز" />
+          <span className="field-hint">سيظهر المنتج في قسم المنتجات المميزة داخل واجهة المتجر.</span>
         </div>
       </div>
       {error && <div className="form-error-banner">{error}</div>}
@@ -290,7 +302,16 @@ export const ProductForm: FunctionalComponent<Props> = ({ storeId, initial, cate
           onChange={setCostPrice}
           hint="سعر التكلفة خاص بك ولن يظهر للعملاء."
         />
-        <ProfitSummary draft={draft} costPrice={costPrice} />
+        <Input
+          label="تكلفة الإعلان لكل عملية بيع"
+          type="number"
+          min={0}
+          step="0.01"
+          value={estimatedAdCost}
+          onChange={setEstimatedAdCost}
+          hint="قيمة تقديرية لما تنفقه على الإعلان للحصول على عملية بيع لهذا المنتج."
+        />
+        <ProfitSummary draft={draft} costPrice={costPrice} estimatedAdCost={estimatedAdCost} />
         <Select
           label="طريقة التسعير"
           value={draft.pricingMode}
@@ -394,10 +415,11 @@ export const ProductForm: FunctionalComponent<Props> = ({ storeId, initial, cate
  * pricing is used — the profit of every bundle tier based on its ACTUAL total
  * price (never `qty × base price`).
  */
-function ProfitSummary({ draft, costPrice }: { draft: Draft; costPrice: string }) {
+function ProfitSummary({ draft, costPrice, estimatedAdCost }: { draft: Draft; costPrice: string; estimatedAdCost: string }) {
   const unitPrice = Number(draft.price) || 0
   const costValid = costPrice !== '' && Number.isFinite(Number(costPrice)) && Number(costPrice) >= 0
   const cost = costValid ? Number(costPrice) : null
+  const adCost = Number.isFinite(Number(estimatedAdCost)) && Number(estimatedAdCost) >= 0 ? Number(estimatedAdCost) : 0
 
   if (!costValid) {
     return (
@@ -412,16 +434,18 @@ function ProfitSummary({ draft, costPrice }: { draft: Draft; costPrice: string }
   }
 
   const unitProfit = unitPrice - (cost as number)
+  const contributionProfit = unitProfit - adCost
   const margin = profitMargin(unitProfit, unitPrice)
   const profitTone = unitProfit < 0 ? 'negative' : 'positive'
 
-  const tierRows: { qty: number; price: number; profit: number }[] = draft.pricingMode === 'quantity'
+  const tierRows: { qty: number; price: number; profit: number; contribution: number }[] = draft.pricingMode === 'quantity'
     ? draft.quantityTiers
         .filter((t) => Number.isFinite(t.price))
         .map((t) => ({
           qty: t.quantity,
           price: t.price,
           profit: lineProfit(unitPrice, t.quantity, cost as number, 'quantity', draft.quantityTiers, draft.quantityPricingStrategy),
+          contribution: lineProfit(unitPrice, t.quantity, cost as number, 'quantity', draft.quantityTiers, draft.quantityPricingStrategy) - adCost,
         }))
     : []
 
@@ -445,8 +469,12 @@ function ProfitSummary({ draft, costPrice }: { draft: Draft; costPrice: string }
         <strong>{formatCurrency(cost as number)}</strong>
       </div>
       <div className="cost-profit-summary-row is-profit">
-        <span>الربح للوحدة</span>
+        <span>الربح قبل الإعلان</span>
         <strong>{formatCurrency(unitProfit)}</strong>
+      </div>
+      <div className="cost-profit-summary-row is-profit">
+        <span>الربح التقديري بعد الإعلان</span>
+        <strong>{formatCurrency(contributionProfit)}</strong>
       </div>
       {tierRows.length > 0 && (
         <div className="cost-profit-tiers">
@@ -454,7 +482,7 @@ function ProfitSummary({ draft, costPrice }: { draft: Draft; costPrice: string }
           {tierRows.map((t) => (
             <div key={t.qty} className="cost-profit-summary-row">
               <span>{t.qty} {piecesLabel(t.qty)}</span>
-              <strong>{formatCurrency(t.profit)}</strong>
+              <strong>{formatCurrency(t.profit)} قبل / {formatCurrency(t.contribution)} بعد الإعلان</strong>
             </div>
           ))}
         </div>

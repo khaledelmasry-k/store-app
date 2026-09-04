@@ -288,9 +288,10 @@ export const MerchantCustomers: FunctionalComponent = () => {
                   <p className="muted small">لم يضع هذا العميل أي طلبات بعد.</p>
                 ) : (
                   detailOrders.slice(0, 3).map((o) => {
-                    const status = STATUS_LABELS[o.status as keyof typeof STATUS_LABELS] || o.status
-                    const isDelivered = o.status === 'DELIVERED'
-                    const tone = STATUS_COLORS[o.status as keyof typeof STATUS_COLORS] || 'slate'
+                    const displayStatus = String(o.shipmentStatus || '').toUpperCase() === 'FAILED' ? 'FAILED' : o.status
+                    const status = displayStatus === 'FAILED' ? 'تعذر التسليم' : (STATUS_LABELS[o.status as keyof typeof STATUS_LABELS] || o.status)
+                    const isDelivered = displayStatus === 'DELIVERED'
+                    const tone = displayStatus === 'FAILED' ? 'red' : (STATUS_COLORS[o.status as keyof typeof STATUS_COLORS] || 'slate')
                     return (
                       <a key={o.id} className="cust-order-row" href={`/dashboard/orders/${o.id}`}>
                         <span className="cust-order-icon"><Icon name={isDelivered ? 'check_circle' : 'local_shipping'} ariaHidden /></span>

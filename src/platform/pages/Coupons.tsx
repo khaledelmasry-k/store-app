@@ -15,7 +15,7 @@ import { Select } from '../../shared/components/ui/Select'
 import { useCollection } from '../../shared/hooks/useCollection'
 import { useToast } from '../../shared/hooks/useToast'
 import { couponsService } from '../../shared/services/billing'
-import { formatDate, formatCurrency } from '../../shared/utils/format'
+import { formatDate, formatCurrency, normalizeDate } from '../../shared/utils/format'
 import type { Coupon } from '../../shared/types'
 
 export const PlatformCoupons: FunctionalComponent = () => {
@@ -26,14 +26,18 @@ export const PlatformCoupons: FunctionalComponent = () => {
   const coupons = couponsRes.data
   const toast = useToast()
   const [open, setOpen] = useState(false)
-  const [form, setForm] = useState<Partial<Coupon>>({ type: 'percent' })
+  const [form, setForm] = useState<Partial<Coupon>>({ type: 'percent', active: true })
 
-  const activeCount = coupons.filter((c) => c.active).length
-  const expiredCount = coupons.filter((c) => !c.active).length
+  const expired = (coupon: Coupon) => {
+    const date = normalizeDate(coupon.expiresAt)
+    return !!date && date.getTime() <= Date.now()
+  }
+  const activeCount = coupons.filter((c) => c.active && !expired(c)).length
+  const expiredCount = coupons.filter(expired).length
 
   const submit = async () => {
-    if (!storeId || !form.code) {
-      toast.push('اختر المتجر وأدخل الكود', undefined, 'error')
+    if (!storeId || !form.code || !Number(form.value || 0)) {
+      toast.push('اختر المتجر وأدخل الكود والقيمة', undefined, 'error')
       return
     }
     await couponsService.create(storeId, {
@@ -44,10 +48,11 @@ export const PlatformCoupons: FunctionalComponent = () => {
       maxUses: Number(form.maxUses || 0),
       usedCount: 0,
       active: true,
+      expiresAt: form.expiresAt,
     })
     toast.push('تم إنشاء الكوبون')
     setOpen(false)
-    setForm({ type: 'percent' })
+    setForm({ type: 'percent', active: true })
   }
 
   if (storesRes.loading) return <Loading />
@@ -79,8 +84,8 @@ export const PlatformCoupons: FunctionalComponent = () => {
               { key: 'type', header: 'النوع', render: (c: Coupon) => <Badge tone={c.type === 'percent' ? 'violet' : 'blue'}>{c.type === 'percent' ? '%' : 'مبلغ'}</Badge> },
               { key: 'value', header: 'القيمة', render: (c: Coupon) => c.type === 'percent' ? `${c.value}%` : formatCurrency(c.value) },
               { key: 'usedCount', header: 'الاستخدام' },
-              { key: 'active', header: 'الحالة', render: (c: Coupon) => <Badge tone={c.active ? 'green' : 'slate'}>{c.active ? 'نشط' : 'موقوف'}</Badge> },
-              { key: 'expiresAt', header: 'الانتهاء', render: (c: Coupon) => <span className="muted">{formatDate(c.expiresAt)}</span> },
+              { key: 'active', header: 'الحالة', render: (c: Coupon) => <Badge tone={expired(c) ? 'red' : c.active ? 'green' : 'slate'}>{expired(c) ? 'منتهي' : c.active ? 'نشط' : 'موقوف'}</Badge> },
+              { key: 'expiresAt', header: 'الانتهاء', render: (c: Coupon) => <span className="muted">{c.expiresAt ? formatDate(c.expiresAt) : 'بلا انتهاء'}</span> },
             ]}
             rows={coupons}
           />
@@ -98,6 +103,7 @@ export const PlatformCoupons: FunctionalComponent = () => {
           <Input label="حد أدنى للطلب" type="number" value={form.minOrder || ''} onChange={(v) => setForm({ ...form, minOrder: Number(v) })} />
           <Input label="حد الاستخدام" type="number" value={form.maxUses || ''} onChange={(v) => setForm({ ...form, maxUses: Number(v) })} />
         </div>
+        <Input label="تاريخ الانتهاء (اختياري)" type="date" value={typeof form.expiresAt === 'string' ? form.expiresAt : ''} onChange={(v) => setForm({ ...form, expiresAt: v || undefined } as any)} />
       </Modal>
     </div>
   )

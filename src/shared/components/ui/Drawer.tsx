@@ -10,9 +10,10 @@ interface Props {
   children?: any
   side?: 'right' | 'left'
   size?: 'md' | 'lg'
+  className?: string
 }
 
-export const Drawer: FunctionalComponent<Props> = ({ open, onClose, title, children, side = 'right', size = 'md' }) => {
+export const Drawer: FunctionalComponent<Props> = ({ open, onClose, title, children, side = 'right', size = 'md', className }) => {
   useEffect(() => {
     if (!open) return
     const onKey = (e: KeyboardEvent) => {
@@ -30,10 +31,10 @@ export const Drawer: FunctionalComponent<Props> = ({ open, onClose, title, child
   return (
     <Fragment>
       <div className="modal-backdrop" onClick={onClose} />
-      <div className={clsx('drawer', `drawer-${side}`, size === 'lg' && 'drawer-lg')} role="dialog" aria-modal="true">
+      <div className={clsx('drawer', `drawer-${side}`, size === 'lg' && 'drawer-lg', className)} role="dialog" aria-modal="true">
         <div className="modal-head">
           <h3 className="modal-title">{title}</h3>
-          <button className="icon-btn" onClick={onClose} type="button">
+          <button className="icon-btn" onClick={onClose} type="button" aria-label="إغلاق اللوحة" title="إغلاق">
             <Icon name="close" />
           </button>
         </div>

@@ -13,6 +13,7 @@ interface Props {
   icon?: string
   iconOnly?: boolean
   type?: 'button' | 'submit'
+  form?: string
   disabled?: boolean
   className?: string
   onClick?: (e: MouseEvent) => void
@@ -28,6 +29,7 @@ export const Button: FunctionalComponent<Props> = ({
   icon,
   iconOnly = false,
   type = 'button',
+  form,
   disabled,
   className,
   onClick,
@@ -36,6 +38,7 @@ export const Button: FunctionalComponent<Props> = ({
 }) => (
   <button
     type={type}
+    form={form}
     className={clsx('btn', `btn-${variant}`, `btn-${size}`, block && 'btn-block', iconOnly && 'btn-icon-only', className)}
     disabled={disabled || loading}
     onClick={onClick}

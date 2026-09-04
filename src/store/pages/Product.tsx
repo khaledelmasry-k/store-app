@@ -16,7 +16,9 @@ import { setSeo } from '../../shared/utils/seo'
 import type { Product, WishlistItem } from '../../shared/types'
 import { Icon } from '../../shared/components/ui/Icon'
 import { StoreProductCard } from '../components/StoreProductCard'
+import { getTemplate } from '../../shared/utils/themes'
 import { wishlistService } from '../../shared/services/system'
+import { storeBaseUrl } from '../../shared/utils/store-url'
 
 interface Props {
   id: string
@@ -49,9 +51,9 @@ export const StoreProduct: FunctionalComponent<Props> = ({ id }) => {
     const price = product.price ? ` — ${formatCurrency(product.price, store.currency)}` : ''
     setSeo({
       title: `${product.name}${price} | ${store.name}`,
-      description: product.description || `تسوق ${product.name} من ${store.name} على منصة M&K`,
+      description: product.description || `تسوق ${product.name} من ${store.name} على منصة متجري`,
       type: 'product',
-      url: `${window.location.origin}/store/${store.slug}/product/${product.id}`,
+      url: `${storeBaseUrl()}/store/${store.slug}/product/${product.id}`,
       image: (product.images && product.images[0]) || store.logo || null,
     })
   // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -74,8 +76,15 @@ export const StoreProduct: FunctionalComponent<Props> = ({ id }) => {
 
   const images = product.images || []
   const hasVariants = (product.variants || []).length > 0
-  const requiresColor = hasVariants && (product.colors || []).length > 0
-  const requiresSize = hasVariants && (product.sizes || []).length > 0
+  // Older products may only persist color/size on each variant and leave the
+  // denormalized `colors`/`sizes` arrays empty. Derive the option lists so the
+  // storefront can still select a concrete SKU and send its variantId.
+  const variantColors = Array.from(new Set((product.variants || []).map((v) => v.color).filter(Boolean))) as string[]
+  const variantSizes = Array.from(new Set((product.variants || []).map((v) => v.size).filter(Boolean))) as string[]
+  const colorValues = (product.colors && product.colors.length > 0) ? product.colors : variantColors
+  const sizeValues = (product.sizes && product.sizes.length > 0) ? product.sizes : variantSizes
+  const requiresColor = hasVariants && colorValues.length > 0
+  const requiresSize = hasVariants && sizeValues.length > 0
   const selectionComplete = (!requiresColor || !!color) && (!requiresSize || !!size)
 
   const isQuantity = product.pricingMode === 'quantity'
@@ -88,7 +97,11 @@ export const StoreProduct: FunctionalComponent<Props> = ({ id }) => {
   const variant = hasVariants && selectionComplete ? findVariant(product, { color, size }) : undefined
   const selectedStock = selectionComplete ? variantStock(product, color, size, variant?.id) : totalStock
 
-  const displayPrice = hasVariants && selectionComplete ? variantPrice(product, color, size, variant?.id) : product.price
+  // Quantity tiers represent bundle totals. Keep the displayed amount in sync
+  // with the shared pricing resolver used for cart/order snapshots.
+  const displayPrice = isQuantity
+    ? productUnitPrice(product, variant, qty)
+    : (hasVariants && selectionComplete ? variantPrice(product, color, size, variant?.id) : product.price)
   const unitPrice = productUnitPrice(product, variant, qty)
   const activeTier = tierForQuantity(product.quantityTiers, qty)
   const outOfStock = selectedStock <= 0
@@ -99,7 +112,7 @@ export const StoreProduct: FunctionalComponent<Props> = ({ id }) => {
       ? Math.round(((product.oldPrice - displayPrice) / product.oldPrice) * 100)
       : 0
 
-  const colorOptions = product.colorOptions && product.colorOptions.length ? product.colorOptions : (product.colors || []).map((n) => ({ name: n, hex: '#6366f1' }))
+  const colorOptions = product.colorOptions && product.colorOptions.length ? product.colorOptions : colorValues.map((n) => ({ name: n, hex: '#6366f1' }))
 
   const selectColor = (c: string) => {
     setColor(c)
@@ -164,7 +177,7 @@ export const StoreProduct: FunctionalComponent<Props> = ({ id }) => {
   }
 
   return (
-    <div className="storefront-page storefront-product storefront-product--stitch">
+    <div className={`storefront-page storefront-product storefront-product--stitch product-layout-${getTemplate(store?.theme?.template).layout.productPage}`}>
       <nav className="store-crumb" aria-label="خيط البيان">
         <Link href={`/store/${store?.slug}`}>الرئيسية</Link>
         <Icon name="chevron_left" ariaHidden />
@@ -175,8 +188,7 @@ export const StoreProduct: FunctionalComponent<Props> = ({ id }) => {
 
       <div className="product-detail">
         <div className="product-gallery">
-          {images.length > 0 && (
-            <>
+          <>
               <div className="product-gallery-main">
                 <SmartImage
                   src={images[displayIndex] || images[0]}
@@ -184,6 +196,7 @@ export const StoreProduct: FunctionalComponent<Props> = ({ id }) => {
                   className={`product-detail-img${store?.theme?.imageFit === 'cover' ? ' product-detail-img--cover' : ''}`}
                   placeholderClassName="product-detail-img"
                   loading="eager"
+                  fallback="product"
                 />
                 {discount > 0 && <span className="product-badge product-badge--sale">خصم {discount}%</span>}
               </div>
@@ -191,13 +204,12 @@ export const StoreProduct: FunctionalComponent<Props> = ({ id }) => {
                 <div className="product-gallery-thumbs">
                   {images.map((src, i) => (
                     <button key={i} type="button" className={`gallery-thumb${i === displayIndex ? ' gallery-thumb--active' : ''}`} onClick={() => setDisplayIndex(i)}>
-                      <SmartImage src={src} alt="" placeholderClassName="gallery-thumb-fallback" />
+                      <SmartImage src={src} alt="" placeholderClassName="gallery-thumb-fallback" fallback="product" />
                     </button>
                   ))}
                 </div>
               )}
-            </>
-          )}
+          </>
         </div>
 
         <div className="product-info product-info--purchase">
@@ -247,7 +259,7 @@ export const StoreProduct: FunctionalComponent<Props> = ({ id }) => {
                   <span className="field-hint">دليل المقاسات</span>
                 </div>
                 <div className="flex flex-wrap mt-1">
-                  {(product.sizes || []).map((s) => {
+                  {sizeValues.map((s) => {
                     const disabled = hasVariants && !sizeInStock(product, color, s)
                     return (
                       <button
@@ -315,7 +327,7 @@ export const StoreProduct: FunctionalComponent<Props> = ({ id }) => {
           <div className="product-trust">
             <div className="product-trust-item">
               <Icon name="local_shipping" ariaHidden />
-              <div><h4>الشحن</h4><p>{store?.shipping?.freeAbove ? `توصيل مجاني للطلبات فوق ${formatCurrency(store.shipping.freeAbove, store?.currency)}` : 'رسوم الشحن تُحسب حسب الوجهة عند إتمام الطلب'}</p></div>
+              <div><h4>الشحن</h4><p>تُحسب رسوم الشحن وتظهر خيارات الخدمة حسب الوجهة عند إتمام الطلب.</p></div>
             </div>
             <div className="product-trust-item">
               <Icon name="support_agent" ariaHidden />

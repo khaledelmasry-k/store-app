@@ -438,6 +438,25 @@
     overflow-y: visible;
   }
 }
+
+/* Keep the editor action strip intact on phones: controls wrap into two
+   deliberate rows instead of letting the save button fall outside the view. */
+@media (max-width: 760px) {
+  .merchant-themes-page .theme-header-meta {
+    width: 100%;
+    flex-wrap: wrap;
+    justify-content: flex-start;
+  }
+  .merchant-themes-page .theme-save-state {
+    flex: 1 1 120px;
+    min-width: 0;
+  }
+  .merchant-themes-page .theme-preview-link {
+    min-height: 44px;
+    padding-inline: 14px;
+  }
+  .merchant-themes-page .theme-studio { gap: 14px; }
+}
 /* ── Stitch header actions: history / preview / save ─────────────────────── */
 .merchant-themes-page .theme-header-meta {
   gap: 10px;

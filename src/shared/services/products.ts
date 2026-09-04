@@ -31,7 +31,7 @@ export const productsService = {
 export const productCostsService = {
   list: (storeId: string) => listDocs<ProductCost>(COST_PATH, { storeId }),
   get: (id: string) => getDocById<ProductCost>(COST_PATH, id),
-  set: (productId: string, storeId: string, data: Pick<ProductCost, 'costPrice'> & Partial<Pick<ProductCost, 'variantCosts'>>) =>
+  set: (productId: string, storeId: string, data: Pick<ProductCost, 'costPrice'> & Partial<Pick<ProductCost, 'variantCosts' | 'estimatedAdCostPerSale' | 'estimatedAdCostMode'>>) =>
     setDocById<ProductCost>(COST_PATH, productId, { storeId, ...data }),
   remove: (productId: string) => deleteDocById(COST_PATH, productId),
 }

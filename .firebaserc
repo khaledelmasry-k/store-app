@@ -1,7 +1,16 @@
 {
   "projects": {
-    "default": "mk-store-app"
+    "default": "mk-store-app",
+    "production": "mk-store-app"
   },
-  "targets": {},
+  "targets": {
+    "mk-store-app": {
+      "hosting": {
+        "mk-store-app": [
+          "mk-store-app"
+        ]
+      }
+    }
+  },
   "etags": {}
 }

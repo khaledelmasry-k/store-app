@@ -1,14 +1,14 @@
 import { FunctionalComponent } from 'preact'
-import { useState } from 'preact/hooks'
+import { useEffect, useState } from 'preact/hooks'
 import { Link } from 'wouter'
 import { Button } from '../../shared/components/ui/Button'
 import { PageHeader } from '../../shared/components/ui/PageHeader'
 import { useStore } from '../../shared/hooks/useStore'
 import { useAuth } from '../../shared/hooks/useAuth'
+import { useCollectionOnce } from '../../shared/hooks/useCollectionOnce'
 import { useCollection } from '../../shared/hooks/useCollection'
 import { useSubscription } from '../../shared/hooks/useSubscription'
 import { useToast } from '../../shared/hooks/useToast'
-import { Loading } from '../../shared/components/ui/Loading'
 import './Dashboard.css'
 import { EmptyState } from '../../shared/components/ui/EmptyState'
 import { formatCurrency, formatNumber, timeAgo } from '../../shared/utils/format'
@@ -16,9 +16,11 @@ import { getPlanLimit, isPlanLimitUnlimited, usageFrom } from '../../shared/serv
 import { orderItemRevenue } from '../../shared/utils/pricing'
 import { storePublicUrl } from '../../shared/utils/store-url'
 import { STATUS_LABELS } from '../../shared/utils/constants'
-import { setStorePublishedCallable } from '../../shared/services/auth'
-import type { Order, Product, ProductCost } from '../../shared/types'
+import { visibleOrderStatus, visibleOrderStatusLabel } from '../../shared/utils/order-status'
+import { setStorePublishedCallable, getEligiblePromotionsCallable } from '../../shared/services/auth'
+import type { Order, Product, ProductCost, Shipment } from '../../shared/types'
 import { Icon } from '../../shared/components/ui/Icon'
+import { CountdownTimer } from '../../shared/components/subscription/CountdownTimer'
 
 const SUB_STATUS_LABELS: Record<string, string> = {
   active: 'نشط',
@@ -44,34 +46,47 @@ export const MerchantDashboard: FunctionalComponent = () => {
   const { user } = useAuth()
   const toast = useToast()
   const storeId = store?.id || ''
-  const [publishing, setPublishing] = useState(false)
-
   const isOwner = user?.role === 'merchant'
+  const [publishing, setPublishing] = useState(false)
+  const [promotions, setPromotions] = useState<any[]>([])
+  const [promotionNow, setPromotionNow] = useState(Date.now())
+  const [secondaryReady, setSecondaryReady] = useState(false)
+  useEffect(() => {
+    let cancelled = false
+    const schedule = window.setTimeout(() => { if (!cancelled) setSecondaryReady(true) }, 0)
+    return () => {
+      cancelled = true
+      window.clearTimeout(schedule)
+    }
+  }, [])
+  useEffect(() => {
+    if (!secondaryReady || !storeId || !isOwner) return
+    getEligiblePromotionsCallable({ storeId }).then((r: any) => setPromotions(r.data?.promotions || [])).catch(() => setPromotions([]))
+  }, [secondaryReady, storeId, isOwner])
+  useEffect(() => { const id = window.setInterval(() => setPromotionNow(Date.now()), 60000); return () => window.clearInterval(id) }, [])
+
   const perms = user?.permissions || []
   const canOrders = isOwner || perms.includes('orders:view')
   const canProducts = isOwner || perms.includes('products:view')
   const canCustomers = isOwner || perms.includes('customers:view')
   const canAnalytics = isOwner || perms.includes('reports:view')
 
-  const ordersRes = useCollection<Order>('orders', { storeId, orderBy: { field: 'createdAt' } }, canOrders)
-  const productsRes = useCollection<Product>('products', { storeId }, canProducts)
-  const costsRes = useCollection<ProductCost>('productCosts', { storeId }, canProducts)
-  const customersRes = useCollection('customers', { storeId }, canCustomers)
-  const teamRes = useCollection<any>('team', { storeId }, isOwner)
+  const ordersRes = useCollectionOnce<Order>('orders', { storeId, orderBy: { field: 'createdAt' } }, secondaryReady && canOrders)
+  const productsRes = useCollectionOnce<Product>('products', { storeId }, secondaryReady && canProducts)
+  const costsRes = useCollectionOnce<ProductCost>('productCosts', { storeId }, secondaryReady && canProducts)
+  const customersRes = useCollectionOnce('customers', { storeId }, secondaryReady && canCustomers)
+  // Shipping is live so the dashboard reflects carrier updates without a reload.
+  const shipmentsRes = useCollection<Shipment>('shipments', { storeId }, secondaryReady && canOrders)
 
   const orders = ordersRes.data
   const products = productsRes.data
   const customers = customersRes.data
+  const shipments = shipmentsRes.data
 
   const subState = useSubscription(isOwner ? storeId : '')
   const subscription = subState.subscription
   const plan = subState.plan
   const subStatus = subState.status
-  const trialRemaining = subState.trialRemaining
-
-  if (ordersRes.loading || productsRes.loading || costsRes.loading || customersRes.loading || teamRes.loading) {
-    return <Loading />
-  }
 
   const dayStart = new Date()
   dayStart.setHours(0, 0, 0, 0)
@@ -106,17 +121,21 @@ export const MerchantDashboard: FunctionalComponent = () => {
   }
   const profitMargin = deliveredRevenue > 0 && hasAnyCost ? (totalProfit / deliveredRevenue) * 100 : 0
   const avgOrderValue = deliveredCount > 0 ? deliveredRevenue / deliveredCount : 0
+  const deliveredShipments = shipments.filter((shipment) => shipment.status === 'DELIVERED').length
+  const inDistributionShipments = shipments.filter((shipment) => ['PICKED_UP', 'IN_TRANSIT', 'OUT_FOR_DELIVERY'].includes(shipment.status)).length
+  const returnedShipments = shipments.filter((shipment) => shipment.status === 'RETURNED').length
+  const failedShipments = shipments.filter((shipment) => shipment.status === 'FAILED').length
 
   const copyLink = async () => {
     if (!store) return
-    const url = storePublicUrl(store)
+    const url = store.published ? storePublicUrl(store) : `${storePublicUrl(store)}?preview=1`
     if (!url) {
       toast.push('رابط المتجر غير متاح بعد', 'حدد رابطاً صالحاً للمتجر من الإعدادات أولاً', 'error')
       return
     }
     try {
       await navigator.clipboard.writeText(url)
-      toast.push('تم نسخ الرابط', url, 'success')
+      toast.push(store.published ? 'تم نسخ رابط المتجر' : 'تم نسخ رابط المعاينة', url, 'success')
     } catch {
       toast.push('تعذر نسخ الرابط', undefined, 'error')
     }
@@ -136,11 +155,19 @@ export const MerchantDashboard: FunctionalComponent = () => {
   }
 
   const usage = usageFrom(subscription, plan)
-  const productLimit = getPlanLimit('products', plan)
-  const productUnlimited = isPlanLimitUnlimited('products', plan)
-  const staffLimit = getPlanLimit('staff', plan)
-  const storageLimit = getPlanLimit('storage', plan)
-  const storageUsed = Math.round(Number((store as any)?.storageUsed || 0) / (1024 * 1024))
+  const resourceUsage = subState.resourceUsage
+  const productUsed = resourceUsage?.products.used ?? products.length
+  const productLimit = resourceUsage?.products.limit ?? getPlanLimit('products', plan)
+  const productUnlimited = productLimit <= 0 && isPlanLimitUnlimited('products', plan)
+  const staffUsed = resourceUsage?.team.used ?? 1
+  const staffLimit = resourceUsage?.team.limit ?? getPlanLimit('staff', plan)
+  const storageUsed = Math.round(Number(resourceUsage?.storage.used ?? (store as any)?.storageUsed ?? 0) / (1024 * 1024))
+  const storageLimit = resourceUsage?.storage.limit ? Math.round(resourceUsage.storage.limit / (1024 * 1024)) : getPlanLimit('storage', plan)
+  const storefrontPath = store?.slug ? `/store/${store.slug}${store.published ? '' : '?preview=1'}` : ''
+  const storefrontLabel = store?.published ? 'فتح المتجر المنشور' : 'معاينة المتجر'
+  const primaryPromotion = promotions.find((p) => p.placement?.includes?.('dashboard_banner'))
+  const promotionEnds = primaryPromotion?.endsAt ? (primaryPromotion.endsAt.seconds ? primaryPromotion.endsAt.seconds * 1000 : new Date(primaryPromotion.endsAt).getTime()) : 0
+  const promotionMinutes = promotionEnds ? Math.max(0, Math.floor((promotionEnds - promotionNow) / 60000)) : 0
 
   const latestOrders = orders.slice(0, 8)
   const headerActions = (
@@ -156,13 +183,13 @@ export const MerchantDashboard: FunctionalComponent = () => {
   const statusbarActions = (
     <div className="dashboard-statusbar-actions">
       {store && (
-        <Button variant="outline" icon="content_copy" onClick={copyLink} disabled={!storePublicUrl(store)} title={!storePublicUrl(store) ? 'رابط المتجر غير متاح بعد' : undefined}>
+        <Button variant="outline" icon="content_copy" onClick={copyLink} disabled={!store?.slug} title={!store?.slug ? 'رابط المتجر غير متاح بعد' : undefined}>
           نسخ الرابط
         </Button>
       )}
       {store && (
-        <a href={`/store/${store.slug}`} target="_blank" rel="noreferrer" className="dashboard-header-link">
-          <Button variant="outline" icon="storefront">عرض المتجر</Button>
+        <a data-tour="preview-store" href={storefrontPath} target="_blank" rel="noreferrer" className="dashboard-header-link">
+          <Button variant="outline" icon="storefront">{storefrontLabel}</Button>
         </a>
       )}
     </div>
@@ -171,7 +198,7 @@ export const MerchantDashboard: FunctionalComponent = () => {
   const kpiCards = (
     <div className="dashboard-kpi-stats">
       {canOrders && (
-        <div className="dashboard-kpi">
+        <div data-tour="kpi-revenue" className="dashboard-kpi">
           <div className="dashboard-kpi-top">
             <span className="dashboard-kpi-label">الإيرادات</span>
             <span className="dashboard-kpi-icon"><Icon name="account_balance_wallet" ariaHidden /></span>
@@ -183,7 +210,7 @@ export const MerchantDashboard: FunctionalComponent = () => {
         </div>
       )}
       {canOrders && (
-        <div className="dashboard-kpi">
+        <div data-tour="kpi-orders" className="dashboard-kpi">
           <div className="dashboard-kpi-top">
             <span className="dashboard-kpi-label">الطلبات</span>
             <span className="dashboard-kpi-icon"><Icon name="shopping_cart" ariaHidden /></span>
@@ -195,7 +222,7 @@ export const MerchantDashboard: FunctionalComponent = () => {
         </div>
       )}
       {canOrders && (
-        <div className="dashboard-kpi">
+        <div data-tour="kpi-profit" className="dashboard-kpi">
           <div className="dashboard-kpi-top">
             <span className="dashboard-kpi-label">الربح الإجمالي</span>
             <span className="dashboard-kpi-icon"><Icon name="monitoring" ariaHidden /></span>
@@ -285,8 +312,48 @@ export const MerchantDashboard: FunctionalComponent = () => {
     </div>
   )
 
+  const shippingOverview = canOrders && (
+    <section className="dashboard-panel dashboard-shipping-overview" data-tour="shipping-summary" aria-label="ملخص تشغيل الشحن">
+      <div className="dashboard-panel-head">
+        <div>
+          <h3>تشغيل الشحن</h3>
+          <p className="dashboard-shipping-subtitle">يتحدث تلقائياً مع آخر حالة وصلت من شركة الشحن</p>
+        </div>
+        <Link href="/dashboard/shipping"><span className="dashboard-panel-link">إدارة الشحن</span></Link>
+      </div>
+      <div className="dashboard-shipping-cards">
+        <Link href="/dashboard/orders" className="dashboard-shipping-card is-delivered">
+          <span className="dashboard-shipping-card-icon"><Icon name="task_alt" ariaHidden /></span>
+          <span className="dashboard-shipping-card-copy"><b>{formatNumber(deliveredShipments)}</b><small>تم التسليم</small></span>
+        </Link>
+        <Link href="/dashboard/orders" className="dashboard-shipping-card is-transit">
+          <span className="dashboard-shipping-card-icon"><Icon name="local_shipping" ariaHidden /></span>
+          <span className="dashboard-shipping-card-copy"><b>{formatNumber(inDistributionShipments)}</b><small>تحت التوزيع</small></span>
+        </Link>
+        <Link href="/dashboard/orders" className="dashboard-shipping-card is-returned">
+          <span className="dashboard-shipping-card-icon"><Icon name="assignment_return" ariaHidden /></span>
+          <span className="dashboard-shipping-card-copy"><b>{formatNumber(returnedShipments)}</b><small>مرتجع للمخزون</small></span>
+        </Link>
+        <Link href="/dashboard/orders" className="dashboard-shipping-card is-failed">
+          <span className="dashboard-shipping-card-icon"><Icon name="error_outline" ariaHidden /></span>
+          <span className="dashboard-shipping-card-copy"><b>{formatNumber(failedShipments)}</b><small>تعذر التسليم</small></span>
+        </Link>
+      </div>
+      <div className="dashboard-shipping-note"><Icon name="inventory_2" ariaHidden /><span>عند وصول حالة <strong>مرتجع</strong> من وصلة أو أي شركة مربوطة، تعود كمية المنتجات إلى مخزون المتجر مرة واحدة تلقائياً.</span></div>
+    </section>
+  )
+
+  const checklist = [
+    { label: 'أضف أول منتج', done: products.length > 0, href: '/dashboard/products' },
+    { label: 'اختر ثيم المتجر', done: Boolean(store?.theme?.template), href: '/dashboard/themes' },
+    { label: 'أضف وسيلة شحن', done: Boolean(store?.shipping?.enabled), href: '/dashboard/shipping' },
+    { label: 'راجع إعدادات المتجر', done: Boolean(store?.name && store?.phone), href: '/dashboard/settings' },
+    { label: 'انشر المتجر', done: store?.storeStatus === 'published' || store?.published === true, href: '/dashboard/settings' },
+  ]
+  const checklistDone = checklist.filter((item) => item.done).length
+
   const planPanel = (subStatus === 'active' || subStatus === 'trialing') && (
-    <div className="dashboard-panel dashboard-plan-panel">
+    <div data-tour="plan-usage" className="dashboard-panel dashboard-plan-panel">
       <div className="dashboard-plan-head">
         <h3>استهلاك الخطة</h3>
         {plan && <span className="dashboard-plan-badge">{plan.name}</span>}
@@ -305,11 +372,11 @@ export const MerchantDashboard: FunctionalComponent = () => {
           <div className="dashboard-usage-row">
             <div className="dashboard-usage-row-top">
               <span>المنتجات</span>
-              <span>{formatNumber(products.length)}{productUnlimited || productLimit <= 0 ? '' : ` / ${formatNumber(productLimit)}`}</span>
+              <span>{formatNumber(productUsed)}{productUnlimited || productLimit <= 0 ? '' : ` / ${formatNumber(productLimit)}`}</span>
             </div>
             {!(productUnlimited || productLimit <= 0) && (
               <div className="dashboard-usage-bar">
-                <span className="dashboard-usage-bar-fill is-products" style={{ width: `${Math.min(100, (products.length / productLimit) * 100)}%` }} />
+                <span className="dashboard-usage-bar-fill is-products" style={{ width: `${Math.min(100, (productUsed / productLimit) * 100)}%` }} />
               </div>
             )}
           </div>
@@ -331,20 +398,14 @@ export const MerchantDashboard: FunctionalComponent = () => {
           <div className="dashboard-usage-row">
             <div className="dashboard-usage-row-top">
               <span>عدد المستخدمين</span>
-              <span>{formatNumber(teamRes.data.length)} / {formatNumber(staffLimit)}</span>
+              <span>{formatNumber(staffUsed)} / {formatNumber(staffLimit)}</span>
             </div>
             <div className="dashboard-usage-bar">
-              <span className="dashboard-usage-bar-fill is-staff" style={{ width: `${Math.min(100, (teamRes.data.length / staffLimit) * 100)}%` }} />
+              <span className="dashboard-usage-bar-fill is-staff" style={{ width: `${Math.min(100, (staffUsed / staffLimit) * 100)}%` }} />
             </div>
           </div>
         )}
       </div>
-      {subStatus === 'trialing' && subscription && (
-        <div className="dashboard-trial">
-          <Icon name="hourglass_top" ariaHidden />
-          <span><strong>{trialRemaining || 'قاربت على الانتهاء'}</strong><small>الفترة التجريبية نشطة</small></span>
-        </div>
-      )}
       <Link href="/dashboard/subscription"><Button variant="outline" block icon="arrow_forward">ترقية الخطة</Button></Link>
     </div>
   )
@@ -403,13 +464,14 @@ export const MerchantDashboard: FunctionalComponent = () => {
               </thead>
               <tbody>
                 {latestOrders.map((o) => {
-                  const pill = STATUS_PILLS[o.status] || { cls: 'order-pill-new' }
+                  const displayStatus = visibleOrderStatus(o)
+                  const pill = STATUS_PILLS[displayStatus] || { cls: displayStatus === 'FAILED' ? 'order-pill-cancelled' : 'order-pill-new' }
                   return (
                     <tr key={o.id}>
                       <td><Link href={`/dashboard/orders/${o.id}`}><span className="monospace dashboard-order-link">{o.orderNumber}</span></Link></td>
                       <td className="dashboard-cell-muted">{o.customerName}</td>
                       <td className="dashboard-cell-muted">{timeAgo(o.createdAt)}</td>
-                      <td><span className={`order-pill ${pill.cls}`}>{STATUS_LABELS[o.status as keyof typeof STATUS_LABELS] || o.status}</span></td>
+                      <td><span className={`order-pill ${pill.cls}`}>{visibleOrderStatusLabel(o)}</span></td>
                       <td>{formatCurrency(o.totalPrice)}</td>
                     </tr>
                   )
@@ -426,6 +488,11 @@ export const MerchantDashboard: FunctionalComponent = () => {
 
   return (
     <div className="merchant-dashboard-canonical">
+      {primaryPromotion && promotionMinutes > 0 && <div className="dashboard-promotion-banner"><strong>{primaryPromotion.title}</strong><span>{primaryPromotion.message}</span><CountdownTimer endsAt={primaryPromotion.endsAt} label="ينتهي خلال" />{primaryPromotion.ctaTarget && <a href={primaryPromotion.ctaTarget}>{primaryPromotion.ctaLabel || 'استفد من العرض'}</a>}</div>}
+      {checklistDone < checklist.length && <section data-tour="onboarding-checklist" className="dashboard-onboarding-checklist" aria-label="خطوات بدء المتجر">
+        <div className="dashboard-checklist-head"><div><h3>ابدأ متجرك خطوة بخطوة</h3><span>{checklistDone} من {checklist.length} مكتملة</span></div><div className="dashboard-checklist-progress"><i style={{ width: `${(checklistDone / checklist.length) * 100}%` }} /></div></div>
+        <div className="dashboard-checklist-items">{checklist.map((item) => <Link key={item.label} href={item.href} className={`dashboard-checklist-item${item.done ? ' is-done' : ''}`}><span className="dashboard-checklist-box">{item.done ? '✓' : ''}</span><span>{item.label}</span></Link>)}</div>
+      </section>}
       {/* ─────────── Desktop composition (Stitch 5ecc1fa6e7f5) ─────────── */}
       <div className="dashboard-desktop">
         <PageHeader
@@ -446,11 +513,10 @@ export const MerchantDashboard: FunctionalComponent = () => {
               <span className="dashboard-statusbar-label">حالة الاشتراك:</span>
               <span className="dashboard-statusbar-icon"><Icon name="stars" ariaHidden /></span>
               <span className="dashboard-statusbar-value">{SUB_STATUS_LABELS[subStatus] || plan?.name || 'الباقة'}</span>
-              {trialRemaining ? <span className="dashboard-statusbar-meta">(تنتهي خلال {trialRemaining})</span> : null}
             </div>
           </div>
           {store && isOwner && (
-            <button type="button" className="dashboard-statusbar-action" onClick={() => togglePublish(!store.published)} disabled={publishing}>
+            <button data-tour="publish-store" type="button" className="dashboard-statusbar-action" onClick={() => togglePublish(!store.published)} disabled={publishing}>
               {store.published ? 'إيقاف النشر المؤقت' : 'نشر المتجر'}
             </button>
           )}
@@ -460,6 +526,7 @@ export const MerchantDashboard: FunctionalComponent = () => {
         <div className="dashboard-grid">
           <main className="dashboard-grid-main">
             {kpiCards}
+            {shippingOverview}
             {profitPanel}
             {ordersPanel}
           </main>
@@ -477,7 +544,7 @@ export const MerchantDashboard: FunctionalComponent = () => {
             <span className="dashboard-mobile-avatar"><Icon name="store" ariaHidden /></span>
             <div>
               <div className="dashboard-mobile-storeline">
-                <span className="dashboard-mobile-storename">{store?.name || 'M&K Store'}</span>
+                <span className="dashboard-mobile-storename">{store?.name || 'Matjari'}</span>
                 <span className="dashboard-mobile-published">{store?.published ? 'منشور' : 'مسودة'}</span>
               </div>
             </div>
@@ -551,15 +618,33 @@ export const MerchantDashboard: FunctionalComponent = () => {
             )}
           </section>
 
+          {canOrders && (
+            <section className="dashboard-mobile-shipping" aria-label="ملخص تشغيل الشحن">
+              <div className="dashboard-mobile-section-head"><h2>تشغيل الشحن</h2><Link href="/dashboard/shipping"><span className="dashboard-panel-link">إدارة الشحن</span></Link></div>
+              <div className="dashboard-mobile-shipping-grid">
+                <Link href="/dashboard/orders"><span>{formatNumber(deliveredShipments)}</span><small>تم التسليم</small></Link>
+                <Link href="/dashboard/orders"><span>{formatNumber(inDistributionShipments)}</span><small>تحت التوزيع</small></Link>
+                <Link href="/dashboard/orders"><span>{formatNumber(returnedShipments)}</span><small>مرتجع للمخزون</small></Link>
+                <Link href="/dashboard/orders"><span>{formatNumber(failedShipments)}</span><small>تعذر التسليم</small></Link>
+              </div>
+              <p><Icon name="inventory_2" ariaHidden /> المرتجع يعيد الكمية للمخزون تلقائياً.</p>
+            </section>
+          )}
+
           <section className="dashboard-quick-actions" aria-label="إجراءات سريعة">
             {canProducts && (
               <Link href="/dashboard/products"><button type="button" className="dashboard-quick-btn dashboard-quick-btn-primary"><Icon name="add_circle" ariaHidden /> إضافة منتج</button></Link>
+            )}
+            {store && isOwner && (
+              <button type="button" className="dashboard-quick-btn" onClick={() => togglePublish(!store.published)} disabled={publishing}>
+                <Icon name={store.published ? 'visibility_off' : 'visibility'} ariaHidden /> {store.published ? 'إيقاف النشر المؤقت' : 'نشر المتجر'}
+              </button>
             )}
             {store && (
               <button type="button" className="dashboard-quick-btn" onClick={copyLink}><Icon name="share" ariaHidden /> مشاركة المتجر</button>
             )}
             {store && (
-              <a href={`/store/${store.slug}`} target="_blank" rel="noreferrer" className="dashboard-quick-link"><button type="button" className="dashboard-quick-btn"><Icon name="open_in_new" ariaHidden /> فتح المتجر</button></a>
+              <a href={storefrontPath} target="_blank" rel="noreferrer" className="dashboard-quick-link"><button type="button" className="dashboard-quick-btn"><Icon name="open_in_new" ariaHidden /> {storefrontLabel}</button></a>
             )}
             {canProducts && (
               <Link href="/dashboard/coupons"><button type="button" className="dashboard-quick-btn"><Icon name="local_offer" ariaHidden /> إنشاء كوبون</button></Link>
@@ -634,11 +719,11 @@ export const MerchantDashboard: FunctionalComponent = () => {
                   <div className="dashboard-usage-row">
                     <div className="dashboard-usage-row-top">
                       <span>المنتجات المضافة</span>
-                      <span>{formatNumber(products.length)}{productUnlimited || productLimit <= 0 ? '' : ` / ${formatNumber(productLimit)}`}</span>
+                    <span>{formatNumber(productUsed)}{productUnlimited || productLimit <= 0 ? '' : ` / ${formatNumber(productLimit)}`}</span>
                     </div>
                     {!(productUnlimited || productLimit <= 0) && (
                       <div className="dashboard-usage-bar">
-                        <span className="dashboard-usage-bar-fill is-products" style={{ width: `${Math.min(100, (products.length / productLimit) * 100)}%` }} />
+                        <span className="dashboard-usage-bar-fill is-products" style={{ width: `${Math.min(100, (productUsed / productLimit) * 100)}%` }} />
                       </div>
                     )}
                   </div>
@@ -660,10 +745,10 @@ export const MerchantDashboard: FunctionalComponent = () => {
                   <div className="dashboard-usage-row">
                     <div className="dashboard-usage-row-top">
                       <span>الفريق</span>
-                      <span>{formatNumber(teamRes.data.length)} / {formatNumber(staffLimit)}</span>
+                      <span>{formatNumber(staffUsed)} / {formatNumber(staffLimit)}</span>
                     </div>
                     <div className="dashboard-usage-bar">
-                      <span className="dashboard-usage-bar-fill is-staff" style={{ width: `${Math.min(100, (teamRes.data.length / staffLimit) * 100)}%` }} />
+                      <span className="dashboard-usage-bar-fill is-staff" style={{ width: `${Math.min(100, (staffUsed / staffLimit) * 100)}%` }} />
                     </div>
                   </div>
                 )}

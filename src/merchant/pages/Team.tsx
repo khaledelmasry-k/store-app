@@ -35,9 +35,10 @@ export const MerchantTeam: FunctionalComponent = () => {
   const team = teamRes.data
   const rolesRes = useCollection<RoleDef>('roles', { storeId })
   const roles = rolesRes.data
-  const { plan } = useSubscription(storeId)
-  const staffLimit = getPlanLimit('staff', plan)
-  const staffFull = staffLimit > 0 && team.length >= staffLimit
+  const { plan, resourceUsage } = useSubscription(storeId)
+  const staffLimit = resourceUsage?.team.limit ?? getPlanLimit('staff', plan)
+  const staffUsed = resourceUsage?.team.used ?? (1 + team.length)
+  const staffFull = staffLimit > 0 && staffUsed >= staffLimit
   const toast = useToast()
   const [tab, setTab] = useState('members')
   const [open, setOpen] = useState(false)
@@ -82,7 +83,7 @@ export const MerchantTeam: FunctionalComponent = () => {
     <div className="merchant-operations merchant-team-page">
       <PageHeader
         title="إدارة الفريق والأدوار"
-        subtitle={tab === 'members' ? `قم بإدارة وصول الموظفين وصلاحياتهم داخل المتجر (${team.length} عضو)` : `إدارة الأدوار والصلاحيات (${roles.length} دور)`}
+        subtitle={tab === 'members' ? `قم بإدارة وصول الموظفيـن وصلاحياتهم داخل المتجر (${staffUsed}/${staffLimit} مستخدم)` : `إدارة الأدوار والصلاحيات (${roles.length} دور)`}
         actions={
           tab === 'members' ? (
             <Button icon="person_add" disabled={staffFull} onClick={() => setOpen(true)}>دعوة عضو</Button>
@@ -159,7 +160,6 @@ export const MerchantTeam: FunctionalComponent = () => {
                       </td>
                       <td><span className="muted">{formatDate(m.createdAt)}</span></td>
                       <td className="actions">
-                        <button className="icon-btn" title="تعديل"><Icon name="edit" /></button>
                       </td>
                     </tr>
                   ))}

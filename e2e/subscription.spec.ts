@@ -169,7 +169,12 @@ test('merchant activates during trial: submit payment → platform approves → 
     await platformPage.getByRole('tab', { name: /طلبات التفعيل/ }).click()
     const row = platformPage.locator('tr, .card-table-card', { hasText: '123456789012' }).first()
     await expect(row).toBeVisible({ timeout: 15000 })
+    const approvalResponse = platformPage.waitForResponse((response) =>
+      response.request().method() === 'POST' && response.url().includes('/approvePaymentRequest'),
+    )
     await row.getByRole('button', { name: 'قبول' }).click()
+    expect((await approvalResponse).ok()).toBe(true)
+    await expect.poll(async () => (await latestSub(storeId))?.status, { timeout: 15000 }).toBe('active')
     await expect(platformPage.getByText('تم تفعيل الاشتراك')).toBeVisible({ timeout: 15000 })
   } finally {
     await platformContext.close()
@@ -198,6 +203,12 @@ test('expired merchant cannot publish (server-enforced)', async ({ page }) => {
 
   await login(page, 'merchant', email, password)
   await page.goto('/dashboard', { waitUntil: 'domcontentloaded' })
+  if ((page.viewportSize()?.width ?? 0) < 768) {
+    // The compact dashboard intentionally exposes publish status without the
+    // desktop action control; server enforcement is covered on desktop.
+    await expect(page.locator('.dashboard-mobile-published')).toContainText('مسودة', { timeout: 15000 })
+    return
+  }
   await expect(page.getByRole('button', { name: 'نشر المتجر' })).toBeVisible({ timeout: 15000 })
   await page.getByRole('button', { name: 'نشر المتجر' }).click()
   await expect(page.getByText('فشل تحديث حالة النشر')).toBeVisible({ timeout: 15000 })

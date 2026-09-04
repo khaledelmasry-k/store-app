@@ -34,20 +34,26 @@ export const OrderDetails: FunctionalComponent<Props> = ({ id }) => {
   if (loading) return <Loading variant="screen" message="جاري تحميل الطلب..." />
   if (!order) return <Card title="الطلب غير موجود" />
 
-  const costByLine = new Map((orderCost?.items || []).map((c) => [c.lineId, c.costPrice]))
-  const costByProduct = new Map(costsRes.data.map((c) => [c.id, c.costPrice]))
+  const costByLine = new Map((orderCost?.items || []).map((c) => [c.lineId, c]))
+  const costByProduct = new Map(costsRes.data.map((c) => [c.id, c]))
   let grossRevenue = 0
   let cogs = 0
+  let estimatedAds = 0
   let costedLines = 0
   for (const it of order.items) {
-    const cost = costByLine.has(it.id) ? costByLine.get(it.id) : costByProduct.get(it.productId)
+    const snapshot = costByLine.get(it.id) || costByProduct.get(it.productId)
+    const cost = snapshot?.costPrice
     if (typeof cost !== 'number' || cost < 0) continue
     grossRevenue += orderItemRevenue(it)
     cogs += Math.max(1, it.quantity || 1) * cost
+    const financial = snapshot as (ProductCost & { estimatedAdCostSnapshot?: number }) | undefined
+    const ad = (financial?.estimatedAdCostSnapshot ?? financial?.estimatedAdCostPerSale) ?? 0
+    estimatedAds += snapshot?.estimatedAdCostMode === 'per_item' ? ad * Math.max(1, it.quantity || 1) : ad
     costedLines += 1
   }
   const hasCosts = costedLines > 0
   const grossProfit = grossRevenue - cogs
+  const contributionProfit = grossProfit - estimatedAds
 
   const changeStatus = async () => {
     if (!status || status === order.status) return
@@ -145,12 +151,14 @@ export const OrderDetails: FunctionalComponent<Props> = ({ id }) => {
               </dl>
           </Card>
 
-          <Card className="order-profit-card" title="الربح الإجمالي" subtitle="إيرادات الطلب مطروحاً منها تكلفة البضاعة المباعة">
+          <Card className="order-profit-card" title="الربحية التقديرية" subtitle="لا تشمل الشحن والرسوم والضرائب أو المرتجعات">
               {hasCosts ? (
                 <div className="kv">
                   <div className="kv-item"><dt>إيرادات الطلب</dt><dd>{formatCurrency(grossRevenue)}</dd></div>
                   <div className="kv-item"><dt>تكلفة البضاعة (COGS)</dt><dd>{formatCurrency(cogs)}</dd></div>
-                  <div className="kv-item"><dt>الربح الإجمالي</dt><dd className={grossProfit < 0 ? 'text-red font-semibold' : 'font-semibold'}>{formatCurrency(grossProfit)}</dd></div>
+                <div className="kv-item"><dt>الربح قبل الإعلان</dt><dd className={grossProfit < 0 ? 'text-red font-semibold' : 'font-semibold'}>{formatCurrency(grossProfit)}</dd></div>
+                <div className="kv-item"><dt>تكلفة الإعلان التقديرية</dt><dd>{formatCurrency(estimatedAds)}</dd></div>
+                <div className="kv-item"><dt>الربح التقديري بعد الإعلان</dt><dd className={contributionProfit < 0 ? 'text-red font-semibold' : 'font-semibold'}>{formatCurrency(contributionProfit)}</dd></div>
                 </div>
               ) : (
                 <p className="muted small m-0">أضف أسعار التكلفة للمنتجات لعرض الأرباح.</p>

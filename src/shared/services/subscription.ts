@@ -1,4 +1,4 @@
-import type { Subscription, SubscriptionPlan, SubscriptionPayment, SubscriptionStatus } from '../types'
+import type { Subscription, SubscriptionPlan, SubscriptionPayment, SubscriptionStatus, StorePurchaseRequest } from '../types'
 import { usageLevelFor } from '../utils/constants'
 
 // ─────────────────────────────────────────────────────────────
@@ -8,14 +8,19 @@ import { usageLevelFor } from '../utils/constants'
 
 export type ResolvedStatus = SubscriptionStatus | 'none'
 
-export function tsMs(t?: { seconds?: number } | null): number | null {
-  if (!t || typeof t.seconds !== 'number') return null
-  return t.seconds * 1000
+export function tsMs(t?: { seconds?: number; _seconds?: number; toMillis?: () => number } | string | null): number | null {
+  if (!t) return null
+  const seconds = typeof (t as any).seconds === 'number' ? (t as any).seconds : (t as any)._seconds
+  if (typeof seconds === 'number') return seconds * 1000
+  if (typeof (t as any).toMillis === 'function') return (t as any).toMillis()
+  const parsed = typeof t === 'string' ? Date.parse(t) : NaN
+  return Number.isFinite(parsed) ? parsed : null
 }
 
 /** Server-computed subscription status from timestamps + explicit state. */
 export function resolveSubscriptionStatus(sub?: Pick<Subscription, 'status' | 'trialEndsAt' | 'currentPeriodEnd' | 'expiresAt'> | null, nowMs = Date.now()): ResolvedStatus {
   if (!sub) return 'none'
+  if ((sub as any).billingModel === 'one_time' && (sub as any).ownershipType === 'lifetime' && (sub as any).lifetimeAccess === true) return 'active'
   const explicit = sub.status
   if (explicit === 'cancelled' || explicit === 'suspended') return explicit
   if (explicit === 'trialing') {
@@ -56,13 +61,8 @@ export const PLAN_FEATURE_KEYS = [
   'quantityPricing',
   'variantInventory',
   'coupons',
-  'abandonedCart',
   'analytics',
-  'advancedReports',
-  'customDomain',
-  'apiAccess',
-  'removeBranding',
-  'prioritySupport',
+  'whatsappAutomation',
 ] as const
 export type PlanFeatureKey = (typeof PLAN_FEATURE_KEYS)[number]
 
@@ -70,13 +70,8 @@ export const PLAN_FEATURE_LABELS: Record<PlanFeatureKey, string> = {
   quantityPricing: 'تسعير بالكمية',
   variantInventory: 'مخزون حسب المقاس/اللون',
   coupons: 'كوبونات خصم',
-  abandonedCart: 'استعادة سلة غير مكتملة',
   analytics: 'تحليلات أساسية',
-  advancedReports: 'تقارير متقدمة',
-  customDomain: 'نطاق مخصص',
-  apiAccess: 'واجهة برمجية (API/Webhooks)',
-  removeBranding: 'إزالة علامة M&K',
-  prioritySupport: 'دعم أولوية',
+  whatsappAutomation: 'أتمتة واتساب',
 }
 
 /** True when `plan` explicitly grants the feature (structured flag). Falls back
@@ -160,6 +155,22 @@ export interface SubscriptionUsage {
   level: ReturnType<typeof usageLevelFor>
 }
 
+export interface ResourceUsageMetric {
+  used: number
+  limit: number
+  remaining: number | null
+  percent: number
+}
+
+export interface MerchantResourceUsage {
+  orders: ResourceUsageMetric
+  products: ResourceUsageMetric
+  team: ResourceUsageMetric
+  storage: ResourceUsageMetric
+  landingPages: ResourceUsageMetric
+  salesLinks: ResourceUsageMetric
+}
+
 export function usageFrom(sub?: Subscription | null, plan?: SubscriptionPlan | null): SubscriptionUsage {
   const limit = Number(plan?.orderLimitPerMonth || 0)
   const used = Number(sub?.ordersUsed || 0)
@@ -204,18 +215,28 @@ export function formatTrialRemaining(trialEndsAt?: { seconds: number } | null, n
   const mins = Math.floor(diff / 60000)
   if (mins < 60) return `متبقي ${Math.max(1, mins)} دقيقة`
   const hours = Math.floor(mins / 60)
-  if (hours < 24) return `متبقي ${hours} ساعة`
   const days = Math.floor(hours / 24)
-  return `متبقي ${days} يوم`
+  const remainingHours = hours % 24
+  const remainingMinutes = mins % 60
+  if (days > 0) {
+    const parts = [`${days} يوم`]
+    if (remainingHours > 0) parts.push(`${remainingHours} ساعة`)
+    if (remainingMinutes > 0) parts.push(`${remainingMinutes} دقيقة`)
+    return `متبقي ${parts.join(' و')}`
+  }
+  return remainingMinutes > 0 ? `متبقي ${hours} ساعة و${remainingMinutes} دقيقة` : `متبقي ${hours} ساعة`
 }
 
 export interface MerchantSubscriptionView {
   subscription: Subscription | null
   plan: SubscriptionPlan | null
   paymentRequests: SubscriptionPayment[]
+  changeRequests: import('../types').SubscriptionChangeRequest[]
+  purchaseRequests: StorePurchaseRequest[]
   status: ResolvedStatus
   usage: SubscriptionUsage
   nextAmount: number
   launchOffer: boolean
   trialRemaining: string | null
+  resourceUsage: MerchantResourceUsage | null
 }

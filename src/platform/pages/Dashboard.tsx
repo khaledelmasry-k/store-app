@@ -3,6 +3,7 @@ import { Link } from 'wouter'
 import { PageHeader } from '../../shared/components/ui/PageHeader'
 import { StatsCard } from '../../shared/components/ui/StatsCard'
 import { Card } from '../../shared/components/ui/Card'
+import { SectionPanel } from '../../shared/components/ui/SectionPanel'
 import { Badge } from '../../shared/components/ui/Badge'
 import { Table } from '../../shared/components/ui/Table'
 import { BarChart } from '../../shared/components/charts/BarChart'
@@ -21,14 +22,15 @@ import {
   ORDER_USAGE_LABELS,
   ORDER_USAGE_TONES,
 } from '../../shared/utils/constants'
-import type { Store, Subscription, SubscriptionPlan, PlatformMerchantRow } from '../../shared/types'
+import type { Store, Subscription, SubscriptionPlan, PlatformMerchantRow, ShippingProviderDefinition, Shipment } from '../../shared/types'
+import './PlatformCorePages.css'
 
 function needsAttention(r: PlatformMerchantRow): boolean {
-  return r.subStatus === 'pending' || r.subStatus === 'expired' || r.usageLevel === 'reached' || r.usageLevel === 'near' || r.usageLevel === 'approaching'
+  return r.subStatus === 'pending' || r.subStatus === 'pending_approval' || r.subStatus === 'expired' || r.usageLevel === 'reached' || r.usageLevel === 'near' || r.usageLevel === 'approaching'
 }
 
 function attentionReason(r: PlatformMerchantRow): { label: string; tone: string } {
-  if (r.subStatus === 'pending') return { label: 'بانتظار الموافقة', tone: 'amber' }
+  if (r.subStatus === 'pending' || r.subStatus === 'pending_approval') return { label: 'بانتظار الموافقة', tone: 'amber' }
   if (r.usageLevel === 'reached') return { label: 'استنفد حد الطلبات', tone: 'red' }
   if (r.usageLevel === 'near' || r.usageLevel === 'approaching') return { label: ORDER_USAGE_LABELS[r.usageLevel], tone: ORDER_USAGE_TONES[r.usageLevel] }
   return { label: 'اشتراك منتهي', tone: 'red' }
@@ -38,14 +40,18 @@ export const PlatformDashboard: FunctionalComponent = () => {
   const storesRes = useCollection<Store>('stores', { orderBy: { field: 'createdAt' } })
   const subsRes = useCollection<Subscription>('subscriptions', { orderBy: { field: 'createdAt' } })
   const plansRes = useCollection<SubscriptionPlan>('plans', { orderBy: { field: 'priceMonthly' } })
+  const carriersRes = useCollection<ShippingProviderDefinition>('shippingProviders', {}, true)
+  const shipmentsRes = useCollection<Shipment>('shipments', {}, true)
   const { rows, metrics, loading: overviewLoading } = usePlatformOverview()
   const toast = useToast()
 
   const stores = storesRes.data
   const subs = subsRes.data
   const plans = plansRes.data
+  const carriers = carriersRes.data
+  const shipments = shipmentsRes.data
 
-  if (storesRes.loading || subsRes.loading || plansRes.loading) {
+  if (storesRes.loading || subsRes.loading || plansRes.loading || carriersRes.loading || shipmentsRes.loading) {
     return <Loading />
   }
 
@@ -71,7 +77,7 @@ export const PlatformDashboard: FunctionalComponent = () => {
   )
 
   const subStatusLabels = SUBSCRIPTION_STATUS_LABELS as Record<string, string>
-  const subStatusColors: Record<string, string> = { active: 'var(--success)', pending: 'var(--warning)', expired: 'var(--danger)', cancelled: 'var(--border-strong)', rejected: 'var(--danger)' }
+  const subStatusColors: Record<string, string> = { active: 'var(--success)', pending: 'var(--warning)', pending_approval: 'var(--warning)', expired: 'var(--danger)', cancelled: 'var(--border-strong)', rejected: 'var(--danger)' }
   const subDonut = (Object.keys(subStatusLabels) as (keyof typeof subStatusLabels)[])
     .map((k) => ({ label: subStatusLabels[k], value: subs.filter((s) => s.status === k).length, color: subStatusColors[k] }))
     .filter((s) => s.value > 0)
@@ -81,9 +87,10 @@ export const PlatformDashboard: FunctionalComponent = () => {
 
   const approve = async (r: PlatformMerchantRow) => {
     if (!r.subId) return
+    if (!window.confirm(`هل تريد اعتماد التاجر «${r.ownerName || r.ownerEmail || r.storeName}» على باقة ${r.planName || 'المحددة'}؟`)) return
     try {
       await approveSubscriptionCallable({ subscriptionId: r.subId })
-      toast.push('تمت الموافقة على الاشتراك', `تم تفعيل حساب ${r.storeName}`, 'success')
+      toast.push('تمت الموافقة على التاجر', `تم اعتماد حساب ${r.storeName} دون نشر المتجر.`, 'success')
     } catch (err: any) {
       toast.push('فشل الموافقة', err?.message || 'حدث خطأ غير متوقع', 'error')
     }
@@ -91,18 +98,16 @@ export const PlatformDashboard: FunctionalComponent = () => {
 
   return (
     <div className="platform-operations platform-dashboard-page">
-      <div className="platform-page-intro">
-        <PageHeader
+      <PageHeader
           title="لوحة تحكم المنصة"
           subtitle="نظرة عامة على الأداء والاهتمامات العاجلة"
+          context={<span className="platform-intro-meta">تشغيل المنصة <span className="platform-intro-dot" /> البيانات محدثة الآن</span>}
           actions={
             <Link href="/platform/merchants">
               <Button variant="outline" icon="add">إضافة تاجر</Button>
             </Link>
           }
         />
-        <div className="platform-intro-meta">تشغيل المنصة <span className="platform-intro-dot" /> البيانات محدثة الآن</div>
-      </div>
 
       <div className="stats-grid platform-stat-grid">
         <StatsCard title="إجمالي التجار" value={stores.length} icon="storefront" tone="primary" />
@@ -113,7 +118,7 @@ export const PlatformDashboard: FunctionalComponent = () => {
         <StatsCard title="تفعيلات بسعر الإطلاق" value={metrics.launchActivations} icon="local_offer" tone="green" />
       </div>
 
-      <Card title="يحتاج اهتماماً" subtitle={attention.length ? `${attention.length} متجر يتطلب إجراء` : 'كل المتاجر بحالة جيدة'} className="mb-2 platform-feature-card">
+      <SectionPanel title="يحتاج اهتماماً" subtitle={attention.length ? `${attention.length} متجر يتطلب إجراء` : 'كل المتاجر بحالة جيدة'} className="mb-2 platform-feature-card">
         {!overviewLoading && attention.length === 0 ? (
           <EmptyState icon="verified" title="لا توجد اهتمامات" description="جميع الاشتراكات نشطة والحدود ضمن المعدل الطبيعي." />
         ) : (
@@ -130,7 +135,7 @@ export const PlatformDashboard: FunctionalComponent = () => {
                   </span>
                 </div>
                 <div className="flex flex-gap-sm">
-                  {r.subStatus === 'pending' && r.subId && (
+                  {(r.subStatus === 'pending' || r.subStatus === 'pending_approval') && r.subId && (
                     <Button size="sm" icon="check" onClick={() => approve(r)}>موافقة</Button>
                   )}
                   <Link href={`/platform/stores/${r.storeId}`}>
@@ -141,7 +146,7 @@ export const PlatformDashboard: FunctionalComponent = () => {
             )
           })
         )}
-      </Card>
+      </SectionPanel>
 
       <div className="grid grid-2 mb-2">
         <Card title="نمو التجار (آخر 6 أشهر)" subtitle="عدد المتاجر الجديدة المسجلة شهرياً">
@@ -191,6 +196,25 @@ export const PlatformDashboard: FunctionalComponent = () => {
           )}
         </Card>
       </div>
+
+      <SectionPanel title="شركات الشحن" subtitle="نظرة تشغيلية على شركات الشحن المرتبطة بالمنصة" className="platform-shipping-widget">
+        <div className="stats-grid platform-shipping-mini-stats">
+          <StatsCard title="النشطة" value={carriers.filter((c) => c.status === 'active').length} icon="local_shipping" tone="green" />
+          <StatsCard title="المتوقفة" value={carriers.filter((c) => c.status !== 'active').length} icon="pause_circle" tone="amber" />
+          <StatsCard title="الشحنات" value={shipments.length} icon="inventory_2" tone="primary" />
+          <StatsCard title="الخدمات المهيأة" value={carriers.reduce((n, c) => n + (c.services?.filter((service) => service.enabled !== false).length || 0), 0)} icon="hub" tone="blue" />
+        </div>
+        {carriers.length === 0 ? <EmptyState icon="local_shipping" title="لا توجد شركات شحن" description="ستظهر الشركات بعد إضافتها من إدارة الشحن." /> : (
+          <Table cardMode columns={[
+            { key: 'name', header: 'الشركة', render: (c: ShippingProviderDefinition) => <Link href={`/platform/shipping-companies/${c.id}`} className="font-semibold">{c.name}</Link> },
+            { key: 'status', header: 'الحالة', render: (c: ShippingProviderDefinition) => <Badge tone={c.status === 'active' ? 'green' : 'slate'}>{c.status === 'active' ? 'نشطة' : 'متوقفة'}</Badge> },
+            { key: 'integration', header: 'التكامل', render: (c: ShippingProviderDefinition) => c.integrationType === 'api' ? 'API' : 'يدوي' },
+            { key: 'adapter', header: 'المحول', render: (c: ShippingProviderDefinition) => c.adapterConfigured ? 'جاهز' : 'غير مهيأ' },
+            { key: 'shipments', header: 'الشحنات', render: (c: ShippingProviderDefinition) => shipments.filter((s) => s.providerId === c.id).length },
+          ]} rows={carriers.slice(0, 5)} />
+        )}
+        <Link href="/platform/shipping-companies" className="platform-shipping-widget-link">عرض شركات الشحن ←</Link>
+      </SectionPanel>
     </div>
   )
 }

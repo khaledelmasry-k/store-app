@@ -45,7 +45,11 @@ function formatLaunchDate(v?: any): string {
 
 export const PlatformPlans: FunctionalComponent = () => {
   const plansRes = useCollection<SubscriptionPlan>('plans', { orderBy: { field: 'sortOrder' } })
-  const plans = [...plansRes.data].sort((a, b) => (a.sortOrder ?? 0) - (b.sortOrder ?? 0))
+  const plans = [...plansRes.data]
+    .filter((p) => p.active !== false && (p as any).isPurchasable !== false && (p as any).archived !== true)
+    .sort((a, b) => (a.sortOrder ?? 0) - (b.sortOrder ?? 0))
+  const subscriptionPlans = plans.filter((p) => p.billingModel !== 'one_time')
+  const lifetimeOffers = plans.filter((p) => p.billingModel === 'one_time')
   const toast = useToast()
   const [billing, setBilling] = useState<'monthly' | 'yearly'>('monthly')
   const [open, setOpen] = useState(false)
@@ -54,7 +58,7 @@ export const PlatformPlans: FunctionalComponent = () => {
   const [flags, setFlags] = useState<Record<PlanFeatureKey, boolean>>(emptyFlags())
   const [syncing, setSyncing] = useState(false)
 
-  const recommendedId = [...plans].sort((a, b) => a.priceMonthly - b.priceMonthly)[Math.max(0, Math.floor((plans.length - 1) / 2))]?.id
+  const recommendedId = [...subscriptionPlans].sort((a, b) => a.priceMonthly - b.priceMonthly)[Math.max(0, Math.floor((subscriptionPlans.length - 1) / 2))]?.id
 
   const priceOf = (p: SubscriptionPlan) => (billing === 'monthly' ? p.priceMonthly : p.priceYearly || p.priceMonthly * 10)
   const storageLabel = (mb?: number) => {
@@ -68,7 +72,7 @@ export const PlatformPlans: FunctionalComponent = () => {
 
   const openCreate = () => {
     setEditing(null)
-    setForm({ features: [] })
+    setForm({ features: [], billingModel: 'subscription' })
     setFlags(emptyFlags())
     setOpen(true)
   }
@@ -81,17 +85,19 @@ export const PlatformPlans: FunctionalComponent = () => {
   }
 
   const submit = async () => {
-    if (!form.name || form.priceMonthly == null || Number(form.priceMonthly) < 0) {
+    if (!form.name || (form.billingModel === 'one_time' ? !(Number(form.oneTimePrice) > 0) : (form.priceMonthly == null || Number(form.priceMonthly) < 0))) {
       toast.push('أكمل بيانات الباقة', undefined, 'error')
       return
     }
     const payload = {
       name: form.name,
+      billingModel: form.billingModel === 'one_time' ? 'one_time' : 'subscription',
+      oneTimePrice: Number(form.oneTimePrice || 0),
       slug: (form.slug || '').trim() || undefined,
       description: form.description || '',
       priceMonthly: Number(form.priceMonthly),
       priceYearly: Number(form.priceYearly || 0),
-      trialDays: Number(form.trialDays || 3),
+      trialDays: Number(form.trialDays ?? 3),
       launchPrice: Number(form.launchPrice || 0),
       launchEnabled: !!form.launchEnabled,
        productLimit: Number(form.productLimit || 10),
@@ -109,6 +115,11 @@ export const PlatformPlans: FunctionalComponent = () => {
        // server gates; when false the numeric cap (incl. 0 = none) is enforced.
        unlimitedProducts: form.unlimitedProducts === true,
        unlimitedSalesLinks: form.unlimitedSalesLinks === true,
+       isLaunchOffer: form.billingModel === 'one_time' ? form.isLaunchOffer !== false : false,
+       isPubliclyAvailable: form.billingModel === 'one_time' ? form.isPubliclyAvailable !== false : true,
+       launchOfferLimit: form.billingModel === 'one_time' ? Math.max(0, Number(form.launchOfferLimit || 0)) : 0,
+       launchOfferSoldCount: form.billingModel === 'one_time' ? Math.max(0, Number(form.launchOfferSoldCount || 0)) : 0,
+       launchOfferEndsAt: form.billingModel === 'one_time' ? form.launchOfferEndsAt : null,
        active: form.active ?? true,
     }
     try {
@@ -144,10 +155,10 @@ export const PlatformPlans: FunctionalComponent = () => {
 
   return (
     <div className="platform-operations platform-plans-page">
-      <div className="platform-page-intro platform-page-intro--plans">
-        <PageHeader
-          title="باقات الاشتراك"
-          subtitle={`${plans.length} باقة`}
+      <PageHeader
+          title="العروض التجارية"
+          subtitle={`${subscriptionPlans.length} باقات اشتراك${lifetimeOffers.length ? ` · ${lifetimeOffers.length} عرض شراء مرة واحدة` : ''}`}
+          context={<span className="platform-intro-meta">الأسعار والحدود والمزايا المعتمدة للمنصة</span>}
           actions={
             <div className="flex">
               <Button variant="outline" icon="sync" loading={syncing} onClick={syncCanonical}>مزامنة الخطط الحالية</Button>
@@ -155,27 +166,25 @@ export const PlatformPlans: FunctionalComponent = () => {
             </div>
           }
         />
-        <div className="platform-intro-meta">الأسعار والحدود والمزايا المعتمدة للمنصة</div>
-      </div>
 
       <Card title="مصفوفة الخطط الحالية" subtitle="المصدر المرجعي للأسعار والحدود المطلوبة" className="mb-2">
         <Table
           cardMode
-          rows={CANONICAL_PLANS.map((p) => ({ ...p, id: p.id }))}
+          rows={CANONICAL_PLANS.filter((p) => p.billingModel !== 'one_time').map((p) => ({ ...p, id: p.id }))}
           columns={[
             { key: 'name', header: 'الخطة' },
-            { key: 'price', header: 'السعر', render: (p) => `${formatPriceEgp(p.priceMonthly)} / شهر، ${formatPriceEgp(p.priceYearly)} / سنة` },
+            { key: 'model', header: 'النموذج', render: (p) => p.billingModel === 'one_time' ? 'شراء مرة واحدة' : 'اشتراك' },
+            { key: 'price', header: 'السعر', render: (p) => p.billingModel === 'one_time' ? `${formatPriceEgp(Number(p.oneTimePrice || 0))} دفعة واحدة` : `${formatPriceEgp(p.priceMonthly)} / شهر، ${formatPriceEgp(p.priceYearly)} / سنة` },
             { key: 'orders', header: 'الطلبات', render: (p) => `${p.orderLimitPerMonth} / شهر` },
             { key: 'products', header: 'المنتجات', render: (p) => p.unlimitedProducts ? 'غير محدود' : p.productLimit },
             { key: 'users', header: 'المستخدمون', render: (p) => p.staffLimit || 1 },
             { key: 'storage', header: 'التخزين', render: (p) => storageLabel(p.storageLimit) },
             { key: 'features', header: 'المزايا', render: (p) => [
-              p.customDomain ? 'نطاق مخصص' : null,
               p.coupons ? 'كوبونات' : null,
               p.salesLinksLimit || p.unlimitedSalesLinks ? 'روابط بيع' : null,
               p.analytics ? 'تقارير أساسية' : null,
-              p.advancedReports ? 'تقارير متقدمة' : null,
-              p.apiAccess ? 'API' : null,
+              p.quantityPricing ? 'تسعير بالكمية' : null,
+              p.variantInventory ? 'متغيرات ومخزون' : null,
             ].filter(Boolean).join('، ') || 'أساسي' },
           ]}
         />
@@ -189,13 +198,19 @@ export const PlatformPlans: FunctionalComponent = () => {
         />
       </div>
 
-      {plans.length === 0 ? (
+      {subscriptionPlans.length === 0 ? (
         <EmptyState title="لا توجد باقات" description="أنشئ أول باقة اشتراك للتجار" icon="workspace_premium" />
       ) : (
         <div className="plan-grid">
-          {plans.map((p) => {
+          {subscriptionPlans.map((p) => {
             const recommended = p.isPopular ?? p.id === recommendedId
             const featureList = PLAN_FEATURE_KEYS.filter((k) => flagsOf(p)[k])
+            const featureLabels = new Set(featureList.map((k) => PLAN_FEATURE_LABELS[k]))
+            const displayFeatures = (p.features || []).filter((f) =>
+              !(p.unlimitedProducts && f === 'منتجات غير محدودة')
+              && !(p.unlimitedSalesLinks && f === 'روابط بيع غير محدودة')
+              && !featureLabels.has(f as any),
+            )
             return (
               <div key={p.id} className={`plan-pricing-card${recommended ? ' plan-pricing-card--featured' : ''}`}>
                 {recommended && <span className="plan-pricing-badge">الأكثر طلباً</span>}
@@ -205,15 +220,15 @@ export const PlatformPlans: FunctionalComponent = () => {
                 </div>
                 {p.description && <p className="plan-pricing-desc">{p.description}</p>}
                 <div className="plan-pricing-price">
-                  <strong>{formatPriceEgp(priceOf(p))}</strong>
-                  <span>/ {billing === 'monthly' ? 'شهرياً' : 'سنوياً'}</span>
+                  <strong>{p.billingModel === 'one_time' ? formatPriceEgp(Number(p.oneTimePrice || 0)) : formatPriceEgp(priceOf(p))}</strong>
+                  <span>{p.billingModel === 'one_time' ? 'دفعة واحدة' : `/ ${billing === 'monthly' ? 'شهرياً' : 'سنوياً'}`}</span>
                 </div>
-                {p.launchEnabled && Number(p.launchPrice) > 0 && (
+                {p.billingModel !== 'one_time' && p.launchEnabled && Number(p.launchPrice) > 0 && (
                   <div className="plan-pricing-launch">أول شهر {formatPriceEgp(p.launchPrice)} (خصم إطلاق)</div>
                 )}
-                <div className="plan-pricing-trial">تجربة مجانية {Number(p.trialDays || 3)} يوم</div>
+                {p.billingModel !== 'one_time' && Number(p.priceMonthly || 0) > 0 && Number(p.trialDays ?? 3) > 0 && <div className="plan-pricing-trial">تجربة مجانية {Number(p.trialDays ?? 3)} يوم</div>}
                 <ul className="plan-pricing-features">
-                  {p.features.map((f, i) => (
+                  {displayFeatures.map((f, i) => (
                     <li key={i}>
                       <Icon name="check_circle" />
                       {f}
@@ -227,14 +242,14 @@ export const PlatformPlans: FunctionalComponent = () => {
                     <Icon name="receipt_long" />
                     {p.orderLimitPerMonth > 0 ? `حتى ${p.orderLimitPerMonth} طلب شهرياً` : 'طلبات غير محدودة'}
                   </li>
-                  <li>
+                  {Number(p.landingPagesLimit || 0) > 0 && <li>
                     <Icon name="web" />
-                    حتى {p.landingPagesLimit || 0} صفحة هبوط
-                  </li>
-                  <li>
+                    حتى {p.landingPagesLimit} صفحة هبوط
+                  </li>}
+                  {(p.unlimitedSalesLinks || Number(p.salesLinksLimit || 0) > 0) && <li>
                     <Icon name="link" />
-                    {p.unlimitedSalesLinks ? 'روابط بيع غير محدودة' : `حتى ${p.salesLinksLimit || 0} رابط بيع`}
-                  </li>
+                    {p.unlimitedSalesLinks ? 'روابط بيع غير محدودة' : `حتى ${p.salesLinksLimit} رابط بيع`}
+                  </li>}
                   <li>
                     <Icon name="group_add" />
                     حتى {p.staffLimit || 1} عضو فريق
@@ -260,6 +275,35 @@ export const PlatformPlans: FunctionalComponent = () => {
         </div>
       )}
 
+      {lifetimeOffers.length > 0 && (
+        <Card title="عرض الشراء لمرة واحدة" subtitle="امتلك متجرك — لا يُعامل كاشتراك دوري، وتظل المزايا والحدود صريحة." className="mt-2">
+          <div className="plan-grid">
+            {lifetimeOffers.map((p) => (
+              <div key={p.id} className="plan-pricing-card plan-pricing-card--lifetime">
+                <div className="plan-pricing-head">
+                  <h3 className="plan-pricing-name">امتلك متجرك</h3>
+                  <Badge tone={p.isPubliclyAvailable !== false && p.active !== false ? 'green' : 'slate'}>{p.isPubliclyAvailable !== false && p.active !== false ? 'متاح للطلب' : 'مغلق'}</Badge>
+                </div>
+                <p className="plan-pricing-desc">دفعة واحدة لحق استخدام دائم لمتجر واحد، وفق حدود العرض.</p>
+                <div className="plan-pricing-price"><strong>{formatPriceEgp(Number(p.oneTimePrice || 0))}</strong><span>دفعة واحدة</span></div>
+                <ul className="plan-pricing-features">
+                  <li><Icon name="inventory_2" />حتى {p.productLimit} منتج</li>
+                  <li><Icon name="receipt_long" />حتى {p.orderLimitPerMonth} طلب</li>
+                  <li><Icon name="group_add" />حتى {p.staffLimit || 1} أعضاء فريق</li>
+                  <li><Icon name="database" />{storageLabel(p.storageLimit)}</li>
+                  <li><Icon name="verified" />لا يوجد انتهاء لملكية المتجر الأساسية</li>
+                </ul>
+                <p className="muted small">المقاعد المستخدمة: {Number(p.launchOfferSoldCount || 0)}{Number(p.launchOfferLimit || 0) > 0 ? ` / ${p.launchOfferLimit}` : ''}</p>
+                <div className="plan-pricing-actions">
+                  <Button variant="soft" size="sm" icon="edit" onClick={() => openEdit(p)}>تعديل العرض</Button>
+                  <Button variant={p.isPubliclyAvailable === false ? 'outline' : 'ghost'} size="sm" onClick={() => savePlanCallable({ planId: p.id, plan: { ...p, isPubliclyAvailable: p.isPubliclyAvailable === false } }).then(() => toast.push(p.isPubliclyAvailable === false ? 'تم فتح العرض' : 'تم إغلاق العرض')).catch((err: any) => toast.push('فشل تحديث العرض', err?.message, 'error'))}>{p.isPubliclyAvailable === false ? 'فتح العرض' : 'إغلاق العرض'}</Button>
+                </div>
+              </div>
+            ))}
+          </div>
+        </Card>
+      )}
+
       <Modal
         open={open}
         onClose={() => setOpen(false)}
@@ -272,23 +316,41 @@ export const PlatformPlans: FunctionalComponent = () => {
         }
       >
         <Input label="اسم الباقة" value={form.name || ''} onChange={(v) => setForm({ ...form, name: v })} required />
+        <label className="field-label">نوع العرض</label>
+        <select className="input" value={form.billingModel || 'subscription'} onChange={(e) => setForm({ ...form, billingModel: (e.target as HTMLSelectElement).value as 'subscription' | 'one_time' })}>
+          <option value="subscription">اشتراك شهري / سنوي</option>
+          <option value="one_time">شراء المتجر مرة واحدة</option>
+        </select>
         <div className="grid grid-2">
           <Input label="Slug (للرابط)" value={form.slug || ''} onChange={(v) => setForm({ ...form, slug: v })} hint="مثال: growth" />
           <Input label="ترتيب العرض" type="number" value={form.sortOrder || 0} onChange={(v) => setForm({ ...form, sortOrder: Number(v) })} hint="الأصغر يظهر أولاً" />
         </div>
         <Textarea label="الوصف" value={form.description || ''} onChange={(v) => setForm({ ...form, description: v })} rows={2} />
-        <div className="grid grid-2">
-          <Input label="السعر الشهري" type="number" value={form.priceMonthly || ''} onChange={(v) => setForm({ ...form, priceMonthly: Number(v) })} />
-          <Input label="السعر السنوي" type="number" value={form.priceYearly || ''} onChange={(v) => setForm({ ...form, priceYearly: Number(v) })} />
-        </div>
-        <div className="grid grid-2">
-          <Input label="مدة التجربة (أيام)" type="number" value={form.trialDays || 3} onChange={(v) => setForm({ ...form, trialDays: Number(v) })} />
+        {form.billingModel === 'one_time' ? (
+          <Input label="سعر الشراء لمرة واحدة" type="number" value={form.oneTimePrice || ''} onChange={(v) => setForm({ ...form, oneTimePrice: Number(v) })} hint="يُستخدم فقط بعد اعتماد الدفع من مدير المنصة." />
+        ) : (
+          <div className="grid grid-2">
+            <Input label="السعر الشهري" type="number" value={form.priceMonthly || ''} onChange={(v) => setForm({ ...form, priceMonthly: Number(v) })} />
+            <Input label="السعر السنوي" type="number" value={form.priceYearly || ''} onChange={(v) => setForm({ ...form, priceYearly: Number(v) })} />
+          </div>
+        )}
+        {form.billingModel === 'one_time' && <>
+          <div className="field"><Toggle checked={form.isLaunchOffer ?? true} onChange={(v) => setForm({ ...form, isLaunchOffer: v })} label="عرض إطلاق" /></div>
+          <div className="field"><Toggle checked={form.isPubliclyAvailable ?? true} onChange={(v) => setForm({ ...form, isPubliclyAvailable: v })} label="متاح للطلبات الجديدة" /></div>
+          <div className="grid grid-2">
+            <Input label="حد مقاعد العرض (0 = بلا حد)" type="number" value={form.launchOfferLimit || ''} onChange={(v) => setForm({ ...form, launchOfferLimit: Math.max(0, Number(v)) })} />
+            <Input type="date" label="تاريخ إغلاق العرض (اختياري)" value={formatLaunchDate(form.launchOfferEndsAt)} onChange={(v) => setForm({ ...form, launchOfferEndsAt: v ? String(v).slice(0, 10) : null } as any)} />
+          </div>
+          <p className="muted small">المقاعد المستخدمة يديرها الخادم ولا يمكن تعديلها من الواجهة.</p>
+        </>}
+        {form.billingModel !== 'one_time' && <div className="grid grid-2">
+          <Input label="مدة التجربة (أيام)" type="number" value={form.trialDays ?? 3} onChange={(v) => setForm({ ...form, trialDays: Math.max(1, Number(v)) })} hint="من يوم إلى 90 يوماً للباقة المدفوعة" />
           <Input label="سعر الإطلاق (الشهر الأول)" type="number" value={form.launchPrice || ''} onChange={(v) => setForm({ ...form, launchPrice: Number(v) })} />
-        </div>
-        <div className="field">
+        </div>}
+        {form.billingModel !== 'one_time' && <div className="field">
           <Toggle checked={form.launchEnabled ?? false} onChange={(v) => setForm({ ...form, launchEnabled: v })} label="تفعيل خصم الإطلاق للشهر الأول" />
-        </div>
-        {form.launchEnabled && (
+        </div>}
+        {form.billingModel !== 'one_time' && form.launchEnabled && (
           <Input
             type="date"
             label="انتهاء عرض الإطلاق"
@@ -301,7 +363,7 @@ export const PlatformPlans: FunctionalComponent = () => {
           <Toggle checked={form.isPopular ?? false} onChange={(v) => setForm({ ...form, isPopular: v })} label="الأكثر طلباً (يُبرز الباقة)" />
         </div>
         <div className="grid grid-2">
-          <Input label="حد المنتجات" type="number" value={form.productLimit || 10} onChange={(v) => setForm({ ...form, productLimit: Number(v) })} />
+          <Input label="حد المنتجات" type="number" value={form.productLimit ?? 10} onChange={(v) => setForm({ ...form, productLimit: Number(v) })} />
           <Input label="حد الطلبات الشهري" type="number" value={form.orderLimitPerMonth || ''} onChange={(v) => setForm({ ...form, orderLimitPerMonth: Number(v) })} />
         </div>
         <div className="grid grid-2">

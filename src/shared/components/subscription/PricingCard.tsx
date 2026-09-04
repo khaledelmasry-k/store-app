@@ -11,6 +11,7 @@ interface Props {
   yearly?: boolean
   onSelect?: () => void
   ctaLabel?: string
+  displayName?: string
 }
 
 const LIMIT_ICONS: Record<string, string> = {
@@ -37,9 +38,10 @@ function storageLabel(mb: number): string {
  * hardcoded. The Free plan (price 0) renders as "مجاناً للأبد" without
  * trial/launch banners.
  */
-export const PricingCard: FunctionalComponent<Props> = ({ plan, selected, featured, yearly, onSelect, ctaLabel }) => {
+export const PricingCard: FunctionalComponent<Props> = ({ plan, selected, featured, yearly, onSelect, ctaLabel, displayName }) => {
   const isFree = Number(plan.priceMonthly || 0) <= 0
-  const hasLaunch = !isFree && !!plan.launchEnabled && Number(plan.launchPrice) > 0
+  const isOneTime = plan.billingModel === 'one_time'
+  const hasLaunch = !isFree && !isOneTime && !!plan.launchEnabled && Number(plan.launchPrice) > 0
   const trialDays = Number(plan.trialDays || 3)
   const limits = planEntitlements(plan)
   const isProductsUnlimited = isPlanLimitUnlimited('products', plan)
@@ -71,18 +73,20 @@ export const PricingCard: FunctionalComponent<Props> = ({ plan, selected, featur
   const primaryFeatureFlags = featureFlags.slice(0, 4)
   const explicitFeatures = (plan.features || [])
     .filter((f) => !featureFlags.some((k) => PLAN_FEATURE_LABELS[k] === f))
+    .filter((f) => !(isProductsUnlimited && f === 'منتجات غير محدودة'))
+    .filter((f) => !(isSalesLinksUnlimited && f === 'روابط بيع غير محدودة'))
     .slice(0, 3)
-  const price = yearly && Number(plan.priceYearly || 0) > 0 ? plan.priceYearly : plan.priceMonthly
+  const price = isOneTime ? Number(plan.oneTimePrice || 0) : yearly && Number(plan.priceYearly || 0) > 0 ? plan.priceYearly : plan.priceMonthly
 
   return (
     <div className={`mk-pricing-card${selected ? ' mk-pricing-card--selected' : ''}${featured ? ' mk-pricing-card--featured' : ''}`}>
       {featured && <span className="mk-pricing-badge">الأكثر شعبية</span>}
-      <h3 className="mk-pricing-name">{plan.name}</h3>
+      <h3 className="mk-pricing-name">{displayName || plan.name}</h3>
       {plan.description && <p className="mk-pricing-desc">{plan.description}</p>}
 
       <div className="mk-pricing-price">
-        {isFree ? <strong>مجاناً</strong> : <strong>{formatPriceEgp(price)}</strong>}
-        <span>{isFree ? 'للأبد' : yearly ? '/ سنوياً' : '/ شهريًا'}</span>
+        {isFree && !isOneTime ? <strong>مجاناً</strong> : <strong>{formatPriceEgp(price)}</strong>}
+        <span>{isOneTime ? 'دفعة واحدة' : isFree ? 'للأبد' : yearly ? '/ سنوياً' : '/ شهريًا'}</span>
       </div>
 
       {hasLaunch && (
@@ -93,7 +97,7 @@ export const PricingCard: FunctionalComponent<Props> = ({ plan, selected, featur
         </div>
       )}
 
-      {!isFree && (
+      {!isFree && !isOneTime && (
         <div className="mk-pricing-trial">
           <Icon name="local_offer" />
           تجربة مجانية لمدة {trialDays} يوم — بكامل المزايا

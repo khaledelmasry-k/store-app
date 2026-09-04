@@ -1,7 +1,7 @@
 import { FunctionalComponent } from 'preact'
 import { useState } from 'preact/hooks'
 import { Link } from 'wouter'
-import { BrandMark } from '../../shared/components/brand/BrandMark'
+import { BrandLogo } from '../../shared/components/brand/BrandLogo'
 import { Button } from '../../shared/components/ui/Button'
 import { Icon } from '../../shared/components/ui/Icon'
 import { useTheme } from '../../shared/hooks/useTheme'
@@ -20,7 +20,7 @@ export const InfoPage: FunctionalComponent<Props> = ({ title, body }) => {
     <div className="landing landing-stitch-exact" dir="rtl">
       <header className="landing-header stitch-header">
         <div className="landing-container stitch-header-inner">
-          <a href="/" className="landing-brand"><BrandMark small /><span>M&amp;K Store</span></a>
+          <a href="/" className="landing-brand"><BrandLogo className="landing-primary-logo" /></a>
           <button type="button" className="landing-menu-toggle" aria-label="القائمة" aria-expanded={menuOpen} onClick={() => setMenuOpen((open) => !open)}>
             <Icon name={menuOpen ? 'close' : 'menu'} />
           </button>
@@ -37,7 +37,7 @@ export const InfoPage: FunctionalComponent<Props> = ({ title, body }) => {
       <main>
         <section className="stitch-info-section">
           <div className="landing-container stitch-info-container">
-            <span className="stitch-info-eyebrow">M&amp;K Store</span>
+            <span className="stitch-info-eyebrow">Matjari — متجري</span>
             <h1>{title}</h1>
             {body.map((p, i) => <p key={i}>{p}</p>)}
             <div className="stitch-info-actions">
@@ -50,12 +50,12 @@ export const InfoPage: FunctionalComponent<Props> = ({ title, body }) => {
 
       <footer className="stitch-footer-band">
         <div className="landing-container stitch-footer-grid">
-          <div><BrandMark small /><strong>M&amp;K Store</strong><p>منصة التجارة الإلكترونية المتكاملة.</p></div>
+          <div><BrandLogo className="landing-footer-logo" /><p>منصة التجارة الإلكترونية المتكاملة.</p></div>
           <div><h3>المنصة</h3><Link href="/">الرئيسية</Link><Link href="/#pricing">الأسعار</Link></div>
           <div><h3>قانونية</h3><Link href="/terms">الشروط والأحكام</Link><Link href="/privacy">سياسة الخصوصية</Link></div>
           <div><h3>الدعم</h3><Link href="/contact">تواصل معنا</Link><Link href="/login">تسجيل الدخول</Link></div>
         </div>
-        <div className="landing-container stitch-footer-copy">© {new Date().getFullYear()} M&amp;K Store. جميع الحقوق محفوظة لشركة حلول التجارة الذكية.</div>
+        <div className="landing-container stitch-footer-copy">© {new Date().getFullYear()} Matjari — متجري. جميع الحقوق محفوظة.</div>
       </footer>
     </div>
   )

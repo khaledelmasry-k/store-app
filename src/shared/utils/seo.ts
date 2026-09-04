@@ -53,7 +53,7 @@ export function setSeo(meta: SeoMeta): void {
   }
   if (meta.image) {
     upsertMeta('meta[property="og:image"]', 'property', 'og:image', meta.image)
-    upsertMeta('meta[property="og:image:alt"]', 'property', 'og:image:alt', meta.title || 'M&K Store')
+    upsertMeta('meta[property="og:image:alt"]', 'property', 'og:image:alt', meta.title || 'Matjari — متجري')
   }
   const card = meta.twitterCard || 'summary_large_image'
   upsertMeta('meta[name="twitter:card"]', 'name', 'twitter:card', card)

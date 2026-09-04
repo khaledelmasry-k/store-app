@@ -1,12 +1,11 @@
 import { FunctionalComponent } from 'preact'
-import { useState } from 'preact/hooks'
+import { useEffect, useState } from 'preact/hooks'
 import { PageHeader } from '../../shared/components/ui/PageHeader'
 import { Button } from '../../shared/components/ui/Button'
 import { EmptyState } from '../../shared/components/ui/EmptyState'
 import { Loading } from '../../shared/components/ui/Loading'
 import { Icon } from '../../shared/components/ui/Icon'
 import { useStore } from '../../shared/hooks/useStore'
-import { useCollection } from '../../shared/hooks/useCollection'
 import { useToast } from '../../shared/hooks/useToast'
 import { notificationsService } from '../../shared/services/system'
 import { timeAgo } from '../../shared/utils/format'
@@ -25,11 +24,13 @@ type Filter = 'all' | 'unread' | 'read'
 export const MerchantNotifications: FunctionalComponent = () => {
   const { store } = useStore()
   const storeId = store?.id || ''
-  const notificationsRes = useCollection<Notification>('notifications', { storeId, orderBy: { field: 'createdAt' } })
-  const notifications = notificationsRes.data
+  const [notifications, setNotifications] = useState<Notification[]>([])
+  const [loading, setLoading] = useState(true)
+  const [error, setError] = useState<Error | null>(null)
   const toast = useToast()
   const [filter, setFilter] = useState<Filter>('all')
   const [reloadKey, setReloadKey] = useState(0)
+  useEffect(() => { let cancelled = false; setLoading(true); setError(null); notificationsService.list(storeId).then((items) => { if (!cancelled) setNotifications(items) }).catch((e) => { if (!cancelled) setError(e) }).finally(() => { if (!cancelled) setLoading(false) }); return () => { cancelled = true } }, [storeId, reloadKey])
 
   const unreadCount = notifications.filter((n) => !n.read).length
   const visible = notifications.filter((n) => (filter === 'all' ? true : filter === 'unread' ? !n.read : n.read))
@@ -73,11 +74,11 @@ export const MerchantNotifications: FunctionalComponent = () => {
       </div>
 
       <div className="notif-feed" key={reloadKey}>
-        {notificationsRes.loading ? (
+        {loading ? (
           <Loading />
-        ) : notificationsRes.error ? (
+        ) : error ? (
           <div className="notif-empty">
-            <EmptyState icon="error" title="تعذر تحميل الإشعارات" description={notificationsRes.error.message || 'حدث خطأ أثناء جلب البيانات.'} />
+            <EmptyState icon="error" title="تعذر تحميل الإشعارات" description={error.message || 'حدث خطأ أثناء جلب البيانات.'} />
           </div>
         ) : visible.length === 0 ? (
           <div className="notif-empty">

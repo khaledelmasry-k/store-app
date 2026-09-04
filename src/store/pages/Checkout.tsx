@@ -1,40 +1,89 @@
 import { FunctionalComponent } from 'preact'
-import { useState } from 'preact/hooks'
+import { useEffect, useState } from 'preact/hooks'
 import { Link } from 'wouter'
 import { useStore } from '../../shared/hooks/useStore'
 import { useCart } from '../../shared/hooks/useCart'
 import { useToast } from '../../shared/hooks/useToast'
 import { useAuth } from '../../shared/hooks/useAuth'
-import { useCollection } from '../../shared/hooks/useCollection'
 import { Button } from '../../shared/components/ui/Button'
 import { Input } from '../../shared/components/ui/Input'
 import { Select } from '../../shared/components/ui/Select'
 import { Textarea } from '../../shared/components/ui/Textarea'
 import { SmartImage } from '../../shared/components/ui/SmartImage'
-import { createOrderCallable, quoteCouponCallable } from '../../shared/services/auth'
-import { GOVER_EG } from '../../shared/utils/constants'
+import { createOrderCallable, getPublicStoreCouponsCallable, getShippingOptionsCallable, quoteCouponCallable } from '../../shared/services/auth'
+import { EGYPT_CITIES_BY_GOVERNORATE, GOVER_EG } from '../../shared/utils/constants'
 import { formatCurrency, todayKey } from '../../shared/utils/format'
 import { cartSubtotal, lineSubtotal, piecesLabel } from '../../shared/utils/pricing'
-import { calculateShipping } from '../../shared/utils/shipping'
-import type { ShippingZone } from '../../shared/types'
 import { Icon } from '../../shared/components/ui/Icon'
 import { EmptyState } from '../../shared/components/ui/EmptyState'
+import { validatePaymentProofFile } from '../../shared/services/uploads'
+import './Checkout.css'
+
+const readProofDataUrl = (file: File) => new Promise<string>((resolve, reject) => {
+  const reader = new FileReader()
+  reader.onerror = () => reject(new Error('تعذر قراءة إثبات التحويل'))
+  reader.onload = () => resolve(String(reader.result || ''))
+  reader.readAsDataURL(file)
+})
 
 export const StoreCheckout: FunctionalComponent = () => {
   const { store } = useStore()
   const cart = useCart()
   const toast = useToast()
   const { user } = useAuth()
-  const [form, setForm] = useState({ customerName: '', phone: '', governorate: '', city: '', address: '', notes: '', paymentMethod: 'cod', couponCode: '' })
+  const [form, setForm] = useState({ customerName: '', phone: '', governorate: '', city: '', area: '', address: '', notes: '', paymentMethod: 'cod', couponCode: '' })
   const [loading, setLoading] = useState(false)
   const [couponLoading, setCouponLoading] = useState(false)
   const [coupon, setCoupon] = useState<{ code: string; discount: number } | null>(null)
+  const [platformCoupons, setPlatformCoupons] = useState<Array<{ code: string; type: 'percent' | 'fixed'; value: number; minOrder: number }>>([])
   const [done, setDone] = useState<{ orderNumber: string; phone: string } | null>(null)
-
-  const zonesRes = useCollection<ShippingZone>('shipping', { storeId: store?.id || '' }, !!store?.id && cart.items.length > 0)
+  const [shippingOptions, setShippingOptions] = useState<Array<{ providerId?: string; providerName?: string; serviceCode?: string; serviceName?: string; amount?: number; price?: number; currency?: string; etaMin?: number | null; etaMax?: number | null; etaUnit?: string; codAvailable?: boolean; trackingAvailable?: boolean; zoneId?: string | null; zoneName?: string | null }>>([])
+  const [shippingUnavailableReason, setShippingUnavailableReason] = useState('')
+  const [selectedShippingOption, setSelectedShippingOption] = useState('')
+  const [bankTransferProof, setBankTransferProof] = useState<File | null>(null)
   const subtotal = cartSubtotal(cart.items)
 
-  const quote = calculateShipping({ store, zones: zonesRes.data, subtotal, governorate: form.governorate })
+  useEffect(() => {
+    if (!store?.id) return
+    let cancelled = false
+    void getPublicStoreCouponsCallable({ storeId: store.id })
+      .then((res) => { if (!cancelled) setPlatformCoupons(((res.data as any)?.coupons || []) as typeof platformCoupons) })
+      .catch(() => { if (!cancelled) setPlatformCoupons([]) })
+    return () => { cancelled = true }
+  }, [store?.id])
+
+  useEffect(() => {
+    if (!store?.id || !form.governorate || cart.items.length === 0) { setShippingOptions([]); setShippingUnavailableReason(''); return }
+    let cancelled = false
+    void getShippingOptionsCallable({ storeId: store.id, destination: { governorate: form.governorate, city: form.city, area: form.area }, subtotal, packageWeightKg: 1 }).then((res) => {
+      if (!cancelled) {
+        const options = ((res.data as any)?.options || []) as Array<{ providerId?: string; providerName?: string; serviceCode?: string; serviceName?: string; amount?: number; price?: number; currency?: string; etaMin?: number | null; etaMax?: number | null; etaUnit?: string; codAvailable?: boolean; trackingAvailable?: boolean; zoneId?: string | null; zoneName?: string | null }>
+        setShippingOptions(options)
+        setShippingUnavailableReason(String((res.data as any)?.unavailableReason || ''))
+        setSelectedShippingOption((current) => current && options.some((option) => `${option.providerId || ''}:${option.serviceCode || ''}` === current) ? current : (options[0] ? `${options[0].providerId || ''}:${options[0].serviceCode || ''}` : ''))
+      }
+    }).catch(() => { if (!cancelled) { setShippingOptions([]); setSelectedShippingOption(''); setShippingUnavailableReason('تعذر تحميل خيارات الشحن، حاول مرة أخرى.') } })
+    return () => { cancelled = true }
+  }, [store?.id, form.governorate, form.city, form.area, subtotal, cart.items.length])
+
+  const providerQuote = shippingOptions.find((option) => `${option.providerId || ''}:${option.serviceCode || ''}` === selectedShippingOption) || shippingOptions[0]
+  const quote = providerQuote
+    ? {
+      available: true,
+      fee: Number(providerQuote.price ?? providerQuote.amount ?? 0),
+      freeDelivery: Number(providerQuote.price ?? providerQuote.amount ?? 0) === 0,
+      method: providerQuote.serviceName || providerQuote.providerName || 'شحن',
+      policy: providerQuote.etaMin || providerQuote.etaMax ? `المدة المتوقعة: ${providerQuote.etaMin || '?'}–${providerQuote.etaMax || '?'} ${providerQuote.etaUnit === 'hours' ? 'ساعة' : 'يوم'}` : '',
+      unavailableReason: undefined,
+    }
+    : {
+      available: false,
+      fee: 0,
+      freeDelivery: false,
+      method: form.governorate ? 'الشحن غير متوفر لهذه الوجهة' : '',
+      policy: '',
+      unavailableReason: form.governorate ? shippingUnavailableReason || 'لا توجد خدمة شحن مفعّلة لهذه الوجهة' : 'اختر المحافظة لعرض خيارات الشحن',
+    }
   const total = subtotal + quote.fee - (coupon?.discount || 0)
 
   const applyCoupon = async () => {
@@ -64,18 +113,40 @@ export const StoreCheckout: FunctionalComponent = () => {
       toast.push('الشحن غير متوفر لهذه الوجهة', quote.unavailableReason || 'اختر محافظة مغطاة قبل المتابعة', 'error')
       return
     }
+    if (form.paymentMethod === 'bank') {
+      const validation = bankTransferProof ? validatePaymentProofFile(bankTransferProof) : { message: 'أرفق صورة إثبات التحويل قبل تأكيد الطلب' }
+      if (validation) {
+        toast.push('إثبات التحويل مطلوب', validation.message, 'error')
+        return
+      }
+    }
     setLoading(true)
     try {
       const salesLinkRef = store?.id ? sessionStorage.getItem(`mk_sales_ref_${store.id}`) || undefined : undefined
       const landingPageId = store?.id ? sessionStorage.getItem(`mk_landing_${store.id}`) || undefined : undefined
+      const attribution = new URLSearchParams(window.location.search)
+      const campaignId = sessionStorage.getItem(`mk_campaign_${store?.id || ''}`) || attribution.get('campaignId') || undefined
+      const utmSource = attribution.get('utm_source') || undefined
+      const utmCampaign = attribution.get('utm_campaign') || undefined
       const res = await createOrderCallable({
         storeId: store?.id,
         items: cart.items.map((i) => ({ productId: i.productId, quantity: i.quantity, color: i.color, size: i.size, variantId: i.variantId })),
-        customer: { name: form.customerName, phone: form.phone, governorate: form.governorate, city: form.city, address: form.address, notes: form.notes || '' },
+        customer: { name: form.customerName, phone: form.phone, governorate: form.governorate, city: form.city, area: form.area, address: form.address, notes: form.notes || '' },
         paymentMethod: form.paymentMethod,
+        bankTransferProof: form.paymentMethod === 'bank' && bankTransferProof ? {
+          dataUrl: await readProofDataUrl(bankTransferProof),
+          name: bankTransferProof.name,
+          contentType: bankTransferProof.type,
+        } : undefined,
         couponCode: coupon?.code || form.couponCode.trim() || undefined,
+        shippingProviderId: providerQuote?.providerId || undefined,
+        shippingServiceCode: providerQuote?.serviceCode || undefined,
+        packageWeightKg: 1,
         salesLinkRef,
         landingPageId,
+        campaignId,
+        utmSource,
+        utmCampaign,
       })
       const data = res.data as any
       setDone({ orderNumber: data.orderNumber, phone: form.phone })
@@ -100,14 +171,18 @@ export const StoreCheckout: FunctionalComponent = () => {
           <div className="confirmation-icon">
             <Icon name="check_circle" />
           </div>
-          <h1>تم إنشاء طلبك بنجاح</h1>
-          <p className="confirmation-subtitle">رقم طلبك: <strong className="monospace">{done.orderNumber}</strong></p>
-          <p className="confirmation-subtitle">يمكنك متابعة طلبك باستخدام رقم الطلب ورقم الهاتف.</p>
+          <span className="confirmation-kicker">تم إنشاء طلبك بنجاح</span>
+          <h1>طلبك وصل لنا بنجاح</h1>
+          <p className="confirmation-subtitle">احتفظ بهذا الكود؛ ستحتاجه للتتبع، وهو المرجع الذي يُرسل لشركة الشحن عند إنشاء الشحنة.</p>
+          <div className="confirmation-order-code">
+            <span>كود الطلب</span>
+            <strong className="monospace">{done.orderNumber}</strong>
+          </div>
 
           {isGuest && (
             <div className="guest-signup">
-              <h2>هل تريد إنشاء حساب لمتابعة جميع طلباتك بسهولة؟</h2>
-              <p className="muted small">أنشئ حساباً الآن وسنربط هذا الطلب بحسابك تلقائياً — التسجيل اختياري.</p>
+              <h2>تابع طلباتك من مكان واحد</h2>
+              <p className="muted small">أنشئ حساب عميل اختياريًا، وسنربط هذا الطلب بحسابك تلقائيًا.</p>
               <Link href={`/store/${store?.slug}/login?mode=signup&order=${encodeURIComponent(done.orderNumber)}&phone=${encodeURIComponent(done.phone)}`}>
                 <Button icon="person_add" className="mt-1">إنشاء حساب</Button>
               </Link>
@@ -147,7 +222,7 @@ export const StoreCheckout: FunctionalComponent = () => {
         <span className="complete"><b>1</b> السلة</span><i /> <span className="active"><b>2</b> بيانات التوصيل</span><i /> <span><b>3</b> التأكيد</span>
       </div>
       <div className="checkout-layout">
-        <form onSubmit={submit} className="checkout-form">
+        <form id="checkout-form" onSubmit={submit} className="checkout-form">
           <section className="checkout-section">
             <div className="checkout-section-header">
               <Icon name="person" className="checkout-section-icon" />
@@ -168,6 +243,12 @@ export const StoreCheckout: FunctionalComponent = () => {
               <Input label="الكود (اختياري)" value={form.couponCode} onChange={(v) => { setForm({ ...form, couponCode: v.toUpperCase() }); setCoupon(null) }} placeholder="مثال: SAVE10" />
               <Button type="button" variant="outline" loading={couponLoading} disabled={!form.couponCode.trim()} onClick={applyCoupon}>تطبيق</Button>
             </div>
+            {platformCoupons.length > 0 && <div className="coupon-available-list" aria-label="عروض متاحة">
+              <span className="muted small">عروض متاحة:</span>
+              {platformCoupons.map((item) => <button type="button" className="coupon-available" key={item.code} onClick={() => { setForm({ ...form, couponCode: item.code }); setCoupon(null) }}>
+                <strong>{item.code}</strong><span>{item.type === 'percent' ? `${item.value}% خصم` : `${formatCurrency(item.value)} خصم`}</span>
+              </button>)}
+            </div>}
             {coupon && <p className="coupon-applied" role="status">تم تطبيق خصم {formatCurrency(coupon.discount)}</p>}
             <p className="muted small">سيتم التحقق من صلاحية الكود وتطبيقه على الخادم.</p>
           </section>
@@ -178,8 +259,9 @@ export const StoreCheckout: FunctionalComponent = () => {
               <h2 className="checkout-section-title">عنوان الشحن</h2>
             </div>
             <div className="form-grid">
-              <Select label="المحافظة" value={form.governorate} onChange={(v) => setForm({ ...form, governorate: v })} placeholder="اختر المحافظة" options={GOVER_EG.map((g) => ({ value: g, label: g }))} />
-              <Input label="المدينة" value={form.city} onChange={(v) => setForm({ ...form, city: v })} required />
+              <Select label="المحافظة" value={form.governorate} onChange={(v) => setForm({ ...form, governorate: v, city: '', area: '' })} placeholder="اختر المحافظة" options={GOVER_EG.map((g) => ({ value: g, label: g }))} />
+              {form.governorate && EGYPT_CITIES_BY_GOVERNORATE[form.governorate]?.length ? <Select label="المدينة" value={form.city} onChange={(v) => setForm({ ...form, city: v, area: '' })} placeholder="اختر المدينة" options={EGYPT_CITIES_BY_GOVERNORATE[form.governorate].map((city) => ({ value: city, label: city }))} /> : <Input label="المدينة" value={form.city} onChange={(v) => setForm({ ...form, city: v })} required />}
+              <Input label="المنطقة / الحي (اختياري)" value={form.area} onChange={(v) => setForm({ ...form, area: v })} />
             </div>
             <Textarea label="العنوان بالتفصيل" value={form.address} onChange={(v) => setForm({ ...form, address: v })} rows={2} required />
             <Textarea label="ملاحظات (اختياري)" value={form.notes} onChange={(v) => setForm({ ...form, notes: v })} rows={2} />
@@ -191,16 +273,20 @@ export const StoreCheckout: FunctionalComponent = () => {
               <h2 className="checkout-section-title">طريقة الشحن</h2>
             </div>
             <div className="shipping-options">
-              <label className="shipping-option">
-                <input type="radio" name="shipping" value="standard" checked disabled={!quote.available} />
-                <div className="shipping-option-content">
-                  <div className="shipping-option-main">
-                    <span className="shipping-option-name">شحن قياسي</span>
-                    <span className="shipping-option-price">{quote.freeDelivery ? 'مجاني' : formatCurrency(quote.fee)}</span>
+              {shippingOptions.length > 0 ? shippingOptions.map((option) => {
+                const optionKey = `${option.providerId || ''}:${option.serviceCode || ''}`
+                const optionPrice = Number(option.price ?? option.amount ?? 0)
+                return <label className="shipping-option" key={optionKey}>
+                  <input type="radio" name="shipping" value={optionKey} checked={selectedShippingOption === optionKey} onChange={() => setSelectedShippingOption(optionKey)} />
+                  <div className="shipping-option-content">
+                    <div className="shipping-option-main">
+                      <span className="shipping-option-name">{option.serviceName || option.providerName || 'شحن'}</span>
+                      <span className="shipping-option-price">{optionPrice === 0 ? 'مجاني' : formatCurrency(optionPrice)}</span>
+                    </div>
+                    <p className="shipping-option-desc">{option.providerName}{option.etaMin || option.etaMax ? ` · ${option.etaMin || '?'}–${option.etaMax || '?'} ${option.etaUnit === 'hours' ? 'ساعة' : 'يوم'}` : ''}</p>
                   </div>
-                    <p className="shipping-option-desc">{quote.available ? 'التوصيل حسب سياسة المتجر' : quote.unavailableReason}</p>
-                </div>
-              </label>
+                </label>
+              }) : <p className="checkout-shipping-error" role="alert">{quote.unavailableReason}</p>}
               {quote.policy && (
                 <div className="shipping-policy">
                   <Icon name="info" className="policy-icon" />
@@ -237,11 +323,16 @@ export const StoreCheckout: FunctionalComponent = () => {
                 </div>
               </label>
             </div>
+            {form.paymentMethod === 'bank' && <div className="shipping-policy mt-1">
+              <Icon name="upload_file" className="policy-icon" />
+              <label className="field" style={{ flex: 1 }}>
+                <span className="field-label">صورة إثبات التحويل <span className="field-label-optional">(مطلوبة)</span></span>
+                <input className="input" type="file" accept="image/jpeg,image/png,image/webp" onChange={(event) => setBankTransferProof((event.target as HTMLInputElement).files?.[0] || null)} />
+                <span className="muted small">JPG أو PNG أو WebP — الحد الأقصى 5 ميجابايت. تُرسل للمراجعة مع الطلب.</span>
+              </label>
+            </div>}
           </section>
 
-          <Button type="submit" block size="lg" loading={loading} disabled={!quote.available} icon="shopping_cart_checkout" className="checkout-submit-btn">
-            تأكيد الطلب — {formatCurrency(total)}
-          </Button>
         </form>
 
         <aside className="order-summary order-summary--checkout" id="checkout-summary">
@@ -252,7 +343,7 @@ export const StoreCheckout: FunctionalComponent = () => {
               return (
                 <div key={i} className="summary-item">
                   <Link href={`/store/${store?.slug}/product/${item.productId}`} className="summary-item-image">
-                    {item.image && <SmartImage src={item.image} alt={item.name} className="summary-item-img" placeholderClassName="summary-item-img" />}
+                    <SmartImage src={item.image} alt={item.name} className="summary-item-img" placeholderClassName="summary-item-img" fallback="product" />
                   </Link>
                   <div className="summary-item-details">
                     <div className="summary-item-name">
@@ -277,6 +368,9 @@ export const StoreCheckout: FunctionalComponent = () => {
           {!quote.available && <p className="checkout-shipping-error" role="alert">{quote.unavailableReason}</p>}
           {quote.policy && <p className="muted small mt-1">{quote.policy}</p>}
           <p className="muted small mt-1">تاريخ اليوم: {todayKey()}</p>
+          <Button type="submit" form="checkout-form" block size="lg" loading={loading} disabled={!quote.available} icon="shopping_cart_checkout" className="checkout-submit-btn">
+            تأكيد الطلب — {formatCurrency(total)}
+          </Button>
         </aside>
       </div>
     </div>

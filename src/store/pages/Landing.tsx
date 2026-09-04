@@ -1,12 +1,9 @@
 import { FunctionalComponent } from 'preact'
 import { useEffect, useState } from 'preact/hooks'
 import { Link } from 'wouter'
-import { collection, query, where, onSnapshot, limit as limitQuery, type QuerySnapshot } from 'firebase/firestore'
-import { db } from '../../shared/firebase'
-import { useDocument } from '../../shared/hooks/useDocument'
 import { useCart } from '../../shared/hooks/useCart'
 import { useToast } from '../../shared/hooks/useToast'
-import { recordLandingPageViewCallable, recordStoreLinkVisitCallable } from '../../shared/services/auth'
+import { getPublicLandingPageCallable, recordLandingPageViewCallable, recordStoreLinkVisitCallable } from '../../shared/services/auth'
 import { Button } from '../../shared/components/ui/Button'
 import { Badge } from '../../shared/components/ui/Badge'
 import { EmptyState } from '../../shared/components/ui/EmptyState'
@@ -24,6 +21,8 @@ import { Icon } from '../../shared/components/ui/Icon'
 interface Props {
   slug: string
 }
+
+type PublicLanding = Pick<LandingPage, 'id' | 'slug' | 'title' | 'template' | 'hero' | 'sections' | 'productId' | 'seo'>
 
 function LandingSectionView({ section, storeSlug }: { section: LandingSection; storeSlug: string }) {
   const items = section.items || []
@@ -129,16 +128,17 @@ function LandingSectionView({ section, storeSlug }: { section: LandingSection; s
 }
 
 /**
- * Public landing page at `/landing/:slug`. The page resolves its own store from
- * `landingPage.storeId`, so it renders as a standalone themed page (no store
- * slug in the URL). Includes an embedded QuickBuy panel for the featured product.
+ * Public landing page at `/landing/:slug`. The callable returns a sanitized
+ * landing/store/product projection, so this standalone route never reads the
+ * internal landingPages document from the browser. Includes an embedded
+ * QuickBuy panel for the featured product.
  */
 export const StoreLanding: FunctionalComponent<Props> = ({ slug }) => {
-  const [landing, setLanding] = useState<LandingPage | null>(null)
+  const [landing, setLanding] = useState<PublicLanding | null>(null)
   const [loading, setLoading] = useState(true)
   const [notFound, setNotFound] = useState(false)
-  const { data: store, loading: storeLoading } = useDocument<Store>('stores', landing?.storeId || null)
-  const { data: product } = useDocument<Product>('products', landing?.productId || null)
+  const [store, setStore] = useState<Store | null>(null)
+  const [product, setProduct] = useState<Product | null>(null)
   const cart = useCart()
   const toast = useToast()
   const [qty, setQty] = useState(1)
@@ -153,29 +153,26 @@ export const StoreLanding: FunctionalComponent<Props> = ({ slug }) => {
     }
     setLoading(true)
     setNotFound(false)
-    const q = query(collection(db, 'landingPages'), where('slug', '==', slug), limitQuery(1))
-    const unsub = onSnapshot(
-      q,
-      (snap: QuerySnapshot) => {
-        if (!snap.empty) {
-          const doc = snap.docs[0]
-          const data = doc.data() as Partial<LandingPage>
-          if (data.active !== false && (data.status === undefined || data.status === 'published')) {
-            setLanding({ id: doc.id, ...data } as LandingPage)
-          } else {
-            setNotFound(true)
-          }
-        } else {
+    let cancelled = false
+    getPublicLandingPageCallable({ slug })
+      .then((result) => {
+        if (cancelled) return
+        const payload = result.data as { landing?: PublicLanding; store?: Store; product?: Product | null }
+        if (!payload.landing || !payload.store) {
           setNotFound(true)
+        } else {
+          setLanding(payload.landing)
+          setStore(payload.store)
+          setProduct(payload.product || null)
         }
         setLoading(false)
-      },
-      () => {
+      })
+      .catch(() => {
+        if (cancelled) return
         setNotFound(true)
         setLoading(false)
-      },
-    )
-    return () => unsub()
+      })
+    return () => { cancelled = true }
   }, [slug])
 
   // In quantity mode the QuickBuy must start on a configured tier quantity.
@@ -214,7 +211,7 @@ export const StoreLanding: FunctionalComponent<Props> = ({ slug }) => {
     }
   }, [landing, store?.id])
 
-  if (loading || (landing && storeLoading)) return <Loading />
+  if (loading) return <Loading />
 
   if (notFound || !landing || !store) {
     return (
@@ -333,7 +330,7 @@ export const StoreLanding: FunctionalComponent<Props> = ({ slug }) => {
               <div className="lp-buy-card">
                 <div className="lp-buy-media">
                   {(product.images || []).length > 0 ? (
-                    <SmartImage src={product.images[0]} alt={product.name} className="lp-buy-img" placeholderClassName="lp-buy-img" loading="eager" />
+                    <SmartImage src={product.images[0]} alt={product.name} className="lp-buy-img" placeholderClassName="lp-buy-img" loading="eager" fallback="product" />
                   ) : (
                     <div className="product-detail-empty"><Icon name="image" /><span className="muted">لا توجد صورة</span></div>
                   )}
@@ -425,7 +422,7 @@ export const StoreLanding: FunctionalComponent<Props> = ({ slug }) => {
 
       <footer className="lp-footer">
         <div className="lp-container lp-footer-inner">
-          <p className="muted small">© {new Date().getFullYear()} {store?.name || 'M&K'} — {store?.description || ''}</p>
+          <p className="muted small">© {new Date().getFullYear()} {store?.name || 'متجري'} — {store?.description || ''}</p>
           <Link href={`/store/${store?.slug}`} className="small">استعرض المتجر</Link>
         </div>
       </footer>

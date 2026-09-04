@@ -30,12 +30,16 @@ export const PlatformPayments: FunctionalComponent = () => {
   const [viewTarget, setViewTarget] = useState<SubscriptionPayment | null>(null)
   const [busyId, setBusyId] = useState<string | null>(null)
 
+  const purposeLabel = (p: SubscriptionPayment) => p.paymentPurpose === 'one_time_store_purchase' ? 'شراء متجر' : p.changeRequestId ? 'ترقية/تغيير' : p.periodNumber && p.periodNumber > 1 ? 'تجديد' : 'تفعيل اشتراك'
+
   const total = payments.reduce((s, p) => s + (p.amount || 0), 0)
   const collected = payments.filter((p) => p.status === 'paid').reduce((s, p) => s + (p.amount || 0), 0)
   const txnTotal = txns.reduce((s, t) => s + (t.amount || 0), 0)
   const pendingCount = subPayments.filter((p) => p.status === 'pending').length
 
-  if (paymentsRes.loading || txnsRes.loading || subPaymentsRes.loading) return <Loading />
+  if (paymentsRes.loading || txnsRes.loading || subPaymentsRes.loading) {
+    return <Loading message="جارٍ تحميل المدفوعات والمعاملات..." />
+  }
 
   const decide = async (p: SubscriptionPayment, approved: boolean) => {
     if (busyId) return
@@ -43,7 +47,7 @@ export const PlatformPayments: FunctionalComponent = () => {
     try {
       if (approved) {
         await approvePaymentRequestCallable({ paymentRequestId: p.id, note: 'تم التأكيد من إدارة المنصة' })
-        toast.push('تم تفعيل الاشتراك', `تم قبول عملية ${p.reference} وتفعيل الباقة`, 'success')
+        toast.push(p.paymentPurpose === 'one_time_store_purchase' ? 'تم اعتماد شراء المتجر' : 'تم تفعيل الاشتراك', `تم قبول عملية ${p.reference} وتطبيق الاستحقاق`, 'success')
       } else {
         await rejectPaymentRequestCallable({ paymentRequestId: p.id, note: 'رفض من إدارة المنصة' })
         toast.push('تم رفض الطلب', `تم رفض عملية ${p.reference}`, 'error')
@@ -58,13 +62,11 @@ export const PlatformPayments: FunctionalComponent = () => {
 
   return (
     <div className="platform-operations platform-payments-page">
-      <div className="platform-page-intro platform-page-intro--payments">
-        <PageHeader
+      <PageHeader
           title="المدفوعات والمعاملات"
           subtitle={tab === 'subscriptions' ? `${subPayments.length} طلب تفعيل اشتراك` : tab === 'payments' ? `${payments.length} عملية دفع` : `${txns.length} معاملة • ${formatCurrency(txnTotal)}`}
+          context={<span className="platform-intro-meta">مراجعة التدفقات المالية وطلبات تفعيل الاشتراكات</span>}
         />
-        <div className="platform-intro-meta">مراجعة التدفقات المالية وطلبات تفعيل الاشتراكات</div>
-      </div>
 
       <Tabs
         tabs={[
@@ -131,7 +133,8 @@ export const PlatformPayments: FunctionalComponent = () => {
               <Table cardMode
                 columns={[
                   { key: 'storeId', header: 'المتجر', render: (p: SubscriptionPayment) => <span className="monospace small">{p.storeId.slice(0, 8)}…</span> },
-                  { key: 'planName', header: 'الباقة' },
+                  { key: 'purpose', header: 'الغرض', render: (p: SubscriptionPayment) => <Badge tone={p.paymentPurpose === 'one_time_store_purchase' ? 'blue' : 'indigo'}>{purposeLabel(p)}</Badge> },
+                  { key: 'planName', header: 'الباقة/العرض' },
                   { key: 'amount', header: 'المبلغ', render: (p: SubscriptionPayment) => formatCurrency(p.amount) },
                   { key: 'paymentMethod', header: 'الوسيلة' },
                   { key: 'reference', header: 'رقم العملية', render: (p: SubscriptionPayment) => <span className="monospace">{p.reference}</span> },
@@ -156,10 +159,10 @@ export const PlatformPayments: FunctionalComponent = () => {
         </Fragment>
       )}
 
-      <Modal open={!!viewTarget} onClose={() => setViewTarget(null)} title={viewTarget ? `طلب تفعيل — ${viewTarget.planName}` : ''} footer={viewTarget?.status === 'pending' ? (
+      <Modal open={!!viewTarget} onClose={() => setViewTarget(null)} title={viewTarget ? `${purposeLabel(viewTarget)} — ${viewTarget.planName}` : ''} footer={viewTarget?.status === 'pending' ? (
         <Fragment>
           <Button variant="danger" icon="close" loading={busyId === viewTarget.id} onClick={() => decide(viewTarget, false)}>رفض الطلب</Button>
-          <Button icon="check" loading={busyId === viewTarget.id} onClick={() => decide(viewTarget, true)}>قبول وتفعيل</Button>
+          <Button icon="check" loading={busyId === viewTarget.id} onClick={() => decide(viewTarget, true)}>{viewTarget.paymentPurpose === 'one_time_store_purchase' ? 'اعتماد شراء المتجر' : 'قبول وتفعيل'}</Button>
         </Fragment>
       ) : undefined}>
         {viewTarget && (

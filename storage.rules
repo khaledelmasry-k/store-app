@@ -25,6 +25,58 @@ service firebase.storage {
       return isAdmin() || isOwnedByUser(storeId);
     }
 
+    // Paid/trial entitlements are enforced for direct media writes too.  The
+    // callable gates are not enough because the Storage SDK can upload without
+    // going through a Function.  Payment-proof documents remain writable for
+    // expired merchants so they can submit a reactivation request.
+    function hasActiveGrant(storeId) {
+      let store = firestore.get(/databases/(default)/documents/stores/$(storeId)).data;
+      let hasPointer = 'activeSubscriptionId' in store && store.activeSubscriptionId != null;
+      let subscriptionId = hasPointer ? store.activeSubscriptionId : '__missing__';
+      let sub = firestore.get(/databases/(default)/documents/subscriptions/$(subscriptionId)).data;
+      let lifetime = hasPointer && sub.billingModel == 'one_time'
+        && sub.ownershipType == 'lifetime'
+        && sub.lifetimeAccess == true;
+      return lifetime
+        || (hasPointer && sub.status == 'active' && (!('currentPeriodEnd' in sub) || request.time < sub.currentPeriodEnd))
+        || (hasPointer && sub.status == 'trialing' && (!('trialEndsAt' in sub) || request.time < sub.trialEndsAt));
+    }
+
+    function storageLimitBytes(storeId) {
+      let store = firestore.get(/databases/(default)/documents/stores/$(storeId)).data;
+      let hasPointer = 'activeSubscriptionId' in store && store.activeSubscriptionId != null;
+      let sub = firestore.get(/databases/(default)/documents/subscriptions/$(hasPointer ? store.activeSubscriptionId : '__missing__')).data;
+      let snapshotLimit = hasPointer && ('limitsSnapshot' in sub && 'storageLimit' in sub.limitsSnapshot)
+        ? sub.limitsSnapshot.storageLimit * 1024 * 1024
+        : 0;
+      return snapshotLimit > 0
+        ? snapshotLimit
+        : (('storageLimitBytes' in store) ? store.storageLimitBytes : 0);
+    }
+
+    function withinStorageQuota(storeId) {
+      let limit = storageLimitBytes(storeId);
+      let used = firestore.get(/databases/(default)/documents/stores/$(storeId)).data.storageUsed;
+      return limit <= 0 || used + request.resource.size <= limit;
+    }
+
+    function canUploadStoreAsset(storeId) {
+      return isAdmin() || (isOwnedByUser(storeId) && hasActiveGrant(storeId) && withinStorageQuota(storeId));
+    }
+
+    function canUploadStoreDocument(storeId) {
+      return isAdmin() || (isOwnedByUser(storeId) && hasActiveGrant(storeId) && withinStorageQuota(storeId));
+    }
+
+    function paymentProofOk(storeId) {
+      return request.resource.metadata.storeId == storeId
+        && request.resource.size <= 5 * 1024 * 1024
+        && (request.resource.contentType == 'image/jpeg'
+          || request.resource.contentType == 'image/png'
+          || request.resource.contentType == 'image/webp'
+          || request.resource.contentType == 'application/pdf');
+    }
+
     function uploadedImageOk(storeId) {
       return request.resource.metadata.storeId == storeId
         && request.resource.contentType.matches('image/.*')
@@ -36,7 +88,7 @@ service firebase.storage {
     // tenant ownership (request.resource is null on delete).
     match /products/{storeId}/{allPaths=**} {
       allow read: if true;
-      allow write: if ownsTenant(storeId) && uploadedImageOk(storeId);
+      allow write: if canUploadStoreAsset(storeId) && uploadedImageOk(storeId);
       allow delete: if ownsTenant(storeId);
     }
 
@@ -46,14 +98,14 @@ service firebase.storage {
     // specific match wins over the generic `stores/{storeId}/{allPaths=**}` rule.
     match /stores/{storeId}/products/{productId}/{allPaths=**} {
       allow read: if true;
-      allow write: if ownsTenant(storeId) && uploadedImageOk(storeId);
+      allow write: if canUploadStoreAsset(storeId) && uploadedImageOk(storeId);
       allow delete: if ownsTenant(storeId);
     }
 
     // Landing page images — public read, same tenant ownership, image + size caps.
     match /landingPages/{storeId}/{allPaths=**} {
       allow read: if true;
-      allow write: if ownsTenant(storeId) && uploadedImageOk(storeId);
+      allow write: if canUploadStoreAsset(storeId) && uploadedImageOk(storeId);
       allow delete: if ownsTenant(storeId);
     }
 
@@ -63,7 +115,18 @@ service firebase.storage {
     // matches the path-owned tenant.
     match /stores/{storeId}/{allPaths=**} {
       allow read: if true;
-      allow write: if ownsTenant(storeId) && uploadedImageOk(storeId);
+      allow write: if canUploadStoreAsset(storeId) && uploadedImageOk(storeId);
+      allow delete: if ownsTenant(storeId);
+    }
+
+    // Payment proofs are deliberately separate from ordinary merchant
+    // documents. A merchant may need to submit proof after a trial/period has
+    // expired, so this path verifies tenant ownership but does not require an
+    // active entitlement. It is still private and constrained to safe types
+    // and a 5 MB limit.
+    match /documents/{storeId}/payment-proofs/{allPaths=**} {
+      allow read: if ownsTenant(storeId);
+      allow write: if (isAdmin() || isOwnedByUser(storeId)) && paymentProofOk(storeId);
       allow delete: if ownsTenant(storeId);
     }
 
@@ -71,7 +134,7 @@ service firebase.storage {
     // the owning store's members and the platform admin may read (PII).
     match /documents/{storeId}/{allPaths=**} {
       allow read: if ownsTenant(storeId);
-      allow write: if ownsTenant(storeId) && request.resource.metadata.storeId == storeId;
+      allow write: if canUploadStoreDocument(storeId) && request.resource.metadata.storeId == storeId;
       allow delete: if ownsTenant(storeId);
     }
 

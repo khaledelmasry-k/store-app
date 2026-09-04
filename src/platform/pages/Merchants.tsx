@@ -16,7 +16,16 @@ import { Input } from '../../shared/components/ui/Input'
 import { Progress } from '../../shared/components/ui/Progress'
 import { useToast } from '../../shared/hooks/useToast'
 import { usePlatformOverview } from '../../shared/hooks/usePlatformOverview'
-import { registerMerchant, approveSubscriptionCallable, deleteSelectedTestMerchantsCallable, deleteTestMerchantCallable } from '../../shared/services/auth'
+import {
+  registerMerchant,
+  approveSubscriptionCallable,
+  deleteSelectedTestMerchantsCallable,
+  getMerchantDeletionPreviewCallable,
+  permanentlyDeleteMerchantCallable,
+  reactivateMerchantCallable,
+  suspendMerchantCallable,
+  type MerchantDeletionPreview,
+} from '../../shared/services/auth'
 import { slugify, formatDate, formatNumber } from '../../shared/utils/format'
 import { storePublicUrl } from '../../shared/utils/store-url'
 import {
@@ -26,11 +35,13 @@ import {
   ORDER_USAGE_TONES,
 } from '../../shared/utils/constants'
 import type { PlatformMerchantRow } from '../../shared/types'
+import './PlatformCorePages.css'
 
 const SEGMENTS = [
   { label: 'الكل', value: 'all' },
   { label: 'نشط', value: 'active' },
   { label: 'موقوف', value: 'suspended' },
+  { label: 'قيد الحذف', value: 'deleting' },
   { label: 'تجربة', value: 'trial' },
   { label: 'منتهي', value: 'expired' },
   { label: 'مجاني', value: 'free' },
@@ -46,7 +57,7 @@ const SORTS = [
   { value: 'name', label: 'الاسم (أ-ي)' },
 ]
 
-const SINGLE_DELETE_CONFIRMATION = 'Delete merchant and all associated test data?'
+const PERMANENT_DELETE_CONFIRMATION = 'حذف نهائي'
 const BULK_DELETE_CONFIRMATION = 'DELETE SELECTED TEST MERCHANTS'
 
 function usageProgressTone(level: PlatformMerchantRow['usageLevel']): 'primary' | 'green' | 'amber' | 'red' {
@@ -74,13 +85,16 @@ export const PlatformMerchants: FunctionalComponent = () => {
   const [selectedTestIds, setSelectedTestIds] = useState<string[]>([])
   const [deleteText, setDeleteText] = useState('')
   const [deleting, setDeleting] = useState(false)
+  const [deletePreview, setDeletePreview] = useState<MerchantDeletionPreview | null>(null)
+  const [previewLoading, setPreviewLoading] = useState(false)
 
   const hasLimit = (r: PlatformMerchantRow) => r.orderLimit > 0
 
   const inSegment = (r: PlatformMerchantRow): boolean => {
     if (statusFilter === 'all') return true
     if (statusFilter === 'active') return r.active
-    if (statusFilter === 'suspended') return !r.active
+    if (statusFilter === 'suspended') return r.merchantStatus === 'suspended'
+    if (statusFilter === 'deleting') return r.merchantStatus === 'deleting'
     if (statusFilter === 'trial') return r.subStatus === 'trialing'
     if (statusFilter === 'expired') return r.subStatus === 'expired'
     if (statusFilter === 'free') return Number(r.planPriceMonthly || 0) === 0
@@ -111,10 +125,12 @@ export const PlatformMerchants: FunctionalComponent = () => {
 
   const approve = async (row: PlatformMerchantRow) => {
     if (!row.subId || busyId) return
+    const confirmed = window.confirm(`هل تريد اعتماد التاجر «${row.ownerName || row.ownerEmail || row.storeName}» على باقة ${row.planName || 'المحددة'}؟`)
+    if (!confirmed) return
     setBusyId(row.storeId)
     try {
       await approveSubscriptionCallable({ subscriptionId: row.subId })
-      toast.push('تمت الموافقة على الاشتراك', `تم تفعيل حساب ${row.storeName}`, 'success')
+      toast.push('تمت الموافقة على التاجر', `تم اعتماد الحساب على ${row.planName || 'الباقة المحددة'} دون نشر المتجر.`, 'success')
       await refresh()
     } catch (err: any) {
       toast.push('فشل الموافقة', err?.message || 'حدث خطأ غير متوقع', 'error')
@@ -141,7 +157,7 @@ export const PlatformMerchants: FunctionalComponent = () => {
         storeName: form.name,
         storeRef: form.ref || slugify(form.name),
       })
-      toast.push('تم إضافة المتجر', 'تم إنشاء الحساب مع تفعيل التجربة المجانية', 'success')
+      toast.push('تم إضافة المتجر', 'تم إنشاء طلب التاجر وهو بانتظار موافقة إدارة المنصة.', 'success')
       setOpen(false)
       setForm({ name: '', ref: '', email: '', ownerName: '', phone: '', password: '' })
       await refresh()
@@ -150,13 +166,51 @@ export const PlatformMerchants: FunctionalComponent = () => {
     }
   }
 
-  const deleteOneTestMerchant = async () => {
-    if (!deleteTarget) return
+  const changeMerchantStatus = async (row: PlatformMerchantRow, action: 'suspend' | 'reactivate') => {
+    if (!row.ownerId || busyId) return
+    const label = action === 'suspend' ? 'إيقاف' : 'إعادة تفعيل'
+    if (!window.confirm(`هل تريد ${label} التاجر «${row.ownerName || row.ownerEmail || row.storeName}»؟`)) return
+    setBusyId(row.storeId)
+    try {
+      if (action === 'suspend') await suspendMerchantCallable({ merchantId: row.ownerId })
+      else await reactivateMerchantCallable({ merchantId: row.ownerId })
+      toast.push(action === 'suspend' ? 'تم إيقاف التاجر' : 'تمت إعادة تفعيل التاجر', action === 'suspend' ? 'تم حظر التشغيل والمتجر العام مع الاحتفاظ بجميع البيانات.' : 'لم تتغير الباقة أو التجربة أو حالة نشر المتجر.', 'success')
+      await refresh()
+    } catch (err: any) {
+      toast.push(`فشل ${label} التاجر`, err?.message || 'حدث خطأ غير متوقع', 'error')
+    } finally {
+      setBusyId(null)
+    }
+  }
+
+  const openPermanentDelete = async (row: PlatformMerchantRow) => {
+    if (!row.ownerId) {
+      toast.push('تعذر تحديد حساب مالك التاجر', undefined, 'error')
+      return
+    }
+    setDeleteTarget(row)
+    setDeleteText('')
+    setDeletePreview(null)
+    setPreviewLoading(true)
+    try {
+      const result = await getMerchantDeletionPreviewCallable({ merchantId: row.ownerId })
+      setDeletePreview(result.data)
+    } catch (err: any) {
+      toast.push('تعذر تحميل أثر الحذف', err?.message || 'حدث خطأ غير متوقع', 'error')
+      setDeleteTarget(null)
+    } finally {
+      setPreviewLoading(false)
+    }
+  }
+
+  const deleteMerchantPermanently = async () => {
+    if (!deleteTarget?.ownerId || !deletePreview) return
     setDeleting(true)
     try {
-      await deleteTestMerchantCallable({ storeId: deleteTarget.storeId, confirmation: SINGLE_DELETE_CONFIRMATION })
-      toast.push('تم حذف المتجر الاختباري', deleteTarget.storeName, 'success')
+      await permanentlyDeleteMerchantCallable({ merchantId: deleteTarget.ownerId, confirmation: PERMANENT_DELETE_CONFIRMATION })
+      toast.push('تم حذف التاجر وجميع بياناته بنجاح.', deleteTarget.ownerEmail || deleteTarget.storeName, 'success')
       setDeleteTarget(null)
+      setDeletePreview(null)
       setDeleteText('')
       await refresh()
     } catch (err: any) {
@@ -192,7 +246,7 @@ export const PlatformMerchants: FunctionalComponent = () => {
 
   const reached = rows.filter((r) => r.usageLevel === 'reached').length
   const near = rows.filter((r) => r.usageLevel === 'near' || r.usageLevel === 'approaching').length
-  const pendingCount = rows.filter((r) => r.subStatus === 'pending').length
+  const pendingCount = rows.filter((r) => r.subStatus === 'pending' || r.subStatus === 'pending_approval').length
   const activeCount = rows.filter((r) => r.active).length
   const selectedTestCount = selectedTestIds.filter((id) => rows.some((r) => r.storeId === id && r.isTestMerchant)).length
   const visibleTestIds = rowsPage.filter((r) => r.isTestMerchant).map((r) => r.storeId)
@@ -202,10 +256,10 @@ export const PlatformMerchants: FunctionalComponent = () => {
 
   return (
     <div className="platform-operations platform-merchants-page">
-      <div className="platform-page-intro">
-        <PageHeader
+      <PageHeader
           title="التجار والمتاجر"
           subtitle={`${rows.length} متجر مسجل`}
+          context={<span className="platform-intro-meta">إدارة الحسابات والاشتراكات والحدود من مساحة واحدة</span>}
           actions={
             <div className="flex">
             <Button
@@ -232,8 +286,6 @@ export const PlatformMerchants: FunctionalComponent = () => {
             </div>
           }
         />
-        <div className="platform-intro-meta">إدارة الحسابات والاشتراكات والحدود من مساحة واحدة</div>
-      </div>
 
       {error && (
         <Card className="mb-2">
@@ -387,17 +439,23 @@ export const PlatformMerchants: FunctionalComponent = () => {
                     <Link href={`/platform/stores/${r.storeId}`}>
                       <Button variant="ghost" size="sm" icon="visibility">عرض</Button>
                     </Link>
-                    {r.subStatus === 'pending' && r.subId && (
+                    {(r.subStatus === 'pending' || (r as any).subStatus === 'pending_approval') && r.subId && (
                       <Button size="sm" icon="check" loading={busyId === r.storeId} onClick={() => approve(r)}>موافقة</Button>
                     )}
-                    {r.isTestMerchant && (
+                    {r.merchantStatus === 'suspended' ? (
+                      <Button variant="outline" size="sm" icon="refresh" loading={busyId === r.storeId} onClick={() => changeMerchantStatus(r, 'reactivate')}>إعادة التفعيل</Button>
+                    ) : r.merchantStatus !== 'deleting' ? (
+                      <Button variant="outline" size="sm" icon="block" loading={busyId === r.storeId} onClick={() => changeMerchantStatus(r, 'suspend')}>إيقاف</Button>
+                    ) : null}
+                    {r.ownerId && r.ownerRole === 'merchant' && (
                       <Button
                         variant="danger"
                         size="sm"
                         icon="delete"
-                        onClick={() => { setDeleteTarget(r); setDeleteText('') }}
+                        disabled={r.merchantStatus === 'deleting'}
+                        onClick={() => openPermanentDelete(r)}
                       >
-                        حذف اختباري
+                        حذف نهائي
                       </Button>
                     )}
                   </div>
@@ -429,18 +487,18 @@ export const PlatformMerchants: FunctionalComponent = () => {
 
       <Modal
         open={!!deleteTarget}
-        onClose={() => { setDeleteTarget(null); setDeleteText('') }}
-        title="حذف متجر اختباري"
+        onClose={() => { if (!deleting) { setDeleteTarget(null); setDeletePreview(null); setDeleteText('') } }}
+        title="حذف التاجر نهائيًا"
         footer={
           <Fragment>
-            <Button variant="ghost" onClick={() => { setDeleteTarget(null); setDeleteText('') }}>إلغاء</Button>
+            <Button variant="ghost" disabled={deleting} onClick={() => { setDeleteTarget(null); setDeletePreview(null); setDeleteText('') }}>إلغاء</Button>
             <Button
               variant="danger"
               loading={deleting}
-              disabled={deleteText !== SINGLE_DELETE_CONFIRMATION}
-              onClick={deleteOneTestMerchant}
+              disabled={previewLoading || !deletePreview || deleteText !== PERMANENT_DELETE_CONFIRMATION}
+              onClick={deleteMerchantPermanently}
             >
-              حذف المتجر وبياناته
+              حذف التاجر نهائيًا
             </Button>
           </Fragment>
         }
@@ -449,14 +507,26 @@ export const PlatformMerchants: FunctionalComponent = () => {
           <div className="delete-identity mb-2">
             <strong>{deleteTarget.storeName}</strong>
             <span>{storePublicUrl(deleteTarget)}</span>
-            <Badge tone="amber">TEST ONLY</Badge>
+            <Badge tone="red">إجراء غير قابل للتراجع</Badge>
           </div>
         )}
-        <p className="muted small mb-2">
-          سيحذف هذا الإجراء المتجر الاختباري وكل بياناته المرتبطة من قاعدة البيانات والتخزين وحسابات الفريق. لا يعمل إلا مع المتاجر المحددة كاختبارية.
-        </p>
+        <p style={{ color: 'var(--danger)', fontWeight: 700 }}>هذا الإجراء نهائي ولا يمكن التراجع عنه.</p>
+        {previewLoading && <Loading />}
+        {deletePreview?.counts && (
+          <div className="delete-impact-grid mb-2">
+            <span>المتاجر: <strong>{deletePreview.counts.stores || 0}</strong></span>
+            <span>المنتجات: <strong>{deletePreview.counts.products || 0}</strong></span>
+            <span>الطلبات: <strong>{deletePreview.counts.orders || 0}</strong></span>
+            <span>العملاء: <strong>{deletePreview.counts.customers || 0}</strong></span>
+            <span>الاشتراكات: <strong>{deletePreview.counts.subscriptions || 0}</strong></span>
+            <span>المدفوعات: <strong>{(deletePreview.counts.subscriptionPayments || 0) + (deletePreview.counts.payments || 0)}</strong></span>
+            <span>ملفات التخزين: <strong>{deletePreview.counts.storageFiles || 0}</strong></span>
+            <span>حسابات Auth: <strong>{deletePreview.counts.authUsers || 0}</strong></span>
+          </div>
+        )}
+        <p className="muted small mb-2">يحذف الخادم التبعيات وحساب المالك وأعضاء الفريق المملوكين لهذا التاجر فقط. لا تُحذف حسابات العملاء العامة أو إعدادات المنصة.</p>
         <Input
-          label={`اكتب نص التأكيد: ${SINGLE_DELETE_CONFIRMATION}`}
+          label={`اكتب نص التأكيد: ${PERMANENT_DELETE_CONFIRMATION}`}
           value={deleteText}
           onChange={setDeleteText}
         />

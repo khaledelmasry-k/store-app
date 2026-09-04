@@ -1,5 +1,5 @@
 import { FunctionalComponent } from 'preact'
-import { useState } from 'preact/hooks'
+import { useEffect, useState } from 'preact/hooks'
 import { Link, useLocation } from 'wouter'
 import { Button } from '../ui/Button'
 import { AuthShell } from './AuthShell'
@@ -29,25 +29,60 @@ const PASSWORD_RULES = [
 const STRENGTH_SEGMENTS = [0, 1, 2, 3, 4]
 
 export const Register:FunctionalComponent = () => {
+  useEffect(() => {
+    document.title = 'Matjari | إنشاء حساب'
+  }, [])
   const [loc] = useLocation()
   const params = new URLSearchParams(loc.split('?')[1] || window.location.search)
   const plansRes = useCollection<SubscriptionPlan>('plans', {})
-  const plans = [...(plansRes.data.length ? plansRes.data : CANONICAL_PLANS)]
+  const availablePlans = [...(plansRes.data.length ? plansRes.data : CANONICAL_PLANS)]
+  const lifetimeOffer = availablePlans.find((plan: any) => plan.id === 'plan-lifetime' || (plan.billingModel === 'one_time' && (plan.slug === 'lifetime' || plan.name === 'LIFETIME')))
+  const lifetimeOfferAvailable = Boolean(
+    lifetimeOffer
+    && lifetimeOffer.billingModel === 'one_time'
+    && lifetimeOffer.active !== false
+    && lifetimeOffer.archived !== true
+    && lifetimeOffer.isPurchasable !== false
+    && lifetimeOffer.isPubliclyAvailable !== false
+    && lifetimeOffer.isLaunchOffer !== false
+    && Number(lifetimeOffer.oneTimePrice || 0) > 0,
+  )
+  const plans = availablePlans.filter((plan: any) => plan.billingModel !== 'one_time')
     .filter((p) => p.active !== false)
     .sort((a, b) => (a.sortOrder ?? 0) - (b.sortOrder ?? 0))
-  const [planId, setPlanId] = useState(params.get('plan') || undefined)
+  const requestedLifetime = params.get('offer') === 'lifetime' || params.get('plan') === 'plan-lifetime'
+  // Keep the dedicated mode while the catalog is loading. Once loaded, a
+  // closed/invalid offer is shown as unavailable and can never become a
+  // purchase intent merely because it was present in the URL.
+  const lifetimeMode = requestedLifetime && (plansRes.loading || lifetimeOfferAvailable)
+  const lifetimeUnavailable = requestedLifetime && !plansRes.loading && !lifetimeOfferAvailable
+  const [planId, setPlanId] = useState(lifetimeMode ? undefined : (params.get('plan') || undefined))
   const selectedPlan = planId ? plans.find((p) => p.id === planId) : undefined
+  const [planSelectorOpen, setPlanSelectorOpen] = useState(!planId && !lifetimeMode)
+
+  useEffect(() => {
+    if (!lifetimeMode) return
+    try {
+      // This is navigation intent only. The server still validates the offer,
+      // price, availability and approval before granting any entitlement.
+      sessionStorage.setItem('matjari:onboarding-offer', 'lifetime')
+    } catch {
+      // Session storage can be unavailable in privacy-restricted browsers;
+      // the URL handoff remains sufficient.
+    }
+  }, [lifetimeMode])
 
   const toast = useToast()
   const [step, setStep] = useState(0)
   const [form, setForm] = useState({ email: '', password: '', name: '', phone: '', storeName: '', storeRef: '' })
+  const [termsAccepted, setTermsAccepted] = useState(false)
   const [showPassword, setShowPassword] = useState(false)
   const [error, setError] = useState('')
   const [loading, setLoading] = useState(false)
   const [done, setDone] = useState(false)
 
   const canProceed = () => {
-    if (step === 0) return isEmailValid(form.email) && form.password.length >= 6 && form.name.trim() && form.phone.trim().length >= 8
+    if (step === 0) return isEmailValid(form.email) && form.password.length >= 6 && form.name.trim() && form.phone.trim().length >= 8 && termsAccepted
     if (step === 2) return form.storeName.trim()
     return true
   }
@@ -70,6 +105,7 @@ export const Register:FunctionalComponent = () => {
     if (!isEmailValid(form.email)) return setError('بريد إلكتروني غير صالح')
     if (form.password.length < 6) return setError('كلمة المرور 6 أحرف على الأقل')
     if (!form.name.trim() || !form.phone.trim() || !form.storeName.trim()) return setError('أدخل الاسم ورقم الهاتف واسم المتجر')
+    if (!termsAccepted) return setError('يجب الموافقة على شروط الاستخدام وسياسة الخصوصية قبل إنشاء الحساب')
     setLoading(true)
     try {
       await registerMerchant({
@@ -81,6 +117,7 @@ export const Register:FunctionalComponent = () => {
         storeRef: form.storeRef.trim() || form.storeName.trim(),
         planId,
       })
+      toast.push('تم إنشاء حسابك بنجاح', undefined, 'success')
       setDone(true)
     } catch (err: any) {
       setError(err?.message || 'فشل التسجيل')
@@ -91,6 +128,11 @@ export const Register:FunctionalComponent = () => {
   }
 
   if (done) {
+    const completionMessage = lifetimeMode
+      ? 'تم إنشاء حسابك ومتجرك كمسودة. بعد تسجيل الدخول ستجد عرض امتلك متجرك محدداً لإرسال طلب الشراء الآمن، ولن تتفعّل الملكية قبل اعتماد الدفع.'
+      : Number(selectedPlan?.priceMonthly || 0) <= 0
+        ? 'تم تفعيل باقة Free فورًا، وتم إنشاء متجرك كمسودة لتجهيزه قبل النشر.'
+        : `بدأت تجربتك المجانية على باقة ${selectedPlan?.name || ''} لمدة 3 أيام، وتم إنشاء متجرك كمسودة. يلزم اعتماد الدفع لاستمرار المزايا بعد انتهاء التجربة.`
     return (
       <AuthShell variant="brand">
         <div className="auth-card">
@@ -99,8 +141,8 @@ export const Register:FunctionalComponent = () => {
               <Icon name="check_circle" />
             </div>
             <h1 className="auth-title">تم إنشاء حسابك بنجاح</h1>
-            <p className="auth-subtitle">يمكنك الآن الدخول مباشرة وتجربة {selectedPlan?.name || 'باقتك'} مجاناً، والبدء في إعداد متجرك فوراً.</p>
-            <Link href="/login?role=merchant">
+            <p className="auth-subtitle">{completionMessage}</p>
+            <Link href={`/login?role=merchant${lifetimeMode ? '&offer=lifetime' : ''}`}>
               <Button variant="outline" block>تسجيل الدخول</Button>
             </Link>
           </div>
@@ -125,7 +167,33 @@ export const Register:FunctionalComponent = () => {
           ))}
         </ol>
 
-        {plans.length > 0 && (
+        {lifetimeMode && lifetimeOffer && (
+          <section className="register-lifetime-offer" data-testid="lifetime-registration-offer" aria-labelledby="lifetime-registration-title">
+            <div className="register-lifetime-offer-icon"><Icon name="workspace_premium" ariaHidden /></div>
+            <div className="register-lifetime-offer-body">
+              <span className="register-lifetime-kicker">Lifetime Access · عرض إطلاق</span>
+              <h2 id="lifetime-registration-title">امتلك متجرك</h2>
+              <div className="register-lifetime-price">
+                <strong>{formatCurrency(Number(lifetimeOffer.oneTimePrice || 4999), 'EGP')}</strong>
+                <span>دفعة واحدة</span>
+              </div>
+              <p>حق استخدام دائم لمتجر واحد داخل Matjari وفق المزايا والحدود المحددة.</p>
+              <ul className="register-lifetime-limits">
+                <li>1,000 منتج</li><li>5,000 طلب</li><li>5 أعضاء فريق</li><li>5 GB تخزين</li><li>3 صفحات هبوط</li><li>50 رابط بيع</li>
+              </ul>
+              <small>لا يشمل ملكية المنصة أو الكود المصدري أو المزايا Premium المستقبلية تلقائياً.</small>
+            </div>
+          </section>
+        )}
+        {lifetimeUnavailable && (
+          <section className="register-lifetime-unavailable" data-testid="lifetime-registration-unavailable" role="status">
+            <Icon name="info" ariaHidden />
+            <div><strong>عرض امتلك متجرك غير متاح حاليًا</strong><span>يمكنك متابعة التسجيل واختيار إحدى باقات الاشتراك المتاحة.</span></div>
+            <Link href="/register">استعرض باقات الاشتراك</Link>
+          </section>
+        )}
+
+        {!lifetimeMode && plans.length > 0 && planSelectorOpen && (
           <div className="register-plan-strip" aria-label="اختيار الباقة">
             {plans.map((p) => (
               <button
@@ -135,6 +203,7 @@ export const Register:FunctionalComponent = () => {
                 onClick={() => {
                   setPlanId(p.id)
                   setStep(1)
+                  setPlanSelectorOpen(false)
                 }}
               >
                 <span>{p.name}</span>
@@ -235,7 +304,7 @@ export const Register:FunctionalComponent = () => {
               </div>
               {error && <p className="field-error">{error}</p>}
               <label className="auth-terms">
-                <input type="checkbox" />
+                <input type="checkbox" checked={termsAccepted} onChange={(e) => setTermsAccepted((e.target as HTMLInputElement).checked)} required />
                 <span>
                   أوافق على <a href="/terms">شروط الاستخدام</a> و<a href="/privacy">سياسة الخصوصية</a>
                 </span>
@@ -252,9 +321,14 @@ export const Register:FunctionalComponent = () => {
         {step === 1 && (
           <>
             <h1 className="auth-title">اختيار الباقة</h1>
-            <p className="auth-subtitle">اختر باقتك — جربها مجاناً لـ {Number(selectedPlan?.trialDays || 3)} أيام</p>
-            {selectedPlan && (
-              <div className="plan-selected">
+            <p className="auth-subtitle">{lifetimeMode
+              ? 'أنشئ متجرك أولاً، ثم أرسل طلب امتلاك المتجر من لوحة الاشتراك بعد تسجيل الدخول.'
+              : Number(selectedPlan?.priceMonthly || 0) <= 0
+                ? 'باقة Free مجانية بدون فترة تجريبية.'
+                : 'اختر باقتك — تبدأ التجربة المجانية لمدة 3 أيام فور إنشاء الحساب.'}</p>
+            {lifetimeMode && <div className="register-lifetime-step-note"><Icon name="lock" ariaHidden /> سيظل الطلب قيد المراجعة ولن تتفعّل الملكية إلا بعد اعتماد الدفع.</div>}
+            {!lifetimeMode && selectedPlan && (
+              <div className="plan-selected register-selected-plan-summary">
                 <Icon name="workspace_premium" />
                 <div>
                   <strong>{selectedPlan.name}</strong>
@@ -263,10 +337,13 @@ export const Register:FunctionalComponent = () => {
                       ? `أول شهر ${formatCurrency(selectedPlan.launchPrice)} ثم ${formatCurrency(selectedPlan.priceMonthly)} شهرياً`
                       : `${formatCurrency(selectedPlan.priceMonthly)} / شهرياً`}
                   </span>
+                  {Number(selectedPlan.priceMonthly || 0) > 0 && <span className="register-selected-plan-trial">تجربة مجانية لمدة 3 أيام</span>}
+                  {Number(selectedPlan.priceMonthly || 0) <= 0 && <span className="register-selected-plan-trial">مجاني بدون فترة تجريبية</span>}
                 </div>
+                <button type="button" className="register-change-plan" onClick={() => setPlanSelectorOpen((open) => !open)}>{planSelectorOpen ? 'إغلاق الاختيار' : 'تغيير الباقة'}</button>
               </div>
             )}
-            <div className="plan-cards plan-cards--pricing">
+            {!lifetimeMode && planSelectorOpen && <div className="plan-cards plan-cards--pricing register-plan-selector">
               {plans.map((p) => (
                 <PricingCard
                   key={p.id}
@@ -277,7 +354,7 @@ export const Register:FunctionalComponent = () => {
                   ctaLabel={p.id === selectedPlan?.id ? 'تم الاختيار' : 'اختيار الخطة'}
                 />
               ))}
-            </div>
+            </div>}
             <div className="auth-step-actions">
               <Button variant="outline" onClick={prev}>السابق</Button>
               <Button onClick={next} icon="arrow_forward">التالي</Button>

@@ -14,9 +14,12 @@ import { uploadStoreLogo, uploadStoreHero, validateImageFile, uploadErrorMessage
 import { STORE_TEMPLATES } from '../../shared/utils/themes'
 import { STORE_LOGO_PRESETS, storeLogoKey, storeLogoKind, presetFromLogo, isPersistableImageUrl } from '../../shared/utils/store-brand'
 import type { StoreTheme } from '../../shared/types'
+import { ThemePreviewStorefront } from '../../store/components/ThemePreviewStorefront'
 
 const PRIMARY_SWATCHES = ['#0b766e', '#073f49', '#0f8f5f', '#075985', '#be3a34', '#102327', '#111827']
 const SECONDARY_SWATCHES = ['#c78a25', '#2dd4bf', '#b87512', '#0f748c', '#64748b', '#f4bf55', '#4f6265']
+const CANONICAL_TEMPLATES = STORE_TEMPLATES.filter((tpl) => tpl.canonical)
+const LEGACY_TEMPLATES = STORE_TEMPLATES.filter((tpl) => tpl.legacy)
 
 export const MerchantThemes: FunctionalComponent = () => {
   const { store } = useStore()
@@ -29,7 +32,6 @@ export const MerchantThemes: FunctionalComponent = () => {
   const [device, setDevice] = useState<'desktop' | 'mobile'>('desktop')
   const logoInputRef = useRef<HTMLInputElement>(null)
   const heroInputRef = useRef<HTMLInputElement>(null)
-  const saveTimer = useRef<ReturnType<typeof setTimeout> | null>(null)
   const undoStack = useRef<StoreTheme[]>([])
   const redoStack = useRef<StoreTheme[]>([])
 
@@ -45,26 +47,18 @@ export const MerchantThemes: FunctionalComponent = () => {
     })
   }, [store?.theme])
 
-  const persistTheme = async (next: StoreTheme) => {
-    if (!store) return
-    setSavingTheme(true)
-    try {
-      await storesService.update(store.id, { theme: next })
-    } catch (err: any) {
-      toast.push('فشل حفظ المظهر', err?.message || 'حدث خطأ غير متوقع', 'error')
-    } finally {
-      setSavingTheme(false)
-    }
-  }
-
   const updateTheme = (patch: Partial<StoreTheme>) => {
     const next = { ...themeForm, ...patch }
     undoStack.current.push(themeForm)
     if (undoStack.current.length > 20) undoStack.current.shift()
     redoStack.current = []
     setThemeForm(next)
-    if (saveTimer.current) clearTimeout(saveTimer.current)
-    saveTimer.current = setTimeout(() => persistTheme(next), 600)
+    if (store) {
+      setSavingTheme(true)
+      void storesService.update(store.id, { theme: next })
+        .catch((err: any) => toast.push('فشل حفظ المظهر', err?.message || 'حدث خطأ غير متوقع', 'error'))
+        .finally(() => setSavingTheme(false))
+    }
   }
 
   const undoTheme = () => {
@@ -72,8 +66,6 @@ export const MerchantThemes: FunctionalComponent = () => {
     if (!prev) return
     redoStack.current.push(themeForm)
     setThemeForm(prev)
-    if (saveTimer.current) clearTimeout(saveTimer.current)
-    saveTimer.current = setTimeout(() => persistTheme(prev), 600)
   }
 
   const redoTheme = () => {
@@ -81,13 +73,10 @@ export const MerchantThemes: FunctionalComponent = () => {
     if (!next) return
     undoStack.current.push(themeForm)
     setThemeForm(next)
-    if (saveTimer.current) clearTimeout(saveTimer.current)
-    saveTimer.current = setTimeout(() => persistTheme(next), 600)
   }
 
   const saveNow = async () => {
     if (!store) return
-    if (saveTimer.current) clearTimeout(saveTimer.current)
     setSavingTheme(true)
     try {
       await storesService.update(store.id, { theme: themeForm })
@@ -113,7 +102,6 @@ export const MerchantThemes: FunctionalComponent = () => {
         imageFit: themeForm.imageFit || 'contain',
       }
       setThemeForm(next)
-      if (saveTimer.current) clearTimeout(saveTimer.current)
       await storesService.update(store.id, { theme: next })
       toast.push('تم تطبيق القالب', tpl.name, 'success')
     } catch (err: any) {
@@ -209,13 +197,13 @@ export const MerchantThemes: FunctionalComponent = () => {
     }
   }
 
-  if (!store) return <Loading />
+  if (!store) return <Loading message="جارٍ تحميل استوديو التصميم..." />
 
   const logoKind = storeLogoKind(store.logo)
   const logoPreset = logoKind === 'preset' ? presetFromLogo(store.logo) : null
 
   return (
-    <div className="merchant-operations merchant-themes-page">
+    <div data-tour="themes-workspace" className="merchant-operations merchant-themes-page">
       <PageHeader
         breadcrumb="استوديو المتجر"
         title="استوديو التصميم"
@@ -247,7 +235,7 @@ export const MerchantThemes: FunctionalComponent = () => {
               <span className="theme-section-sub">اختر الهيكل العام لمتجرك</span>
             </div>
             <div className="theme-tpl-grid theme-gallery">
-              {STORE_TEMPLATES.map((tpl) => {
+              {CANONICAL_TEMPLATES.map((tpl) => {
                 const active = themeForm.template === tpl.id
                 const preview = { primary: tpl.defaultPrimary, secondary: tpl.defaultSecondary }
                 return (
@@ -271,6 +259,22 @@ export const MerchantThemes: FunctionalComponent = () => {
                 )
               })}
             </div>
+            {LEGACY_TEMPLATES.length > 0 && <details className="theme-legacy-group">
+              <summary>قوالب قديمة (للمتاجر الحالية)</summary>
+              <div className="theme-tpl-grid theme-gallery">
+                {LEGACY_TEMPLATES.map((tpl) => {
+                  const active = themeForm.template === tpl.id
+                  const preview = { primary: tpl.defaultPrimary, secondary: tpl.defaultSecondary }
+                  return (
+                    <div key={tpl.id} className={`theme-tpl-card theme-card${active ? ' theme-card--active is-active' : ''}`} onClick={() => applyTemplate(tpl.id)} title={tpl.description}>
+                      {active && <span className="theme-tpl-badge">القالب الحالي</span>}
+                      <ThemePreview tpl={tpl} colors={preview} />
+                      <div className="theme-tpl-foot"><span className="theme-tpl-name">{tpl.name}</span><Button size="sm" icon="check" loading={applying === tpl.id} onClick={(e) => { e.stopPropagation(); applyTemplate(tpl.id) }}>تطبيق</Button></div>
+                    </div>
+                  )
+                })}
+              </div>
+            </details>}
           </div>
 
           <div className="theme-section">
@@ -411,24 +415,7 @@ export const MerchantThemes: FunctionalComponent = () => {
               <button type="button" className={`theme-device-btn${device === 'mobile' ? ' is-active' : ''}`} onClick={() => setDevice('mobile')} title="جوال"><Icon name="smartphone" ariaHidden /></button>
             </div>
           </div>
-          <div className="theme-preview-stage">
-            <div className={`theme-preview-frame${device === 'mobile' ? ' is-mobile' : ''}${themeForm.darkMode ? ' is-dark' : ''}`} style={{ '--tp-primary': themeForm.primary, '--tp-secondary': themeForm.secondary } as any}>
-              <div className="tp-bar">
-                <span className="tp-logo" style={{ background: themeForm.primary }} />
-                <span className="tp-name">{store.name}</span>
-                <nav className="tp-nav-links"><span>الرئيسية</span><span>المنتجات</span><span>العروض</span><span>تواصل معنا</span></nav>
-                <span className="tp-icons"><i className="tp-search" /><i className="tp-cart" /></span>
-              </div>
-              <div className="tp-hero">
-                <b>{store.seoTitle || store.name}</b>
-                <i>{store.description || 'منتجات مختارة، عروض واضحة، وتجربة شراء سهلة.'}</i>
-                <em>تسوق الآن</em>
-              </div>
-              <div className="tp-grid">
-                <span className="tp-card" /><span className="tp-card" /><span className="tp-card" />
-              </div>
-            </div>
-          </div>
+          <div className="theme-preview-stage"><ThemePreviewStorefront template={themeForm.template || 'modern'} primary={themeForm.primary} secondary={themeForm.secondary || themeForm.primary} storeName={store.name} description={store.description} mobile={device === 'mobile'} /></div>
           <a href={`/store/${store.slug}`} target="_blank" rel="noreferrer" className="btn btn-primary btn-lg theme-preview-link">
             <Icon name="open_in_new" />
             فتح المعاينة الحية
@@ -439,24 +426,8 @@ export const MerchantThemes: FunctionalComponent = () => {
   )
 }
 
-function ThemePreview({ tpl, colors }: { tpl: { name: string; cssClass: string }; colors: { primary: string; secondary: string } }) {
-  return (
-    <div className={`theme-preview-frame tp-mini ${tpl.cssClass}`} style={{ '--tp-primary': colors.primary, '--tp-secondary': colors.secondary } as any}>
-      <div className="tp-bar">
-        <span className="tp-logo" />
-        <span className="tp-name">{tpl.name}</span>
-        <span className="tp-nav"><i /><i /><i /></span>
-      </div>
-      <div className="tp-hero">
-        <b>تسوق أحدث المنتجات</b>
-        <i>عروض مميزة وتوصيل سريع</i>
-        <em>تسوق الآن</em>
-      </div>
-      <div className="tp-grid">
-        <span className="tp-card" /><span className="tp-card" /><span className="tp-card" />
-      </div>
-    </div>
-  )
+function ThemePreview({ tpl, colors }: { tpl: any; colors: { primary: string; secondary: string } }) {
+  return <ThemePreviewStorefront template={tpl} primary={colors.primary} secondary={colors.secondary} storeName={tpl.name} mini />
 }
 
 export default MerchantThemes

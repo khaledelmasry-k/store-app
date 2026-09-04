@@ -9,6 +9,7 @@ import { Avatar } from '../../shared/components/ui/Avatar'
 import { Dropdown } from '../../shared/components/ui/Dropdown'
 import { Icon } from '../../shared/components/ui/Icon'
 import { MerchantLogo } from '../../shared/components/brand/MerchantLogo'
+import { getTemplate } from '../../shared/utils/themes'
 import './StorefrontHeader.css'
 
 interface NavItem {
@@ -32,8 +33,8 @@ interface Props {
 
 /**
  * Storefront header rebuilt from the real Stitch storefront sources:
- *  - desktop:  M&K Store | Premium Consumer Storefront Home (56916061f03346f78802151c20218370)
- *  - mobile:   M&K Store | Refined Mobile Storefront Experience (46368a57a55d4c4d95b73c89b5dd8680)
+ *  - desktop:  Matjari | Premium Consumer Storefront Home
+ *  - mobile:   Matjari | Refined Mobile Storefront Experience
  * Desktop = sticky surface bar, 1440px inner, px-8 py-4, brand wordmark,
  * underline-active nav (gap-8), 256px search pill (>=1024px), round icon
  * controls (cart / account / theme). Mobile = 64px row (menu + centered
@@ -75,6 +76,7 @@ export const StorefrontHeader: FunctionalComponent<Props> = ({
     : []
 
   const cartLabel = `السلة${cart.count > 0 ? `، ${cart.count} منتج` : '، فارغة'}`
+  const headerVariant = getTemplate(store?.theme?.template).layout.header
 
   const searchField = (variant: string) => (
     <form className={`storefront-search ${variant}`} onSubmit={onSearchSubmit} role="search">
@@ -92,6 +94,7 @@ export const StorefrontHeader: FunctionalComponent<Props> = ({
   return (
     <>
       <header className={`storefront-header store-header${scrolled ? ' storefront-header--scrolled' : ''}`}>
+        {(headerVariant === 'bold' || headerVariant === 'market') && <div className={`storefront-theme-strip storefront-theme-strip--${headerVariant}`}>{headerVariant === 'market' ? 'تسوق أسرع — فئاتك ومنتجاتك كلها في مكان واحد' : 'عروض الموسم متاحة الآن — اكتشف الجديد'}</div>}
         <div className="storefront-header-inner">
           <button
             type="button"
@@ -104,17 +107,19 @@ export const StorefrontHeader: FunctionalComponent<Props> = ({
             <Icon name={menuOpen ? 'close' : 'menu'} />
           </button>
 
-          <Link href={base} className="storefront-brand" aria-label={store?.name || 'M&K Store'}>
+          <Link href={base} className="storefront-brand" aria-label={store?.name || 'Matjari'}>
             <MerchantLogo store={store} variant="header" />
           </Link>
 
-          <nav className="storefront-nav" role="navigation" aria-label="التنقل الرئيسي">
+          <nav className={`storefront-nav storefront-nav--${headerVariant}`} role="navigation" aria-label="التنقل الرئيسي">
             {navItems.map((n) => (
               <Link key={n.to} href={n.to} className={`storefront-nav-link${isActive(n.to) ? ' storefront-nav-link--active' : ''}`}>
                 {n.label}
               </Link>
             ))}
           </nav>
+
+          {headerVariant === 'market' && <Link href={`${base}/catalog`} className="storefront-category-link"><Icon name="apps" ariaHidden /> كل الفئات</Link>}
 
           <div className="storefront-controls">
             {showSearch && searchField('storefront-search--desktop')}

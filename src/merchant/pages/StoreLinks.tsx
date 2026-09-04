@@ -63,7 +63,7 @@ export const MerchantStoreLinks: FunctionalComponent = () => {
   const landingsRes = useCollection<LandingPage>('landingPages', { storeId })
   const products = productsRes.data || []
   const landings = landingsRes.data || []
-  const { plan } = useSubscription(storeId)
+  const { plan, resourceUsage } = useSubscription(storeId)
   const toast = useToast()
   const [query, setQuery] = useState('')
   const [status, setStatus] = useState('')
@@ -82,8 +82,8 @@ export const MerchantStoreLinks: FunctionalComponent = () => {
     (!status || (status === 'active' ? l.active : !l.active)),
   )
 
-  const linksLimit = getPlanLimit('salesLinks', plan)
-  const linksUnlimited = isPlanLimitUnlimited('salesLinks', plan)
+  const linksLimit = resourceUsage?.salesLinks.limit ?? getPlanLimit('salesLinks', plan)
+  const linksUnlimited = resourceUsage ? resourceUsage.salesLinks.limit <= 0 : isPlanLimitUnlimited('salesLinks', plan)
   const atLimit = !linksUnlimited && linksLimit > 0 && links.length >= linksLimit
 
   const openForm = (l?: StoreLink) => {
@@ -169,6 +169,7 @@ export const MerchantStoreLinks: FunctionalComponent = () => {
 
   const conversionRate = (l: StoreLink) => (l.visits && l.visits > 0 ? Math.round(((l.ordersCount || 0) / l.visits) * 1000) / 10 : 0)
 
+  if (!store) return <Loading variant="screen" message="جارٍ تحميل بيانات المتجر..." />
   if (linksRes.loading || productsRes.loading || landingsRes.loading) return <Loading variant="screen" message="جاري تحميل روابط البيع..." />
 
   const totalClicks = links.reduce((s, l) => s + (l.visits || 0), 0)
@@ -208,7 +209,6 @@ export const MerchantStoreLinks: FunctionalComponent = () => {
 
       <div className="storelinks-toolbar">
         <div className="storelinks-toolbar-group">
-          <button type="button" className="storelinks-filter-btn" title="فلاتر"><Icon name="tune" ariaHidden /></button>
           <select value={status} onChange={(e) => setStatus((e.target as HTMLSelectElement).value)} aria-label="الحالة">
             <option value="">جميع الحالات</option>
             <option value="active">نشط</option>

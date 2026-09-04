@@ -9,6 +9,7 @@ import { SmartImage } from '../../shared/components/ui/SmartImage'
 import { formatCurrency } from '../../shared/utils/format'
 import { Icon } from '../../shared/components/ui/Icon'
 import type { Product, WishlistItem } from '../../shared/types'
+import { getTemplate } from '../../shared/utils/themes'
 import './StoreProductCard.css'
 
 interface Props {
@@ -49,11 +50,12 @@ export const StoreProductCard: FunctionalComponent<Props> = ({ product, category
   const colors = colorOptions.slice(0, 3)
 
   const goto = `/store/${store?.slug}/product/${product.id}`
+  const cardVariant = getTemplate(store?.theme?.template).layout.productCard
 
   return (
-    <article className={`spc-card store-card${!inStock ? ' spc-card--out' : ''}`}>
+    <article className={`spc-card store-card spc-card--${cardVariant}${!inStock ? ' spc-card--out' : ''}`} data-template-card={cardVariant}>
       <Link href={goto} className="spc-media" aria-label={product.name}>
-        <SmartImage src={product.images?.[0]} alt={product.name} className="spc-media-img" placeholderClassName="spc-media-img" />
+        <SmartImage src={product.images?.[0]} alt={product.name} className="spc-media-img" placeholderClassName="spc-media-img" fallback="product" />
         {product.featured && <span className="spc-badge spc-badge--new">جديد</span>}
         {discount > 0 && <span className="spc-badge spc-badge--sale">-{discount}%</span>}
         {!inStock && <span className="spc-badge spc-badge--out">نفد</span>}
@@ -91,7 +93,8 @@ export const StoreProductCard: FunctionalComponent<Props> = ({ product, category
       >
         <Icon name={wished ? 'favorite' : 'favorite_border'} ariaHidden />
       </button>
-      <div className="spc-body">
+      <div className={`spc-body spc-body--${cardVariant}`}>
+        {cardVariant === 'market' && <span className="spc-market-label">شراء سريع</span>}
         {colorCount > 0 && (
           <div className="spc-colors">
             {colors.map((c, i) => (
@@ -104,7 +107,7 @@ export const StoreProductCard: FunctionalComponent<Props> = ({ product, category
           <Link href={goto}>{product.name}</Link>
         </h3>
         {categoryName && <p className="spc-category">{categoryName}</p>}
-        <div className="spc-price-row">
+        <div className={`spc-price-row spc-price-row--${cardVariant}`}>
           <div className="spc-price-col">
             <span className={`spc-price${discount > 0 ? ' spc-price--sale' : ''}`}>{formatCurrency(product.price, store?.currency)}</span>
             {discount > 0 && product.oldPrice && (
@@ -115,7 +118,7 @@ export const StoreProductCard: FunctionalComponent<Props> = ({ product, category
             {inStock ? (lowCount > 0 ? `آخر ${lowCount} قطعة` : 'متوفر') : 'نفد'}
           </span>
         </div>
-        <button type="button" className="spc-add-btn spc-add-btn--mobile" aria-label={`أضف ${product.name} للسلة`}>
+        <button type="button" className={`spc-add-btn spc-add-btn--mobile spc-add-btn--${cardVariant}`} aria-label={`أضف ${product.name} للسلة`}>
           <Icon name="add_shopping_cart" ariaHidden />
           أضف للسلة
         </button>

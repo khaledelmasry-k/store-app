@@ -71,6 +71,8 @@ export function extFromType(type: string): string {
       return 'webp'
     case 'image/gif':
       return 'gif'
+    case 'application/pdf':
+      return 'pdf'
     default:
       return 'jpg'
   }
@@ -95,6 +97,52 @@ export function uploadErrorMessage(e: unknown): string {
     default:
       return 'فشل رفع الصورة — تحقق من اتصالك وحاول مجدداً'
   }
+}
+
+async function fileAsBase64(file: File): Promise<string> {
+  const buffer = await file.arrayBuffer()
+  const bytes = new Uint8Array(buffer)
+  let binary = ''
+  for (let index = 0; index < bytes.length; index += 0x8000) binary += String.fromCharCode(...bytes.subarray(index, index + 0x8000))
+  return btoa(binary)
+}
+
+/** Uses the server-checked path only when a direct Storage upload is denied.
+ * This keeps resumable direct uploads as the normal fast path while making a
+ * valid merchant upload resilient to a stale Storage-rule entitlement. */
+async function uploadWithFallback(file: File, input: { storeId: string; assetType: 'product' | 'store' | 'landing'; productId?: string }): Promise<string> {
+  const result = await httpsCallable(functions, 'uploadMerchantImage')({
+    ...input,
+    fileName: file.name,
+    contentType: file.type,
+    base64: await fileAsBase64(file),
+  })
+  const url = String((result.data as { url?: string })?.url || '')
+  if (!url) throw new Error('لم تُرجع خدمة الرفع رابط الصورة')
+  return url
+}
+
+function shouldUseUploadFallback(error: unknown) {
+  const code = String((error as { code?: string } | null)?.code || '')
+  // Do not retry an intentional cancellation or a known capacity limit. Every
+  // other Storage SDK failure may be caused by a browser-side rule/session
+  // mismatch, so hand the same validated image to the server-authorized route.
+  // This keeps merchants able to upload a logo, banner, or product photo even
+  // when a browser holds an outdated Storage auth token.
+  return code !== 'storage/canceled' && code !== 'storage/quota-exceeded'
+}
+
+/** Validates payment proof files independently from storefront images. */
+export function validatePaymentProofFile(file: File): UploadError | null {
+  if (!file || !file.type) return { code: 'empty', message: 'اختر إثبات تحويل صالحاً أولاً' }
+  const allowed = ['image/jpeg', 'image/png', 'image/webp', 'application/pdf']
+  if (!allowed.includes(file.type)) {
+    return { code: 'type', message: 'صيغة إثبات التحويل غير مدعومة — استخدم JPG أو PNG أو WebP أو PDF' }
+  }
+  if (file.size > MAX_IMAGE_BYTES) {
+    return { code: 'size', message: 'حجم إثبات التحويل كبير جداً — الحد الأقصى 5 ميجابايت' }
+  }
+  return null
 }
 
 /**
@@ -134,8 +182,13 @@ export async function uploadProductImage(
       onProgress?.(pct)
     },
   )
-  await task
-  return getDownloadURL(storageRef)
+  try {
+    await task
+    return getDownloadURL(storageRef)
+  } catch (error) {
+    if (!shouldUseUploadFallback(error)) throw error
+    return uploadWithFallback(file, { storeId, assetType: 'product', productId })
+  }
 }
 
 /** Deletes an uploaded image given its download URL (best-effort). */
@@ -166,11 +219,16 @@ export async function uploadStoreLogo(file: File, storeId: string): Promise<stri
   const ext = extFromType(normalized.type)
   const clean = normalized.name.replace(/[^a-zA-Z0-9._-]/g, '').slice(0, 40) || 'logo'
   const storageRef = ref(storage, `stores/${storeId}/logo-${Date.now()}-${uid(6)}-${clean}.${ext}`)
-  await uploadBytesResumable(storageRef, normalized, {
-    contentType: normalized.type,
-    customMetadata: { storeId },
-  })
-  return getDownloadURL(storageRef)
+  try {
+    await uploadBytesResumable(storageRef, normalized, {
+      contentType: normalized.type,
+      customMetadata: { storeId },
+    })
+    return getDownloadURL(storageRef)
+  } catch (error) {
+    if (!shouldUseUploadFallback(error)) throw error
+    return uploadWithFallback(normalized, { storeId, assetType: 'store' })
+  }
 }
 
 /**
@@ -193,8 +251,13 @@ export async function uploadStoreHero(file: File, storeId: string, onProgress?: 
     const pct = snap.totalBytes > 0 ? Math.round((snap.bytesTransferred / snap.totalBytes) * 100) : 0
     onProgress?.(pct)
   })
-  await task
-  return getDownloadURL(storageRef)
+  try {
+    await task
+    return getDownloadURL(storageRef)
+  } catch (error) {
+    if (!shouldUseUploadFallback(error)) throw error
+    return uploadWithFallback(file, { storeId, assetType: 'store' })
+  }
 }
 
 /**
@@ -217,21 +280,30 @@ export async function uploadLandingImage(file: File, storeId: string, onProgress
     const pct = snap.totalBytes > 0 ? Math.round((snap.bytesTransferred / snap.totalBytes) * 100) : 0
     onProgress?.(pct)
   })
-  await task
-  return getDownloadURL(storageRef)
+  try {
+    await task
+    return getDownloadURL(storageRef)
+  } catch (error) {
+    if (!shouldUseUploadFallback(error)) throw error
+    return uploadWithFallback(file, { storeId, assetType: 'landing' })
+  }
 }
 
 /**
- * Uploads a payment proof / transfer screenshot to `documents/{storeId}/...`
- * (matches storage.rules `documents` path for merchant-uploaded evidence).
+ * Uploads a payment proof / transfer screenshot to
+ * `documents/{storeId}/payment-proofs/...`. This dedicated path remains
+ * writable for an owned store even after a trial/period expires, allowing a
+ * merchant to submit reactivation proof without opening ordinary documents.
  */
 export async function uploadPaymentProof(file: File, storeId: string, onProgress?: (pct: number) => void): Promise<string> {
+  const validation = validatePaymentProofFile(file)
+  if (validation) throw validation
   await assertStorageQuota(storeId, file.size).catch((e) => {
     if (e && (e as UploadError).code === 'quota') throw e
   })
   const ext = extFromType(file.type)
   const clean = file.name.replace(/[^a-zA-Z0-9._-]/g, '').slice(0, 40) || 'proof'
-  const storageRef = ref(storage, `documents/${storeId}/payment-${Date.now()}-${uid(6)}-${clean}.${ext}`)
+  const storageRef = ref(storage, `documents/${storeId}/payment-proofs/payment-${Date.now()}-${uid(6)}-${clean}.${ext}`)
   const task = uploadBytesResumable(storageRef, file, {
     contentType: file.type,
     customMetadata: { storeId },

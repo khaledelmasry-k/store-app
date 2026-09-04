@@ -14,12 +14,19 @@ import { Register } from './shared/components/auth/Register'
 import { ForgotPassword } from './shared/components/auth/ForgotPassword'
 import { PlatformLayout } from './shared/components/layout/PlatformLayout'
 import { MerchantLayout } from './shared/components/layout/MerchantLayout'
-import { StoreLayout } from './shared/components/layout/StoreLayout'
+import { StorefrontShell } from './shared/components/layout/StorefrontShell'
 import { StoreSlugLoader } from './shared/components/layout/StoreSlugLoader'
 import { StoreLinkRedirect } from './shared/components/layout/StoreLinkRedirect'
 import { parseStoreLocation } from './shared/utils/store-route'
 import { ROUTE_PERMISSIONS } from './shared/utils/constants'
 import { InfoPage } from './platform/pages/InfoPage'
+
+// Development-only diagnostics are loaded only in dev builds. Keeping the
+// import behind Vite's compile-time DEV flag prevents the route and component
+// from entering production chunks at all.
+const FirebaseDiagnostics = import.meta.env.DEV
+  ? lazy(() => import('./shared/components/dev/FirebaseDiagnostics').then((module) => ({ default: module.FirebaseDiagnostics as any })) as any)
+  : null
 
 const PlatformDashboard = lazy(() => import('./platform/pages/Dashboard'))
 const PlatformLanding = lazy(() => import('./platform/pages/LandingPage'))
@@ -32,6 +39,7 @@ const PlatformCustomers = lazy(() => import('./platform/pages/Customers'))
 const PlatformSubscriptions = lazy(() => import('./platform/pages/Subscriptions'))
 const PlatformSubscriptionDetail = lazy(() => import('./platform/pages/Subscription'))
 const PlatformPlans = lazy(() => import('./platform/pages/Plans'))
+const PlatformPromotions = lazy(() => import('./platform/pages/Promotions'))
 const PlatformPayments = lazy(() => import('./platform/pages/Payments'))
 const PlatformCoupons = lazy(() => import('./platform/pages/Coupons'))
 const PlatformReports = lazy(() => import('./platform/pages/Reports'))
@@ -40,6 +48,7 @@ const PlatformAudit = lazy(() => import('./platform/pages/Audit'))
 const PlatformNotifications = lazy(() => import('./platform/pages/Notifications'))
 const PlatformSettings = lazy(() => import('./platform/pages/Settings'))
 const PlatformShippingCompanies = lazy(() => import('./platform/pages/ShippingCompanies'))
+const PlatformShippingCompanyDetails = lazy(() => import('./platform/pages/ShippingCompanyDetails'))
 
 const MerchantDashboard = lazy(() => import('./merchant/pages/Dashboard'))
 const MerchantProducts = lazy(() => import('./merchant/pages/Products'))
@@ -137,6 +146,7 @@ function PlatformRoutes() {
       <Route path="/subscriptions" component={() => <PlatformSubscriptions />} />
       <Route path="/subscriptions/:id" component={PlatformSubscriptionRoute} />
       <Route path="/plans" component={() => <PlatformPlans />} />
+      <Route path="/promotions" component={() => <PlatformPromotions />} />
       <Route path="/payments" component={() => <PlatformPayments />} />
       <Route path="/transactions" component={() => <Redirect to="/platform/payments" replace />} />
       <Route path="/coupons" component={() => <PlatformCoupons />} />
@@ -146,6 +156,7 @@ function PlatformRoutes() {
       <Route path="/notifications" component={() => <PlatformNotifications />} />
       <Route path="/settings" component={() => <PlatformSettings />} />
       <Route path="/shipping-companies" component={() => <PlatformShippingCompanies />} />
+      <Route path="/shipping-companies/:id" component={({ params }: any) => <PlatformShippingCompanyDetails id={params.id} />} />
       <Route component={() => <Redirect to="/platform" replace />} />
     </ZoneRouter>
   )
@@ -195,7 +206,7 @@ function StoreRoutes() {
 
   return (
     <StoreSlugLoader>
-      <StoreLayout>
+      <StorefrontShell>
         <Switch location={innerPath}>
           <Route path="/" component={() => <StoreHome />} />
           <Route path="/catalog" component={() => <StoreCatalog />} />
@@ -209,7 +220,7 @@ function StoreRoutes() {
           <Route path="/login" component={() => <StoreLogin />} />
           <Route component={() => <StoreHome />} />
         </Switch>
-      </StoreLayout>
+      </StorefrontShell>
     </StoreSlugLoader>
   )
 }
@@ -225,6 +236,7 @@ export default function App() {
                 <Switch>
                   <Route path="/" component={HomeRedirect} />
                   <Route path="/login" component={LoginByRole} />
+                  {import.meta.env.DEV && FirebaseDiagnostics && <Route path="/__dev/firebase" component={FirebaseDiagnostics} />}
                   <Route path="/register" component={Register} />
                   <Route path="/forgot-password" component={ForgotPassword} />
                   <Route
@@ -233,9 +245,18 @@ export default function App() {
                       <InfoPage
                         title="سياسة الخصوصية"
                         body={[
-                          'خصوصية بياناتك وبيانات عملائك مسؤولية نأخذها على محمل الجد في M&K Store.',
-                          'بيانات متاجرك وعملائك ملك لك وحدك. نحن لا نبيع بياناتك ولا نشاركها مع أي جهة خارجية.',
-                          'نستخدم بياناتك فقط لتشغيل خدمات المنصة وتحسين تجربتك، ونطبق أفضل ممارسات الأمان في حفظها ومعالجتها.',
+                          'آخر تحديث: 28 أغسطس 2026. توضح هذه السياسة كيف تجمع Matjari (متجري) البيانات الشخصية وتستخدمها وتحميها عند استخدام المنصة أو المتاجر المنشأة عبرها.',
+                          'البيانات التي قد نجمعها تشمل بيانات الحساب ووسائل التواصل، بيانات المتجر والمنتجات، سجلات الطلبات والدعم، وبيانات تقنية مثل عنوان IP ونوع المتصفح وسجلات الأعطال.',
+                          'يجوز للتاجر إدخال بيانات عملائه لتقديم الطلبات وخدمات ما بعد البيع. يظل التاجر مسؤولًا عن وجود أساس قانوني مناسب وإشعار عملائه وفق القوانين السارية.',
+                          'نستخدم البيانات لإنشاء الحساب وتشغيل المتجر ومعالجة الطلبات والشحن والدفع، وتقديم الدعم، وتحسين الأداء، ومنع الاحتيال وإساءة الاستخدام والالتزام بالمتطلبات النظامية.',
+                          'لا نبيع البيانات الشخصية. وقد نشارك الحد الأدنى اللازم مع مزودي الاستضافة والدفع والتحليلات والشحن الذين يعملون بتعليماتنا، أو عند وجود التزام قانوني أو لحماية الحقوق والسلامة.',
+                          'تستخدم ملفات تعريف الارتباط والتقنيات المشابهة لحفظ الجلسة وتفضيلات اللغة والسمة وقياس أداء الصفحات. يمكنك التحكم بها من إعدادات المتصفح، وقد تتأثر بعض الوظائف عند تعطيلها.',
+                          'نحتفظ بالبيانات طوال مدة الحساب أو الفترة اللازمة لتقديم الخدمة والوفاء بالالتزامات القانونية وحل النزاعات، ثم نحذفها أو نجهل هويتها وفق إجراءات الاحتفاظ الداخلية.',
+                          'نطبق ضوابط وصول وتشفيرًا أثناء النقل وإجراءات مراقبة مناسبة، لكن لا توجد وسيلة نقل أو تخزين إلكترونية مضمونة بصورة مطلقة. يجب الحفاظ على سرية بيانات الدخول ومفاتيح المتجر.',
+                          'بحسب القانون المنطبق، قد يحق لك طلب الوصول إلى بياناتك أو تصحيحها أو حذفها أو تقييد معالجتها أو الاعتراض عليها أو طلب نسخة منها. تواصل معنا عبر قنوات الدعم للتحقق من الطلب والرد عليه.',
+                          'لا تستهدف المنصة الأطفال، ولا يجوز إنشاء حساب نيابة عن قاصر دون موافقة وليه حيث يلزم. إذا علمت بتزويدنا ببيانات طفل بصورة غير مناسبة فأبلغنا لنراجعها.',
+                          'قد نحدّث هذه السياسة عند تغيير الخدمة أو المتطلبات القانونية. سنعرض تاريخ التحديث، ويعد استمرار استخدام الخدمة بعد التحديث قبولًا بالصياغة الجديدة في الحدود التي يسمح بها القانون.',
+                          'هذه صياغة عامة لا تشكل استشارة قانونية، ويجب مراجعتها وتكييفها مع الدولة والكيان القانوني ووسائل المعالجة الفعلية قبل النشر التجاري.',
                         ]}
                       />
                     )}
@@ -246,9 +267,20 @@ export default function App() {
                       <InfoPage
                         title="شروط الاستخدام"
                         body={[
-                          'باستخدامك منصة M&K Store فأنت توافق على شروط الاستخدام هذه.',
-                          'أنت مسؤول عن صحة البيانات التي تدخلها، وعن الالتزام بالقوانين في بلدك عند استخدام المتجر.',
-                          'تحتفظ المنصة بحق إيقاف أي حساب يخالف شروط الاستخدام أو يسيء استخدام الخدمة.',
+                          'آخر تحديث: 28 أغسطس 2026. تحكم هذه الشروط استخدام منصة Matjari (متجري) وخدمات إنشاء المتاجر وإدارتها والمتاجر العامة المرتبطة بها.',
+                          'بإنشاء حساب أو استخدام أي جزء من الخدمة تقر بأنك قرأت هذه الشروط وتملك الصلاحية لقبولها. إذا لم توافق عليها، توقف عن الاستخدام ولا تنشئ متجرًا.',
+                          'أنت مسؤول عن دقة بيانات الحساب والمتجر، وعن حماية بيانات الدخول، وعن جميع الأنشطة التي تتم من حسابك وإبلاغنا فورًا بأي استخدام غير مصرح به.',
+                          'تلتزم باستخدام المنصة بطريقة قانونية وأخلاقية، ولا يجوز انتحال الهوية أو نشر محتوى غير قانوني أو مضلل أو منتهك للحقوق، أو محاولة تعطيل الخدمة أو تجاوز ضوابط الأمان.',
+                          'تحتفظ بملكية المحتوى الذي ترفعه، وتمنحنا ترخيصًا محدودًا لمعالجته وعرضه فقط لتشغيل الخدمة وتسليمها. تضمن امتلاك الحقوق والتراخيص اللازمة للصور والعلامات والمنتجات.',
+                          'التاجر مسؤول عن المنتجات والأسعار والضرائب وسياسات الاسترجاع والضمان وإشعارات الخصوصية والامتثال لقوانين حماية المستهلك والشحن والدفع في الأسواق التي يبيع فيها.',
+                          'تسجل الطلبات وفق البيانات التي يدخلها العميل والتاجر. لا نعد بتوافر بوابة دفع أو شركة شحن بعينها، وتظل مسؤولية تنفيذ الطلب وخدمة العميل على التاجر ما لم ينص اتفاق منفصل على غير ذلك.',
+                          'تخضع الباقات المدفوعة للأسعار ودورات الفوترة المعروضة عند الاشتراك. قد تتغير الأسعار مستقبلًا مع إشعار مناسب، ولا تعني التجربة المجانية ضمان استمرار أي ميزة أو سعر.',
+                          'يجوز لنا تعليق أو إنهاء الحساب عند مخالفة الشروط أو وجود خطر أمني أو التزام قانوني. سنحاول، حيثما يسمح القانون، منح إشعار وفرصة معقولة للمعالجة، مع حفظ الحقوق والالتزامات المستحقة.',
+                          'تقدم الخدمة كما هي وحسب التوافر، دون ضمان خلوها من الانقطاع أو الأخطاء. لا نضمن ملاءمتها لغرض قانوني أو تجاري محدد، وعلى التاجر الاحتفاظ بنسخ مناسبة من بياناته.',
+                          'في الحدود التي يسمح بها القانون، لا نكون مسؤولين عن خسائر غير مباشرة أو فقد أرباح أو بيانات ناتجة عن محتوى التاجر أو سلوك العملاء أو خدمات أطراف خارجية. لا يحد ذلك من المسؤولية التي لا يجوز استبعادها قانونًا.',
+                          'لا يجوز نقل الحساب أو الحقوق الناشئة عن هذه الشروط إلا وفق القانون وبموافقتنا عند الحاجة. تمثل هذه الشروط الاتفاق الكامل بشأن الخدمة، وأي شروط إضافية مكتوبة ومعلنة تسري على الجزء الخاص بها.',
+                          'يجب تحديد القانون المختص والجهة القضائية في النسخة النهائية بما يناسب الكيان القانوني ومكان تقديم الخدمة قبل النشر. تواصل معنا عبر الدعم لأي استفسار أو شكوى.',
+                          'هذه صياغة عامة وليست استشارة قانونية، ويجب مراجعتها من محامٍ مرخص وتخصيصها لسياسات Matjari الفعلية قبل اعتمادها نهائيًا.',
                         ]}
                       />
                     )}
@@ -259,7 +291,7 @@ export default function App() {
                       <InfoPage
                         title="تواصل معنا"
                         body={[
-                          'فريق M&K Store جاهز لمساعدتك في أي وقت.',
+                          'فريق Matjari جاهز لمساعدتك في أي وقت.',
                           'يمكنك التواصل معنا عبر قسم الدعم من داخل لوحة التحكم، وسنرد عليك في أقرب وقت.',
                         ]}
                       />

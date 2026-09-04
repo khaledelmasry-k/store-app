@@ -41,7 +41,14 @@ export const PlatformStoreDetails: FunctionalComponent<Props> = ({ id }) => {
   const productsRes = useCollection<Product>('products', store?.id ? { storeId: store.id } : {})
   const products = productsRes.data
 
-  const latestSub = [...subs].sort((a, b) => (b.createdAt?.seconds || 0) - (a.createdAt?.seconds || 0))[0]
+  const pointedSub = store?.activeSubscriptionId ? subs.find((s) => s.id === store.activeSubscriptionId) : null
+  const effectivePaid = subs
+    .filter((s) => (s.status === 'active' || s.status === 'trialing') && Number(s.normalPriceSnapshot || s.priceSnapshot || 0) > 0)
+    .sort((a, b) => (b.createdAt?.seconds || 0) - (a.createdAt?.seconds || 0))[0]
+  const latestSub = (pointedSub && Number(pointedSub.normalPriceSnapshot || pointedSub.priceSnapshot || 0) <= 0 && effectivePaid)
+    || pointedSub
+    || effectivePaid
+    || [...subs].sort((a, b) => (b.createdAt?.seconds || 0) - (a.createdAt?.seconds || 0))[0]
   const plan = latestSub ? plans.find((p) => p.id === latestSub.planId) : null
   const orderLimit = plan?.orderLimitPerMonth || 0
   const ordersUsed = latestSub?.ordersUsed || 0
@@ -148,7 +155,7 @@ export const PlatformStoreDetails: FunctionalComponent<Props> = ({ id }) => {
                   <div className="muted small mt-1">المتبقي: {formatNumber(remaining ?? 0)} — نسبة الاستخدام {usagePercent}%</div>
                 </div>
               )}
-              {latestSub.status === 'pending' && (
+              {(latestSub.status === 'pending' || latestSub.status === 'pending_approval') && (
                 <div className="mt-2">
                   <Button icon="check" loading={busy} onClick={approve}>الموافقة على الاشتراك</Button>
                 </div>

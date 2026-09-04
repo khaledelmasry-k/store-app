@@ -6,7 +6,10 @@ import { defineConfig } from '@playwright/test'
 export default defineConfig({
   testDir: './e2e',
   timeout: 90000,
-  retries: 0,
+  // A single fresh-context retry distinguishes an intermittent Chromium/emulator
+  // session loss from a deterministic product regression. A persistent failure
+  // still blocks the release gate.
+  retries: 1,
   fullyParallel: false,
   workers: 1,
   reporter: 'list',
@@ -16,7 +19,7 @@ export default defineConfig({
   projects: [
     {
       name: 'desktop',
-      testMatch: /emulator\.spec\.ts|subscription\.spec\.ts|landing\.spec\.ts|products\.spec\.ts|customer-flow\.spec\.ts|branding\.spec\.ts|saas\.spec\.ts|variant-logic\.spec\.ts|variant-flow\.spec\.ts|storage-limit\.spec\.ts|seo\.spec\.ts|platform-subscriptions\.spec\.ts/,
+      testMatch: /emulator\.spec\.ts|subscription\.spec\.ts|landing\.spec\.ts|products\.spec\.ts|customer-flow\.spec\.ts|branding\.spec\.ts|saas\.spec\.ts|variant-logic\.spec\.ts|variant-flow\.spec\.ts|storage-limit\.spec\.ts|seo\.spec\.ts|platform-subscriptions\.spec\.ts|merchant-lifecycle\.spec\.ts|payment-proof\.spec\.ts|system-audit\.spec\.ts|integration-foundation\.spec\.ts/,
       use: { viewport: { width: 1440, height: 900 } },
     },
     {

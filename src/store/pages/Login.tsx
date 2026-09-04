@@ -1,28 +1,33 @@
 import { FunctionalComponent } from 'preact'
 import { useState } from 'preact/hooks'
-import { Link, useLocation, useParams } from 'wouter'
+import { Link, useLocation, useParams, useSearch } from 'wouter'
 import { useAuth } from '../../shared/hooks/useAuth'
 import { useToast } from '../../shared/hooks/useToast'
 import { useStore } from '../../shared/hooks/useStore'
 import { Button } from '../../shared/components/ui/Button'
+import { doc, getDoc } from 'firebase/firestore'
+import { db } from '../../shared/firebase'
 import { Input } from '../../shared/components/ui/Input'
 import { MerchantLogo } from '../../shared/components/brand/MerchantLogo'
 import { Icon } from '../../shared/components/ui/Icon'
-import { login, signupCustomer } from '../../shared/services/auth'
+import { claimOrderCallable, login, logout, signupCustomer } from '../../shared/services/auth'
 
 export const StoreLogin: FunctionalComponent = () => {
   const { store } = useStore()
   const { loading: authLoading } = useAuth()
   const toast = useToast()
   const [, navigate] = useLocation()
+  const search = useSearch()
   const params = useParams<{ mode?: string; order?: string; phone?: string }>()
+  const query = new URLSearchParams(search)
 
-  const mode = params.mode || 'login'
-  const redirectOrder = params.order
-  const redirectPhone = params.phone
+  const mode = query.get('mode') || params.mode || 'login'
+  const redirectOrder = query.get('order') || params.order
+  const redirectPhone = query.get('phone') || params.phone
 
   const [password, setPassword] = useState('')
   const [name, setName] = useState('')
+  const [email, setEmail] = useState('')
   const [phone, setPhone] = useState(redirectPhone || '')
   const [loading, setLoading] = useState(false)
   const [showPassword, setShowPassword] = useState(false)
@@ -32,13 +37,19 @@ export const StoreLogin: FunctionalComponent = () => {
   const handleSubmit = async (e: Event) => {
     e.preventDefault()
     if (isSignup) {
-      if (!name || !phone || !password) {
+      if (!name || !email || !phone || !password) {
         toast.push('أكمل جميع الحقول', undefined, 'error')
         return
       }
       setLoading(true)
       try {
-        await signupCustomer(phone, password, name, phone)
+        await signupCustomer(email, password, name, phone)
+        // A guest checkout signup carries the order context in the query
+        // string. Link that existing order after Auth creates the account;
+        // navigating to My Orders alone does not perform the claim.
+        if (redirectOrder && store?.id) {
+          await claimOrderCallable({ storeId: store.id, orderNumber: redirectOrder, phone })
+        }
         toast.push('تم إنشاء الحساب بنجاح')
         if (redirectOrder) {
           navigate(`/store/${store?.slug}/account?tab=orders`)
@@ -51,13 +62,18 @@ export const StoreLogin: FunctionalComponent = () => {
         setLoading(false)
       }
     } else {
-      if (!phone || !password) {
-        toast.push('أدخل رقم الهاتف وكلمة المرور', undefined, 'error')
+      if (!email || !password) {
+        toast.push('أدخل البريد الإلكتروني وكلمة المرور', undefined, 'error')
         return
       }
       setLoading(true)
       try {
-        await login({ email: phone, password })
+        const credential = await login({ email, password })
+        const profile = await getDoc(doc(db, 'users', credential.user.uid))
+        if (profile.exists() && profile.data()?.role && profile.data()?.role !== 'customer') {
+          await logout()
+          throw new Error('هذا حساب إدارة متجر. استخدم حساب عميل منفصل للتسوق ومتابعة الطلبات.')
+        }
         toast.push('مرحباً بعودتك!')
         if (redirectOrder) {
           navigate(`/store/${store?.slug}/account?tab=orders`)
@@ -85,6 +101,8 @@ export const StoreLogin: FunctionalComponent = () => {
             <Link href={`/store/${store?.slug}`} className="auth-brand">
               <MerchantLogo store={store} variant="header" />
             </Link>
+            <h1>{isSignup ? 'أنشئ حسابك' : 'أهلاً بعودتك'}</h1>
+            <p>{isSignup ? 'احفظ بياناتك وتابع طلباتك بسهولة.' : 'سجّل دخولك لمتابعة طلباتك ومشترياتك.'}</p>
           </div>
 
           <div className="auth-tabs">
@@ -116,6 +134,17 @@ export const StoreLogin: FunctionalComponent = () => {
             )}
 
             <div className="auth-field">
+              <label>البريد الإلكتروني</label>
+              <Input
+                type="email"
+                value={email}
+                onChange={setEmail}
+                placeholder="you@example.com"
+                required
+              />
+            </div>
+
+            {isSignup && <div className="auth-field">
               <label>رقم الهاتف</label>
               <Input
                 type="tel"
@@ -124,7 +153,7 @@ export const StoreLogin: FunctionalComponent = () => {
                 placeholder="01xxxxxxxxx"
                 required
               />
-            </div>
+            </div>}
 
             <div className="auth-field">
               <label>كلمة المرور</label>

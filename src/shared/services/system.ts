@@ -1,4 +1,4 @@
-import { listDocs, getDocById, createDoc, updateDocById, deleteDocById } from '../utils/firestore'
+import { listDocs, getDocById, createDoc, updateDocById, deleteDocById, mergeDocById } from '../utils/firestore'
 import type { Notification, Ticket, AuditLog, DailyAnalytics, StoreLink, LandingPage, TeamMember, RoleDef, Invitation, Address, WishlistItem, PlatformSettings } from '../types'
 
 const notifications = 'notifications'
@@ -113,5 +113,5 @@ export const wishlistService = {
 
 export const settingsService = {
   get: () => getDocById<PlatformSettings>(settings, 'platform'),
-  update: (data: Record<string, unknown>) => updateDocById(settings, 'platform', data),
+  update: (data: Record<string, unknown>) => mergeDocById(settings, 'platform', data),
 }

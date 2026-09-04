@@ -1,5 +1,5 @@
 import { FunctionalComponent } from 'preact'
-import { useState, useMemo } from 'preact/hooks'
+import { useState, useMemo, useEffect } from 'preact/hooks'
 import { PageHeader } from '../../shared/components/ui/PageHeader'
 import { StatsCard } from '../../shared/components/ui/StatsCard'
 import { Card } from '../../shared/components/ui/Card'
@@ -7,6 +7,7 @@ import { ChartCard } from '../../shared/components/ui/ChartCard'
 import { Badge } from '../../shared/components/ui/Badge'
 import { Table } from '../../shared/components/ui/Table'
 import { Button } from '../../shared/components/ui/Button'
+import { Input } from '../../shared/components/ui/Input'
 import { Loading } from '../../shared/components/ui/Loading'
 import { EmptyState } from '../../shared/components/ui/EmptyState'
 import { DonutChart } from '../../shared/components/charts/DonutChart'
@@ -14,13 +15,13 @@ import { Icon } from '../../shared/components/ui/Icon'
 import { useStore } from '../../shared/hooks/useStore'
 import { useAuth } from '../../shared/hooks/useAuth'
 import { useCollection } from '../../shared/hooks/useCollection'
-import { useSubscription } from '../../shared/hooks/useSubscription'
 import { useToast } from '../../shared/hooks/useToast'
 import { STATUS_LABELS, STATUS_COLORS } from '../../shared/utils/constants'
-import { formatCurrency, formatDateTime, downloadFile, deliveredRevenue } from '../../shared/utils/format'
+import { formatCurrency, formatDateTime, formatNumber, downloadFile, deliveredRevenue } from '../../shared/utils/format'
 import { orderItemRevenue } from '../../shared/utils/pricing'
 import { csvEscape } from '../../shared/utils/validators'
-import type { Order, ProductCost, Product } from '../../shared/types'
+import { createAdCampaignCallable, listAdCampaignsCallable } from '../../shared/services/auth'
+import type { Order, ProductCost, Product, OrderCost } from '../../shared/types'
 import './Analytics.css'
 
 const PERIODS = [
@@ -37,9 +38,6 @@ export const MerchantAnalytics: FunctionalComponent = () => {
   const { store } = useStore()
   const { user } = useAuth()
   const storeId = store?.id || ''
-  const subState = useSubscription(storeId)
-  const plan = subState.plan
-  const hasAdvancedReports = plan?.advancedReports !== false
   const canCustomers = user?.role === 'merchant' || (user?.permissions || []).includes('customers:view')
   const ordersRes = useCollection<Order>('orders', { storeId })
   const orders = ordersRes.data
@@ -50,10 +48,29 @@ export const MerchantAnalytics: FunctionalComponent = () => {
   const productsRes = useCollection<Product>('products', { storeId })
   const products = productsRes.data
   const costsRes = useCollection<ProductCost>('productCosts', { storeId }, !!storeId)
+  const orderCostsRes = useCollection<OrderCost>('orderCosts', { storeId }, !!storeId)
   const costByProduct = useMemo(() => new Map(costsRes.data.map((c) => [c.id, c.costPrice])), [costsRes.data])
   const toast = useToast()
   const [period, setPeriod] = useState<Period>('30')
   const [bannerDismissed, setBannerDismissed] = useState(false)
+  const [campaigns, setCampaigns] = useState<any[]>([])
+  const [campaignForm, setCampaignForm] = useState({ name: '', platform: 'facebook', totalSpend: '' })
+
+  useEffect(() => {
+    if (!storeId) return
+    listAdCampaignsCallable({ storeId }).then((r: any) => setCampaigns(r.data?.campaigns || [])).catch(() => setCampaigns([]))
+  }, [storeId])
+  const addCampaign = async () => {
+    if (!campaignForm.name.trim()) return toast.push('أدخل اسم الحملة', undefined, 'error')
+    const spend = Number(campaignForm.totalSpend || 0)
+    if (!Number.isFinite(spend) || spend < 0) return toast.push('الإنفاق غير صالح', undefined, 'error')
+    try {
+      await createAdCampaignCallable({ storeId, name: campaignForm.name, platform: campaignForm.platform, totalSpend: spend, attributionMode: 'manual' })
+      setCampaignForm({ name: '', platform: 'facebook', totalSpend: '' })
+      const r: any = await listAdCampaignsCallable({ storeId }); setCampaigns(r.data?.campaigns || [])
+      toast.push('تمت إضافة الحملة')
+    } catch (e: any) { toast.push(e?.message || 'تعذر إضافة الحملة', undefined, 'error') }
+  }
 
   const periodDays = period === 'today' || period === 'yesterday' ? 1 : Number(period)
   const periodOffset = period === 'yesterday' ? 1 : 0
@@ -79,6 +96,16 @@ export const MerchantAnalytics: FunctionalComponent = () => {
   const hasAnyCost = costsRes.data.some((c) => typeof c.costPrice === 'number' && c.costPrice >= 0)
   const conversion = customers.length ? orders.length / Math.max(customers.length, 1) : 0
   const revenue = deliveredRevenue(orders)
+  const orderCostById = useMemo(() => new Map(orderCostsRes.data.map((c) => [c.orderId, c])), [orderCostsRes.data])
+  const attributedOrders = orders.filter((o) => o.status === 'DELIVERED' && o.campaignId)
+  const campaignSpend = campaigns.reduce((sum, c) => sum + Number(c.totalSpend || 0), 0)
+  const campaignRevenue = attributedOrders.reduce((sum, o) => sum + Number(o.totalPrice || 0), 0)
+  const advertisingCost = orders.filter((o) => o.status === 'DELIVERED').reduce((sum, o) => {
+    const snapshot = orderCostById.get(o.id)
+    const lineAd = (snapshot?.items || []).reduce((s, item: any) => s + Number(item.estimatedAdCostSnapshot || 0) * (item.estimatedAdCostMode === 'per_item' ? Math.max(1, Number(item.quantity || 1)) : 1), 0)
+    return sum + lineAd
+  }, 0)
+  const contributionProfit = deliveredProfit - advertisingCost
 
   const prevDateKeys = dateKeys.map((key) => {
     const d = new Date(`${key}T00:00:00`)
@@ -141,10 +168,10 @@ export const MerchantAnalytics: FunctionalComponent = () => {
     toast.push('تم تصدير الطلبات')
   }
 
-  if (ordersRes.loading || costsRes.loading || productsRes.loading) return <Loading variant="screen" message="جاري تحميل التقارير..." />
+  if (ordersRes.loading || costsRes.loading || productsRes.loading || orderCostsRes.loading) return <Loading variant="screen" message="جاري تحميل التقارير..." />
 
   return (
-    <div className="merchant-operations merchant-analytics-page">
+    <div data-tour="analytics-workspace" className="merchant-operations merchant-analytics-page">
       <PageHeader
         breadcrumb="مركز الأداء"
         title="التحليلات والتقارير"
@@ -198,6 +225,9 @@ export const MerchantAnalytics: FunctionalComponent = () => {
         <StatsCard title="الطلبات" value={orders.length} icon="receipt_long" tone="amber" changeLabel={orders.length - prevOrders > 0 ? `+${orders.length - prevOrders} عن السابق` : `${orders.length - prevOrders} عن السابق`} />
         <StatsCard title="العملاء الجدد" value={canCustomers ? customers.length : '—'} icon="groups" tone="violet" />
         <StatsCard title="متوسط الطلب (AOV)" value={aov} currency icon="payments" tone="blue" />
+        <StatsCard title="الإنفاق الإعلاني (يدوي)" value={campaignSpend || advertisingCost} currency icon="campaign" tone="amber" changeLabel="من الحملات أو snapshots" />
+        <StatsCard title="تكلفة الحصول على طلب" value={attributedOrders.length > 0 && campaignSpend > 0 ? campaignSpend / attributedOrders.length : '—'} currency icon="ads_click" tone="violet" />
+        <StatsCard title="الربح بعد الإعلان" value={hasAnyCost ? contributionProfit : '—'} currency icon="trending_down" tone="green" changeLabel="تقديري قبل الشحن والرسوم" />
       </div>
 
       <div className="chart-grid">
@@ -227,8 +257,7 @@ export const MerchantAnalytics: FunctionalComponent = () => {
           </div>
         </ChartCard>
 
-        {hasAdvancedReports ? (
-          <Card title="أفضل المنتجات مبيعاً" subtitle="حسب الإيرادات" className="chart-wide">
+        <Card title="أفضل المنتجات مبيعاً" subtitle="حسب الإيرادات" className="chart-wide">
             {topProducts.length === 0 ? (
               <EmptyState icon="inventory" title="لا توجد مبيعات مسلمة بعد" description="ستظهر المنتجات الأكثر مبيعاً هنا بعد استلام أول طلب." />
             ) : (
@@ -247,18 +276,34 @@ export const MerchantAnalytics: FunctionalComponent = () => {
                 rows={topProducts.map(([productId, p]) => ({ id: productId, name: p.name, orders: p.orders, revenue: p.revenue }))}
               />
             )}
-          </Card>
-        ) : (
-          <Card className="chart-wide">
-            <EmptyState
-              icon="lock"
-              title="التقارير المتقدمة"
-              description="هذه الميزة متاحة بدايةً من خطة Growth. يمكنك متابعة المؤشرات الأساسية هنا، وترقية الخطة لفتح التحليلات المتقدمة ورؤى المبيعات."
-              action={<a href="/dashboard/subscription"><Button variant="primary">ترقية الخطة</Button></a>}
-            />
-          </Card>
-        )}
+        </Card>
       </div>
+
+      <Card title="أداء الحملات الإعلانية" subtitle="بيانات يدوية — لا يوجد ربط تلقائي بمنصات الإعلانات">
+        <div className="campaign-summary"><span>الطلبات المنسوبة: <strong>{attributedOrders.length}</strong></span><span>الإيراد المنسوب: <strong>{campaignRevenue ? formatCurrency(campaignRevenue) : '—'}</strong></span><span>ROAS: <strong>{campaignSpend > 0 && campaignRevenue > 0 ? `${(campaignRevenue / campaignSpend).toFixed(2)}x` : '—'}</strong></span></div>
+        <div className="form-grid campaign-form">
+          <Input label="اسم الحملة" value={campaignForm.name} onChange={(v) => setCampaignForm({ ...campaignForm, name: v })} placeholder="حملة الصيف" />
+          <label className="field-label">المنصة<select className="input" value={campaignForm.platform} onChange={(e) => setCampaignForm({ ...campaignForm, platform: (e.currentTarget as HTMLSelectElement).value })}><option value="facebook">Facebook</option><option value="instagram">Instagram</option><option value="tiktok">TikTok</option><option value="google">Google</option><option value="other">أخرى</option></select></label>
+          <Input label="إجمالي الإنفاق (ج.م)" type="number" min="0" value={campaignForm.totalSpend} onChange={(v) => setCampaignForm({ ...campaignForm, totalSpend: v })} />
+          <div className="campaign-form-action"><Button variant="secondary" onClick={addCampaign}>إضافة حملة</Button></div>
+        </div>
+        {campaigns.length === 0 ? (
+          <p className="muted small">لم تُضف حملات إعلانية بعد. سجّل الإنفاق وربطه بمصادر البيع لقياس تكلفة الحصول على الطلب.</p>
+        ) : (
+          <div className="table-scroll">
+            <Table
+              columns={[
+                { key: 'name', header: 'الحملة' },
+                { key: 'platform', header: 'المنصة' },
+                { key: 'spend', header: 'الإنفاق', render: (c: any) => formatCurrency(Number(c.totalSpend || 0)) },
+                { key: 'orders', header: 'الطلبات المنسوبة', render: (c: any) => formatNumber(Number(c.attributedOrders || 0)) },
+                { key: 'cost', header: 'تكلفة الطلب', render: (c: any) => c.costPerOrder == null ? '—' : formatCurrency(c.costPerOrder) },
+              ]}
+              rows={campaigns}
+            />
+          </div>
+        )}
+      </Card>
 
       <Card
         title="تفاصيل الطلبات"

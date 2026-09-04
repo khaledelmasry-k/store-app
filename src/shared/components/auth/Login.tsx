@@ -1,5 +1,5 @@
 import { FunctionalComponent } from 'preact'
-import { useEffect, useRef, useState } from 'preact/hooks'
+import { useCallback, useEffect, useRef, useState } from 'preact/hooks'
 import { Link, useLocation } from 'wouter'
 import { login, logout } from '../../services/auth'
 import { useAuth } from '../../hooks/useAuth'
@@ -30,34 +30,79 @@ export const Login: FunctionalComponent<Props> = ({ role }) => {
   const meta = META[role]
   const toast = useToast()
   const { user, initialized } = useAuth()
-  const [, navigate] = useLocation()
+  const [loc, navigate] = useLocation()
+  const loginParams = new URLSearchParams(loc.split('?')[1] || window.location.search)
+  const queryLifetimeIntent = role === 'merchant' && loginParams.get('offer') === 'lifetime'
+  const [storedLifetimeIntent, setStoredLifetimeIntent] = useState(false)
+
+  useEffect(() => {
+    if (role !== 'merchant' || queryLifetimeIntent) return
+    try {
+      setStoredLifetimeIntent(sessionStorage.getItem('matjari:onboarding-offer') === 'lifetime')
+    } catch {
+      setStoredLifetimeIntent(false)
+    }
+  }, [role, queryLifetimeIntent])
+
+  const lifetimeIntent = queryLifetimeIntent || storedLifetimeIntent
+
+  const merchantRedirect = useCallback(() => {
+    const target = lifetimeIntent ? '/dashboard/subscription?offer=lifetime' : '/dashboard/'
+    try {
+      if (lifetimeIntent) sessionStorage.removeItem('matjari:onboarding-offer')
+    } catch {
+      // URL intent remains authoritative for this navigation.
+    }
+    return target
+  }, [lifetimeIntent])
+
+  useEffect(() => {
+    document.title = `Matjari | ${meta.title}`
+  }, [meta.title])
 
   useEffect(() => {
     if (!initialized || navigatedRef.current) return
     if (user) {
       navigatedRef.current = true
-      if (user.role === 'superAdmin') navigate('/platform/', { replace: true })
+      if (user.role === 'superAdmin') { navigate('/platform/', { replace: true }) }
       else if (user.role === 'merchant' || user.role === 'staff') {
         if (user.active === false) {
           setPending(true)
           return
         }
-        navigate('/dashboard/', { replace: true })
+        const target = merchantRedirect()
+        navigate(target, { replace: true })
       }
-      else if (user.role === 'customer') navigate('/', { replace: true })
+      else if (user.role === 'customer') { navigate('/', { replace: true }) }
       else navigate('/dashboard/', { replace: true })
     }
-  }, [user, initialized, navigate])
+  }, [user, initialized, navigate, merchantRedirect])
 
   const onSubmit = async (e: Event) => {
     e.preventDefault()
     setError('')
     setLoading(true)
+    const submittedEmail = email.trim()
     try {
-      await login({ email, password })
-    } catch {
-      setError('بيانات الدخول غير صحيحة أو الحساب غير مفعل بعد')
-      toast.push('فشل تسجيل الدخول', 'تحقق من البريد وكلمة المرور', 'error')
+      await login({ email: submittedEmail, password })
+      toast.push('تم تسجيل الدخول بنجاح', 'مرحبًا بعودتك', 'success')
+    } catch (err) {
+      const code = typeof err === 'object' && err && 'code' in err
+        ? String((err as { code?: unknown }).code)
+        : ''
+      const message = code === 'auth/user-disabled'
+        ? 'تم تعطيل هذا الحساب. تواصل مع إدارة المنصة للمساعدة.'
+        : code === 'auth/too-many-requests'
+          ? 'تم إيقاف المحاولات مؤقتًا. انتظر قليلًا ثم حاول مرة أخرى.'
+          : code === 'auth/operation-not-allowed'
+            ? 'تسجيل الدخول بالبريد الإلكتروني غير متاح حاليًا.'
+            : code === 'auth/network-request-failed'
+              ? 'تعذر الاتصال بالخدمة. تحقق من اتصال الإنترنت ثم حاول مجددًا.'
+              : code === 'auth/invalid-credential' || code === 'auth/wrong-password' || code === 'auth/user-not-found'
+                ? 'البريد الإلكتروني أو كلمة المرور غير صحيحة.'
+                : 'تعذر تسجيل الدخول الآن. حاول مرة أخرى بعد قليل.'
+      setError(message)
+      toast.push('فشل تسجيل الدخول', message, 'error')
     } finally {
       setLoading(false)
     }

@@ -1,6 +1,6 @@
 import { FunctionalComponent } from 'preact'
 import { Link, useLocation } from 'wouter'
-import { BrandMark } from '../brand/BrandMark'
+import { BrandLogo } from '../brand/BrandLogo'
 import { useTheme } from '../../hooks/useTheme'
 import { Icon } from '../ui/Icon'
 
@@ -13,8 +13,7 @@ export const AuthTopBar: FunctionalComponent = () => {
     <header className="auth-topbar">
       <div className="auth-topbar-inner">
         <Link href="/" className="auth-brand">
-          <BrandMark small />
-          <span>M&amp;K Store</span>
+          <BrandLogo className="auth-topbar-logo" />
         </Link>
 
         <div className="auth-topbar-actions">

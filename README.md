@@ -1,4 +1,4 @@
-# M&K Store — SaaS (Firebase V2)
+# Matjari (متجري) — SaaS (Firebase V2)
 
 A multi-tenant **e-commerce SaaS** built on the **Firebase** stack (Auth, Firestore, Storage, Hosting, Cloud Functions) — no Express, no Prisma, no PostgreSQL. Designed to run on the **Spark Free Plan** with a clear upgrade path.
 
@@ -126,4 +126,4 @@ See [DEPLOYMENT.md](./DEPLOYMENT.md) and [FIREBASE_SETUP.md](./FIREBASE_SETUP.md
 
 ## License
 
-Proprietary — M&K Store.
+Proprietary — Matjari (متجري).

@@ -1,5 +1,5 @@
 import { FunctionalComponent } from 'preact'
-import { useState } from 'preact/hooks'
+import { useEffect, useState } from 'preact/hooks'
 import { Link } from 'wouter'
 import { resetPassword } from '../../services/auth'
 import { useToast } from '../../hooks/useToast'
@@ -9,6 +9,9 @@ import { isEmailValid } from '../../utils/validators'
 import { Icon } from '../ui/Icon'
 
 export const ForgotPassword: FunctionalComponent = () => {
+  useEffect(() => {
+    document.title = 'Matjari | استعادة كلمة المرور'
+  }, [])
   const [email, setEmail] = useState('')
   const [error, setError] = useState('')
   const [loading, setLoading] = useState(false)
@@ -38,12 +41,6 @@ export const ForgotPassword: FunctionalComponent = () => {
   return (
     <AuthShell>
       <div className="auth-card">
-        <div className="auth-forgot-head">
-          <div className="auth-forgot-icon">
-            <Icon name="storefront" />
-          </div>
-          <h1 className="auth-title">M&amp;K Store</h1>
-        </div>
         {sent ? (
           <div className="auth-status-card">
             <div className="auth-status-icon">

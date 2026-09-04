@@ -24,15 +24,13 @@ interface TrackedOrder {
   items: TrackedItem[]
   subtotal: number
   shippingFee: number
+  shippingMethod?: string | null
+  shippingProviderName?: string | null
   totalPrice: number
   paymentMethod: string
   customerType?: string
   createdAt: { seconds: number; nanoseconds: number }
-  customerName?: string
-  customerPhone?: string
-  customerAddress?: string
-  customerCity?: string
-  customerGovernorate?: string
+  shipment?: { providerName?: string | null; status?: string | null; trackingNumber?: string | null; trackingUrl?: string | null; failureReason?: string | null; updatedAt?: { seconds: number; nanoseconds: number } | null } | null
 }
 
 export const StoreTrack: FunctionalComponent = () => {
@@ -72,13 +70,13 @@ export const StoreTrack: FunctionalComponent = () => {
       <header className="track-hero">
         <span className="page-eyebrow">خدمة ما بعد البيع</span>
         <h1 className="page-title">تتبع طلبك</h1>
-        <p className="page-subtitle">أدخل رقم الطلب ورقم الهاتف للبحث عن طلبك</p>
+        <p className="page-subtitle">أدخل كود الطلب ورقم الهاتف كما كُتبا عند إتمام الشراء</p>
       </header>
 
       <form onSubmit={search} className="track-form">
         <div className="form-grid">
           <Input label="رقم الهاتف" value={phone} onChange={setPhone} placeholder="01xxxxxxxxx" required type="tel" />
-          <Input label="رقم الطلب" value={orderNumber} onChange={setOrderNumber} placeholder="ORD-00001" required />
+          <Input label="كود الطلب" value={orderNumber} onChange={setOrderNumber} placeholder="ORD-00001" required />
         </div>
         <Button type="submit" loading={loading} icon="search" className="mt-1" block>تتبع الطلب</Button>
       </form>
@@ -94,8 +92,8 @@ export const StoreTrack: FunctionalComponent = () => {
                   <p className="track-order-number monospace">{o.orderNumber}</p>
                   <p className="track-order-date muted small">{formatDateTime(o.createdAt)}</p>
                 </div>
-                <span className={`status-badge status-${STATUS_COLORS[o.status as keyof typeof STATUS_COLORS]}`}>
-                  {STATUS_LABELS[o.status as keyof typeof STATUS_LABELS] || o.status}
+                <span className={`status-badge status-${String(o.shipment?.status || '').toUpperCase() === 'FAILED' ? 'red' : STATUS_COLORS[o.status as keyof typeof STATUS_COLORS]}`}>
+                  {String(o.shipment?.status || '').toUpperCase() === 'FAILED' ? 'تعذر التسليم' : (STATUS_LABELS[o.status as keyof typeof STATUS_LABELS] || o.status)}
                 </span>
               </div>
 
@@ -103,6 +101,15 @@ export const StoreTrack: FunctionalComponent = () => {
                 <h3 className="section-title">حالة الشحنة</h3>
                 <OrderTimeline order={{ status: o.status as any, statusHistory: o.statusHistory as any }} />
               </section>
+
+              {o.shipment && <section className="track-details-section">
+                <h3 className="section-title">تفاصيل الشحنة</h3>
+                <div className="detail-grid">
+                  {o.shipment.providerName && <div className="detail-item"><Icon name="local_shipping" className="detail-icon" /><div><span className="detail-label">شركة الشحن</span><span className="detail-value">{o.shipment.providerName}</span></div></div>}
+                  {o.shipment.trackingNumber && <div className="detail-item"><Icon name="pin" className="detail-icon" /><div><span className="detail-label">كود المتابعة</span><span className="detail-value">{o.shipment.trackingUrl ? <a href={o.shipment.trackingUrl} target="_blank" rel="noreferrer">{o.shipment.trackingNumber}</a> : o.shipment.trackingNumber}</span></div></div>}
+                  {o.shipment.failureReason && <div className="detail-item"><Icon name="info" className="detail-icon" /><div><span className="detail-label">ملاحظة من شركة الشحن</span><span className="detail-value">{o.shipment.failureReason}</span></div></div>}
+                </div>
+              </section>}
 
               <section className="track-items-section">
                 <h3 className="section-title">المنتجات</h3>
@@ -122,7 +129,7 @@ export const StoreTrack: FunctionalComponent = () => {
                 <h3 className="section-title">ملخص الطلب</h3>
                 <div className="summary-rows">
                   <div className="summary-row"><span>المجموع الفرعي</span><span>{formatCurrency(o.subtotal)}</span></div>
-                  <div className="summary-row"><span>الشحن</span><span>{o.shippingFee > 0 ? formatCurrency(o.shippingFee) : 'مجاني'}</span></div>
+                  <div className="summary-row"><span>الشحن{o.shippingMethod ? ` (${o.shippingMethod})` : ''}</span><span>{o.shippingFee > 0 ? formatCurrency(o.shippingFee) : 'مجاني'}</span></div>
                   <div className="summary-row total"><span>الإجمالي</span><span>{formatCurrency(o.totalPrice)}</span></div>
                 </div>
               </section>
@@ -134,12 +141,7 @@ export const StoreTrack: FunctionalComponent = () => {
                     <Icon name="location_on" className="detail-icon" />
                     <div>
                       <span className="detail-label">عنوان التوصيل</span>
-                      <address className="detail-value">
-                        {o.customerName}<br />
-                        {o.customerAddress}<br />
-                        {o.customerCity}, {o.customerGovernorate}<br />
-                        {o.customerPhone && <a href={`tel:${o.customerPhone}`} className="ltr-text">{o.customerPhone}</a>}
-                      </address>
+                      <span className="detail-value">تم حفظ العنوان بأمان مع الطلب</span>
                     </div>
                   </div>
                   <div className="detail-item">

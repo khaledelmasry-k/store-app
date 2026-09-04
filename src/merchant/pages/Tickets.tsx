@@ -7,9 +7,8 @@ import { EmptyState } from '../../shared/components/ui/EmptyState'
 import { Icon } from '../../shared/components/ui/Icon'
 import { useStore } from '../../shared/hooks/useStore'
 import { useCollection } from '../../shared/hooks/useCollection'
-import { useAuth } from '../../shared/hooks/useAuth'
 import { useToast } from '../../shared/hooks/useToast'
-import { ticketsService } from '../../shared/services/system'
+import { createTicketCallable } from '../../shared/services/auth'
 import { formatDateTime, timeAgo } from '../../shared/utils/format'
 import { TICKET_STATUS_TONES } from '../../shared/utils/constants'
 import type { Ticket, TicketPriority, TicketStatus } from '../../shared/types'
@@ -31,7 +30,6 @@ const PRIORITY_LABELS: { value: TicketPriority; label: string }[] = [
 export const MerchantTickets: FunctionalComponent = () => {
   const { store } = useStore()
   const storeId = store?.id || ''
-  const { user } = useAuth()
   const toast = useToast()
   const ticketsRes = useCollection<Ticket>('tickets', { storeId });
   const tickets = ticketsRes.data
@@ -49,14 +47,11 @@ export const MerchantTickets: FunctionalComponent = () => {
       return
     }
     try {
-      await ticketsService.create({
+      await createTicketCallable({
         storeId,
-        createdBy: user?.uid || '',
         subject,
         description,
-        status: 'open',
         priority,
-        replies: [],
       })
       toast.push('تم إنشاء التذكرة')
       setSubject('')

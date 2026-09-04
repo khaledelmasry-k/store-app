@@ -1,7 +1,7 @@
 import { FunctionalComponent, Fragment } from 'preact'
 import { useState, useEffect, useRef } from 'preact/hooks'
 import { Link, useLocation } from 'wouter'
-import { doc, onSnapshot } from 'firebase/firestore'
+import { doc, getDoc } from 'firebase/firestore'
 import { useAuth } from '../../hooks/useAuth'
 import { useTheme } from '../../hooks/useTheme'
 import { logout, exitImpersonationCallable } from '../../services/auth'
@@ -11,26 +11,128 @@ import { db } from '../../firebase'
 import { NAV_GROUPS, ROLE_LABELS, type NavGroup, type NavItem } from '../../utils/constants'
 import { Icon } from '../ui/Icon'
 import './AppShell.css'
+import { AdminSidebar } from './AdminSidebar'
+import { AdminTopbar } from './AdminTopbar'
+import { BrandLogo } from '../brand/BrandLogo'
+import { BrandMark } from '../brand/BrandMark'
+import { SmartImage } from '../ui/SmartImage'
+import { presetFromLogo, storeLogoKind } from '../../utils/store-brand'
+import { useSubscription } from '../../hooks/useSubscription'
+import { canUseFeature, getPlanLimit, isPlanLimitUnlimited } from '../../services/subscription'
+import { NotificationPopover } from '../notification/NotificationPopover'
+import { useToast } from '../../hooks/useToast'
 
 interface Props {
   navKey: 'platform' | 'dashboard'
   brand: string
+  brandLogo?: string
   storeSwitcher?: { storeIds: string[]; currentId: string; onSwitch: (id: string | null) => void }
   storefrontHref?: string
   children?: any
 }
 
-export const AppShell: FunctionalComponent<Props> = ({ navKey, brand, storeSwitcher, storefrontHref, children }) => {
+interface CollapsedSidebarRailProps {
+  groups: NavGroup[]
+  isPinned: boolean
+  displayName: string
+  photoURL?: string | null
+  storefrontHref?: string
+  isGroupActive: (group: NavGroup) => boolean
+  onPin: () => void
+  onGroupClick: (groupId: string) => void
+  onLogout: () => void
+  onKeyDown: (event: KeyboardEvent) => void
+}
+
+/** Canonical collapsed rail used by both Merchant and SuperAdmin shells. */
+const CollapsedSidebarRail: FunctionalComponent<CollapsedSidebarRailProps> = ({
+  groups,
+  isPinned,
+  displayName,
+  photoURL,
+  storefrontHref,
+  isGroupActive,
+  onPin,
+  onGroupClick,
+  onLogout,
+  onKeyDown,
+}) => (
+  <Fragment>
+    <div className="sidebar-top">
+      <button
+        type="button"
+        className="sidebar-pin-btn"
+        aria-pressed={isPinned}
+        aria-label="تثبيت القائمة"
+        title="تثبيت القائمة"
+        data-tip="تثبيت القائمة"
+        onClick={onPin}
+      >
+        <Icon name="pin_off" ariaHidden />
+      </button>
+    </div>
+    <nav className="sidebar-nav sidebar-nav-collapsed" aria-label="التنقل الرئيسي" onKeyDown={onKeyDown}>
+      {groups.map((group) => {
+        const active = isGroupActive(group)
+        return (
+          <section key={group.id} className={`sidebar-group${active ? ' active-child' : ''}`}>
+            <button
+              type="button"
+              className={`sidebar-group-header${active ? ' active' : ''}`}
+              data-nav
+              data-tip={group.label}
+              aria-expanded={false}
+              onClick={() => onGroupClick(group.id)}
+            >
+              <Icon name={group.icon} className="sidebar-group-icon" ariaHidden />
+            </button>
+          </section>
+        )
+      })}
+    </nav>
+    <div className="sidebar-collapsed-spacer" aria-hidden="true" />
+    <div className="sidebar-foot">
+      {storefrontHref && (
+        <a href={storefrontHref} className="sidebar-link" target="_blank" rel="noopener noreferrer" data-tip="متجري">
+          <Icon name="storefront" className="sidebar-link-icon" />
+        </a>
+      )}
+      <span className="sidebar-foot-user" data-tip={displayName}>
+        <Avatar name={displayName} size="sm" src={photoURL} />
+      </span>
+      <button type="button" className="sidebar-link sidebar-logout" onClick={onLogout} data-tip="تسجيل الخروج">
+        <Icon name="logout" className="sidebar-link-icon" />
+      </button>
+    </div>
+  </Fragment>
+)
+
+export const AppShell: FunctionalComponent<Props> = ({ navKey, brand, brandLogo, storeSwitcher, storefrontHref, children }) => {
+  const storefrontLabel = storefrontHref?.includes('preview=1') ? 'معاينة المتجر' : 'فتح المتجر المنشور'
   const { user } = useAuth()
+  const toast = useToast()
   const theme = useTheme()
+  const isDarkTheme = theme.theme === 'dark'
   const [location] = useLocation()
+  useEffect(() => {
+    document.title = navKey === 'platform' ? 'Matjari | إدارة المنصة' : 'Matjari | لوحة التاجر'
+  }, [navKey])
   const [exiting, setExiting] = useState(false)
   const [drawerOpen, setDrawerOpen] = useState(false)
+  // The old shared preference could leave either console permanently in the
+  // narrow icon rail after the rail geometry changed.  Start the refreshed
+  // navigation expanded for both roles, while keeping any *new* choice per
+  // console separate.
+  const sidebarPreferenceKey = navKey === 'platform'
+    ? 'platformSidebarPinnedV3'
+    : 'merchantSidebarPinnedV2'
   const [isPinned, setIsPinned] = useState<boolean>(() => {
     try {
-      const stored = localStorage.getItem('merchantSidebarPinned')
+      const stored = localStorage.getItem(sidebarPreferenceKey)
       if (stored !== null) return stored === '1'
-      return localStorage.getItem('merchantSidebarCollapsed') !== '1'
+      // الإدارة تتبع الآن نفس rail لوحة التاجر: يبدأ كمسار أيقونات نظيف
+      // ويتوسع فقط عند التثبيت أو المرور، بدل قائمة منصة منفصلة ومزدحمة.
+      return navKey !== 'platform'
     } catch {
       return true
     }
@@ -40,6 +142,10 @@ export const AppShell: FunctionalComponent<Props> = ({ navKey, brand, storeSwitc
   const collapseTimer = useRef<ReturnType<typeof setTimeout> | null>(null)
   const { data: stores } = useStoresForSwitcher(storeSwitcher?.storeIds || [])
   const multiStore = storeSwitcher && (storeSwitcher.storeIds.length > 1)
+  const entitlementStoreId = navKey === 'dashboard' && user?.role === 'merchant'
+    ? (storeSwitcher?.currentId || user.storeIds?.[0] || '')
+    : ''
+  const entitlement = useSubscription(entitlementStoreId)
 
   const clearExpandTimer = () => {
     if (expandTimer.current) {
@@ -91,7 +197,7 @@ export const AppShell: FunctionalComponent<Props> = ({ navKey, brand, storeSwitc
     setIsPinned((prev) => {
       const next = !prev
       try {
-        localStorage.setItem('merchantSidebarPinned', next ? '1' : '0')
+        localStorage.setItem(sidebarPreferenceKey, next ? '1' : '0')
       } catch {
         /* ignore */
       }
@@ -104,15 +210,9 @@ export const AppShell: FunctionalComponent<Props> = ({ navKey, brand, storeSwitc
   const notificationsHref = navKey === 'platform' ? '/platform/notifications' : '/dashboard/notifications'
   const helpHref = navKey === 'platform' ? '/platform/tickets' : '/dashboard/tickets'
 
-  const storageKey = `mk-shell-open-groups:${navKey}`
-  const [openGroups, setOpenGroups] = useState<Record<string, boolean>>(() => {
-    try {
-      const raw = localStorage.getItem(storageKey)
-      return raw ? (JSON.parse(raw) as Record<string, boolean>) : {}
-    } catch {
-      return {}
-    }
-  })
+  // Group state is intentionally ephemeral: each shell starts compact and
+  // route navigation keeps only the active parent open.
+  const [openGroups, setOpenGroups] = useState<Record<string, boolean>>({})
 
   const handleSwitchStore = (id: string) => {
     storeSwitcher?.onSwitch(id)
@@ -121,6 +221,7 @@ export const AppShell: FunctionalComponent<Props> = ({ navKey, brand, storeSwitc
 
   const handleLogout = async () => {
     await logout()
+    toast.push('تم تسجيل الخروج بنجاح', undefined, 'success')
     window.location.href = `/login?role=${navKey === 'platform' ? 'platform' : 'merchant'}`
   }
 
@@ -147,6 +248,14 @@ export const AppShell: FunctionalComponent<Props> = ({ navKey, brand, storeSwitc
     .map((group) => ({
       ...group,
       items: group.items.filter((item) => {
+        if (navKey === 'dashboard' && user?.role === 'merchant' && !entitlement.loading && entitlement.status !== 'none') {
+          if (entitlement.status !== 'active' && entitlement.status !== 'trialing') return false
+          if (item.entitlement === 'coupons' && !canUseFeature('coupons', entitlement.plan)) return false
+          if (item.entitlement === 'analytics' && !canUseFeature('analytics', entitlement.plan)) return false
+          if (item.quota === 'landingPages' && getPlanLimit('landingPages', entitlement.plan) <= 0) return false
+          if (item.quota === 'salesLinks' && !isPlanLimitUnlimited('salesLinks', entitlement.plan) && getPlanLimit('salesLinks', entitlement.plan) <= 0) return false
+          if (item.quota === 'staff' && getPlanLimit('staff', entitlement.plan) <= 1) return false
+        }
         if (!isStaff) return true
         const perm = item.permission
         if (!perm) return true
@@ -157,12 +266,7 @@ export const AppShell: FunctionalComponent<Props> = ({ navKey, brand, storeSwitc
 
   const toggleGroup = (id: string) => {
     setOpenGroups((prev) => {
-      const next = { ...prev, [id]: !prev[id] }
-      try {
-        localStorage.setItem(storageKey, JSON.stringify(next))
-      } catch {
-        /* ignore */
-      }
+      const next = prev[id] ? {} : { [id]: true }
       return next
     })
   }
@@ -176,27 +280,11 @@ export const AppShell: FunctionalComponent<Props> = ({ navKey, brand, storeSwitc
 
   useEffect(() => {
     setOpenGroups((prev) => {
-      const next = { ...prev }
-      let changed = false
-      for (const group of NAV_GROUPS[navKey]) {
-        const hasActive = group.items.some(isItemActive)
-        if (hasActive && !next[group.id]) {
-          next[group.id] = true
-          changed = true
-        }
-      }
-      if (changed) {
-        try {
-          localStorage.setItem(storageKey, JSON.stringify(next))
-        } catch {
-          /* ignore */
-        }
-        return next
-      }
-      return prev
+      const activeGroup = visibleGroups.find((group) => group.items.some(isItemActive))
+      return activeGroup ? { [activeGroup.id]: true } : {}
     })
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [location])
+  }, [location, navKey])
 
   const onNavKeyDown = (e: KeyboardEvent) => {
     const navEl = e.currentTarget as HTMLDivElement
@@ -214,6 +302,15 @@ export const AppShell: FunctionalComponent<Props> = ({ navKey, brand, storeSwitc
   }
 
   const impersonating = Boolean(user?.impersonatedBy)
+  const displayName = navKey === 'platform' ? 'خالد المصري' : (user?.name || '?')
+  const merchantLogoKind = navKey === 'dashboard' ? storeLogoKind(brandLogo) : 'none'
+  const merchantPreset = merchantLogoKind === 'preset' ? presetFromLogo(brandLogo) : null
+  const hasMerchantLogo = navKey === 'dashboard' && merchantLogoKind === 'image'
+  const merchantBrandMark = merchantLogoKind === 'image' ? (
+    <SmartImage src={brandLogo || ''} alt={brand} className="merchant-console-logo" placeholderClassName="merchant-console-logo" />
+  ) : merchantPreset ? (
+    <span className="merchant-console-logo merchant-console-logo--preset" role="img" aria-label={brand}><Icon name={merchantPreset.icon} ariaHidden /></span>
+  ) : null
   const routeClass = location
     .split('?')[0]
     .replace(/^\/+/, '')
@@ -232,6 +329,22 @@ export const AppShell: FunctionalComponent<Props> = ({ navKey, brand, storeSwitc
         </div>
       )}
       <div className="sidebar-top">
+        <Link
+          href={navKey === 'platform' ? '/platform' : '/dashboard'}
+          className="sidebar-console-brand"
+          aria-label={navKey === 'platform' ? 'العودة إلى إدارة المنصة' : 'العودة إلى لوحة التاجر'}
+          onClick={() => setDrawerOpen(false)}
+        >
+          {navKey === 'dashboard' ? (
+            <span className="sidebar-console-logo-frame sidebar-console-logo-frame--merchant" aria-hidden="true">
+              <Icon name="storefront" />
+            </span>
+          ) : <BrandMark small surface="light" />}
+          <span>
+            <strong>{navKey === 'dashboard' ? brand : 'Matjari'}</strong>
+            <small>{navKey === 'platform' ? 'إدارة المنصة' : 'لوحة التاجر'}</small>
+          </span>
+        </Link>
         <button
           type="button"
           className="sidebar-pin-btn"
@@ -257,6 +370,7 @@ export const AppShell: FunctionalComponent<Props> = ({ navKey, brand, storeSwitc
                 data-tip={group.label}
                 aria-expanded={open}
                 aria-controls={`sidebar-group-${group.id}`}
+                data-tour={navKey === 'dashboard' ? group.id : undefined}
                 onClick={() => {
                   if (!isPinned) {
                     if (!isHoverExpanded) {
@@ -287,6 +401,15 @@ export const AppShell: FunctionalComponent<Props> = ({ navKey, brand, storeSwitc
                       data-tip={item.label}
                       className={`sidebar-child-link${itemActive ? ' active' : ''}`}
                       aria-current={itemActive ? 'page' : undefined}
+                      data-tour={navKey === 'dashboard' ? ({
+                        '/dashboard': 'dashboard',
+                        '/dashboard/products': 'products',
+                        '/dashboard/orders': 'orders',
+                        '/dashboard/analytics': 'analytics',
+                        '/dashboard/themes': 'themes',
+                        '/dashboard/subscription': 'subscription',
+                        '/dashboard/team': 'team',
+                      } as Record<string, string>)[item.to] : undefined}
                       onClick={() => setDrawerOpen(false)}
                     >
                       <Icon name={item.icon} className="sidebar-child-icon" ariaHidden />
@@ -301,16 +424,24 @@ export const AppShell: FunctionalComponent<Props> = ({ navKey, brand, storeSwitc
       </nav>
       <div className="sidebar-foot">
         {storefrontHref && (
-          <a href={storefrontHref} className="sidebar-link" target="_blank" rel="noopener noreferrer" data-tip="متجري">
+        <a href={storefrontHref} className="sidebar-link" target="_blank" rel="noopener noreferrer" data-tip={storefrontLabel}>
             <Icon name="storefront" className="sidebar-link-icon" />
-            <span>متجري (المتجر الإلكتروني)</span>
+          <span>{storefrontLabel}</span>
           </a>
         )}
-        <span className="sidebar-foot-user" data-tip={user?.name || ''}>
-          <Avatar name={user?.name || '?'} size="sm" src={user?.photoURL} />
+        <span
+          className="sidebar-foot-user"
+          data-tip={displayName}
+          style={{
+            background: isDarkTheme ? '#17213a' : '#f3f5fb',
+            borderColor: isDarkTheme ? '#2d3b53' : '#dfe4f0',
+            color: isDarkTheme ? '#f3f6fb' : '#182033',
+          }}
+        >
+          <Avatar name={displayName} size="sm" src={user?.photoURL} />
           <span>
-            <strong>{user?.name}</strong>
-            <small>{user?.role ? ROLE_LABELS[user.role] : ''}</small>
+            <strong style={{ color: isDarkTheme ? '#f3f6fb' : '#182033' }}>{displayName}</strong>
+            <small style={{ color: isDarkTheme ? '#b3bdd3' : '#59657a' }}>{navKey === 'platform' ? 'مدير المنصة' : (user?.role ? ROLE_LABELS[user.role] : '')}</small>
           </span>
         </span>
         <button type="button" className="sidebar-link sidebar-logout" onClick={handleLogout} data-tip="تسجيل الخروج">
@@ -321,13 +452,28 @@ export const AppShell: FunctionalComponent<Props> = ({ navKey, brand, storeSwitc
     </Fragment>
   )
 
+  const collapsedSidebarContent = (
+    <CollapsedSidebarRail
+      groups={visibleGroups}
+      isPinned={isPinned}
+      displayName={displayName}
+      photoURL={user?.photoURL}
+      storefrontHref={storefrontHref}
+      isGroupActive={(group) => group.items.some(isItemActive)}
+      onPin={togglePin}
+      onGroupClick={() => setIsHoverExpanded(true)}
+      onLogout={handleLogout}
+      onKeyDown={onNavKeyDown}
+    />
+  )
+
   return (
     <Fragment>
       <div
-        className={`app-shell app-shell--${navKey} route-${routeClass}${isPinned ? '' : ' sidebar-unpinned'}${isHoverExpanded ? ' sidebar-hover-expanded' : ''}`}
+        className={`app-shell ${navKey === 'dashboard' ? 'merchant-chrome' : 'platform-chrome'} app-shell--${navKey} route-${routeClass}${isPinned ? '' : ' sidebar-unpinned'}${isHoverExpanded ? ' sidebar-hover-expanded' : ''}`}
         data-zone={navKey}
       >
-        <header className="topbar">
+          <AdminTopbar>
           <button
             type="button"
             className="btn btn-ghost sidebar-toggle"
@@ -336,14 +482,21 @@ export const AppShell: FunctionalComponent<Props> = ({ navKey, brand, storeSwitc
           >
             <Icon name="menu" />
           </button>
-          <div className="topbar-brand">
-            <span className="topbar-brand-mark">
-              <Icon name="storefront" />
-            </span>
-            <div className="topbar-brand-meta">
-              <span className="topbar-brand-name">{brand}</span>
-              <span className="topbar-brand-sub">{navKey === 'platform' ? 'منصة المتاجر' : 'لوحة التاجر'}</span>
-            </div>
+          <div className={`topbar-brand${navKey === 'platform' ? ' topbar-brand--platform' : ''}${hasMerchantLogo ? ' topbar-brand--has-logo' : ''}`}>
+            {navKey === 'platform' ? (
+              <>
+                <BrandLogo className="topbar-brand-logo" />
+                <BrandMark className="topbar-brand-mark-platform" />
+              </>
+            ) : (
+              <>
+                {merchantBrandMark || <span className="topbar-brand-mark"><Icon name="storefront" /></span>}
+                <div className="topbar-brand-meta">
+                  <span className="topbar-brand-name">{brand}</span>
+                  <span className="topbar-brand-sub">لوحة التاجر</span>
+                </div>
+              </>
+            )}
           </div>
           <label className="topbar-search">
             <Icon name="search" ariaHidden />
@@ -366,9 +519,8 @@ export const AppShell: FunctionalComponent<Props> = ({ navKey, brand, storeSwitc
                   }))}
                 />
               )}
-              <Link href={notificationsHref} className="topbar-icon-btn" aria-label="الإشعارات" title="الإشعارات">
-                <Icon name="notifications" />
-              </Link>
+              {navKey === 'dashboard' && <NotificationPopover storeId={storeSwitcher?.currentId} href={notificationsHref} />}
+              {navKey === 'platform' && <Link href={notificationsHref} className="topbar-icon-btn" aria-label="الإشعارات" title="الإشعارات"><Icon name="notifications" /></Link>}
               <Link href={helpHref} className="topbar-icon-btn" aria-label="الدعم والمساعدة" title="الدعم والمساعدة">
                 <Icon name="support_agent" />
               </Link>
@@ -382,21 +534,19 @@ export const AppShell: FunctionalComponent<Props> = ({ navKey, brand, storeSwitc
                 <Icon name={theme.theme === 'dark' ? 'light_mode' : 'dark_mode'} />
               </button>
               <span className="topbar-divider" />
-              <span className="topbar-avatar" title={user?.name || ''}>
-                <Avatar name={user?.name || '?'} size="sm" src={user?.photoURL} />
+              <span className="topbar-avatar" title={displayName}>
+                <Avatar name={displayName} size="sm" src={user?.photoURL} />
               </span>
             </div>
-          </header>
+          </AdminTopbar>
           <div className="app-shell-body">
-            <aside
-              className="sidebar"
-              id="sidebar"
+            <AdminSidebar
               onMouseEnter={handleSidebarEnter}
               onMouseMove={handleSidebarMove}
               onMouseLeave={handleSidebarLeave}
             >
-              {sidebarContent}
-            </aside>
+              {!isPinned && !isHoverExpanded ? collapsedSidebarContent : sidebarContent}
+            </AdminSidebar>
             <div className="shell-main">
               <main className="shell-content">
                 <div className="route-surface">{children}</div>
@@ -450,18 +600,18 @@ function useStoresForSwitcher(ids: string[]) {
       setStores([])
       return
     }
-    const unsubs = ids.map((id) =>
-      onSnapshot(doc(db, 'stores', id), (snap) => {
-        if (snap.exists()) {
-          const d = snap.data()
-          setStores((prev) => {
-            const next = prev.filter((s) => s.id !== id)
-            return [...next, { id, name: d.name || id }]
-          })
-        }
-      }),
-    )
-    return () => unsubs.forEach((u) => u())
+    let cancelled = false
+    Promise.all(ids.map(async (id) => {
+      const snap = await getDoc(doc(db, 'stores', id))
+      if (!cancelled && snap.exists()) {
+        const d = snap.data()
+        setStores((prev) => {
+          const next = prev.filter((s) => s.id !== id)
+          return [...next, { id, name: d.name || id }]
+        })
+      }
+    })).catch(() => {})
+    return () => { cancelled = true }
   }, [ids, idsKey])
   return { data: stores }
 }

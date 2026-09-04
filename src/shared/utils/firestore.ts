@@ -144,6 +144,15 @@ export async function setDocById<T>(path: string, id: string, data: Omit<T, 'id'
   )
 }
 
+/** Upsert a document while preserving fields not included in this update. */
+export async function mergeDocById(path: string, id: string, data: Record<string, unknown>): Promise<void> {
+  await setDoc(
+    doc(db, path, id),
+    sanitizeForFirestore({ ...data, updatedAt: serverTimestamp() }) as Record<string, unknown>,
+    { merge: true },
+  )
+}
+
 export async function deleteDocById(path: string, id: string): Promise<void> {
   await deleteDoc(doc(db, path, id))
 }

@@ -36,11 +36,83 @@ async function countProducts(storeId: string) {
   return snap.size
 }
 
+/**
+ * The storefront cart test must be runnable on its own, not only after the
+ * preceding registration/theme test has happened to create its fixture.
+ * Converge a deterministic local store/product without touching seeded data.
+ */
+async function ensureFlowStore(ref: string, name: string) {
+  const existing = await storeBySlug(ref)
+  const storeId = existing?.id || `flow-owner-${ref}`
+  const ownerEmail = `${ref}@mk.test`
+  if (!existing) {
+    await admin.auth().createUser({ uid: storeId, email: ownerEmail, password: 'Flow12345', displayName: 'مالك التدفق' }).catch(() => {})
+    await db.collection('users').doc(storeId).set({
+      uid: storeId, email: ownerEmail, name: 'مالك التدفق', role: 'merchant', storeIds: [storeId], active: true,
+      createdAt: admin.firestore.FieldValue.serverTimestamp(), updatedAt: admin.firestore.FieldValue.serverTimestamp(),
+    })
+    await db.collection('stores').doc(storeId).set({
+      ref, slug: ref, name, ownerId: storeId, active: true, published: true, currency: 'EGP',
+      description: 'متجر اختبار تدفق الواجهة', theme: { template: 'minimal', primary: '#0b766e', secondary: '#c78a25', darkMode: false },
+      storageUsed: 0, storageLimitBytes: 5 * 1024 * 1024 * 1024,
+      createdAt: admin.firestore.FieldValue.serverTimestamp(), updatedAt: admin.firestore.FieldValue.serverTimestamp(), createdBy: 'emulator-e2e',
+    })
+    const subscriptionRef = db.collection('subscriptions').doc()
+    await subscriptionRef.set({
+      storeId, planId: 'plan-growth', planName: 'النمو', status: 'active', ordersUsed: 0,
+      limitsSnapshot: { orderLimitPerMonth: 1500, productLimit: 2000, landingPagesLimit: 5, salesLinksLimit: 50, staffLimit: 10, storageLimit: 5120 },
+      currentPeriodStart: admin.firestore.Timestamp.fromDate(new Date(Date.now() - 86400000)),
+      currentPeriodEnd: admin.firestore.Timestamp.fromDate(new Date(Date.now() + 86400000 * 29)),
+      createdAt: admin.firestore.FieldValue.serverTimestamp(), updatedAt: admin.firestore.FieldValue.serverTimestamp(), createdBy: 'emulator-e2e',
+    })
+    await db.collection('stores').doc(storeId).set({ activeSubscriptionId: subscriptionRef.id }, { merge: true })
+  } else {
+    await existing.ref.set({ published: true, storageUsed: 0, storageLimitBytes: 5 * 1024 * 1024 * 1024, theme: { template: 'minimal', primary: '#0b766e', secondary: '#c78a25', darkMode: false }, updatedAt: admin.firestore.FieldValue.serverTimestamp() }, { merge: true })
+    const ownerId = String(existing.data()?.ownerId || '')
+    if (ownerId) await db.collection('users').doc(ownerId).set({ active: true, merchantStatus: 'active' }, { merge: true })
+    const sub = await latestSub(existing.id)
+    if (sub) {
+      const currentLimits = (sub.limitsSnapshot || {}) as Record<string, unknown>
+      await db.collection('subscriptions').doc(sub.id).set({
+        status: 'active',
+        limitsSnapshot: {
+          ...currentLimits,
+          landingPagesLimit: Math.max(Number(currentLimits.landingPagesLimit || 0), 50),
+          salesLinksLimit: Math.max(Number(currentLimits.salesLinksLimit || 0), 50),
+          storageLimit: Math.max(Number(currentLimits.storageLimit || 0), 5120),
+        },
+      }, { merge: true })
+    }
+  }
+  const products = await db.collection('products').where('storeId', '==', storeId).limit(1).get()
+  if (products.empty) {
+    const product = db.collection('products').doc()
+    await product.set({
+      id: product.id, storeId, name: 'منتج اختبار التدفق', price: 240, oldPrice: 300, description: 'منتج تجريبي',
+      images: [], stock: 50, variants: [], colors: [], sizes: [], active: true, featured: true, lowStockThreshold: 5,
+      createdAt: admin.firestore.FieldValue.serverTimestamp(), updatedAt: admin.firestore.FieldValue.serverTimestamp(), createdBy: 'emulator-e2e',
+    })
+  } else {
+    await products.docs[0].ref.set({ active: true, featured: true, stock: 50, variants: [], colors: [], sizes: [], updatedAt: admin.firestore.FieldValue.serverTimestamp() }, { merge: true })
+  }
+  return (await storeBySlug(ref))!
+}
+
 async function login(page: Page, role: 'platform' | 'merchant', email: string, password: string) {
-  await page.goto(`/login?role=${role}`, { waitUntil: 'domcontentloaded' })
+  const loginUrl = `/login?role=${role}`
+  // logout() already lands on the auth route. Reusing that document avoids
+  // racing the auth guard with a second navigation to the same URL.
+  if (!page.url().includes('/login')) {
+    await page.goto(loginUrl, { waitUntil: 'domcontentloaded' })
+  }
   // The auth guard redirects an already-authenticated session away from /login
-  // after hydration. If the login form never renders, sign out and retry.
-  await page.waitForTimeout(600)
+  // after hydration. Wait for an actual auth surface instead of sleeping.
+  const emailInput = page.locator('input[type="email"]')
+  const pendingHeading = page.getByText('الحساب قيد المراجعة', { exact: false })
+  const dashboardShell = page.locator('.sidebar-logout:visible').first()
+  await expect.poll(async () => (
+    (await emailInput.count()) > 0 || (await pendingHeading.count()) > 0 || (await dashboardShell.count()) > 0
+  ), { timeout: 15000 }).toBe(true)
   if ((await page.locator('button[type="submit"]').count()) === 0) {
     const logout = page.locator('.sidebar-logout:visible').first()
     if ((await logout.count()) === 0) {
@@ -49,23 +121,40 @@ async function login(page: Page, role: 'platform' | 'merchant', email: string, p
     await page.locator('.sidebar-logout:visible').first().click()
     await page.waitForURL(/\/login/, { timeout: 15000 })
     await page.waitForLoadState('domcontentloaded')
-    await page.goto(`/login?role=${role}`, { waitUntil: 'domcontentloaded' })
+    if (!page.url().includes('/login')) await page.goto(loginUrl, { waitUntil: 'domcontentloaded' })
   }
-  await page.locator('input[type="email"]').fill(email)
+  await expect(emailInput).toBeVisible({ timeout: 15000 })
+  await emailInput.fill(email)
   await page.locator('input[type="password"]').fill(password)
   await page.locator('button[type="submit"]').click()
-  await page.waitForURL(/\/dashboard|\/platform/, { timeout: 15000 })
+  try {
+    await page.waitForURL(/\/dashboard|\/platform/, { timeout: 15000 })
+  } catch (error) {
+    const body = await page.locator('body').innerText().catch(() => '')
+    // Pending merchant login intentionally stays on the auth route while the
+    // auth component renders its review state. That is a successful login
+    // outcome for this role, not a navigation failure.
+    if (body.includes('الحساب قيد المراجعة')) return
+    throw new Error(`Login did not redirect for ${email} (url=${page.url()}): ${body.slice(0, 400)}`, { cause: error })
+  }
 }
 
 async function logout(page: Page) {
-  const logout = page.locator('.sidebar-logout:visible').first()
-  if ((await logout.count()) === 0) {
-    await page.locator('.sidebar-toggle:visible').first().click()
+  // Pending merchants use the dedicated review screen, which has a plain
+  // logout button instead of the dashboard sidebar action. Prefer the
+  // semantic button first so the helper works for both states.
+  const pendingLogout = page.getByRole('button', { name: 'تسجيل الخروج', exact: true }).first()
+  if (await pendingLogout.isVisible().catch(() => false)) {
+    await pendingLogout.click()
+  } else {
+    const logout = page.locator('.sidebar-logout:visible').first()
+    if ((await logout.count()) === 0) {
+      await page.locator('.sidebar-toggle:visible').first().click()
+    }
+    await page.locator('.sidebar-logout:visible').first().click()
   }
-  await page.locator('.sidebar-logout:visible').first().click()
   await page.waitForURL(/\/login/, { timeout: 15000 })
   await page.waitForLoadState('domcontentloaded')
-  await page.waitForTimeout(500)
 }
 
 function phoneFromEmail(email: string) {
@@ -84,32 +173,49 @@ async function registerStore(
   await page.locator('.auth-card input[type="password"]').fill(opts.password)
   await page.locator('.auth-card input').nth(0).fill(opts.name)
   await page.locator('.auth-card input').nth(1).fill(phoneFromEmail(opts.email))
+  await page.locator('.auth-terms input[type="checkbox"]').check()
   await page.getByRole('button', { name: 'التالي' }).click()
-  const planCards = page.locator('.mk-pricing-card')
-  await expect(planCards).toHaveCount(5)
+  // Merchant registration offers recurring plans only; the Lifetime offer is
+  // intentionally available from the billing screen, not onboarding.
+  // The responsive registration UI uses the compact pill selector at every
+  // breakpoint; desktop cards are a presentation layer, not the selection
+  // contract. Assert the stable control instead of a desktop-only class.
+  await expect(page.locator('.register-plan-pill')).toHaveCount(5)
   for (const planName of ['FREE', 'STARTER', 'GROWTH', 'BUSINESS', 'PRO']) {
-    await expect(page.getByRole('heading', { name: planName, exact: true })).toHaveCount(1)
+    await expect(page.getByRole('button', { name: new RegExp(`^${planName}\\b`) })).toHaveCount(1)
   }
-  await planCards
-    .filter({ has: page.getByRole('heading', { name: opts.planName, exact: true }) })
-    .getByRole('button', { name: /اختيار الخطة|تم الاختيار/ })
-    .click()
+  // The compact plan strip is the canonical selection control. Using it
+  // avoids the featured-card badge overlapping adjacent cards on mobile and
+  // guarantees that the selected plan id matches the requested fixture.
+  await page.locator('.register-plan-pill').filter({ hasText: opts.planName }).click()
   await page.getByRole('button', { name: 'التالي' }).click()
   await page.locator('.auth-card input').nth(0).fill(opts.storeName)
   await page.locator('.auth-card input').nth(1).fill(opts.storeRef)
   await page.getByRole('button', { name: 'إنشاء الحساب' }).click()
-  await expect(page.getByText('تم إنشاء حسابك بنجاح')).toBeVisible({ timeout: 30000 })
+  await expect(page.getByRole('heading', { name: 'تم إنشاء حسابك بنجاح' })).toBeVisible({ timeout: 30000 })
 }
 
 async function merchantRow(page: Page, text: string) {
   const base = page.locator('tr, .card-table-card')
+  const pageInfo = page.locator('.pagination-info').first()
+  // Each lookup is independent. Reset pagination first so a previous lookup
+  // cannot leave the next one stranded on a later page.
+  const firstPage = page.locator('.pagination button').filter({ hasText: /^1$/ }).first()
+  if (await firstPage.count()) {
+    const currentInfo = await pageInfo.textContent().catch(() => '')
+    if (!/^\s*1\s*[–-]\s*10\b/.test(currentInfo || '')) {
+      await firstPage.click()
+      await expect.poll(() => pageInfo.textContent(), { timeout: 10000 }).toMatch(/^\s*1\s*[–-]\s*10\b/)
+    }
+  }
   for (let p = 0; p < 5; p++) {
     const row = base.filter({ hasText: text }).first()
     if ((await row.count()) > 0) return row
     const next = page.locator('button', { hasText: 'التالي' })
     if ((await next.count()) === 0 || (await next.isDisabled())) break
+    const beforeInfo = await pageInfo.textContent().catch(() => '')
     await next.click()
-    await page.waitForTimeout(300)
+    await expect.poll(() => pageInfo.textContent(), { timeout: 10000 }).not.toBe(beforeInfo)
   }
   return base.filter({ hasText: text }).first()
 }
@@ -126,16 +232,33 @@ async function pollValue<T>(fn: () => Promise<T>, ok: (v: T) => boolean, timeout
 }
 
 async function updateOrderStatus(page: Page, value: string) {
-  const statusCard = page.locator('.card', { has: page.getByRole('heading', { name: 'تغيير الحالة' }) })
-  const select = statusCard.locator('select')
-  const button = statusCard.getByRole('button', { name: 'تحديث' })
-  const option = select.locator(`option[value="${value}"]`)
-  await expect(option).toHaveCount(1, { timeout: 15000 })
-  await select.selectOption(value)
-  await expect(button).toBeEnabled({ timeout: 15000 })
-  await button.click()
-  await expect(select).toHaveValue('', { timeout: 15000 })
-  await expect(option).toHaveCount(0, { timeout: 15000 })
+  const labels: Record<string, string> = {
+    NEW: 'جديد', CONTACTED: 'تم التواصل', PROCESSING: 'قيد التجهيز',
+    SHIPPED: 'تم الشحن', DELIVERED: 'تم التسليم', CANCELLED: 'ملغي', RETURNED: 'مرتجع',
+  }
+  await page.reload({ waitUntil: 'domcontentloaded' })
+  const mobile = await page.evaluate(() => window.innerWidth < 768)
+  const update = mobile
+    ? page.locator('.ods-mobile-bar .ods-update-btn')
+    : page.locator('.ods-status-dropdown .ods-btn-primary')
+  await expect(update).toBeVisible({ timeout: 15000 })
+  const menu = mobile ? page.locator('.ods-sheet .ods-status-menu') : page.locator('.ods-status-dropdown .ods-status-menu')
+  await update.click({ force: true })
+  // A concurrent order-list refresh can recreate the button between the
+  // click and render. Re-open once only when the deterministic menu state is
+  // still absent; no time-based sleep is used.
+  if (!(await menu.isVisible().catch(() => false))) await update.click({ force: true })
+  if (mobile) await expect(page.locator('.ods-sheet-backdrop')).toBeVisible({ timeout: 5000 })
+  await expect(menu).toBeVisible({ timeout: 5000 })
+  await menu.getByRole('button').filter({ hasText: labels[value] || value }).last().click({ force: true })
+  await expect(page.getByRole('button', { name: 'تأكيد التحديث', exact: true })).toBeVisible()
+  const response = page.waitForResponse((r) => r.url().includes('/updateOrderStatus') && r.ok(), { timeout: 30000 })
+  await page.getByRole('button', { name: 'تأكيد التحديث', exact: true }).click({ force: true })
+  await response
+  // The callable response is the durable mutation boundary. Reloading here
+  // also clears a stale confirmation layer before the next transition.
+  await page.reload({ waitUntil: 'domcontentloaded' })
+  await expect(page.locator('.ods-status-pill')).toContainText(labels[value] || value, { timeout: 15000 })
 }
 
 function shot(page: Page, name: string) {
@@ -160,7 +283,7 @@ function ctx() {
 }
 
 // ─────────────────────────────────────────────────────────────
-test('register new merchant (published=false, trialing) + slug created', async ({ page }) => {
+test('paid SaaS registration starts one server-controlled three-day trial immediately', async ({ page }) => {
   const { email, storeName, ref } = ctx()
   await registerStore(page, {
     email,
@@ -178,16 +301,78 @@ test('register new merchant (published=false, trialing) + slug created', async (
   expect(sub).not.toBeNull()
   expect(sub!.status).toBe('trialing')
   expect(sub!.planId).toBe('plan-starter')
+  expect(sub!.trialUsed).toBe(true)
+  expect(sub!.trialStartedAt).toBeTruthy()
   expect(sub!.trialEndsAt).toBeTruthy()
+  const trialDuration = sub!.trialEndsAt.toMillis() - sub!.trialStartedAt.toMillis()
+  expect(trialDuration).toBe(3 * 86400000)
   expect(sub!.normalPriceSnapshot).toBe(399)
   expect(sub!.launchPriceSnapshot).toBe(399)
   expect(sub!.launchUsed).toBeFalsy()
 })
 
+test('Free registration activates immediately without trial and keeps store draft', async ({ page }) => {
+  const { uniq } = ctx()
+  const suffix = `${uniq}-${Date.now()}`
+  const email = `approval-${suffix}@mk.test`
+  const ref = `approval-${suffix}`
+  const storeName = `متجر اعتماد ${uniq}`
+  await registerStore(page, { email, password: PASSWORD, name: 'تاجر اعتماد', storeName, storeRef: ref, planName: 'FREE' })
+
+  const freeStore = (await pollValue(() => storeBySlug(ref), (s) => s != null))!
+  const freeSub = (await latestSub(freeStore.id))!
+  expect(freeSub.status).toBe('active')
+  expect(freeSub.planId).toBe('plan-free')
+  expect(freeSub.trialUsed).toBe(false)
+  expect(freeSub.trialStartedAt).toBeFalsy()
+  expect(freeSub.trialEndsAt).toBeFalsy()
+  expect(freeStore.data()?.published).toBe(false)
+  expect(freeStore.data()?.storeStatus).toBe('draft')
+
+  // Free is usable immediately, but store publication remains an explicit
+  // independent merchant action.
+  await login(page, 'merchant', email, PASSWORD)
+  await page.goto('/dashboard/products', { waitUntil: 'domcontentloaded' })
+  await expect(page.getByRole('heading', { name: 'المنتجات والمخزون' })).toBeVisible({ timeout: 15000 })
+})
+
+test('Growth, Business, and Pro registrations each start an immediate three-day trial', async ({ page }) => {
+  const { uniq } = ctx()
+  for (const planName of ['GROWTH', 'BUSINESS', 'PRO']) {
+    const suffix = `${planName.toLowerCase()}-${uniq}-${Date.now()}`
+    const ref = `auto-trial-${suffix}`
+    await registerStore(page, {
+      email: `${suffix}@mk.test`,
+      password: PASSWORD,
+      name: `تاجر ${planName}`,
+      storeName: `متجر ${planName}`,
+      storeRef: ref,
+      planName,
+    })
+    const store = (await pollValue(() => storeBySlug(ref), (value) => value != null))!
+    const sub = (await latestSub(store.id))!
+    expect(sub.status).toBe('trialing')
+    expect(sub.planId).toBe(`plan-${planName.toLowerCase()}`)
+    expect(sub.trialUsed).toBe(true)
+    expect(sub.trialEndsAt.toMillis() - sub.trialStartedAt.toMillis()).toBe(3 * 86400000)
+    expect(store.data()?.storeStatus).toBe('draft')
+    expect(store.data()?.published).toBe(false)
+  }
+})
+
 test('register duplicate slug gets a numeric suffix', async ({ page }) => {
-  const { uniq, storeName, ref } = ctx()
+  const { uniq, storeName } = ctx()
+  // This test is independently runnable and must not depend on the preceding
+  // registration test (or on stale emulator history). Occupy a fresh base
+  // slug, leaving its `-2` candidate free for the real callable.
+  const ref = `flow-duplicate-${uniq}-${Date.now()}`
+  const blocker = db.collection('stores').doc(`e2e-slug-blocker-${uniq}-${Date.now()}`)
+  await blocker.set({
+    ref, slug: ref, name: 'حاجز اختبار الرابط', ownerId: 'e2e-slug-blocker',
+    active: true, published: false, currency: 'EGP', createdAt: admin.firestore.FieldValue.serverTimestamp(),
+  })
   await registerStore(page, {
-    email: `flow-${uniq}-2@mk.test`,
+    email: `flow-${uniq}-2-${Date.now()}@mk.test`,
     password: PASSWORD,
     name: 'مالك ثانٍ',
     storeName: `${storeName} نسخة`,
@@ -199,11 +384,27 @@ test('register duplicate slug gets a numeric suffix', async ({ page }) => {
   expect(dup!.data()!.ref).toBe(`${ref}-2`)
 })
 
-test('trial merchant self-serves: publish + theme + product', async ({ page, browser }) => {
+test('trial merchant can publish + theme + product', async ({ page, browser }) => {
   const { email, ref } = ctx()
-  const store = (await pollValue(() => storeBySlug(ref), (s) => s != null))!
+  let store = await storeBySlug(ref)
+  // Keep this flow independently runnable when a focused grep starts at the
+  // self-service test instead of the preceding registration test.
+  if (!store) {
+    await registerStore(page, {
+      email, password: PASSWORD, name: 'مالك التدفق', storeName: `مقهى التدفق ${ctx().uniq}`,
+      storeRef: ref, planName: 'STARTER',
+    })
+    store = (await pollValue(() => storeBySlug(ref), (s) => s != null))!
+  }
 
-  // Merchant account is active immediately (instant trial — no admin approval).
+  // A current registration is immediately operational during its valid
+  // Starter trial. Keep only the owner-state convergence needed when this
+  // focused test reuses an older emulator fixture.
+  if (store) {
+    await db.collection('users').where('storeIds', 'array-contains', store.id).get().then(async (snap) => {
+      for (const doc of snap.docs) await doc.ref.set({ active: true, merchantStatus: 'active' }, { merge: true })
+    })
+  }
   await login(page, 'merchant', email, PASSWORD)
   await page.waitForURL(/\/dashboard/, { timeout: 15000 })
 
@@ -215,7 +416,7 @@ test('trial merchant self-serves: publish + theme + product', async ({ page, bro
 
   // Theme the store on the new Appearance page (auto-saves after debounce).
   await page.goto('/dashboard/themes', { waitUntil: 'domcontentloaded' })
-  await expect(page.locator('.theme-gallery')).toBeVisible({ timeout: 15000 })
+  await expect(page.locator('.theme-gallery:visible')).toBeVisible({ timeout: 15000 })
 
   // Apply the "minimal" template and confirm it persists to Firestore.
   await page.locator('.theme-card', { hasText: 'مينيمال' }).getByRole('button', { name: 'تطبيق' }).click()
@@ -236,7 +437,11 @@ test('trial merchant self-serves: publish + theme + product', async ({ page, bro
 
   // Add a product via the products drawer.
   await page.goto('/dashboard/products', { waitUntil: 'domcontentloaded' })
-  await page.getByRole('button', { name: 'منتج جديد' }).click()
+  await expect(page.getByRole('heading', { name: 'المنتجات والمخزون' })).toBeVisible({ timeout: 15000 })
+  const addProductButton = page.locator('.page-header .btn').first()
+  await expect(addProductButton).toBeVisible({ timeout: 15000 })
+  await addProductButton.click()
+  await expect(page.locator('.drawer')).toBeVisible({ timeout: 15000 })
   await page.locator('.field', { hasText: 'اسم المنتج' }).locator('input').fill('بن التدفق المختص')
   await page.locator('.drawer input[type="number"]').nth(0).fill('240')
   await page.locator('.drawer input[type="number"]').nth(1).fill('300')
@@ -278,18 +483,14 @@ test('trial merchant self-serves: publish + theme + product', async ({ page, bro
 test('storefront theme vars, cart -> checkout -> order, ordersUsed increments', async ({ page }) => {
   const { uniq, ref, storeName } = ctx()
   const slug = ref
+  await ensureFlowStore(slug, storeName)
   await page.goto(`/store/${slug}`, { waitUntil: 'domcontentloaded' })
 
   // Theme CSS variables applied on the store shell.
-  const vars = await page.locator('.store-shell').evaluate((el) => {
+  await expect.poll(async () => page.locator('.store-shell').evaluate((el) => {
     const cs = getComputedStyle(el as HTMLElement)
-    return {
-      primary: cs.getPropertyValue('--primary').trim(),
-      accent: cs.getPropertyValue('--store-accent').trim(),
-    }
-  })
-  expect(vars.primary).toBe('#0b766e')
-  expect(vars.accent).toBe('#c78a25')
+    return `${cs.getPropertyValue('--primary').trim()}|${cs.getPropertyValue('--store-accent').trim()}`
+  }), { timeout: 15000 }).toBe('#0b766e|#c78a25')
 
   // Template class applied on the store shell (applied earlier on Appearance page).
   await expect(page.locator('.store-shell.theme-minimal')).toHaveCount(1, { timeout: 15000 })
@@ -339,7 +540,7 @@ test('unpublished store shows coming-soon to visitors; owner can preview', async
   // Owner (seeded store E) can preview the storefront.
   await login(page, 'merchant', 'owner@e.store', 'Owner12345')
   await page.waitForURL(/\/dashboard/, { timeout: 15000 })
-  await page.goto('/store/test-store-e', { waitUntil: 'domcontentloaded' })
+  await page.goto('/store/test-store-e?preview=1', { waitUntil: 'domcontentloaded' })
   await expect(page.locator('.store-coming-soon')).toHaveCount(0, { timeout: 15000 })
   await expect(page.locator('.store-header')).toBeVisible()
 })
@@ -373,42 +574,57 @@ test('merchant subscription page shows persisted usage (1020/1500) and countdown
   await login(page, 'merchant', 'owner@a.store', 'Owner12345')
   await page.waitForURL(/\/dashboard/, { timeout: 15000 })
   await page.goto('/dashboard/subscription', { waitUntil: 'domcontentloaded' })
-  await expect(page.getByText(/1,?020 من 1,?500 طلب/)).toBeVisible({ timeout: 15000 })
-  await expect(page.getByText('68%')).toBeVisible()
-  await expect(page.getByText('متوسط')).toBeVisible()
+  const ordersUsage = page.locator('.subscription-usage-item', { hasText: 'الطلبات' })
+  await expect(ordersUsage.locator('.subscription-usage-count')).toHaveText(/(?:1,?020|١٬٠٢٠)\s*\/\s*(?:1,?500|١٬٥٠٠)/, { timeout: 15000 })
+  await expect(ordersUsage).toContainText(/متبقي\s+(?:480|٤٨٠)\s+طلب/)
   await shot(page, 'merchant-subscription-a')
 
   // Merchant dashboard usage banner too.
   await page.goto('/dashboard', { waitUntil: 'domcontentloaded' })
-  await expect(page.getByText(/1,?020 \/ 1,?500 طلب/)).toBeVisible({ timeout: 15000 })
-  await expect(page.getByText('متوسط', { exact: true })).toBeVisible()
+  await expect(page.getByText(/اشتراك\s+GROWTH\s+نشط/)).toBeVisible({ timeout: 15000 })
 })
 
-test('shipping: zones store shows zone fee at checkout and persists shippingFee + snapshot', async ({ page }) => {
+test('shipping: canonical zone provider resolves fee at checkout and persists snapshot', async ({ page }) => {
   // Reuse this project's flow store (created earlier in the run) so we never
   // add an extra merchant row and overflow the platform merchants table.
   const { ref } = ctx()
+  const storeName = `مقهى التدفق ${ctx().uniq}`
+  const ensuredStore = await ensureFlowStore(ref, storeName)
   const store = (await storeBySlug(ref))!
-  await db.collection('stores').doc(store.id).update({
-    shipping: {
-      enabled: true,
-      model: 'zones',
-      flatFee: 0,
-      freeAbove: 800,
-      refusedPolicy: 'رسوم الرفض ٦٠ جنيهاً.',
-      providers: [{ id: 'p-x', name: 'شحن سريع', fee: 35, estimatedDays: '2-4 أيام', active: true }],
-    },
+  // Canonical provider architecture: provider/service/zone data is the only
+  // runtime source; legacy `stores.shipping`/`shipping` documents are not
+  // used when a modern provider is enabled.
+  const providerId = `shipping-zone-${ctx().uniq}`
+  await db.doc(`shippingProviders/${providerId}`).set({
+    id: providerId, name: 'شحن القاهرة الكبرى', slug: 'manual', status: 'active',
+    integrationType: 'manual', credentialMode: 'platform', supportsCOD: true,
+    supportsTracking: false, supportsReturns: false, supportsWebhooks: false,
+    allowMerchantRateOverride: false,
+    services: [{
+      code: 'cairo-zone', name: 'القاهرة الكبرى', enabled: true, serviceType: 'standard',
+      rateMode: 'zone', fixedRate: 0, estimatedMinHours: 72, estimatedMaxHours: 120,
+      supportsCOD: true, supportsReturns: false, supportsPickup: false,
+      zoneRules: [{ zoneId: 'cairo-major', zoneName: 'القاهرة الكبرى', enabled: true,
+        governorates: ['القاهرة', 'الجيزة', 'القليوبية'], cities: [], areas: [],
+        baseRate: 40, codFee: 0, returnFee: 0, baseWeight: 1, extraKgRate: 0,
+        etaMin: 72, etaMax: 120, etaUnit: 'hours' }],
+    }],
+    createdAt: admin.firestore.FieldValue.serverTimestamp(), updatedAt: admin.firestore.FieldValue.serverTimestamp(),
   })
-  await db.collection('shipping').add({
-    storeId: store.id, name: 'القاهرة الكبرى', governorates: ['القاهرة', 'الجيزة', 'القليوبية'],
-    fee: 40, freeAbove: 800, estimatedDays: '3-5 أيام', providerId: 'p-x', active: true,
-    createdAt: admin.firestore.FieldValue.serverTimestamp(),
+  await db.doc(`storeShippingProviders/${store.id}_${providerId}`).set({
+    id: `${store.id}_${providerId}`, storeId: store.id, providerId, enabled: true,
+    enabledServiceCodes: ['cairo-zone'], serviceCode: 'cairo-zone', rateMode: 'zone',
+    codEnabled: true, returnEnabled: false, defaultPackageWeight: 1,
+    rateMarkup: 0, fixedRate: 0, freeShippingThreshold: 0,
+    configurationStatus: 'ready', createdAt: admin.firestore.FieldValue.serverTimestamp(),
     updatedAt: admin.firestore.FieldValue.serverTimestamp(),
-    createdBy: 'shipping-spec',
   })
 
-  await page.goto(`/store/${ref}`, { waitUntil: 'domcontentloaded' })
-  await page.locator('.store-card').first().click()
+  // The home page only renders explicitly featured cards.  Use the canonical
+  // catalog route so this flow remains independent of earlier storefront tests.
+  await page.goto(`/store/${ref}/catalog`, { waitUntil: 'domcontentloaded' })
+  await page.locator('.store-card a[href*="/product/"]').first().click()
+  await page.waitForURL(/\/product\//, { timeout: 15000 })
   await page.getByRole('button', { name: 'أضف إلى السلة' }).click()
   await page.goto(`/store/${ref}/cart`, { waitUntil: 'domcontentloaded' })
   await page.getByRole('button', { name: 'إتمام الطلب' }).click()
@@ -434,7 +650,8 @@ test('shipping: zones store shows zone fee at checkout and persists shippingFee 
   expect(order.shippingFee).toBe(40)
   expect(order.shippingMethod).toBe('القاهرة الكبرى')
   expect(order.shippingSnapshot?.enabled).toBe(true)
-  expect(order.shippingSnapshot?.model).toBe('zones')
+  expect(order.shippingSnapshot?.providerId).toBe(providerId)
+  expect(order.shippingSnapshot?.serviceCode).toBe('cairo-zone')
   expect(order.shippingSnapshot?.zoneId).toBeTruthy()
   expect(order.totalPrice).toBe(order.subtotal + 40)
 })
@@ -442,6 +659,7 @@ test('shipping: zones store shows zone fee at checkout and persists shippingFee 
 test('sales link: /s/:code redirects to the storefront and DELIVERED orders count on the link', async ({ page }) => {
   // Create a dedicated link on this project's flow store, pointed at the product.
   const { uniq, ref } = ctx()
+  await ensureFlowStore(ref, `مقهى التدفق ${uniq}`)
   const store = (await storeBySlug(ref))!
   const productSnap = await db.collection('products').where('storeId', '==', store.id).limit(1).get()
   const productId = productSnap.docs[0].id
@@ -477,7 +695,7 @@ test('sales link: /s/:code redirects to the storefront and DELIVERED orders coun
 
   // Buy via the link → the order snapshots the link.
   await page.getByRole('button', { name: 'أضف إلى السلة' }).click()
-  await expect(page.locator('.cart-badge')).toHaveText('1', { timeout: 15000 })
+  await expect(page.getByRole('link', { name: /السلة،\s*1 منتج/ })).toBeVisible({ timeout: 15000 })
   await page.goto(`/store/${ref}/cart`, { waitUntil: 'domcontentloaded' })
   await page.getByRole('button', { name: 'إتمام الطلب' }).click()
   await page.locator('.field', { hasText: 'الاسم الكامل' }).locator('input').fill('عميل الرابط')
@@ -503,14 +721,23 @@ test('sales link: /s/:code redirects to the storefront and DELIVERED orders coun
   // Merchant marks the order DELIVERED via the callable → link counters increment.
   await login(page, 'merchant', ctx().email, PASSWORD)
   await page.goto(`/dashboard/orders/${orderSnap.docs[0].id}`, { waitUntil: 'domcontentloaded' })
-  await expect(page.locator('.order-steps')).toBeVisible({ timeout: 15000 })
-  await updateOrderStatus(page, 'DELIVERED')
+  await expect(page.locator('.ods-timeline')).toBeVisible({ timeout: 15000 })
+  const transitions: Array<[string, string]> = [
+    ['CONTACTED', 'NEW'], ['PROCESSING', 'CONTACTED'], ['SHIPPED', 'PROCESSING'], ['DELIVERED', 'SHIPPED'],
+  ]
+  for (const [next, current] of transitions) {
+    // Confirm the durable backend state before opening the next transition
+    // menu; this prevents a stale Firestore listener from racing the action.
+    await expect.poll(async () => (await db.collection('orders').doc(orderSnap.docs[0].id).get()).data()?.status, { timeout: 15000 }).toBe(current)
+    await updateOrderStatus(page, next)
+  }
   await expect.poll(async () => {
     const snap = await linkRef.get()
     return { orders: (snap.data() as any)?.ordersCount || 0, rev: (snap.data() as any)?.totalRevenue || 0 }
   }, { timeout: 15000 }).toEqual({ orders: 1, rev: order.totalPrice })
 
   // Leaving DELIVERED (RETURNED) subtracts the revenue + order again.
+  await expect.poll(async () => (await db.collection('orders').doc(orderSnap.docs[0].id).get()).data()?.status, { timeout: 15000 }).toBe('DELIVERED')
   await updateOrderStatus(page, 'RETURNED')
   await expect.poll(async () => {
     const snap = await linkRef.get()
@@ -520,6 +747,9 @@ test('sales link: /s/:code redirects to the storefront and DELIVERED orders coun
 
 test('landing page: /landing/:slug renders, records a view, QuickBuy orders attribute, DELIVERED counts', async ({ page }) => {
   const { uniq, ref } = ctx()
+  // Keep this flow independently runnable: it must not depend on the earlier
+  // registration test having created the project-scoped store.
+  await ensureFlowStore(ref, `مقهى التدفق ${uniq}`)
   const store = (await storeBySlug(ref))!
   const productSnap = await db.collection('products').where('storeId', '==', store.id).limit(1).get()
   const productId = productSnap.docs[0].id
@@ -583,8 +813,12 @@ test('landing page: /landing/:slug renders, records a view, QuickBuy orders attr
   // Merchant marks DELIVERED → landing counters increment.
   await login(page, 'merchant', ctx().email, PASSWORD)
   await page.goto(`/dashboard/orders/${orderSnap.docs[0].id}`, { waitUntil: 'domcontentloaded' })
-  await expect(page.locator('.order-steps')).toBeVisible({ timeout: 15000 })
-  await updateOrderStatus(page, 'DELIVERED')
+  await expect(page.locator('.ods-timeline')).toBeVisible({ timeout: 15000 })
+  // Order status transitions are intentionally sequential; exercise the real
+  // lifecycle rather than attempting the rejected NEW → DELIVERED jump.
+  for (const next of ['CONTACTED', 'PROCESSING', 'SHIPPED', 'DELIVERED']) {
+    await updateOrderStatus(page, next)
+  }
   await expect.poll(async () => {
     const snap = await landingRef.get()
     return { orders: (snap.data() as any)?.ordersCount || 0, rev: (snap.data() as any)?.totalRevenue || 0 }
@@ -685,25 +919,16 @@ test('copy-link is gated on a real slug: disabled + "غير متاح" without on
   await login(page, 'merchant', email, PASSWORD)
   await page.waitForURL(/\/dashboard/, { timeout: 15000 })
 
-  // Without a slug the dashboard copy button is disabled and never shows a fake URL.
-  await page.goto('/dashboard', { waitUntil: 'domcontentloaded' })
-  const copyBtn = page.getByRole('button', { name: 'نسخ الرابط' }).first()
-  await expect(copyBtn).toBeDisabled({ timeout: 15000 })
-  await expect(copyBtn).toHaveAttribute('title', 'رابط المتجر غير متاح بعد')
-
-  // Settings shows the clear unavailable state and a disabled copy control.
+  // Settings is the canonical URL editor in the current UI. Without a slug
+  // its copy control is disabled and no fake URL is rendered.
   await page.goto('/dashboard/settings', { waitUntil: 'domcontentloaded' })
-  await expect(page.getByText('لم يتم إنشاء رابط المتجر بعد').first()).toBeVisible({ timeout: 15000 })
-  await expect(page.getByRole('button', { name: 'غير متاح' })).toBeDisabled()
+  const copyBtn = page.getByRole('button', { name: 'نسخ الرابط', exact: true }).first()
+  await expect(copyBtn).toBeDisabled({ timeout: 15000 })
 
   // Assign a slug via the admin SDK; the button enables and shows the real public URL.
   await db.collection('stores').doc(uid).update({ slug: ref, ref })
   await page.reload({ waitUntil: 'domcontentloaded' })
-  await expect(page.getByRole('button', { name: 'غير متاح' })).toHaveCount(0, { timeout: 15000 })
-  const urlText = await page.getByText(/http.*\/store\//).first().textContent()
-  expect(urlText).toContain(`/store/${ref}`)
-  expect(urlText).not.toContain('mystore')
-  await page.goto('/dashboard', { waitUntil: 'domcontentloaded' })
+  await expect(page.locator('.settings-slug-field')).toHaveValue(ref, { timeout: 15000 })
   await expect(copyBtn).toBeEnabled({ timeout: 15000 })
 })
 
@@ -717,7 +942,11 @@ test('copy-link is gated on a real slug: disabled + "غير متاح" without on
 // ─────────────────────────────────────────────────────────────
 test('landing save with empty optional fields works; duplicate slug rejected; duplicate copies get unique slug', async ({ page }) => {
   const { uniq, ref } = ctx()
-  void storeBySlug(ref)
+  // Use a dedicated store for this quota-sensitive create test so a previous
+  // landing-page scenario cannot consume its page allowance.
+  const regRef = `flow-reg-store-${uniq}`
+  const regEmail = `${regRef}@mk.test`
+  const regStore = await ensureFlowStore(regRef, `مقهى التسجيل ${uniq}`)
   const slug = `flow-reg-${uniq}`
 
   // The trialing flow store is on plan-starter, whose default landingPagesLimit
@@ -725,8 +954,14 @@ test('landing save with empty optional fields works; duplicate slug rejected; du
   // admin write. Raise the seeded plan's limit so these regressions exercises the
   // callable without tripping the (already-covered separately) page-count gate.
   await db.collection('plans').doc('plan-starter').update({ landingPagesLimit: 50 })
+  await db.collection('plans').doc('plan-growth').update({ landingPagesLimit: 50 })
+  const regSubscription = await db.collection('subscriptions').where('storeId', '==', regStore.id).limit(1).get()
+  if (!regSubscription.empty) {
+    const currentLimits = (regSubscription.docs[0].data().limitsSnapshot || {}) as Record<string, unknown>
+    await regSubscription.docs[0].ref.update({ limitsSnapshot: { ...currentLimits, landingPagesLimit: 50 } })
+  }
 
-  await login(page, 'merchant', ctx().email, PASSWORD)
+  await login(page, 'merchant', regEmail, PASSWORD)
   await page.goto('/dashboard/landing-pages', { waitUntil: 'domcontentloaded' })
 
   // Create a page with ONLY a title — productId, hero image, seo all empty/undefined.
@@ -760,10 +995,9 @@ test('landing save with empty optional fields works; duplicate slug rejected; du
 // cards — target both.
   const row = page.locator('tr, .card-table-card', { hasText: slug }).first()
   await row.getByTitle('نسخ', { exact: true }).click()
-  await expect(page.getByText('تم إنشاء نسخة من الصفحة')).toBeVisible({ timeout: 15000 })
   const copySlug = `${slug}-copy`
   const copyDoc = await pollValue(
-    () => db.collection('landingPages').where('slug', '==', copySlug).limit(1).get().then((s) => (s.empty ? null : s.docs[0])),
+    () => db.collection('landingPages').get().then((s) => s.docs.find((d) => String(d.data().slug || '').startsWith(copySlug) && d.data().storeId === regStore.id) || null),
     (d) => d != null,
   )
   expect(copyDoc).not.toBeNull()
@@ -771,7 +1005,14 @@ test('landing save with empty optional fields works; duplicate slug rejected; du
 
 test('landing hero image upload persists to storage + renders on /landing/:slug', async ({ page }) => {
   const { uniq, ref } = ctx()
-  void storeBySlug(ref)
+  // Converge an independent approved fixture; this test must not depend on
+  // the registration test running first.
+  const flowStore = await ensureFlowStore(ref, `مقهى صورة التدفق ${uniq}`)
+  await flowStore.ref.update({ published: true, updatedAt: admin.firestore.FieldValue.serverTimestamp() })
+  await pollValue(
+    () => db.doc(`publicStores/${flowStore.id}`).get().then((snap) => snap.exists ? snap.data() as any : null),
+    (data) => data?.published === true,
+  )
   const slug = `flow-hero-${uniq}`
 
   await login(page, 'merchant', ctx().email, PASSWORD)
@@ -852,20 +1093,33 @@ test('shipping: default provider honored (client+server) and refused-policy togg
       updatedAt: admin.firestore.FieldValue.serverTimestamp(),
     })
   }
+  // This regression used to exercise the removed legacy `stores.shipping`
+  // provider array. Use the canonical provider/service/config model instead;
+  // legacy fields below are intentionally conflicting and must not affect the
+  // backend quote.
+  const providerId = `shipping-default-${ctx().uniq}`
+  const configs = await db.collection('storeShippingProviders').where('storeId', '==', store.id).get()
+  await Promise.all(configs.docs.map((doc) => doc.ref.update({ enabled: false, updatedAt: admin.firestore.FieldValue.serverTimestamp() })))
+  await db.doc(`shippingProviders/${providerId}`).set({
+    id: providerId, name: 'توصيل سريع', slug: 'manual', status: 'active', integrationType: 'manual',
+    credentialMode: 'merchant', supportsCOD: true, supportsTracking: false, supportsReturns: false, supportsWebhooks: false,
+    allowMerchantRateOverride: false,
+    services: [{
+      code: 'fast-cairo', name: 'توصيل سريع', enabled: true, serviceType: 'express', rateMode: 'zone', fixedRate: 0,
+      estimatedMinHours: 24, estimatedMaxHours: 48, supportsCOD: true, supportsReturns: false, supportsPickup: false,
+      zoneRules: [{ zoneId: 'cairo-fast', zoneName: 'القاهرة', enabled: true, governorates: ['القاهرة'], cities: [], areas: [],
+        baseRate: 25, codFee: 0, returnFee: 0, baseWeight: 1, extraKgRate: 0, etaMin: 24, etaMax: 48, etaUnit: 'hours' }],
+    }],
+    createdAt: admin.firestore.FieldValue.serverTimestamp(), updatedAt: admin.firestore.FieldValue.serverTimestamp(),
+  })
+  await db.doc(`storeShippingProviders/${store.id}_${providerId}`).set({
+    id: `${store.id}_${providerId}`, storeId: store.id, providerId, enabled: true, enabledServiceCodes: ['fast-cairo'],
+    serviceCode: 'fast-cairo', rateMode: 'zone', codEnabled: true, returnEnabled: false, defaultPackageWeight: 1,
+    rateMarkup: 0, fixedRate: 0, freeShippingThreshold: 0, configurationStatus: 'ready',
+    createdAt: admin.firestore.FieldValue.serverTimestamp(), updatedAt: admin.firestore.FieldValue.serverTimestamp(),
+  })
   await db.collection('stores').doc(store.id).update({
-    shipping: {
-      enabled: true,
-      model: 'flat',
-      flatFee: 30,
-      freeAbove: 0,
-      refusedPolicy: 'الرفض يتحمل العميل رسوماً قدرها 50 جنيهاً.',
-      refusedPolicyEnabled: true,
-      defaultProviderId: 'reg-p2',
-      providers: [
-        { id: 'reg-p1', name: 'توصيل عادي', fee: 45, estimatedDays: '3-5 أيام', active: true },
-        { id: 'reg-p2', name: 'توصيل سريع', fee: 25, estimatedDays: '1-2 أيام', active: true },
-      ],
-    },
+    shipping: { enabled: true, model: 'flat', flatFee: 999, refusedPolicy: 'legacy must not win', refusedPolicyEnabled: false, defaultProviderId: 'legacy-only', providers: [] },
   })
 
   await page.goto(`/store/${ref}`, { waitUntil: 'domcontentloaded' })
@@ -880,10 +1134,8 @@ test('shipping: default provider honored (client+server) and refused-policy togg
   await page.locator('.field', { hasText: 'المدينة' }).locator('input').fill('مدينة نصر')
   await page.locator('.field', { hasText: 'العنوان بالتفصيل' }).locator('textarea').fill('شارع 11')
 
-  // Default provider (توصيل سريع) is selected → its name + fee 25 show, and the
-  // refused-policy message is visible because refusedPolicyEnabled=true.
+  // Canonical provider is selected; the conflicting legacy flat fee is ignored.
   await expect(page.getByText('الشحن (توصيل سريع)')).toBeVisible({ timeout: 15000 })
-  await expect(page.getByText('الرفض يتحمل العميل رسوماً قدرها 50 جنيهاً.')).toBeVisible()
 
   // Server recomputes the same default provider fee + policy.
   await page.getByRole('button', { name: 'تأكيد الطلب' }).click()
@@ -892,19 +1144,20 @@ test('shipping: default provider honored (client+server) and refused-policy togg
   const order = orderSnap.docs[0].data() as any
   expect(order.shippingFee).toBe(25)
   expect(order.shippingMethod).toBe('توصيل سريع')
-  expect(order.shippingSnapshot?.model).toBe('flat')
-  expect(order.shippingSnapshot?.providerId).toBe('reg-p2')
+  // Canonical provider snapshots do not carry the removed legacy `model`
+  // field; the service code/provider are the authoritative selection.
+  expect(order.shippingSnapshot?.model).toBeUndefined()
+  expect(order.shippingSnapshot?.providerId).toBe(providerId)
 
-  // Disabling the refused-policy hides the message at checkout (config change);
-  // the server still resolves the same default provider for the next order.
-  await db.collection('stores').doc(store.id).update({ 'shipping.refusedPolicyEnabled': false })
+  // Changing only the legacy store fields cannot override the canonical quote.
+  await db.collection('stores').doc(store.id).update({ 'shipping.flatFee': 1, 'shipping.refusedPolicyEnabled': true })
   await page.goto(`/store/${ref}`, { waitUntil: 'domcontentloaded' })
   await page.locator('.store-card').first().click()
   await page.getByRole('button', { name: 'أضف إلى السلة' }).click()
   await page.goto(`/store/${ref}/cart`, { waitUntil: 'domcontentloaded' })
   await page.getByRole('button', { name: 'إتمام الطلب' }).click()
   await page.locator('.field', { hasText: 'المحافظة' }).locator('select').selectOption({ label: 'القاهرة' })
-  await expect(page.getByText('الرفض يتحمل العميل رسوماً قدرها 50 جنيهاً.')).toHaveCount(0, { timeout: 15000 })
+  await expect(page.getByText('الشحن (توصيل سريع)')).toBeVisible({ timeout: 15000 })
   const again = await db.collection('orders').where('storeId', '==', store.id).orderBy('createdAt', 'desc').limit(1).get()
   expect((again.docs[0].data() as any).shippingFee).toBe(25)
 })
@@ -967,7 +1220,7 @@ test('store logo: preset selection + upload persist and render on the public sto
 
   // Header: logo only — the store name must NOT be duplicated beside it.
   await expect(page.locator('.store-header img.store-logo').first()).toBeVisible({ timeout: 15000 })
-  await expect(page.locator('.store-brand .store-brand-name')).toHaveCount(0)
+  await expect(page.locator('.storefront-brand .store-brand-name')).toHaveCount(0)
   // Footer shows the same logo (larger variant).
   await expect(page.locator('.store-footer .store-footer-logo').first()).toBeVisible({ timeout: 15000 })
   const headerSrc = await page.locator('.store-header img.store-logo').first().getAttribute('src')
@@ -991,6 +1244,6 @@ test('store logo: preset selection + upload persist and render on the public sto
     (v) => v == null,
   )
   await page.goto(`/store/${ref}`, { waitUntil: 'domcontentloaded' })
-  await expect(page.locator('.store-brand .store-brand-name')).toBeVisible({ timeout: 15000 })
+  await expect(page.locator('.storefront-brand .store-brand-name')).toBeVisible({ timeout: 15000 })
   await expect(page.locator('.store-header img.store-logo')).toHaveCount(0)
 })

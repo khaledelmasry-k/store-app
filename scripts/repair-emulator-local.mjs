@@ -36,7 +36,13 @@ async function main() {
       .map((d) => ({ id: d.id, data: d.data() }))
       .sort((a, b) => (b.data.createdAt?.seconds || 0) - (a.data.createdAt?.seconds || 0))
     let pointed = store.activeSubscriptionId ? subs.find((s) => s.id === store.activeSubscriptionId) : null
-    if (!pointed) pointed = subs.find((s) => effective(s.data)) || subs[0]
+    const effectiveSubs = subs.filter((s) => effective(s.data))
+    // A stale FREE pointer must not displace an older valid paid snapshot.
+    // Prefer an effective paid subscription, then the canonical pointer, then
+    // the newest remaining record. Historical records are never deleted.
+    const paid = effectiveSubs.filter((s) => Number(s.data.normalPriceSnapshot ?? s.data.priceSnapshot ?? 0) > 0)
+    if (paid.length > 0 && (!pointed || Number(pointed.data.normalPriceSnapshot ?? pointed.data.priceSnapshot ?? 0) <= 0)) pointed = paid[0]
+    if (!pointed) pointed = effectiveSubs[0] || subs[0]
     if (!pointed && planFree.exists) {
       const ref = db.collection('subscriptions').doc()
       await ref.set({

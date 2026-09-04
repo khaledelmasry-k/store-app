@@ -1,10 +1,11 @@
 import { FunctionalComponent, Fragment } from 'preact'
 import { useEffect, useState } from 'preact/hooks'
+import { useLocation } from 'wouter'
 import { useStore } from '../../shared/hooks/useStore'
 import { useSubscription } from '../../shared/hooks/useSubscription'
-import { useCollection } from '../../shared/hooks/useCollection'
-import { getMerchantPaymentInfoCallable, submitPaymentRequestCallable, changeSubscriptionPlanCallable, getBillingSnapshotsCallable } from '../../shared/services/auth'
-import { uploadPaymentProof, validateImageFile } from '../../shared/services/uploads'
+import { useCollectionOnce } from '../../shared/hooks/useCollectionOnce'
+import { getMerchantPaymentInfoCallable, submitPaymentRequestCallable, changeSubscriptionPlanCallable, requestStorePurchaseCallable, getBillingSnapshotsCallable, getEligiblePromotionsCallable } from '../../shared/services/auth'
+import { uploadPaymentProof, validatePaymentProofFile, uploadErrorMessage } from '../../shared/services/uploads'
 import { PageHeader } from '../../shared/components/ui/PageHeader'
 import { Loading } from '../../shared/components/ui/Loading'
 import './Subscription.css'
@@ -17,6 +18,7 @@ import { EmptyState } from '../../shared/components/ui/EmptyState'
 import { Modal } from '../../shared/components/ui/Modal'
 import { SegmentedControl } from '../../shared/components/ui/SegmentedControl'
 import { Icon } from '../../shared/components/ui/Icon'
+import { CountdownTimer } from '../../shared/components/subscription/CountdownTimer'
 import { Table } from '../../shared/components/ui/Table'
 import { PricingCard } from '../../shared/components/subscription/PricingCard'
 import { Progress } from '../../shared/components/ui/Progress'
@@ -24,7 +26,7 @@ import { formatCurrency, formatDate, formatDateTime, formatNumber } from '../../
 import { SUBSCRIPTION_STATUS_LABELS, SUBSCRIPTION_STATUS_TONES, ORDER_USAGE_LABELS, usageLevelFor } from '../../shared/utils/constants'
 import { usageFrom, PLAN_FEATURE_KEYS, PLAN_FEATURE_LABELS, canUseFeature, isPlanLimitUnlimited } from '../../shared/services/subscription'
 import { useToast } from '../../shared/hooks/useToast'
-import type { PlatformSettings, Product, SubscriptionPayment, SubscriptionPlan } from '../../shared/types'
+import type { PlatformSettings, SubscriptionPayment, SubscriptionPlan } from '../../shared/types'
 
 interface StorageQuota {
   usedBytes: number
@@ -35,6 +37,14 @@ interface StorageQuota {
 }
 
 const MB = 1024 * 1024
+
+function offerIsPubliclyAvailable(plan: SubscriptionPlan) {
+  if (plan.isPubliclyAvailable === false) return false
+  const raw: any = plan.launchOfferEndsAt
+  if (!raw) return true
+  const ms = typeof raw.toDate === 'function' ? raw.toDate().getTime() : typeof raw.seconds === 'number' ? raw.seconds * 1000 : new Date(raw).getTime()
+  return !Number.isFinite(ms) || ms > Date.now()
+}
 
 const BILLING_TYPE_LABELS: Record<string, string> = {
   plan_change: 'تغيير الباقة',
@@ -47,28 +57,33 @@ const BILLING_TYPE_LABELS: Record<string, string> = {
 export const MerchantSubscription: FunctionalComponent = () => {
   const { store } = useStore()
   const storeId = store?.id || ''
+  const [location] = useLocation()
+  const subscriptionParams = new URLSearchParams(location.split('?')[1] || window.location.search)
+  const lifetimeIntent = subscriptionParams.get('offer') === 'lifetime'
   const toast = useToast()
-  const { subscription, plan, paymentRequests, status, nextAmount, launchOffer, trialRemaining, loading, refresh } = useSubscription(storeId)
+  const { subscription, plan, paymentRequests, changeRequests, purchaseRequests, status, nextAmount, launchOffer, loading, refresh, resourceUsage } = useSubscription(storeId)
 
-  const plansRes = useCollection<SubscriptionPlan>('plans', { orderBy: { field: 'priceMonthly' } })
-  const allPlans = [...plansRes.data].filter((p) => p.active !== false).sort((a, b) => (a.sortOrder ?? 0) - (b.sortOrder ?? 0))
+  const plansRes = useCollectionOnce<SubscriptionPlan>('plans', { orderBy: { field: 'priceMonthly' } })
+  const allPlans = [...plansRes.data]
+    .filter((p: any) => p.active !== false && p.isPurchasable !== false && p.archived !== true)
+    .sort((a, b) => (a.sortOrder ?? 0) - (b.sortOrder ?? 0))
 
-  const productsRes = useCollection<Product>('products', { storeId, orderBy: { field: 'createdAt' } })
-  const productCount = productsRes.data.length
-  const teamRes = useCollection<any>('team', { storeId }, !!storeId)
-  const userCount = 1 + teamRes.data.length
-  const userLimit = Number(plan?.staffLimit || 1)
+  const productCount = resourceUsage?.products.used ?? 0
+  const userCount = resourceUsage?.team.used ?? 1
+  const userLimit = resourceUsage?.team.limit ?? Number(plan?.staffLimit || 1)
   const userPct = userLimit > 0 ? Math.min(100, Math.round((userCount / userLimit) * 100)) : 0
   const userLevel = userLimit > 0 ? usageLevelFor(userPct, true) : 'none'
   const userTone = userLevel === 'reached' ? 'red' : userLevel === 'near' || userLevel === 'approaching' ? 'amber' : userLevel === 'moderate' ? 'primary' : 'green'
   const isProductsUnlimited = isPlanLimitUnlimited('products', plan)
-  const productLimit = isProductsUnlimited ? 0 : Number(plan?.productLimit || 0)
+  const productLimit = resourceUsage?.products.limit ?? (isProductsUnlimited ? 0 : Number(plan?.productLimit || 0))
   const productPct = productLimit > 0 ? Math.min(100, Math.round((productCount / productLimit) * 100)) : 0
   const productLevel = productLimit > 0 ? usageLevelFor(productPct, true) : 'none'
   const productTone = productLevel === 'reached' ? 'red' : productLevel === 'near' || productLevel === 'approaching' ? 'amber' : productLevel === 'moderate' ? 'primary' : 'green'
   const enabledFeatures = PLAN_FEATURE_KEYS.filter((k) => canUseFeature(k, plan))
 
   const [snapshots, setSnapshots] = useState<any[]>([])
+  const [eligiblePromotions, setEligiblePromotions] = useState<any[]>([])
+  useEffect(() => { if (storeId) getEligiblePromotionsCallable({ storeId }).then((r: any) => setEligiblePromotions(r.data?.promotions || [])).catch(() => setEligiblePromotions([])) }, [storeId])
   useEffect(() => {
     if (!storeId) return
     let active = true
@@ -90,6 +105,7 @@ export const MerchantSubscription: FunctionalComponent = () => {
   const [changeBilling, setChangeBilling] = useState<'monthly' | 'yearly'>('monthly')
   const [targetPlanId, setTargetPlanId] = useState<string>('')
   const [changing, setChanging] = useState(false)
+  const [purchasingOfferId, setPurchasingOfferId] = useState<string | null>(null)
 
   useEffect(() => {
     if (!storeId) return
@@ -98,8 +114,8 @@ export const MerchantSubscription: FunctionalComponent = () => {
       .catch(() => {})
   }, [storeId])
 
-  const limitBytes = plan ? Number(plan.storageLimit || 0) * MB : 0
-  const usedBytes = Number(store?.storageUsed || 0)
+  const limitBytes = resourceUsage?.storage.limit ?? (plan ? Number(plan.storageLimit || 0) * MB : 0)
+  const usedBytes = resourceUsage?.storage.used ?? Number(store?.storageUsed || 0)
   const storage: StorageQuota | null = limitBytes > 0 ? {
     usedBytes,
     limitBytes,
@@ -125,15 +141,17 @@ export const MerchantSubscription: FunctionalComponent = () => {
   }
 
   const pendingRequest = paymentRequests.find((p) => p.status === 'pending')
+  const pendingChangeRequest = changeRequests.find((r) => r.status === 'pending_payment' || r.status === 'pending_approval')
+  const pendingPurchaseRequest = purchaseRequests.find((r) => r.status === 'pending_payment' || r.status === 'pending_approval')
   const paymentHistory = [...paymentRequests].sort((a, b) => (b.createdAt?.seconds || 0) - (a.createdAt?.seconds || 0))
 
-  const canSubmit = status === 'trialing' || status === 'expired' || status === 'suspended'
-  const needsPayment = !pendingRequest && (status === 'trialing' || status === 'expired' || status === 'suspended')
+  const canSubmit = Boolean(pendingChangeRequest && pendingChangeRequest.status === 'pending_payment') || Boolean(pendingPurchaseRequest && pendingPurchaseRequest.status === 'pending_payment') || status === 'trialing' || status === 'expired' || status === 'suspended'
+  const needsPayment = !pendingRequest && (Boolean(pendingChangeRequest) || Boolean(pendingPurchaseRequest) || status === 'trialing' || status === 'expired' || status === 'suspended')
 
   const handleProof = (file: File | null) => {
     setError('')
     if (!file) return setProof(null)
-    const err = validateImageFile(file)
+    const err = validatePaymentProofFile(file)
     if (err) return setError(err.message)
     setProof(file)
   }
@@ -151,15 +169,29 @@ export const MerchantSubscription: FunctionalComponent = () => {
     }
     setChanging(true)
     try {
-      const res = await changeSubscriptionPlanCallable({ storeId, planId: targetPlanId })
-      const changed = (res.data as { changed?: boolean })?.changed
-      toast.push(changed ? 'تم تغيير باقتك بنجاح' : 'أنت بالفعل على هذه الباقة', undefined, 'success')
+      const res = await changeSubscriptionPlanCallable({ storeId, planId: targetPlanId, billingCycle: changeBilling })
+      const result = res.data as { changed?: boolean; requestId?: string; quotedAmount?: number }
+      toast.push(result.requestId ? 'تم إنشاء طلب تغيير الباقة' : result.changed ? 'تم تغيير باقتك بنجاح' : 'أنت بالفعل على هذه الباقة', result.requestId ? 'أرسل إثبات الدفع لإكمال التفعيل بعد مراجعة إدارة المنصة.' : undefined, 'success')
       setUpgradeOpen(false)
       refresh()
     } catch (err: any) {
       toast.push('فشل تغيير الباقة', err?.message || 'حدث خطأ غير متوقع', 'error')
     } finally {
       setChanging(false)
+    }
+  }
+
+  const requestLifetimePurchase = async (offerId: string) => {
+    setPurchasingOfferId(offerId)
+    try {
+      const res = await requestStorePurchaseCallable({ storeId, offerId })
+      const result = res.data as { quotedAmount?: number }
+      toast.push('تم إنشاء طلب امتلاك المتجر', `أرسل إثبات الدفع بمبلغ ${formatCurrency(Number(result.quotedAmount || 0), currency) || 'المبلغ المحدد'} لإكمال المراجعة.`, 'success')
+      refresh()
+    } catch (err: any) {
+      toast.push('تعذر إنشاء طلب الشراء', err?.message || 'حدث خطأ غير متوقع', 'error')
+    } finally {
+      setPurchasingOfferId(null)
     }
   }
 
@@ -183,7 +215,7 @@ export const MerchantSubscription: FunctionalComponent = () => {
         screenshotUrl = await uploadPaymentProof(proof, subscription.storeId)
       }
       await submitPaymentRequestCallable({
-        subscriptionId: subscription.id,
+        ...(pendingPurchaseRequest ? { purchaseRequestId: pendingPurchaseRequest.id } : pendingChangeRequest ? { changeRequestId: pendingChangeRequest.id } : { subscriptionId: subscription.id }),
         paymentMethod: method.trim(),
         reference: reference.trim(),
         note: note.trim(),
@@ -196,7 +228,8 @@ export const MerchantSubscription: FunctionalComponent = () => {
       setProof(null)
       refresh()
     } catch (err: any) {
-      setError(err?.message || 'فشل إرسال طلب الدفع')
+      const safeMessage = err?.code?.startsWith?.('storage/') ? uploadErrorMessage(err) : (err?.message || 'فشل إرسال طلب الدفع')
+      setError(safeMessage)
       toast.push('فشل إرسال الطلب', undefined, 'error')
     } finally {
       setUploading(false)
@@ -205,6 +238,10 @@ export const MerchantSubscription: FunctionalComponent = () => {
   }
 
   const statusLabel = SUBSCRIPTION_STATUS_LABELS[status as keyof typeof SUBSCRIPTION_STATUS_LABELS] || status
+  const isLifetime = subscription.billingModel === 'one_time' && subscription.ownershipType === 'lifetime' && subscription.lifetimeAccess === true
+  const lifetimeOffers = allPlans.filter((p: any) => p.billingModel === 'one_time' && p.isLaunchOffer !== false && Number(p.oneTimePrice || 0) > 0 && offerIsPubliclyAvailable(p))
+  const subscriptionOffers = allPlans.filter((p: any) => p.billingModel !== 'one_time')
+
   const isFreePlan = Number(plan?.priceMonthly || 0) <= 0
   const paidPeriodEnd = subscription.currentPeriodEnd || subscription.expiresAt
   const renewalLabel = status === 'active' && !isFreePlan && paidPeriodEnd ? formatDate(paidPeriodEnd) : isFreePlan ? 'لا يوجد تجديد مدفوع' : '—'
@@ -301,9 +338,10 @@ export const MerchantSubscription: FunctionalComponent = () => {
             <Badge tone={SUBSCRIPTION_STATUS_TONES[status as keyof typeof SUBSCRIPTION_STATUS_TONES] || 'slate'}>{statusLabel}</Badge>
           </div>
           <div className="subscription-summary-rows">
-            <div><span>تاريخ التجديد القادم</span><b>{renewalLabel}</b></div>
-            <div><span>تاريخ انتهاء الصلاحية</span><b>{subscription.expiresAt ? formatDate(subscription.expiresAt) : '—'}</b></div>
-            <div><span>تكلفة التجديد</span><b>{plan ? `${formatCurrency(plan.priceMonthly, currency)} / شهرياً` : '—'}</b></div>
+            <div><span>حالة الملكية</span><b>{isLifetime ? 'المتجر مملوك' : 'اشتراك دوري'}</b></div>
+            <div><span>تاريخ التجديد القادم</span><b>{isLifetime ? 'لا يوجد تجديد لملكية المتجر الأساسية' : renewalLabel}</b></div>
+            <div><span>نهاية الدورة الحالية</span><b>{paidPeriodEnd ? formatDate(paidPeriodEnd) : isLifetime ? 'لا تنتهي ملكية المتجر' : 'يُحدَّد عند تفعيل الدورة'}</b></div>
+            <div><span>تكلفة التجديد</span><b>{isLifetime ? 'لا توجد رسوم شهرية للملكية الأساسية' : plan ? `${formatCurrency(plan.priceMonthly, currency)} / شهرياً` : '—'}</b></div>
             {launchOffer && <div><span>خصم الإطلاق</span><b>أول شهر {formatCurrency(nextAmount, currency)}</b></div>}
           </div>
         </div>
@@ -360,7 +398,7 @@ export const MerchantSubscription: FunctionalComponent = () => {
           <div className="trial-countdown">
             <Icon name="hourglass_top" />
             <div>
-              <strong>{trialRemaining || 'قاربت على الانتهاء'}</strong>
+              {subscription?.trialEndsAt ? <CountdownTimer endsAt={subscription.trialEndsAt} label="متبقي من الفترة التجريبية" /> : <strong className="trial-missing-end">تعذر تحديد موعد انتهاء التجربة</strong>}
               <p className="muted small">باقتك النشطة تعمل بكامل المزايا خلال الفترة التجريبية.</p>
             </div>
           </div>
@@ -389,7 +427,7 @@ export const MerchantSubscription: FunctionalComponent = () => {
         )}
       </Card>
 
-      <div className="plans-section">
+      {!isLifetime && <div className="plans-section">
         <div className="plans-section-head">
           <div>
             <h2>ترقية أو تغيير الخطة</h2>
@@ -403,16 +441,40 @@ export const MerchantSubscription: FunctionalComponent = () => {
             </button>
           </div>
         </div>
-        {allPlans.length === 0 ? (
+        {eligiblePromotions.filter((p) => p.placement?.includes?.('subscription') && p.planId && p.promotionalPrice != null).length > 0 && <div className="subscription-offer-callout"><strong>عروض خاصة لك</strong>{eligiblePromotions.filter((p) => p.placement?.includes?.('subscription') && p.planId && p.promotionalPrice != null).map((p) => { const target = subscriptionOffers.find((x: any) => x.id === p.planId); return target ? <div key={p.id}><span>{target.name}</span><b>{formatCurrency(Number(p.promotionalPrice), currency)} بدلًا من {formatCurrency(Number(changeBilling === 'yearly' ? target.priceYearly : target.priceMonthly), currency)}</b><CountdownTimer endsAt={p.endsAt} label="ينتهي خلال" /></div> : null })}</div>}
+        {subscriptionOffers.length === 0 ? (
           <EmptyState title="لا توجد باقات" description="لم تُضف الباقات بعد — تواصل مع مدير المنصة." icon="workspace_premium" />
         ) : (
           <div className="grid grid-3">
-            {allPlans.map((p) => (
+            {subscriptionOffers.map((p) => (
               <PricingCard key={p.id} plan={p} yearly={changeBilling === 'yearly'} featured={p.id === subscription?.planId} />
             ))}
           </div>
         )}
-      </div>
+      </div>}
+
+      {!isLifetime && lifetimeOffers.length > 0 && (
+        <div id="lifetime-offer" className={lifetimeIntent ? 'lifetime-offer-section is-handoff-selected' : 'lifetime-offer-section'}>
+          <Card title="امتلك متجرك" subtitle="دفعة واحدة — بدون اشتراك شهري للمتجر الأساسي، وفق حدود ومزايا العرض المحددة." className="mt-2">
+            {lifetimeIntent && <Badge tone="indigo">العرض المحدد من التسجيل</Badge>}
+          <div className="grid grid-2">
+            {lifetimeOffers.map((offer: any) => (
+              <div key={offer.id} className="mk-pricing-card">
+                <h3 className="mk-pricing-name">امتلك متجرك</h3>
+                {offer.description && <p className="mk-pricing-desc">{offer.description}</p>}
+                <div className="mk-pricing-price"><strong>{formatCurrency(Number(offer.oneTimePrice || 0), currency)}</strong><span>دفعة واحدة</span></div>
+                <p className="muted small">حق استخدام دائم لمتجر واحد داخل Matjari، ولا يشمل ملكية المنصة أو الكود المصدري أو المزايا Premium المستقبلية تلقائياً.</p>
+                {pendingPurchaseRequest ? (
+                  <Badge tone="amber">طلب الشراء قيد المراجعة</Badge>
+                ) : (
+                  <Button loading={purchasingOfferId === offer.id} onClick={() => requestLifetimePurchase(offer.id)}>امتلك متجرك</Button>
+                )}
+              </div>
+            ))}
+          </div>
+          </Card>
+        </div>
+      )}
 
       <Card title="تغيير الباقة" className="mt-2">
         <div className="flex-between">
@@ -462,11 +524,11 @@ export const MerchantSubscription: FunctionalComponent = () => {
             options={[{ value: 'monthly', label: 'شهري' }, { value: 'yearly', label: 'سنوي' }]}
           />
         </div>
-        {allPlans.length === 0 ? (
+        {subscriptionOffers.length === 0 ? (
           <EmptyState title="لا توجد باقات" description="لم تُضف الباقات بعد — تواصل مع مدير المنصة." icon="workspace_premium" />
         ) : (
           <div className="grid grid-2">
-            {allPlans.map((p) => (
+            {subscriptionOffers.map((p) => (
               <PricingCard
                 key={p.id}
                 plan={p}
@@ -482,23 +544,35 @@ export const MerchantSubscription: FunctionalComponent = () => {
       </Modal>
 
       <div id="subscription-payment">
-        <Card title={pendingRequest ? 'طلب التفعيل' : 'تفعيل الاشتراك'} className="mt-2">
+        <Card title={pendingPurchaseRequest ? 'طلب امتلاك المتجر' : pendingChangeRequest ? 'طلب تغيير الباقة' : pendingRequest ? 'طلب التفعيل' : 'تفعيل الاشتراك'} className="mt-2">
           {pendingRequest ? (
             <EmptyState
               icon="hourglass_top"
               title="طلبك قيد المراجعة"
               description={`تم استلام طلب التفعيل بمبلغ ${formatCurrency(pendingRequest.amount, currency)} وهو قيد المراجعة من إدارة المنصة. سيتم تفعيل اشتراكك فور التأكيد.`}
             />
-          ) : status === 'active' ? (
+          ) : pendingPurchaseRequest?.status === 'pending_approval' ? (
+            <EmptyState icon="hourglass_top" title="طلب امتلاك المتجر قيد المراجعة" description="تم إرسال إثبات الدفع. تبقى ملكية المتجر الأساسية دون تغيير حتى اعتماد الدفع." />
+          ) : pendingChangeRequest?.status === 'pending_approval' ? (
+            <EmptyState
+              icon="hourglass_top"
+              title="طلب تغيير الباقة قيد المراجعة"
+              description={`تم إرسال طلب تغيير الباقة إلى ${pendingChangeRequest.toPlanName || pendingChangeRequest.toPlanId}. لا تتغير باقتك الحالية قبل اعتماد الدفع.`}
+            />
+          ) : status === 'active' && !pendingChangeRequest ? (
             <EmptyState
               icon="verified"
               title="اشتراكك نشط"
-              description={`باقتك مفعّلة حتى ${formatDate(subscription.currentPeriodEnd || subscription.expiresAt)}. سيتم التجديد تلقائياً بالمبلغ ${formatCurrency(nextAmount, currency)} عند انتهاء الدورة.`}
+              description={isLifetime ? 'تم اعتماد ملكية المتجر الأساسية. لا يوجد انتهاء أو تجديد لهذه الملكية، وتظل حدود ومزايا العرض المشتراة مطبقة.' : `باقتك مفعّلة حتى ${formatDate(subscription.currentPeriodEnd || subscription.expiresAt)}. سيتم التجديد تلقائياً بالمبلغ ${formatCurrency(nextAmount, currency)} عند انتهاء الدورة.`}
             />
           ) : canSubmit ? (
             <>
               <p className="muted small mb-2">
-                {status === 'trialing'
+                {pendingPurchaseRequest
+                  ? `أرسل إثبات الدفع بمبلغ ${formatCurrency(pendingPurchaseRequest.quotedAmount, pendingPurchaseRequest.currency || currency)} لإكمال شراء ملكية المتجر.`
+                  : pendingChangeRequest
+                  ? `أرسل إثبات الدفع بمبلغ ${formatCurrency(pendingChangeRequest.quotedAmount, pendingChangeRequest.currency || currency)} لإكمال تغيير الباقة.`
+                  : status === 'trialing'
                   ? `بدّل للتجديد المدفوع الآن بخصم الإطلاق: أول شهر ${formatCurrency(nextAmount, currency)} فقط.`
                   : `متجرك متوقف عن البيع حالياً. فعّل باقتك بمبلغ ${formatCurrency(nextAmount, currency)} لاستئناف العمل فوراً.`}
               </p>
@@ -521,14 +595,14 @@ export const MerchantSubscription: FunctionalComponent = () => {
                   <span className="field-label">إرفاق إثبات التحويل (اختياري)</span>
                   <input
                     type="file"
-                    accept="image/jpeg,image/png,image/webp,image/gif"
+                    accept="image/jpeg,image/png,image/webp,application/pdf"
                     onChange={(e) => handleProof((e.target as HTMLInputElement).files?.[0] || null)}
                   />
                   {proof && <p className="muted small">{proof.name}</p>}
-                  {uploading && <p className="muted small">جاري رفع الصورة…</p>}
+                  {uploading && <p className="muted small">جاري رفع الإثبات…</p>}
                 </div>
                 {error && <p className="field-error">{error}</p>}
-                <Button type="submit" loading={submitting} icon="arrow_forward" className="mt-2">إرسال طلب التفعيل</Button>
+                <Button type="submit" loading={submitting} icon="arrow_forward" className="mt-2">{pendingPurchaseRequest ? 'إرسال إثبات شراء المتجر' : 'إرسال طلب التفعيل'}</Button>
               </form>
             </>
           ) : null}

@@ -60,6 +60,48 @@ export function registerMerchant(input: RegisterInput) {
   return fn(input)
 }
 
+export function getPublicPlatformConfigCallable() {
+  return httpsCallable(getFunctions(), 'getPublicPlatformConfig')({})
+}
+
+export function saveEnterpriseWhatsAppSettingsCallable(input: { number: string; enabled: boolean; message?: string }) {
+  return httpsCallable(getFunctions(), 'saveEnterpriseWhatsAppSettings')(input)
+}
+
+export function saveWhatsAppAutomationSettingsCallable(input: { senderNumber?: string; events: string[]; templates?: Record<string, string>; metaTemplates?: Record<string, { name?: string; language?: string }> }) {
+  return httpsCallable(getFunctions(), 'saveWhatsAppAutomationSettings')(input)
+}
+
+export function getStoreWhatsAppAutomationCallable(input: { storeId: string }) {
+  return httpsCallable(getFunctions(), 'getStoreWhatsAppAutomation')(input)
+}
+
+export function getStoreWhatsAppDeliveryLogCallable(input: { storeId: string }) {
+  return httpsCallable(getFunctions(), 'getStoreWhatsAppDeliveryLog')(input)
+}
+
+export function saveStoreWhatsAppMetaConnectionCallable(input: { storeId: string; phoneNumberId: string; accessToken: string }) {
+  return httpsCallable(getFunctions(), 'saveStoreWhatsAppMetaConnection')(input)
+}
+
+export function testStoreWhatsAppMetaConnectionCallable(input: { storeId: string }) {
+  return httpsCallable(getFunctions(), 'testStoreWhatsAppMetaConnection')(input)
+}
+
+export function saveStoreWhatsAppAutomationCallable(input: { storeId: string; senderNumber?: string; events: string[]; templates?: Record<string, string>; metaTemplates?: Record<string, { name?: string; language?: string }> }) {
+  return httpsCallable(getFunctions(), 'saveStoreWhatsAppAutomation')(input)
+}
+
+export function createPlatformPromotionCallable(input: Record<string, unknown>) { return httpsCallable(getFunctions(), 'createPlatformPromotion')(input) }
+export function updatePlatformPromotionCallable(input: Record<string, unknown>) { return httpsCallable(getFunctions(), 'updatePlatformPromotion')(input) }
+export function setPlatformPromotionStatusCallable(input: { promotionId: string; status: string }) { return httpsCallable(getFunctions(), 'setPlatformPromotionStatus')(input) }
+export function getEligiblePromotionsCallable(input: { storeId: string }) { return httpsCallable(getFunctions(), 'getEligiblePromotions')(input) }
+export function listPlatformPromotionsCallable() { return httpsCallable(getFunctions(), 'listPlatformPromotions')({}) }
+export function getPublicPromotionsCallable() { return httpsCallable(getFunctions(), 'getPublicPromotions')({}) }
+export function createAdCampaignCallable(input: Record<string, unknown>) { return httpsCallable(getFunctions(), 'createAdCampaign')(input) }
+export function updateAdCampaignCallable(input: Record<string, unknown>) { return httpsCallable(getFunctions(), 'updateAdCampaign')(input) }
+export function listAdCampaignsCallable(input: { storeId: string }) { return httpsCallable(getFunctions(), 'listAdCampaigns')(input) }
+
 export function createOrderCallable(input: Record<string, unknown>) {
   const functions = getFunctions()
   const fn = httpsCallable(functions, 'createOrder')
@@ -70,6 +112,10 @@ export function updateOrderStatusCallable(input: Record<string, unknown>) {
   const functions = getFunctions()
   const fn = httpsCallable(functions, 'updateOrderStatus')
   return fn(input)
+}
+
+export function getOrderIntegrationEventsCallable(input: { orderId: string }) {
+  return httpsCallable(getFunctions(), 'getOrderIntegrationEvents')(input)
 }
 
 export function quoteShipmentCallable(input: Record<string, unknown>) {
@@ -86,6 +132,70 @@ export function submitShippingReviewCallable(input: Record<string, unknown>) {
 
 export function updateShipmentStatusCallable(input: Record<string, unknown>) {
   return httpsCallable(getFunctions(), 'updateShipmentStatus')(input)
+}
+
+export function saveShippingProviderCallable(input: Record<string, unknown>) {
+  return httpsCallable(getFunctions(), 'saveShippingProvider')(input)
+}
+
+export function setShippingProviderStatusCallable(input: Record<string, unknown>) {
+  return httpsCallable(getFunctions(), 'setShippingProviderStatus')(input)
+}
+
+export function getMerchantShippingProvidersCallable(input: { storeId: string }) {
+  return httpsCallable(getFunctions(), 'getMerchantShippingProviders')(input)
+}
+
+export function saveStoreShippingProviderCallable(input: Record<string, unknown>) {
+  return httpsCallable(getFunctions(), 'saveStoreShippingProvider')(input)
+}
+
+export function testShippingConnectionCallable(input: Record<string, unknown>) {
+  return httpsCallable(getFunctions(), 'testShippingConnection')(input)
+}
+
+export function getWaslaLocationsCallable(input: Record<string, unknown>) {
+  return httpsCallable(getFunctions(), 'getWaslaLocations')(input)
+}
+
+export function saveIntegrationCredentialsCallable(input: Record<string, unknown>) {
+  return httpsCallable(getFunctions(), 'saveIntegrationCredentials')(input)
+}
+
+export function saveShippingAutomationSettingsCallable(input: Record<string, unknown>) {
+  return httpsCallable(getFunctions(), 'saveShippingAutomationSettings')(input)
+}
+
+export function getShippingOptionsCallable(input: Record<string, unknown>) {
+  return httpsCallable(getFunctions(), 'getShippingOptions')(input)
+}
+
+export function createOrderShipmentCallable(input: Record<string, unknown>) {
+  return httpsCallable(getFunctions(), 'createOrderShipment')(input)
+}
+
+export function requestOrderReturnCallable(input: Record<string, unknown>) {
+  return httpsCallable(getFunctions(), 'requestOrderReturn')(input)
+}
+
+export function receiveOrderReturnCallable(input: Record<string, unknown>) {
+  return httpsCallable(getFunctions(), 'receiveOrderReturn')(input)
+}
+
+export function refreshShipmentTrackingCallable(input: Record<string, unknown>) {
+  return httpsCallable(getFunctions(), 'refreshShipmentTracking')(input)
+}
+
+export function recordShippingSettlementCallable(input: Record<string, unknown>) {
+  return httpsCallable(getFunctions(), 'recordShippingSettlement')(input)
+}
+
+export function downloadShipmentDocumentCallable(input: Record<string, unknown>) {
+  return httpsCallable(getFunctions(), 'downloadShipmentDocument')(input)
+}
+
+export function cancelExternalShipmentCallable(input: Record<string, unknown>) {
+  return httpsCallable(getFunctions(), 'cancelExternalShipment')(input)
 }
 
 export function generateOrderNumberCallable(input: Record<string, unknown>) {
@@ -165,8 +275,20 @@ export function quoteCouponCallable(input: { storeId: string; code: string; subt
   return fn(input)
 }
 
-export function getPublicStoreCallable(input: { slug: string }) {
+export function getPublicStoreCouponsCallable(input: { storeId: string }) {
+  return httpsCallable(getFunctions(), 'getPublicStoreCoupons')(input)
+}
+
+export function getPublicStoreCallable(input: { slug: string; preview?: boolean }) {
   return httpsCallable(getFunctions(), 'getPublicStore')(input)
+}
+
+export function getPublicLandingPageCallable(input: { slug: string }) {
+  return httpsCallable(getFunctions(), 'getPublicLandingPage')(input)
+}
+
+export function createTicketCallable(input: { storeId: string; subject: string; description: string; priority: string }) {
+  return httpsCallable(getFunctions(), 'createTicket')(input)
 }
 
 export function inviteStaffCallable(input: Record<string, unknown>) {
@@ -187,9 +309,15 @@ export function getMerchantSubscriptionCallable(input: { storeId: string }) {
   return fn(input)
 }
 
-export function changeSubscriptionPlanCallable(input: { storeId: string; planId: string }) {
+export function changeSubscriptionPlanCallable(input: { storeId: string; planId: string; billingCycle?: 'monthly' | 'yearly' }) {
   const functions = getFunctions()
   const fn = httpsCallable(functions, 'changeSubscriptionPlan')
+  return fn(input)
+}
+
+export function requestStorePurchaseCallable(input: { storeId: string; offerId: string }) {
+  const functions = getFunctions()
+  const fn = httpsCallable(functions, 'requestStorePurchase')
   return fn(input)
 }
 
@@ -253,6 +381,18 @@ export function createProductCallable(input: { storeId: string; productId: strin
   return fn(input)
 }
 
+export function updateProductCallable(input: { storeId: string; productId: string; data: Record<string, unknown> }) {
+  const functions = getFunctions()
+  const fn = httpsCallable(functions, 'updateProduct')
+  return fn(input)
+}
+
+export function deleteProductCallable(input: { storeId: string; productId: string }) {
+  const functions = getFunctions()
+  const fn = httpsCallable(functions, 'deleteProduct')
+  return fn(input)
+}
+
 export function createSalesLinkCallable(input: Record<string, unknown>) {
   const functions = getFunctions()
   const fn = httpsCallable(functions, 'createSalesLink')
@@ -281,4 +421,36 @@ export function deleteSelectedTestMerchantsCallable(input: { storeIds: string[];
   const functions = getFunctions()
   const fn = httpsCallable(functions, 'deleteSelectedTestMerchants')
   return fn(input)
+}
+
+export function suspendMerchantCallable(input: { merchantId: string }) {
+  const functions = getFunctions()
+  return httpsCallable(functions, 'suspendMerchant')(input)
+}
+
+export function reactivateMerchantCallable(input: { merchantId: string }) {
+  const functions = getFunctions()
+  return httpsCallable(functions, 'reactivateMerchant')(input)
+}
+
+export interface MerchantDeletionPreview {
+  status: 'ready' | 'deletion_failed' | 'deleting' | 'already_deleted'
+  merchantId: string
+  merchantName?: string
+  merchantEmail?: string
+  storeIds?: string[]
+  storeNames?: Record<string, string>
+  counts?: Record<string, number>
+  summary?: Record<string, number>
+  confirmation?: string
+}
+
+export function getMerchantDeletionPreviewCallable(input: { merchantId: string }) {
+  const functions = getFunctions()
+  return httpsCallable<typeof input, MerchantDeletionPreview>(functions, 'getMerchantDeletionPreview')(input)
+}
+
+export function permanentlyDeleteMerchantCallable(input: { merchantId: string; confirmation: string }) {
+  const functions = getFunctions()
+  return httpsCallable<typeof input, { ok: boolean; status: 'deleted' | 'already_deleted' | 'already_deleting'; summary: Record<string, number> }>(functions, 'permanentlyDeleteMerchant')(input)
 }

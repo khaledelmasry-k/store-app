@@ -17,8 +17,8 @@ import { useStore } from '../../shared/hooks/useStore'
 import { useCollection } from '../../shared/hooks/useCollection'
 import { useSubscription } from '../../shared/hooks/useSubscription'
 import { useToast } from '../../shared/hooks/useToast'
-import { productsService, productCostsService } from '../../shared/services/products'
-import { deleteProductImage } from '../../shared/services/uploads'
+import { productsService } from '../../shared/services/products'
+import { deleteProductCallable, updateProductCallable } from '../../shared/services/auth'
 import { formatCurrency } from '../../shared/utils/format'
 import { stockTone } from '../../shared/utils/format'
 import { lineProfit } from '../../shared/utils/pricing'
@@ -94,10 +94,12 @@ export const MerchantProducts: FunctionalComponent = () => {
   }
   const toast = useToast()
   const sub = useSubscription(storeId)
-  const productLimit = Number(sub.plan?.productLimit || 0)
-  const atProductLimit = productLimit > 0 && products.length >= productLimit
+  const productUsage = sub.resourceUsage?.products
+  const productUsed = productUsage?.used ?? products.length
+  const productLimit = productUsage?.limit ?? Number(sub.plan?.productLimit || 0)
+  const atProductLimit = productLimit > 0 && productUsed >= productLimit
   const hasPlanLimit = productLimit > 0
-  const planUsagePct = hasPlanLimit ? Math.min(100, Math.round((products.length / productLimit) * 100)) : 0
+  const planUsagePct = productUsage?.percent ?? (hasPlanLimit ? Math.min(100, Math.round((productUsed / productLimit) * 100)) : 0)
 
   const [tab, setTab] = useState<'products' | 'inventory'>('products')
 
@@ -110,6 +112,7 @@ export const MerchantProducts: FunctionalComponent = () => {
 
   const [stockQuery, setStockQuery] = useState('')
   const [stockFilter, setStockFilter] = useState<'all' | 'low' | 'out'>('all')
+  const [featuredFilter, setFeaturedFilter] = useState<'all' | 'featured' | 'unfeatured'>('all')
   const [adjusting, setAdjusting] = useState<Product | null>(null)
   const [delta, setDelta] = useState(0)
 
@@ -126,7 +129,9 @@ export const MerchantProducts: FunctionalComponent = () => {
     const matchesQuery = (p.name || "").includes(query) || (p.sku || "").includes(query)
     const matchesStatus = !statusFilter || (statusFilter === 'active' ? p.active : !p.active)
     const matchesCategory = !categoryFilter || p.categoryId === categoryFilter
-    return matchesQuery && matchesStatus && matchesCategory
+    const featured = p.isFeatured === true || p.featured === true
+    const matchesFeatured = featuredFilter === 'all' || (featuredFilter === 'featured' ? featured : !featured)
+    return matchesQuery && matchesStatus && matchesCategory && matchesFeatured
   })
 
   const isLow = (p: Product) => {
@@ -156,43 +161,12 @@ export const MerchantProducts: FunctionalComponent = () => {
     if (!deleteTarget) return
     const target = deleteTarget
     try {
-      await productsService.remove(target.id)
-      // Remove the private cost doc too (productCosts is keyed by product id).
-      try {
-        await productCostsService.remove(target.id)
-      } catch {
-        // No cost doc existed — nothing to remove.
-      }
-      // Best-effort storage cleanup: delete this product's images ONLY if no
-      // other product still references them (shared URLs are kept alive).
-      await cleanupOrphanedImages(target)
+      await deleteProductCallable({ storeId: store?.id || target.storeId, productId: target.id })
       toast.push('تم حذف المنتج')
     } catch (err: any) {
       toast.push('تعذر حذف المنتج', err?.message || 'حدث خطأ غير متوقع', 'error')
     }
     setDeleteTarget(null)
-  }
-
-  const cleanupOrphanedImages = async (target: Product): Promise<void> => {
-    const urls = target.images || []
-    if (urls.length === 0) return
-    try {
-      const others = await productsService.all()
-      const referenced = new Set<string>()
-      for (const p of others) {
-        for (const img of p.images || []) referenced.add(img)
-      }
-      for (const url of urls) {
-        if (referenced.has(url)) continue
-        try {
-          await deleteProductImage(url)
-        } catch (err) {
-          console.error('storage delete failed', url, err)
-        }
-      }
-    } catch (err) {
-      console.error('storage cleanup scan failed', err)
-    }
   }
 
   const toggleActive = async (p: Product) => {
@@ -201,6 +175,10 @@ export const MerchantProducts: FunctionalComponent = () => {
     } catch (err: any) {
       toast.push('تعذر تحديث حالة النشر', err?.message || 'حدث خطأ غير متوقع', 'error')
     }
+  }
+  const toggleFeatured = async (p: Product) => {
+    try { await updateProductCallable({ storeId: store?.id || p.storeId, productId: p.id, data: { isFeatured: !(p.isFeatured === true || p.featured === true) } }) }
+    catch (err: any) { toast.push('تعذر تحديث التمييز', err?.message || 'حدث خطأ غير متوقع', 'error') }
   }
 
   const applyAdjustment = async () => {
@@ -228,7 +206,7 @@ export const MerchantProducts: FunctionalComponent = () => {
 
   const productCell = (p: Product) => (
     <span className="flex" style={{ gap: 10 }}>
-      <SmartImage src={p.images?.[0]} alt={p.name} className="product-cell-thumb" placeholderClassName="product-thumb" />
+      <SmartImage src={p.images?.[0]} alt={p.name} className="product-cell-thumb" placeholderClassName="product-thumb" fallback="product" />
       <span className="grow font-semibold">
         {p.name}
         {!p.active && <span className="ms-1"><Badge tone="amber">مسودة</Badge></span>}
@@ -237,7 +215,7 @@ export const MerchantProducts: FunctionalComponent = () => {
   )
 
   return (
-    <div className="merchant-operations merchant-products-page products-page-canonical">
+    <div data-tour="products-workspace" className="merchant-operations merchant-products-page products-page-canonical">
       <PageHeader
         breadcrumb="كتالوج المتجر"
         title="المنتجات والمخزون"
@@ -249,7 +227,7 @@ export const MerchantProducts: FunctionalComponent = () => {
         <div className="products-usage-bar">
           <div className="products-usage-head">
             <span>المنتجات المستخدمة من حد الخطة</span>
-            <strong>{products.length} / {productLimit}</strong>
+            <strong>{productUsed} / {productLimit}</strong>
           </div>
           <div className="products-usage-track">
             <div className="products-usage-fill" style={{ width: `${planUsagePct}%` }} />
@@ -301,6 +279,7 @@ export const MerchantProducts: FunctionalComponent = () => {
               placeholder="الفئة"
               options={[{ value: '', label: 'كل الفئات' }, ...categories.map((c) => ({ value: c.id, label: c.name }))]}
             />
+            <Select value={featuredFilter} onChange={(v) => setFeaturedFilter(v as 'all' | 'featured' | 'unfeatured')} placeholder="التمييز" options={[{ value: 'all', label: 'كل المنتجات' }, { value: 'featured', label: 'المنتجات المميزة' }, { value: 'unfeatured', label: 'غير المميزة' }]} />
           </div>
 
           {productsRes.loading ? (
@@ -325,6 +304,7 @@ export const MerchantProducts: FunctionalComponent = () => {
                   { key: 'actions', header: '', render: (p: Product) => (
                     <span className="flex" style={{ gap: 4 }}>
                       <button className="icon-btn" onClick={() => openEdit(p)} title="تعديل"><Icon name="edit" /></button>
+                      <button className="icon-btn" onClick={() => toggleFeatured(p)} title={p.isFeatured || p.featured ? 'إلغاء التمييز' : 'تمييز المنتج'}><Icon name={p.isFeatured || p.featured ? 'star' : 'star_outline'} /></button>
                       <button className="icon-btn icon-btn-danger" onClick={() => setDeleteTarget(p)} title="حذف"><Icon name="delete" /></button>
                     </span>
                   ) },
@@ -342,7 +322,7 @@ rows={filtered}
                 const low = isLow(p)
                 return (
                   <div key={p.id} className="pcard" onClick={() => openEdit(p)}>
-                    <SmartImage src={p.images?.[0]} alt={p.name} className="pcard-thumb" placeholderClassName="product-thumb" />
+                    <SmartImage src={p.images?.[0]} alt={p.name} className="pcard-thumb" placeholderClassName="product-thumb" fallback="product" />
                     <div className="pcard-body">
                       <div className="pcard-top">
                         <div className="pcard-info">
@@ -367,6 +347,15 @@ rows={filtered}
                           <span className="pcard-qty-value"><span className="pcard-qty-unit">كمية: </span>{qty}</span>
                         </div>
                         <Toggle checked={p.active} onChange={() => toggleActive(p)} />
+                        <button
+                          type="button"
+                          className="icon-btn icon-btn-danger"
+                          title="حذف"
+                          aria-label={`حذف ${p.name}`}
+                          onClick={(event) => { event.stopPropagation(); setDeleteTarget(p) }}
+                        >
+                          <Icon name="delete" ariaHidden />
+                        </button>
                       </div>
                     </div>
                   </div>
@@ -423,14 +412,21 @@ rows={filtered}
         </Fragment>
       )}
 
-      <Drawer open={drawerOpen} onClose={() => setDrawerOpen(false)} title={editing ? 'تعديل المنتج' : 'منتج جديد'} size="lg">
+      <Drawer open={drawerOpen} onClose={() => setDrawerOpen(false)} title={editing ? 'تعديل المنتج' : 'منتج جديد'} size="lg" className="product-editor-drawer">
         <ProductForm
           key={editing?.id || 'new'}
           storeId={storeId}
           initial={editing}
           categories={categories}
           onClose={() => setDrawerOpen(false)}
-          onSaved={() => setDrawerOpen(false)}
+          onSaved={() => {
+            // Force the merchant list subscription to re-read after a callable
+            // create/update. This avoids leaving the newly-written product
+            // hidden behind the previous listener snapshot until a later
+            // Firestore event or manual reload.
+            setRetryKey((value) => value + 1)
+            setDrawerOpen(false)
+          }}
         />
       </Drawer>
 

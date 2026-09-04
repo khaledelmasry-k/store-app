@@ -12,7 +12,8 @@ import { Link } from 'wouter'
 import { formatCurrency, timeAgo } from '../../shared/utils/format'
 import { orderItemRevenue } from '../../shared/utils/pricing'
 import { STATUS_LABELS, STATUS_COLORS } from '../../shared/utils/constants'
-import type { Order, ProductCost } from '../../shared/types'
+import { visibleOrderStatusLabel, visibleOrderStatusTone } from '../../shared/utils/order-status'
+import type { Order, ProductCost, Shipment } from '../../shared/types'
 import './Orders.css'
 
 const PILL_TONES: Record<string, string> = {
@@ -38,8 +39,18 @@ const PAYMENT_LABELS: Record<string, string> = {
 export const MerchantOrders: FunctionalComponent = () => {
   const { store } = useStore()
   const storeId = store?.id || ''
-  const ordersRes = useCollection<Order>('orders', { storeId, orderBy: { field: 'createdAt' } })
+  // Sort locally so legacy timestamp shapes cannot leave the tenant query
+  // waiting on an unavailable composite index in the local emulator.
+  const ordersRes = useCollection<Order>('orders', { storeId })
   const orders = ordersRes.data
+  const shipmentsRes = useCollection<Shipment>('shipments', { storeId }, !!storeId)
+  const shipmentByOrder = new Map<string, Shipment>()
+  for (const shipment of shipmentsRes.data) {
+    const previous = shipmentByOrder.get(shipment.orderId)
+    const currentAt = shipment.updatedAt?.seconds || shipment.lastSyncedAt?.seconds || 0
+    const previousAt = previous?.updatedAt?.seconds || previous?.lastSyncedAt?.seconds || 0
+    if (!previous || shipment.active === true || currentAt >= previousAt) shipmentByOrder.set(shipment.orderId, shipment)
+  }
   const costsRes = useCollection<ProductCost>('productCosts', { storeId }, !!storeId)
   const costByProduct = new Map(costsRes.data.map((c) => [c.id, c.costPrice]))
   const [query, setQuery] = useState('')
@@ -167,7 +178,11 @@ export const MerchantOrders: FunctionalComponent = () => {
               <tbody>
                 {rows.map((o) => {
                   const profit = orderProfit(o)
-                  const tone = STATUS_COLORS[o.status as keyof typeof STATUS_COLORS] || 'slate'
+                  const shipment = shipmentByOrder.get(o.id)
+                  const shipmentFailed = String(shipment?.currentStatus || shipment?.status || o.shipmentStatus || '').toUpperCase() === 'FAILED'
+                  const tone = shipmentFailed ? 'red' : visibleOrderStatusTone(o)
+                  const statusText = shipmentFailed ? 'تعذر التسليم' : visibleOrderStatusLabel(o)
+                  const statusTitle = shipmentFailed ? (shipment?.failureReason || 'تعذر التسليم. لم ترسل شركة الشحن سببًا تفصيليًا عبر الربط.') : undefined
                   return (
                     <tr key={o.id} className="order-row" onClick={() => (window.location.href = `/dashboard/orders/${o.id}`)}>
                       <td className="check-col"><input type="checkbox" aria-label={`تحديد ${o.orderNumber}`} /></td>
@@ -194,9 +209,9 @@ export const MerchantOrders: FunctionalComponent = () => {
                         </span>
                       </td>
                       <td>
-                        <span className={`order-status-pill ${PILL_TONES[tone] || ''}`}>
+                        <span className={`order-status-pill ${PILL_TONES[tone] || ''}`} title={statusTitle}>
                           <span className="order-status-dot" />
-                          {STATUS_LABELS[o.status] || o.status}
+                          {statusText}
                         </span>
                       </td>
                       <td><span className="order-date">{timeAgo(o.createdAt)}</span></td>

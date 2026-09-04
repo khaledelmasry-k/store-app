@@ -277,6 +277,10 @@
   border-radius: 6px 6px 0 0;
   transition: background 0.15s, transform 0.15s;
 }
+
+.campaign-form { align-items: end; margin-block-end: 18px; }
+.campaign-form-action { display: flex; align-items: end; min-height: 40px; }
+.merchant-analytics-page .table-wrap { overflow-x: auto; }
 .analytics-bar-col:hover .analytics-bar {
   background: var(--primary);
 }

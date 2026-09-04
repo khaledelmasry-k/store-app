@@ -21,13 +21,14 @@ function uniq() {
 
 async function login(page: Page, email: string, password: string) {
   await page.goto(`/login?role=merchant`, { waitUntil: 'domcontentloaded' })
-  await page.waitForTimeout(600)
+  const loginOrShell = page.locator('input[type="email"]:visible').or(page.locator('.sidebar-logout:visible'))
+  await expect(loginOrShell.first()).toBeVisible({ timeout: 15000 })
   if ((await page.locator('button[type="submit"]').count()) === 0) {
     const logout = page.locator('.sidebar-logout:visible').first()
     if ((await logout.count()) === 0) {
-      await page.locator('.sidebar-toggle:visible').first().click()
+      await page.locator('.sidebar-toggle:visible').first().click({ force: true })
     }
-    await page.locator('.sidebar-logout:visible').first().click()
+    await page.locator('.sidebar-logout:visible').first().click({ force: true })
     await page.waitForURL(/\/login/, { timeout: 15000 })
     await page.goto('about:blank').catch(() => {})
     await page.goto(`/login?role=merchant`, { waitUntil: 'domcontentloaded' })
@@ -36,6 +37,12 @@ async function login(page: Page, email: string, password: string) {
   await page.locator('input[type="password"]').fill(password)
   await page.locator('button[type="submit"]').click()
   await page.waitForURL(/\/dashboard/, { timeout: 15000 })
+}
+
+async function openProductDrawer(page: Page) {
+  const named = page.getByRole('button', { name: 'إضافة منتج' })
+  if (await named.count()) return named.click()
+  return page.locator('.page-header button').first().click()
 }
 
 async function latestSub(storeId: string) {
@@ -69,10 +76,16 @@ async function makeFreeStore(tag: string, extraProducts = 0) {
     theme: { primary: '#6366f1', secondary: '#f59e0b', darkMode: false },
     createdAt: us(), updatedAt: us(), createdBy: 'saas-spec',
   })
-  await db.collection('subscriptions').add({
+  const subscription = await db.collection('subscriptions').add({
     storeId, planId: 'plan-free', planName: 'الأساسية', status: 'active', billingCycle: 'monthly',
     periodNumber: 0, ordersUsed: 0, normalPriceSnapshot: 0, launchPriceSnapshot: 0,
+    limitsSnapshot: { storageLimit: 200 },
     createdAt: us(), updatedAt: us(), createdBy: 'saas-spec',
+  })
+  await db.collection('stores').doc(storeId).update({
+    activeSubscriptionId: subscription.id,
+    storageLimitBytes: 200 * 1024 * 1024,
+    storageUsed: 0,
   })
   for (let i = 0; i < extraProducts; i++) {
     await db.collection('products').add({
@@ -85,7 +98,7 @@ async function makeFreeStore(tag: string, extraProducts = 0) {
 }
 
 async function createWithinDrawer(page: Page, name: string) {
-  await page.getByRole('button', { name: 'منتج جديد' }).click()
+  await openProductDrawer(page)
   await page.locator('.drawer .field', { hasText: 'اسم المنتج' }).locator('input').fill(name)
   await page.locator('.drawer input[type="number"]').nth(0).fill('120')
   await page.getByRole('button', { name: 'حفظ المنتج' }).click()
@@ -107,7 +120,7 @@ test('free store blocks quantity pricing inline and never creates the product', 
 
   await login(page, email, password)
   await page.goto('/dashboard/products', { waitUntil: 'domcontentloaded' })
-  await page.getByRole('button', { name: 'منتج جديد' }).click()
+  await openProductDrawer(page)
 
   // The free tier shows a clear upgrade lock banner for advanced product modes.
   await expect(page.getByText('هذه المزايا غير متوفرة في باقتك الحالية')).toBeVisible({ timeout: 15000 })
@@ -130,15 +143,15 @@ test('free product cap (50) is enforced server-side — 51st product is rejected
 
   await login(page, email, password)
   await page.goto('/dashboard/products', { waitUntil: 'domcontentloaded' })
-  await createWithinDrawer(page, 'المؤدي للمنتج الحادي والخمسين')
-
-  // The save fails and the drawer stays open; nothing was written to Firestore.
-  await expect(page.locator('.drawer')).toBeVisible({ timeout: 15000 })
-  await expect(page.locator('.form-error-banner')).toBeVisible({ timeout: 15000 })
+  // At the quota boundary the product action is intentionally removed from
+  // the UI and replaced by the server-backed limit banner; there is no stale
+  // drawer to submit against.
+  await expect(page.getByText('وصلت إلى حد المنتجات في باقتك الحالية')).toBeVisible({ timeout: 15000 })
+  await expect(page.getByRole('button', { name: 'إضافة منتج' })).toHaveCount(0)
   expect(await productCount(storeId)).toBe(50)
 })
 
-test('merchant upgrades free → growth from the subscription page; advanced features unlock', async ({ page }) => {
+test('merchant requests free → growth; entitlements remain locked until payment approval', async ({ page }) => {
   const { storeId, email, password } = await makeFreeStore('upgrade')
 
   await login(page, email, password)
@@ -151,25 +164,20 @@ test('merchant upgrades free → growth from the subscription page; advanced fea
   // plan-name heading so ordering never matters.
   await page.locator('.modal .mk-pricing-card').filter({ has: page.getByRole('heading', { name: 'GROWTH', exact: true }) }).getByRole('button', { name: 'اختيار' }).click()
   await page.getByRole('button', { name: 'تأكيد التغيير' }).click()
-  await expect(page.getByText('تم تغيير باقتك بنجاح')).toBeVisible({ timeout: 15000 })
+  await expect(page.getByText('تم إنشاء طلب تغيير الباقة')).toBeVisible({ timeout: 15000 })
+  await expect.poll(async () => (await latestSub(storeId))?.planId, { timeout: 15000 }).toBe('plan-free')
 
-  await expect.poll(async () => (await latestSub(storeId))?.planId, { timeout: 15000 }).toBe('plan-growth')
-
-  // Quantity pricing is now selectable without an inline error.
+  // Until a trusted approval, quantity pricing remains locked.
   await page.goto('/dashboard/products', { waitUntil: 'domcontentloaded' })
-  await page.getByRole('button', { name: 'منتج جديد' }).click()
+  await openProductDrawer(page)
   await page.locator('.drawer .field', { hasText: 'اسم المنتج' }).locator('input').fill('منتج الكمية بعد الترقية')
   await page.locator('.drawer input[type="number"]').nth(0).fill('200')
   await page.locator('.drawer .field', { hasText: 'طريقة التسعير' }).locator('select').selectOption({ label: 'سعر حسب الكمية (أسعار متدرجة)' })
-  await expect(page.getByText('ميزة التسعير حسب الكمية تتطلب ترقية الباقة')).toHaveCount(0, { timeout: 5000 })
-  await expect(page.locator('.qty-tier-editor')).toBeVisible({ timeout: 5000 })
-  await page.getByRole('button', { name: 'إضافة مستوى سعري' }).click()
-  const tier = page.locator('.qty-tier-editor-row').first()
-  await tier.locator('input[type="number"]').nth(0).fill('3')
-  await tier.locator('input[type="number"]').nth(1).fill('540')
+  await expect(page.getByText('هذه المزايا غير متوفرة في باقتك الحالية')).toBeVisible({ timeout: 15000 })
   await page.getByRole('button', { name: 'حفظ المنتج' }).click()
-  await expect(page.locator('.drawer')).toHaveCount(0, { timeout: 15000 })
-  expect(await productCount(storeId)).toBe(1)
+  await expect(page.locator('.drawer')).toBeVisible({ timeout: 15000 })
+  await page.locator('.drawer').getByRole('button', { name: 'إلغاء' }).click()
+  expect(await productCount(storeId)).toBe(0)
 })
 
 test('variant product creation works after upgrade but is denied on free', async ({ page }) => {
@@ -177,7 +185,7 @@ test('variant product creation works after upgrade but is denied on free', async
   const free = await makeFreeStore('variantfree')
   await login(page, free.email, free.password)
   await page.goto('/dashboard/products', { waitUntil: 'domcontentloaded' })
-  await page.getByRole('button', { name: 'منتج جديد' }).click()
+  await openProductDrawer(page)
   await page.locator('.drawer .field', { hasText: 'اسم المنتج' }).locator('input').fill('قميص بمقاسات — مجاني')
   await page.locator('.drawer input[type="number"]').nth(0).fill('150')
   const sizeInput = page.locator('.size-input')
@@ -189,15 +197,16 @@ test('variant product creation works after upgrade but is denied on free', async
   await expect(page.locator('.drawer')).toBeVisible({ timeout: 15000 })
   expect(await productCount(free.storeId)).toBe(0)
 
-  // Part 2: upgrade to Growth (also gate-checks the change callable) unlocks it.
+  // Part 2: an unpaid Growth request does not unlock it.
   await page.goto('/dashboard/subscription', { waitUntil: 'domcontentloaded' })
   await page.getByRole('button', { name: 'تغيير الباقة' }).click()
   await page.locator('.modal .mk-pricing-card').filter({ has: page.getByRole('heading', { name: 'GROWTH', exact: true }) }).getByRole('button', { name: 'اختيار' }).click()
   await page.getByRole('button', { name: 'تأكيد التغيير' }).click()
-  await expect.poll(async () => (await latestSub(free.storeId))?.planId, { timeout: 15000 }).toBe('plan-growth')
+  await expect(page.getByText('تم إنشاء طلب تغيير الباقة')).toBeVisible({ timeout: 15000 })
+  await expect.poll(async () => (await latestSub(free.storeId))?.planId, { timeout: 15000 }).toBe('plan-free')
 
   await page.goto('/dashboard/products', { waitUntil: 'domcontentloaded' })
-  await page.getByRole('button', { name: 'منتج جديد' }).click()
+  await openProductDrawer(page)
   await page.locator('.drawer .field', { hasText: 'اسم المنتج' }).locator('input').fill('قميص بمقاسات — نمو')
   await page.locator('.drawer input[type="number"]').nth(0).fill('160')
   const s2 = page.locator('.size-input')
@@ -207,8 +216,8 @@ test('variant product creation works after upgrade but is denied on free', async
   await expect(page.locator('.variant-stock')).toHaveCount(1, { timeout: 15000 })
   await page.locator('.variant-stock').nth(0).fill('7')
   await page.getByRole('button', { name: 'حفظ المنتج' }).click()
-  await expect(page.locator('.drawer')).toHaveCount(0, { timeout: 15000 })
-  expect(await productCount(free.storeId)).toBe(1)
+  await expect(page.locator('.drawer')).toBeVisible({ timeout: 15000 })
+  expect(await productCount(free.storeId)).toBe(0)
 })
 
 test('storage quota meter reflects uploaded files on the subscription page', async ({ page }) => {
@@ -216,7 +225,7 @@ test('storage quota meter reflects uploaded files on the subscription page', asy
 
   await login(page, email, password)
   await page.goto('/dashboard/products', { waitUntil: 'domcontentloaded' })
-  await page.getByRole('button', { name: 'منتج جديد' }).click()
+  await openProductDrawer(page)
   await page.locator('.drawer .field', { hasText: 'اسم المنتج' }).locator('input').fill('منتج بصورة كبيرة')
   await page.locator('.drawer input[type="number"]').nth(0).fill('300')
   const fileInput = page.locator('.image-gallery-field input[type="file"]')

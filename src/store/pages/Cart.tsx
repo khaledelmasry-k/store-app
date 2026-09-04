@@ -56,7 +56,7 @@ export const StoreCart: FunctionalComponent = () => {
             return (
               <article key={i} className="cart-line">
                 <Link href={`/store/${store?.slug}/product/${item.productId}`} className="cart-line-image">
-                  {item.image && <SmartImage src={item.image} alt={item.name} className="cart-line-img" placeholderClassName="cart-line-img" />}
+                  <SmartImage src={item.image} alt={item.name} className="cart-line-img" placeholderClassName="cart-line-img" fallback="product" />
                 </Link>
                 <div className="cart-line-details">
                   <Link href={`/store/${store?.slug}/product/${item.productId}`} className="cart-line-name">

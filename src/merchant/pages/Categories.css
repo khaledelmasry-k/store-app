@@ -3,6 +3,9 @@
   max-width: 360px;
   margin-bottom: 16px;
 }
+.merchant-categories-page .stats-grid {
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+}
 .merchant-categories-page .category-search .mk-icon {
   position: absolute;
   inset-inline-start: 10px;
@@ -76,6 +79,9 @@
 }
 
 @media (max-width: 768px) {
+  .merchant-categories-page .stats-grid {
+    grid-template-columns: 1fr;
+  }
   .merchant-categories-page .category-search {
     max-width: none;
   }

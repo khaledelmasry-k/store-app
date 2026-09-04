@@ -5,15 +5,20 @@ interface Props {
   subtitle?: string
   actions?: any
   breadcrumb?: string
+  eyebrow?: string
+  context?: any
 }
 
-export const PageHeader: FunctionalComponent<Props> = ({ title, subtitle, actions, breadcrumb }) => (
+export const PageHeader: FunctionalComponent<Props> = ({ title, subtitle, actions, breadcrumb, eyebrow, context }) => (
   <div className="page-header">
     <div className="page-header-copy">
-      {breadcrumb && <div className="breadcrumb">{breadcrumb}</div>}
+      {(eyebrow || breadcrumb) && <div className="page-eyebrow">{eyebrow || breadcrumb}</div>}
       <h1 className="page-title">{title}</h1>
       {subtitle && <p className="page-subtitle">{subtitle}</p>}
     </div>
-    {actions && <div className="page-actions">{actions}</div>}
+    <div className="page-header-end">
+      {context && <div className="page-context">{context}</div>}
+      {actions && <div className="page-actions">{actions}</div>}
+    </div>
   </div>
 )

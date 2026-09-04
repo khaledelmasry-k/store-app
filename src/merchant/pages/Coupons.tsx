@@ -17,7 +17,7 @@ import { useCollection } from '../../shared/hooks/useCollection'
 import { useToast } from '../../shared/hooks/useToast'
 import { couponsService } from '../../shared/services/billing'
 import { canUseFeature } from '../../shared/services/subscription'
-import { formatCurrency } from '../../shared/utils/format'
+import { formatCurrency, formatDate, normalizeDate } from '../../shared/utils/format'
 import type { Coupon } from '../../shared/types'
 import { Icon } from '../../shared/components/ui/Icon'
 import './Coupons.css'
@@ -100,12 +100,18 @@ export const MerchantCoupons: FunctionalComponent = () => {
     return { pct, label: `${c.usedCount || 0}/${c.maxUses}` }
   }
 
+  const platformIssued = (c: Coupon) => c.source === 'platform' || c.createdByRole === 'superAdmin'
+  const expired = (c: Coupon) => {
+    const date = normalizeDate(c.expiresAt)
+    return !!date && date.getTime() <= Date.now()
+  }
+
   return (
     <div className="merchant-operations merchant-coupons-page">
       <PageHeader
         breadcrumb="إدارة العروض"
         title="إدارة القسائم"
-        subtitle="إدارة وتتبع رموز الخصم لعملائك"
+        subtitle="أنشئ قسائمك وتابع قسائم إدارة المنصة في مكان واحد"
         actions={<Button icon="add" disabled={!couponsEnabled || subscriptionLoading} onClick={() => setOpen(true)}>إضافة قسيمة</Button>}
       />
 
@@ -151,6 +157,8 @@ export const MerchantCoupons: FunctionalComponent = () => {
                     <th>القيمة</th>
                     <th>الحد الأدنى للطلب</th>
                     <th>عدد الاستخدامات</th>
+                    <th>الانتهاء</th>
+                    <th>المصدر</th>
                     <th className="center">الحالة</th>
                     <th className="actions">الإجراءات</th>
                   </tr>
@@ -158,6 +166,8 @@ export const MerchantCoupons: FunctionalComponent = () => {
                 <tbody>
                   {pageRows.map((c) => {
                     const u = usage(c)
+                    const isPlatformCoupon = platformIssued(c)
+                    const isExpired = expired(c)
                     return (
                       <tr key={c.id}>
                         <td className="font-bold"><span className="monospace">{c.code}</span></td>
@@ -174,11 +184,13 @@ export const MerchantCoupons: FunctionalComponent = () => {
                             <span className="muted">{c.usedCount || 0} / ∞</span>
                           )}
                         </td>
+                        <td><span className="muted">{c.expiresAt ? formatDate(c.expiresAt) : 'بلا انتهاء'}</span></td>
+                        <td><span className={isPlatformCoupon ? 'coupon-platform-source' : 'muted'}>{isPlatformCoupon ? 'إدارة المنصة' : 'التاجر'}</span></td>
                         <td className="center">
-                          <Toggle checked={c.active} disabled={!couponsEnabled} onChange={(v) => toggleActive(c, v)} />
+                          <Toggle checked={c.active && !isExpired} disabled={!couponsEnabled || isPlatformCoupon || isExpired} onChange={(v) => toggleActive(c, v)} />
                         </td>
                         <td className="actions">
-                          <button className="icon-btn icon-btn-danger" onClick={() => setDeleteTarget(c)} title="حذف">
+                          <button type="button" className="icon-btn icon-btn-danger" disabled={!couponsEnabled || isPlatformCoupon} onClick={() => setDeleteTarget(c)} title={isPlatformCoupon ? 'تتم إدارة هذا الكوبون من المنصة' : 'حذف'}>
                             <Icon name="delete" />
                           </button>
                         </td>
@@ -205,6 +217,7 @@ export const MerchantCoupons: FunctionalComponent = () => {
           <Input label="الحد الأدنى للطلب" type="number" value={form.minOrder || ''} onChange={(v) => setForm({ ...form, minOrder: Number(v) })} />
         </div>
         <Input label="الحد الأقصى للاستخدام (0 = غير محدود)" type="number" value={form.maxUses || ''} onChange={(v) => setForm({ ...form, maxUses: Number(v) })} min={0} />
+        <Input label="تاريخ الانتهاء (اختياري)" type="date" value={typeof form.expiresAt === 'string' ? form.expiresAt : ''} onChange={(v) => setForm({ ...form, expiresAt: v || undefined } as any)} />
         <div className="coupon-modal-toggle">
           <span>تفعيل القسيمة</span>
           <Toggle checked={form.active ?? true} onChange={(v) => setForm({ ...form, active: v })} />
