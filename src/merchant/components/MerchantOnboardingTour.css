@@ -1,0 +1,23 @@
+.merchant-tour-overlay { position:fixed; inset:0; z-index:120; background:rgba(15,23,42,.48); pointer-events:none; }
+.merchant-tour-welcome, .merchant-tour-card { pointer-events:auto; position:absolute; inset-inline-start:50%; top:50%; transform:translate(-50%,-50%); width:min(420px,calc(100vw - 32px)); padding:26px; border:1px solid var(--border); border-radius:16px; background:var(--surface); box-shadow:0 24px 70px rgba(15,23,42,.28); text-align:center; }
+.merchant-tour-welcome h2, .merchant-tour-card h3 { margin:0 0 9px; }
+.merchant-tour-welcome p, .merchant-tour-card p { margin:0 0 20px; color:var(--text-secondary); line-height:1.8; }
+.merchant-tour-welcome > div, .merchant-tour-actions { display:flex; align-items:center; justify-content:center; gap:8px; flex-wrap:wrap; }
+.merchant-tour-progress { display:block; margin-bottom:8px; color:var(--primary); font-size:12px; font-weight:800; }
+.merchant-tour-actions { justify-content:flex-start; }
+.merchant-tour-actions .btn:last-child { margin-inline-start:auto; }
+.tour-target-active { position:relative; z-index:121; outline:3px solid var(--primary); outline-offset:5px; border-radius:8px; }
+.merchant-welcome-overlay { overflow:auto; padding:24px; display:grid; place-items:center; }
+.merchant-start-guide { pointer-events:auto; width:min(920px,100%); margin:auto; padding:clamp(22px,4vw,42px); border:1px solid color-mix(in srgb, var(--primary) 20%, var(--border)); border-radius:24px; background:linear-gradient(145deg, color-mix(in srgb, var(--primary) 7%, var(--surface)), var(--surface) 45%); box-shadow:0 28px 90px rgba(15,23,42,.34); }
+.merchant-start-guide__eyebrow { color:var(--primary); font-size:12px; font-weight:900; letter-spacing:.08em; text-transform:uppercase; }
+.merchant-start-guide h2 { margin:8px 0; font-size:clamp(24px,4vw,34px); }
+.merchant-start-guide__intro { max-width:720px; margin:0; color:var(--text-secondary); line-height:1.9; }
+.merchant-start-guide__grid { display:grid; grid-template-columns:repeat(2,minmax(0,1fr)); gap:12px; margin:24px 0; }
+.merchant-start-guide__grid article { padding:16px; border:1px solid var(--border); border-radius:14px; background:color-mix(in srgb, var(--surface) 88%, white); }
+.merchant-start-guide__grid b { display:block; margin-bottom:6px; color:var(--text-primary); }
+.merchant-start-guide__grid span { display:block; color:var(--text-secondary); font-size:13px; line-height:1.75; }
+.merchant-start-guide__foot { display:flex; align-items:center; justify-content:space-between; gap:16px; padding-top:18px; border-top:1px solid var(--border); }
+.merchant-start-guide__foot label { display:flex; align-items:center; gap:8px; color:var(--text-secondary); font-size:13px; cursor:pointer; }
+.merchant-start-guide__foot > div { display:flex; gap:8px; flex-wrap:wrap; }
+@media (max-width:640px) { .merchant-tour-card { inset-inline:16px; top:auto; bottom:16px; transform:none; width:auto; } .merchant-tour-actions { justify-content:stretch; } .merchant-tour-actions .btn { flex:1; } .merchant-tour-actions .btn:last-child { margin-inline-start:0; flex-basis:100%; } }
+@media (max-width:640px) { .merchant-welcome-overlay { padding:12px; align-items:start; } .merchant-start-guide { padding:22px 18px; border-radius:18px; } .merchant-start-guide__grid { grid-template-columns:1fr; margin:18px 0; } .merchant-start-guide__foot { align-items:stretch; flex-direction:column; } .merchant-start-guide__foot > div .btn { flex:1; } }

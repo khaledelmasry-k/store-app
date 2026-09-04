@@ -1,0 +1,6 @@
+.platform-shell { min-height: 100vh; width: 100%; }
+.platform-shell .platform-chrome { min-height: 100vh; }
+.platform-shell .sidebar-child-link,
+.platform-shell .sidebar-group-header,
+.platform-shell .sidebar-link { opacity: 1; }
+
