@@ -34,10 +34,12 @@
   grid-template-columns: repeat(4, 1fr);
   gap: 16px;
   align-items: stretch;
+  grid-auto-rows: 1fr;
 }
 .analytics-primary-grid > * {
   min-height: 110px;
   height: 100%;
+  display: flex;
 }
 
 /* Sales Performance — 2fr / 1fr */
@@ -209,11 +211,8 @@
 }
 @media (max-width: 430px) {
   .merchant-analytics-page { gap: 18px; }
-  .analytics-primary-grid { gap: 12px; }
+  .analytics-primary-grid { gap: 12px; grid-template-columns: 1fr; }
   .analytics-sales-grid, .analytics-business-grid, .analytics-ad-grid { gap: 12px; }
-}
-@media (max-width: 390px) {
-  .analytics-primary-grid { grid-template-columns: 1fr; }
 }
 @media (max-width: 360px) {
   .analytics-bars { gap: 4px; }
