@@ -48,6 +48,27 @@ type SettlementLine = {
   settledNet: number
 }
 
+const connectionStatusLabel = (status?: string, enabled?: boolean) => {
+  if (!enabled) return 'غير مفعلة'
+  switch (status) {
+    case 'CONNECTED': return 'متصلة'
+    case 'CONFIGURED': return 'بانتظار اختبار الاتصال'
+    case 'INVALID_CREDENTIALS': return 'مفتاح API غير صالح'
+    case 'PROVIDER_UNAVAILABLE': return 'خدمة الشركة غير متاحة مؤقتًا'
+    case 'ERROR': return 'تعذر التحقق من الاتصال'
+    case 'DISABLED': return 'موقوفة'
+    case 'NOT_CONFIGURED': return 'بيانات الربط غير محفوظة'
+    default: return 'تحتاج إعداد'
+  }
+}
+
+const connectionFailureTitle = (status?: string) => {
+  if (status === 'INVALID_CREDENTIALS') return 'مفتاح API غير صالح'
+  if (status === 'PROVIDER_UNAVAILABLE') return 'خدمة شركة الشحن غير متاحة مؤقتًا'
+  if (status === 'NOT_CONFIGURED') return 'بيانات الربط غير محفوظة'
+  return 'تعذر اختبار الاتصال'
+}
+
 export const MerchantShipping: FunctionalComponent = () => {
   const { store } = useStore()
   const storeId = store?.id || ''
@@ -131,7 +152,7 @@ export const MerchantShipping: FunctionalComponent = () => {
     try {
       const result = await testShippingConnectionCallable({ providerId: provider.id, storeId })
       const data = result.data as any
-      toast.push(data?.ok ? 'الاتصال جاهز' : 'التكامل غير مهيأ', data?.message, data?.ok ? 'success' : 'error')
+      toast.push(data?.ok ? 'تم التحقق من الاتصال' : connectionFailureTitle(data?.status), data?.message, data?.ok ? 'success' : 'error')
     } catch (err: any) { toast.push('تعذر اختبار الاتصال', err?.message || 'حاول مرة أخرى', 'error') }
   }
 
@@ -424,11 +445,12 @@ export const MerchantShipping: FunctionalComponent = () => {
               <div><strong>{provider.integrationType === 'api' ? 'ربط مباشر مع شركة الشحن' : 'شحن يدوي من لوحة المتجر'}</strong><p className="muted small">{provider.description || 'شركة شحن مُدارة من منصة متجري'}</p></div>
               <span className={`shipping-provider-connection ${isProviderReadyForAutomation(provider, config) ? 'is-ready' : config?.enabled ? 'is-pending' : ''}`}><Icon name={isProviderReadyForAutomation(provider, config) ? 'check_circle' : 'schedule'} ariaHidden />{isProviderReadyForAutomation(provider, config) ? 'جاهزة لإنشاء الشحنات' : config?.enabled ? 'تحتاج إكمال الإعداد' : 'غير مفعلة'}</span>
             </div>
-            <div className="shipping-provider-summary"><span>{provider.supportsCOD ? 'الدفع عند الاستلام' : 'بدون COD'}</span><span>{provider.supportsTracking ? 'تتبع' : 'تتبع يدوي'}</span><span>{config?.configurationStatus === 'CONNECTED' ? 'متصلة' : config?.configurationStatus === 'ERROR' ? 'خطأ اتصال' : config?.configurationStatus === 'CONFIGURED' ? 'مهيأة' : config ? 'تحتاج إعداد' : 'غير مفعلة'}</span>{config?.isDefault && <span>الافتراضية</span>}</div>
+            <div className="shipping-provider-summary"><span>{provider.supportsCOD ? 'الدفع عند الاستلام' : 'بدون COD'}</span><span>{provider.supportsTracking ? 'تتبع' : 'تتبع يدوي'}</span><span>{connectionStatusLabel(config?.configurationStatus, config?.enabled)}</span>{config?.isDefault && <span>الافتراضية</span>}</div>
             {provider.integrationType === 'manual' && <div className="shipping-secure-note"><Icon name="local_shipping" ariaHidden /><span>هذا الخيار لا يحتاج API أو حسابًا لدى شركة شحن. فعّله واضبط السعر، ثم سجّل بيانات التتبع يدويًا عند إرسال الشحنة.</span></div>}
             {provider.integrationType === 'api' && !isProviderLive(provider) && <div className="shipping-secure-note"><Icon name="schedule" ariaHidden /><span><strong>قريبًا:</strong> نعمل على محول API الرسمي لـ{provider.name}. الأسعار والمناطق قد تظهر في المتجر، لكن لا تُدخل مفتاح API ولا تعتمد الإنشاء التلقائي قبل أن تصبح الحالة «متصلة».</span></div>}
             {provider.slug === 'bosta' && <p className="muted small">أدخل مفاتيح Bosta الخاصة بهذا المتجر فقط، ثم اختبر الاتصال. عنوان Webhook سيظهر بعد نجاح الحفظ.</p>}
             {provider.slug === 'wasla' && <div className="shipping-secure-note"><Icon name="info" ariaHidden /><span><strong>إعداد مرة واحدة:</strong> وصلة تتطلب عنوان الفرع الذي ستستلم منه الشحنات عند إنشاء الطلب. احفظ عنوان استلام وصلة أدناه مرة واحدة للتاجر؛ لا يراه العميل ولا تعيد إدخاله في كل طلب. الأسعار والتغطية تأتيان من وصلة مباشرة.</span></div>}
+            {provider.slug === 'wasla' && <div className="shipping-secure-note"><Icon name="sync" ariaHidden /><span><strong>تحديث الحالة:</strong> العقد الحالي يدعم إنشاء الشحنة وجلب التتبع والحالات من وصلة، لكنه لا يوفر Webhook موثقًا أو إلغاء/AWB/مرتجع عبر API. لن يظهر رابط Webhook وهمي؛ استخدم «تحديث من الشركة» من تفاصيل الطلب لجلب آخر حالة.</span></div>}
             {provider.slug === 'wasla' && config?.enabled && !isProviderReadyForAutomation(provider, config) && <div className="shipping-secure-note"><Icon name="schedule" ariaHidden /><span><strong>ينقص الإعداد:</strong> اختر عنوان استلام وصلة واحفظه. بعد ذلك تنشئ المنصة الشحنات تلقائيًا من هذا الفرع.</span></div>}
             {config?.enabled && (() => {
               const draft = platformDrafts[provider.id] || { fixedRate: String(config.fixedRate ?? ''), defaultPackageWeight: String(config.defaultPackageWeight ?? ''), codEnabled: config.codEnabled !== false, serviceCode: config.serviceCode || provider.services?.[0]?.code || '', rateMarkup: String(config.rateMarkup ?? ''), freeShippingThreshold: String(config.freeShippingThreshold ?? ''), waslaPickupLocationName: config.waslaPickupLocationName || '', waslaPickupContactPhone: config.waslaPickupContactPhone || '', waslaPickupAddressLine1: config.waslaPickupAddressLine1 || '', waslaPickupGovernorateId: String(config.waslaPickupGovernorateId || ''), waslaPickupCityId: String(config.waslaPickupCityId || '') }

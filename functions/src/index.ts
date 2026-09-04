@@ -349,6 +349,17 @@ function normalizeProviderServices(input: any) {
   })
 }
 
+/**
+ * A provider may only advertise webhooks when its server-side adapter can
+ * both parse the provider payload and authenticate it. A UI flag alone is
+ * never enough: publishing a callback URL without those two guarantees
+ * creates a misleading and unsafe integration surface.
+ */
+function hasVerifiedWebhookContract(slug: unknown, integrationType: unknown): boolean {
+  const adapter = getShippingAdapter(String(slug || ''), String(integrationType || 'manual'))
+  return Boolean(adapter?.parseWebhook && adapter?.verifyWebhookSignature)
+}
+
 function safeShippingProvider(id: string, data: any) {
   const services = Array.isArray(data?.services) ? data.services.slice(0, 50).map((service: any) => ({
     code: String(service?.code || '').slice(0, 80),
@@ -380,7 +391,7 @@ function safeShippingProvider(id: string, data: any) {
     supportsCOD: data?.supportsCOD === true,
     supportsReturns: data?.supportsReturns === true,
     supportsTracking: data?.supportsTracking === true,
-    supportsWebhooks: data?.supportsWebhooks === true,
+    supportsWebhooks: data?.supportsWebhooks === true && hasVerifiedWebhookContract(data?.slug, data?.integrationType),
     supportsPickup: data?.supportsPickup === true,
     supportedCountries: Array.isArray(data?.supportedCountries) ? data.supportedCountries.slice(0, 100) : [],
     defaultServiceCodes: Array.isArray(data?.defaultServiceCodes) ? data.defaultServiceCodes.slice(0, 100) : [],
@@ -414,7 +425,10 @@ function normalizeShippingProviderPayload(input: any) {
     supportsCOD: input?.supportsCOD === true,
     supportsReturns: input?.supportsReturns === true,
     supportsTracking: input?.supportsTracking === true,
-    supportsWebhooks: input?.supportsWebhooks === true,
+    // Keep advertised functionality aligned with the adapter contract. This
+    // intentionally makes Wasla webhooks unavailable until a signed Wasla
+    // webhook contract is implemented server-side.
+    supportsWebhooks: input?.supportsWebhooks === true && hasVerifiedWebhookContract(slug, integrationType),
     supportsPickup: input?.supportsPickup === true,
     supportedCountries: Array.isArray(input?.supportedCountries) ? input.supportedCountries.map(String).slice(0, 100) : [],
     defaultServiceCodes: Array.isArray(input?.defaultServiceCodes) ? input.defaultServiceCodes.map(String).slice(0, 100) : [],
@@ -3760,6 +3774,14 @@ export const createSalesLink = onCall(async (request: CallableRequest<any>) => {
   const { storeId, data } = request.data || {}
   if (!storeId || !data || !data.code) throw new HttpsError('invalid-argument', 'بيانات رابط البيع غير مكتملة')
 
+  // `/s/:code` is a public global route, so its code must be globally unique.
+  // Normalize it once on the server to prevent different casing from creating
+  // two links that look identical to a customer.
+  const code = String(data.code).trim().toLowerCase()
+  if (!/^[a-z0-9_-]{3,80}$/.test(code)) {
+    throw new HttpsError('invalid-argument', 'كود الرابط يجب أن يحتوي 3 إلى 80 حرفاً أو رقماً فقط')
+  }
+
    const grant = await grantForStore(storeId, request.auth?.uid)
    if (!grant) throw new HttpsError('failed-precondition', 'الاشتراك غير نشط — لا يمكن إنشاء روابط بيع الآن')
 
@@ -3768,13 +3790,13 @@ export const createSalesLink = onCall(async (request: CallableRequest<any>) => {
   await db.runTransaction(async (tx) => {
     const count = await tx.get(db.collection('storeLinks').where('storeId', '==', storeId).where('archived', '==', false))
     if (salesLinksLimit !== null && count.size >= salesLinksLimit) throw new HttpsError('resource-exhausted', `تم تجاوز حد روابط البيع (${salesLinksLimit})`)
-    const linkQuery = await tx.get(db.collection('storeLinks').where('storeId', '==', storeId).where('code', '==', data.code).limit(1))
+    const linkQuery = await tx.get(db.collection('storeLinks').where('code', '==', code).limit(1))
     if (!linkQuery.empty) throw new HttpsError('already-exists', 'كود الرابط مستخدم مسبقاً')
     tx.create(ref, {
       storeId,
-      code: data.code,
-      name: data.name || data.code,
-      title: data.title || data.name || data.code,
+      code,
+      name: data.name || code,
+      title: data.title || data.name || code,
       sellerName: data.sellerName || null,
       destinationType: data.destinationType || 'home',
       destinationId: data.destinationId || null,
@@ -3793,8 +3815,8 @@ export const createSalesLink = onCall(async (request: CallableRequest<any>) => {
     })
   })
 
-  await auditLog(storeId, request.auth?.uid || 'guest', 'create_sales_link', 'storeLinks', ref.id, { code: data.code })
-  return { id: ref.id }
+  await auditLog(storeId, request.auth?.uid || 'guest', 'create_sales_link', 'storeLinks', ref.id, { code })
+  return { id: ref.id, code }
 })
 
 // ─────────────────────────────────────────────────────────────
@@ -4782,7 +4804,15 @@ export const getMerchantShippingProviders = onCall(async (request: CallableReque
       functionRegion: SHIPPING_FUNCTION_REGION,
       environment: process.env.FUNCTIONS_EMULATOR === 'true' ? 'emulator' : 'production',
       webhookUrls: Object.fromEntries(providersSnap.docs
-        .filter((doc) => doc.data()?.integrationType === 'api' && getShippingAdapter(doc.data()?.slug, 'api'))
+        // A public webhook URL is useful only when the provider adapter can
+        // parse and authenticate that provider's real webhook contract. Do
+        // not advertise a generic endpoint for an adapter that has not
+        // declared those capabilities yet.
+        .filter((doc) => {
+          if (doc.data()?.integrationType !== 'api') return false
+          const adapter = getShippingAdapter(doc.data()?.slug, 'api')
+          return !!adapter?.parseWebhook && !!adapter.verifyWebhookSignature
+        })
         .map((doc) => [String(doc.data()?.slug || ''), publicWebhookUrl(String(doc.data()?.slug || ''))])),
       appCheckCompatible: true,
       appCheckEnforced: false,
@@ -4956,7 +4986,12 @@ export const testShippingConnection = onCall({ region: SHIPPING_FUNCTION_REGION,
   if (provider.integrationType !== 'manual' && !vault) return { ok: false, configured: false, status: 'NOT_CONFIGURED', message: 'بيانات الاعتماد غير محفوظة' }
   try {
     const result = await adapter.testConnection({ provider, config, credentials: vault?.credentials || null })
-    const status = result.ok ? 'CONNECTED' : 'ERROR'
+    const returnedStatus = String((result as any)?.status || '')
+    const status = result.ok
+      ? 'CONNECTED'
+      : ['INVALID_CREDENTIALS', 'PROVIDER_UNAVAILABLE', 'ERROR'].includes(returnedStatus)
+        ? returnedStatus
+        : 'ERROR'
     const writes: Promise<unknown>[] = [providerSnap.ref.update({ lastTestedAt: now(), updatedAt: now() })]
     if (vault) writes.push(vault.ref.update({ status, lastValidatedAt: now(), lastValidationStatus: status, updatedAt: now() }))
     if (storeId) writes.push(db.doc(`storeShippingProviders/${storeId}_${providerId}`).set({ configurationStatus: status, lastVerifiedAt: now(), updatedAt: now() }, { merge: true }))
@@ -4964,11 +4999,18 @@ export const testShippingConnection = onCall({ region: SHIPPING_FUNCTION_REGION,
     return { ok: result.ok, configured: true, status, message: result.message, account: result.account || null }
   } catch (error) {
     const code = error instanceof ShippingProviderError ? error.code : 'PROVIDER_UNAVAILABLE'
-    const status = code === 'INVALID_CREDENTIALS' ? 'INVALID_CREDENTIALS' : code === 'CONFIGURATION_ERROR' ? 'CONFIGURATION_ERROR' : 'PROVIDER_UNAVAILABLE'
+    // Persist the same truthful state returned to the client. An invalid key
+    // must not be collapsed into a vague ERROR, and a transient outage must
+    // remain distinguishable from a merchant configuration issue.
+    const status = code === 'INVALID_CREDENTIALS'
+      ? 'INVALID_CREDENTIALS'
+      : code === 'PROVIDER_UNAVAILABLE'
+        ? 'PROVIDER_UNAVAILABLE'
+        : 'ERROR'
     const message = sanitizeSensitiveText(error instanceof Error ? error.message : 'تعذر الاتصال بمزود الشحن')
     const writes: Promise<unknown>[] = []
-    if (vault) writes.push(vault.ref.update({ status: 'ERROR', lastValidatedAt: now(), lastValidationStatus: status, updatedAt: now() }))
-    if (storeId) writes.push(db.doc(`storeShippingProviders/${storeId}_${providerId}`).set({ configurationStatus: 'ERROR', lastVerifiedAt: now(), lastValidationStatus: status, updatedAt: now() }, { merge: true }))
+    if (vault) writes.push(vault.ref.update({ status, lastValidatedAt: now(), lastValidationStatus: status, updatedAt: now() }))
+    if (storeId) writes.push(db.doc(`storeShippingProviders/${storeId}_${providerId}`).set({ configurationStatus: status, lastVerifiedAt: now(), lastValidationStatus: status, updatedAt: now() }, { merge: true }))
     await Promise.all(writes)
     return { ok: false, configured: true, status, message }
   }
@@ -6229,6 +6271,7 @@ export const claimOrder = onCall(async (request: CallableRequest<{ storeId?: str
 // ─────────────────────────────────────────────────────────────
 export const recordStoreLinkVisit = onCall(async (request: CallableRequest<{ storeId?: string; code?: string }>) => {  const { storeId, code } = request.data || {}
   if (!storeId || !code) throw new HttpsError('invalid-argument', 'storeId و code مطلوبان')
+  const normalizedCode = String(code).trim().toLowerCase()
 
   const storeSnap = await db.doc(`stores/${storeId}`).get()
   if (!storeSnap.exists || !storeSnap.data()?.active) {
@@ -6238,7 +6281,7 @@ export const recordStoreLinkVisit = onCall(async (request: CallableRequest<{ sto
   const linkQuery = await db
     .collection('storeLinks')
     .where('storeId', '==', storeId)
-    .where('code', '==', String(code))
+    .where('code', '==', normalizedCode)
     .limit(1)
     .get()
 
@@ -6290,10 +6333,11 @@ export const recordLandingPageView = onCall(async (request: CallableRequest<{ la
 export const resolveStoreLink = onCall(async (request: CallableRequest<{ code?: string }>) => {
   const { code } = request.data || {}
   if (!code) throw new HttpsError('invalid-argument', 'code مطلوب')
+  const normalizedCode = String(code).trim().toLowerCase()
 
   const linkQuery = await db
     .collection('storeLinks')
-    .where('code', '==', String(code))
+    .where('code', '==', normalizedCode)
     .where('active', '==', true)
     .limit(1)
     .get()

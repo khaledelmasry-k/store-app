@@ -182,7 +182,12 @@ export async function createShipmentForOrder(
         eventType: 'shipment.created',
         entityType: 'shipment',
         entityId: shipmentRef.id,
-        payload: { orderId: input.orderId, providerId, externalShipmentId: result.providerShipmentId || null, trackingNumber: result.trackingNumber || null },
+        payload: {
+          orderId: input.orderId,
+          providerId,
+          externalShipmentId: result.providerShipmentId || null,
+          trackingNumber: shipment.trackingNumber || null,
+        },
       })
     })
     return { shipment: { ...shipment, id: shipmentRef.id }, duplicate: false }

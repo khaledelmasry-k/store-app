@@ -493,6 +493,14 @@ export const PlatformShippingCompanies: FunctionalComponent = () => {
       )
       return
     }
+    if (merchantApiProvider) {
+      toast.push(
+        'مفتاح الربط خاص بالتاجر',
+        'يُجرى اختبار الاتصال من إعدادات الشحن داخل لوحة التاجر بعد أن يحفظ التاجر مفتاحه.',
+        'info',
+      )
+      return
+    }
     if (!editingId) {
       toast.push('احفظ المزود أولاً لاختبار الربط', undefined, 'error')
       return
@@ -532,6 +540,7 @@ export const PlatformShippingCompanies: FunctionalComponent = () => {
   )
   const apiAdapterSupported =
     draft.integrationType === 'api' && ['bosta', 'wasla'].includes(draft.slug.trim().toLowerCase())
+  const isWaslaProvider = draft.integrationType === 'api' && draft.slug.trim().toLowerCase() === 'wasla'
   const merchantApiProvider = draft.integrationType === 'api' && draft.credentialMode === 'merchant'
   const manualProvider = draft.integrationType === 'manual'
 
@@ -622,7 +631,7 @@ export const PlatformShippingCompanies: FunctionalComponent = () => {
           ...(!merchantApiProvider ? [{ key: 'services', label: 'الخدمات', count: draft.services.length }, { key: 'zones', label: 'المناطق والأسعار' }] : []),
           ...(!manualProvider ? [{ key: 'api', label: 'التكامل API' }] : []),
           { key: 'capabilities', label: 'الإمكانيات' },
-          ...(!manualProvider ? [{ key: 'webhooks', label: 'Webhooks' }] : []),
+          ...(!manualProvider && !isWaslaProvider ? [{ key: 'webhooks', label: 'Webhooks' }] : []),
         ]}
         active={tab}
         onChange={setTab}
@@ -967,7 +976,7 @@ export const PlatformShippingCompanies: FunctionalComponent = () => {
                   الخاصة بمتجره.
                 </span>
               </div>
-              {draft.slug.trim().toLowerCase() === 'wasla' && <div className="shipping-secure-note"><Icon name="payments" ariaHidden /><span>وصلة هي مصدر السعر والتغطية. لا تضف أسعارًا أو مناطق هنا، ولا تعتمد سعرًا قبل أن توفر وصلة واجهة API رسمية للاستعلام عن السعر قبل إنشاء الشحنة.</span></div>}
+              {isWaslaProvider && <div className="shipping-secure-note"><Icon name="info" ariaHidden /><span><strong>نطاق وصلة المدعوم حاليًا:</strong> اختبار اتصال، تحميل محافظات ومدن، تسعير مباشر، إنشاء شحنة، وتتبّع/سجل حالة. لا تضف أسعارًا ثابتة أو مناطق محلية لهذه الشركة. Webhooks والإلغاء وAWB/الملصق وإنشاء المرتجع وطلب الاستلام ليست مدعومة بالعقد الحالي، لذلك لا تظهر كميزات متاحة.</span></div>}
             </Card>
           ))}
         {tab === 'capabilities' && (
@@ -994,7 +1003,7 @@ export const PlatformShippingCompanies: FunctionalComponent = () => {
                   'inventory_2',
                 ],
                 ['supportsWebhooks', 'Webhooks', 'استقبال تحديثات الحالة من المزود', 'webhook'],
-              ].map(([key, title, description, icon]) => (
+              ].filter(([key]) => !(isWaslaProvider && key === 'supportsWebhooks')).map(([key, title, description, icon]) => (
                 <div className="shipping-capability-card" key={key}>
                   <span className="shipping-capability-icon">
                     <Icon name={icon} ariaHidden />
@@ -1015,6 +1024,7 @@ export const PlatformShippingCompanies: FunctionalComponent = () => {
                 </div>
               ))}
             </div>
+            {isWaslaProvider && <div className="shipping-secure-note mt-1"><Icon name="webhook" ariaHidden /><span>لا يوجد Webhook موثّق ومتحقق منه في محول وصلة الحالي، ولذلك لا يمكن تفعيله من الإدارة. تُحدّث حالة الشحنة بجلبها من وصلة عند طلب التحديث.</span></div>}
             {!merchantApiProvider && <label className="shipping-capability-card shipping-capability-card--wide">
               <div>
                 <strong>السماح للتاجر بتجاوز السعر الثابت</strong>
@@ -1032,7 +1042,7 @@ export const PlatformShippingCompanies: FunctionalComponent = () => {
             </label>}
           </Card>
         )}
-        {tab === 'webhooks' &&
+        {tab === 'webhooks' && !isWaslaProvider &&
           (draft.supportsWebhooks ? (
             <Card title="Webhooks" subtitle="تتبع الأحداث الواردة من شركة الشحن">
               <div className="shipping-webhook-list">

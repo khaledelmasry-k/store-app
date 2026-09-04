@@ -527,7 +527,16 @@ match /orders/{id} {
       // document while requiring a merchant owner or granular staff permission.
       allow update: if (isPlatformAdmin() || (canAccessStore(resource.data.storeId)
           && (isMerchant() || hasAnyPermission(['sales_links:create', 'sales_links:analytics']))))
-        && request.resource.data.storeId == resource.data.storeId;
+        && request.resource.data.storeId == resource.data.storeId
+        // Visits, delivered-order totals, and revenue are server-owned
+        // attribution data. Merchants can edit their link settings but must
+        // never be able to forge campaign analytics in the browser.
+        && !request.resource.data.diff(resource.data).affectedKeys().hasAny([
+          'visits', 'ordersCount', 'totalRevenue', 'createdAt', 'createdBy'
+        ])
+        // Public links resolve by this code globally, so it cannot be changed
+        // by a direct client update after the server has guaranteed uniqueness.
+        && request.resource.data.code == resource.data.code;
       allow delete: if isPlatformAdmin() || (canAccessStore(resource.data.storeId)
         && (isMerchant() || hasAnyPermission(['sales_links:create'])));
     }

@@ -68,6 +68,7 @@ export const MerchantStoreLinks: FunctionalComponent = () => {
   const [query, setQuery] = useState('')
   const [status, setStatus] = useState('')
   const [open, setOpen] = useState(false)
+  const [saving, setSaving] = useState(false)
   const [deleteTarget, setDeleteTarget] = useState<StoreLink | null>(null)
   const [form, setForm] = useState<Draft>({
     name: '', code: '', sellerName: '', destinationType: 'home', destinationId: '', source: '', campaign: '', content: '', active: true, archived: false,
@@ -96,6 +97,7 @@ export const MerchantStoreLinks: FunctionalComponent = () => {
   }
 
   const submit = async () => {
+    if (saving) return
     if (!form.name) {
       toast.push('أدخل اسم الرابط', undefined, 'error')
       return
@@ -122,17 +124,28 @@ export const MerchantStoreLinks: FunctionalComponent = () => {
       totalRevenue: 0,
       createdBy: '',
     }
+    setSaving(true)
     try {
       if (form.id) {
         await storeLinksService.update(form.id, data)
         toast.push('تم تحديث الرابط')
       } else {
-        await createSalesLinkCallable({ storeId, data })
-        toast.push('تم إنشاء رابط البيع')
+        const created = await createSalesLinkCallable({ storeId, data })
+        const savedCode = String((created.data as { code?: string } | undefined)?.code || code)
+        toast.push('تم إنشاء رابط البيع', `الرابط جاهز للمشاركة: ${publicUrl(savedCode)}`, 'success')
       }
       setOpen(false)
     } catch (err: any) {
-      toast.push('فشل حفظ الرابط', err?.message || 'حدث خطأ غير متوقع', 'error')
+      const message = String(err?.message || '')
+      const errorCode = String(err?.code || '')
+      const detail = errorCode.includes('resource-exhausted')
+        ? 'وصلت إلى حد روابط البيع في باقتك الحالية.'
+        : errorCode.includes('already-exists')
+          ? 'الكود المختصر مستخدم بالفعل. أعد المحاولة ليتم إنشاء كود جديد.'
+          : message || 'حدث خطأ غير متوقع'
+      toast.push('تعذر حفظ رابط البيع', detail, 'error')
+    } finally {
+      setSaving(false)
     }
   }
 
@@ -362,8 +375,8 @@ export const MerchantStoreLinks: FunctionalComponent = () => {
             <div>
               <span className="field-label">معاينة الرابط المختصر</span>
               <div className="storelinks-url-preview">
-                <div className="storelinks-url-text" dir="ltr">{form.code ? `/s/${form.code}` : '/s/...'}</div>
-                <button className="storelinks-url-copy" onClick={() => copyLink(form.code || randomCode())} title="نسخ الرابط"><Icon name="content_copy" ariaHidden /></button>
+                <div className="storelinks-url-text" dir="ltr">{form.code ? `/s/${form.code}` : 'سيُنشأ الكود عند الحفظ'}</div>
+                <button type="button" className="storelinks-url-copy" onClick={() => form.code && copyLink(form.code)} title="نسخ الرابط" disabled={!form.code}><Icon name="content_copy" ariaHidden /></button>
               </div>
               <p className="muted small mt-1">
                 <Icon name="info" className="storelinks-attribution-icon" ariaHidden />
@@ -379,8 +392,8 @@ export const MerchantStoreLinks: FunctionalComponent = () => {
           </Card>
 
           <div className="storelinks-form-actions">
-            <Button variant="ghost" onClick={() => setOpen(false)}>إلغاء</Button>
-            <Button icon="save" onClick={submit}>{form.id ? 'حفظ التغييرات' : 'حفظ وإنشاء'}</Button>
+            <Button variant="ghost" onClick={() => setOpen(false)} disabled={saving}>إلغاء</Button>
+            <Button icon="save" onClick={submit} loading={saving}>{form.id ? 'حفظ التغييرات' : 'حفظ وإنشاء'}</Button>
           </div>
         </div>
       </Drawer>
