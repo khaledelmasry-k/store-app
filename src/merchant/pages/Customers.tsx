@@ -19,6 +19,7 @@ import { normalizeSegment, segmentLabel } from '../../shared/utils/segments'
 import { STATUS_LABELS, STATUS_COLORS } from '../../shared/utils/constants'
 import { CRM_STAGE_OPTIONS, normalizeCrmStage, crmStageLabel, CRM_STAGE_TONES, sanitizeTags } from '../../shared/utils/crm'
 import { normalizePhoneEG, formatPhoneDisplay } from '../../shared/utils/phone'
+import { timestampToMillis, millisToDaysAgo } from '../../shared/utils/timestamp'
 import type { Customer, Order, CustomerTimelineEvent, CustomerFollowUp } from '../../shared/types'
 import { Icon } from '../../shared/components/ui/Icon'
 import { CrmTimeline } from '../components/CrmTimeline'
@@ -88,7 +89,7 @@ export const MerchantCustomers: FunctionalComponent = () => {
       .filter(
         (o) => (o.customerDocId && o.customerDocId === c.id) || (o.phone && c.phone && (normalizePhoneEG(o.phone) === normalizePhoneEG(c.phone) || o.phone === c.phone)),
       )
-      .sort((a, b) => (b.createdAt?.seconds || 0) - (a.createdAt?.seconds || 0))
+      .sort((a, b) => (timestampToMillis(b.createdAt as any) || 0) - (timestampToMillis(a.createdAt as any) || 0))
 
   const detail = selected || (filtered.length > 0 && !selected ? filtered[0] : null)
   const detailOrders = useMemo(() => detail ? (orders360.length ? orders360 : customerOrders(detail)) : [], [detail, orders360, ordersRes.data])
@@ -126,7 +127,7 @@ export const MerchantCustomers: FunctionalComponent = () => {
           returnedOrders: localOrders.filter((o) => o.status === 'RETURNED').length,
           totalRevenue,
           avgOrderValue: delivered ? totalRevenue / delivered : 0,
-          daysSinceLastOrder: detail.lastOrderAt ? Math.floor((Date.now() - detail.lastOrderAt.seconds * 1000) / 86400000) : null,
+          daysSinceLastOrder: millisToDaysAgo(timestampToMillis(detail.lastOrderAt as any)),
           returnRate: localOrders.length ? localOrders.filter((o) => o.status === 'RETURNED').length / localOrders.length : 0,
           cancellationRate: localOrders.length ? localOrders.filter((o) => o.status === 'CANCELLED').length / localOrders.length : 0,
         })
@@ -147,7 +148,7 @@ export const MerchantCustomers: FunctionalComponent = () => {
         return [
           c.name, c.phone, (c as any).phoneNormalized || normalizePhoneEG(c.phone), c.email || '', c.governorate || '', c.city || '',
           st ? crmStageLabel(st) : '', (c.tags || []).join(' | '), String(c.totalOrders), String(c.totalSpent),
-          c.lastOrderAt ? new Date((c.lastOrderAt as any).seconds * 1000).toISOString().slice(0, 10) : '',
+          timestampToMillis(c.lastOrderAt as any) ? new Date(timestampToMillis(c.lastOrderAt as any)!).toISOString().slice(0, 10) : '',
           (c as any).attributionSource || (c as any).lastSalesLinkCode || '',
         ]
       }),
@@ -261,7 +262,7 @@ export const MerchantCustomers: FunctionalComponent = () => {
     // need dueAt: fetch existing
     const existing = followUps.find((f) => f.id === id)
     if (!existing) return
-    const dueAt = existing.dueAt ? new Date(existing.dueAt.seconds * 1000).toISOString() : new Date().toISOString()
+    const dueAt = timestampToMillis(existing.dueAt as any) ? new Date(timestampToMillis(existing.dueAt as any)!).toISOString() : new Date().toISOString()
     await upsertFollowUpCallable({ storeId, customerId: detail.id, followUpId: id, dueAt, status, notes: existing.notes || '', result })
     toast.push(status === 'done' ? 'تم إتمام المتابعة' : 'تم تحديث المتابعة')
     const res: any = await getCustomer360Callable({ storeId, customerId: detail.id })

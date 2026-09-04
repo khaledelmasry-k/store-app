@@ -6,6 +6,7 @@ import { Textarea } from '../../shared/components/ui/Textarea'
 import { Badge } from '../../shared/components/ui/Badge'
 import { Icon } from '../../shared/components/ui/Icon'
 import { formatDate, timeAgo } from '../../shared/utils/format'
+import { timestampToMillis } from '../../shared/utils/timestamp'
 import { FOLLOW_UP_STATUS_LABELS, FOLLOW_UP_STATUS_TONES } from '../../shared/utils/crm'
 import type { CustomerFollowUp } from '../../shared/types'
 import './CrmFollowUps.css'
@@ -47,7 +48,7 @@ export const CrmFollowUps: FunctionalComponent<Props> = ({ followUps, loading, o
           <p className="muted small" style={{ padding: 8 }}>لا توجد متابعات. أضف متابعة لتذكير الفريق بالتواصل.</p>
         ) : followUps.map((f) => {
           const isPending = f.status === 'pending' || f.status === 'overdue'
-          const dueMs = f.dueAt?.seconds ? f.dueAt.seconds * 1000 : 0
+          const dueMs = timestampToMillis(f.dueAt as any) || 0
           const isOverdue = dueMs && dueMs < Date.now() && isPending
           const displayStatus = isOverdue ? 'overdue' : f.status
           return (

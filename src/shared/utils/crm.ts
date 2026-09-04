@@ -1,4 +1,5 @@
 import type { Order } from '../types'
+import { timestampToMillis, millisToDaysAgo } from './timestamp'
 
 export const CRM_STAGES = ['lead', 'new', 'active', 'repeat', 'vip', 'at_risk', 'lost'] as const
 export type CrmStage = typeof CRM_STAGES[number]
@@ -100,7 +101,7 @@ export function sanitizePhone(raw: string | null | undefined): string {
   return String(raw || '').trim().slice(0, 30)
 }
 
-// Metrics helpers — mirrors backend logic
+// Metrics helpers — mirrors backend logic (timestamp-safe)
 export function calcCustomerMetrics(orders: Order[]) {
   const totalOrders = orders.length
   const deliveredOrders = orders.filter((o) => o.status === 'DELIVERED').length
@@ -109,17 +110,18 @@ export function calcCustomerMetrics(orders: Order[]) {
   const shippedOrders = orders.filter((o) => o.status === 'SHIPPED').length
   const totalRevenue = orders.filter((o) => o.status === 'DELIVERED').reduce((s, o) => s + (o.totalPrice || 0), 0)
   const avgOrderValue = deliveredOrders > 0 ? totalRevenue / deliveredOrders : 0
-  // lastOrderAt
-  const sorted = [...orders].sort((a, b) => (b.createdAt?.seconds || 0) - (a.createdAt?.seconds || 0))
+  const sorted = [...orders].sort((a, b) => (timestampToMillis(b.createdAt as any) || 0) - (timestampToMillis(a.createdAt as any) || 0))
   const lastOrder = sorted[0] || null
   const lastOrderAt = lastOrder?.createdAt || null
-  const daysSinceLastOrder = lastOrderAt ? Math.floor((Date.now() - lastOrderAt.seconds * 1000) / 86400000) : null
+  const daysSinceLastOrder = millisToDaysAgo(timestampToMillis(lastOrderAt as any))
   const returnRate = totalOrders > 0 ? returnedOrders / totalOrders : 0
   const cancellationRate = totalOrders > 0 ? cancelledOrders / totalOrders : 0
   const repeatPurchaseRate = totalOrders > 1 ? 1 : 0 // per-customer; aggregated elsewhere
   // frequency: orders per 30d
-  const firstOrder = [...orders].sort((a, b) => (a.createdAt?.seconds || 0) - (b.createdAt?.seconds || 0))[0]
-  const daysSpan = firstOrder && lastOrder && firstOrder !== lastOrder ? Math.max(1, Math.floor(((lastOrder.createdAt?.seconds || 0) - (firstOrder.createdAt?.seconds || 0)) / 86400)) : 0
+  const firstOrder = [...orders].sort((a, b) => (timestampToMillis(a.createdAt as any) || 0) - (timestampToMillis(b.createdAt as any) || 0))[0]
+  const lastMillis = timestampToMillis(lastOrder?.createdAt as any)
+  const firstMillis = timestampToMillis(firstOrder?.createdAt as any)
+  const daysSpan = firstOrder && lastOrder && firstOrder !== lastOrder && firstMillis != null && lastMillis != null ? Math.max(1, Math.floor((lastMillis - firstMillis) / 86400000)) : 0
   const frequency = daysSpan > 0 ? (totalOrders / daysSpan) * 30 : totalOrders > 1 ? totalOrders : 0
 
   return {

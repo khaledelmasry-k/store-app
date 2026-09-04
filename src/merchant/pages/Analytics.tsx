@@ -19,6 +19,7 @@ import { STATUS_LABELS, STATUS_COLORS } from '../../shared/utils/constants'
 import { formatCurrency, formatDateTime, formatNumber, downloadFile, deliveredRevenue } from '../../shared/utils/format'
 import { orderItemRevenue } from '../../shared/utils/pricing'
 import { csvEscape } from '../../shared/utils/validators'
+import { timestampToMillis } from '../../shared/utils/timestamp'
 import { createAdCampaignCallable, listAdCampaignsCallable } from '../../shared/services/auth'
 import type { Order, ProductCost, Product, OrderCost } from '../../shared/types'
 import './Analytics.css'
@@ -112,10 +113,9 @@ export const MerchantAnalytics: FunctionalComponent = () => {
   const revenueSeries = dateKeys.map((key) => analytics.filter((a) => a.date === key).reduce((s, a) => s + (a.revenue || 0), 0))
   const prevRevenue = prevDateKeys.reduce((s, key) => s + analytics.filter((a) => a.date === key).reduce((p, a) => p + (a.revenue || 0), 0), 0)
   const prevOrders = orders.filter((o) => {
-    const t = o.createdAt
-    if (!t || !('seconds' in t)) return false
-    const d = new Date(t.seconds * 1000)
-    return d.getTime() > Date.now() - periodDays * 2 * 86400000 && d.getTime() <= Date.now() - periodDays * 86400000
+    const m = timestampToMillis(o.createdAt as any)
+    if (m == null) return false
+    return m > Date.now() - periodDays * 2 * 86400000 && m <= Date.now() - periodDays * 86400000
   }).length
   const deltaRevenue = prevRevenue > 0 ? ((revenue - prevRevenue) / prevRevenue) * 100 : null
 

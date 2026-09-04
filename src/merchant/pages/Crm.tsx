@@ -8,6 +8,7 @@ import { useToast } from '../../shared/hooks/useToast'
 import { getCrmAnalyticsCallable } from '../../shared/services/crm'
 import { useCollection } from '../../shared/hooks/useCollection'
 import { formatCurrency, formatNumber } from '../../shared/utils/format'
+import { timestampToMillis } from '../../shared/utils/timestamp'
 import type { CustomerFollowUp } from '../../shared/types'
 import './Crm.css'
 
@@ -38,7 +39,7 @@ export const MerchantCrm: FunctionalComponent = () => {
   ] : []
 
   const overdue = followUpsRes.data.filter((f) => {
-    const due = f.dueAt?.seconds ? f.dueAt.seconds * 1000 : 0
+    const due = timestampToMillis(f.dueAt as any) || 0
     return due && due < Date.now()
   })
 
@@ -112,7 +113,7 @@ export const MerchantCrm: FunctionalComponent = () => {
               <>
                 {overdue.length > 0 && <p style={{ fontSize: 12, color: 'var(--error)', marginBottom: 8 }}>⚠️ {overdue.length} متابعة متأخرة</p>}
                 {followUpsRes.data.slice(0, 6).map((f) => {
-                  const due = f.dueAt?.seconds ? f.dueAt.seconds * 1000 : 0
+                  const due = timestampToMillis(f.dueAt as any) || 0
                   const isOverdue = due && due < Date.now()
                   return (
                     <div key={f.id} className={`crm-follow-row ${isOverdue ? 'is-overdue' : ''}`}>
@@ -124,7 +125,7 @@ export const MerchantCrm: FunctionalComponent = () => {
                         <div style={{ fontSize: 11, color: 'var(--text-on-surface-variant)', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{f.notes || 'بدون ملاحظات'}</div>
                       </div>
                       <span style={{ fontSize: 11, color: isOverdue ? 'var(--error)' : 'var(--text-on-surface-variant)', whiteSpace: 'nowrap' }}>
-                        {f.dueAt ? new Date(f.dueAt.seconds * 1000).toLocaleDateString('ar-EG') : ''}
+                        {f.dueAt ? new Date(timestampToMillis(f.dueAt as any)!).toLocaleDateString('ar-EG') : ''}
                       </span>
                     </div>
                   )

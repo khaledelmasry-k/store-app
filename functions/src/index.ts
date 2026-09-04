@@ -107,6 +107,47 @@ function tsFromDate(d: Date) {
   return Timestamp.fromDate(d)
 }
 
+function toMillis(value: any): number | null {
+  if (value == null) return null
+  if (value instanceof Date) {
+    const t = value.getTime()
+    return Number.isFinite(t) ? t : null
+  }
+  if (typeof value === 'string') {
+    const t = Date.parse(value)
+    return Number.isFinite(t) ? t : null
+  }
+  if (typeof value === 'object') {
+    if (typeof (value as any).toMillis === 'function') {
+      try {
+        const m = (value as any).toMillis()
+        return typeof m === 'number' && Number.isFinite(m) ? m : null
+      } catch {
+        return null
+      }
+    }
+    if (typeof (value as any).toDate === 'function') {
+      try {
+        const d = (value as any).toDate()
+        const t = d instanceof Date ? d.getTime() : Date.parse(String(d))
+        return Number.isFinite(t) ? t : null
+      } catch {
+        return null
+      }
+    }
+    const sec = (value as any).seconds ?? (value as any)._seconds ?? (value as any)._sec ?? null
+    if (sec != null) {
+      const s = typeof sec === 'number' ? sec : typeof sec === 'string' ? Number(sec) : NaN
+      if (Number.isFinite(s)) {
+        const nano = (value as any).nanoseconds ?? (value as any)._nanoseconds ?? (value as any).nanos ?? 0
+        const n = typeof nano === 'number' ? nano : typeof nano === 'string' ? Number(nano) : 0
+        return s * 1000 + (Number.isFinite(n) ? Math.floor(n / 1e6) : 0)
+      }
+    }
+  }
+  return null
+}
+
 // Mirrors src/shared/utils/pricing.ts (client). Functions is a separate
 // package, so tier resolution is duplicated here on purpose and must stay in
 // sync. Never accept a client-supplied price.
@@ -551,12 +592,15 @@ function calcCustomerMetricsFromOrders(orders: any[]) {
   const shippedOrders = orders.filter((o) => o.status === 'SHIPPED').length
   const totalRevenue = orders.filter((o) => o.status === 'DELIVERED').reduce((s: number, o: any) => s + (o.totalPrice || 0), 0)
   const avgOrderValue = deliveredOrders > 0 ? totalRevenue / deliveredOrders : 0
-  const sorted = [...orders].sort((a, b) => (b.createdAt?.seconds || 0) - (a.createdAt?.seconds || 0))
+  const sorted = [...orders].sort((a, b) => (toMillis(b.createdAt) ?? 0) - (toMillis(a.createdAt) ?? 0))
   const lastOrder = sorted[0] || null
   const lastOrderAt = lastOrder?.createdAt || null
   const lastOrderNumber = lastOrder?.orderNumber || null
   const lastOrderStatus = lastOrder?.status || null
-  const daysSinceLastOrder = lastOrderAt ? Math.floor((Date.now() - lastOrderAt.seconds * 1000) / 86400000) : null
+  const daysSinceLastOrder = (() => {
+    const m = toMillis(lastOrderAt)
+    return m == null ? null : Math.floor((Date.now() - m) / 86400000)
+  })()
   const returnRate = totalOrders > 0 ? returnedOrders / totalOrders : 0
   const cancellationRate = totalOrders > 0 ? cancelledOrders / totalOrders : 0
   // product breakdown
@@ -6983,7 +7027,7 @@ export const getCustomer360 = onCall(async (request: CallableRequest<any>) => {
           }
         }
       }
-      orders.sort((a, b) => (b.createdAt?.seconds || 0) - (a.createdAt?.seconds || 0))
+      orders.sort((a, b) => (toMillis(b.createdAt) ?? 0) - (toMillis(a.createdAt) ?? 0))
       orders = orders.slice(0, 100)
     }
   }
@@ -7038,7 +7082,7 @@ export const getCrmAnalytics = onCall(async (request: CallableRequest<any>) => {
   const weekAgo = nowMs - 7 * DAY_MS
   const monthAgo = nowMs - 30 * DAY_MS
   const newCustomers = customers.filter((c: any) => {
-    const t = c.createdAt?.seconds ? c.createdAt.seconds * 1000 : 0
+    const t = toMillis(c.createdAt) ?? 0
     return t >= monthAgo
   }).length
   // Stage breakdown
@@ -7062,7 +7106,7 @@ export const getCrmAnalytics = onCall(async (request: CallableRequest<any>) => {
   let overdueFollowUps = 0
   if (followUpsSnap && !followUpsSnap.empty) {
     for (const d of followUpsSnap.docs) {
-      const due = d.data()?.dueAt?.seconds ? d.data().dueAt.seconds * 1000 : 0
+      const due = toMillis(d.data()?.dueAt) ?? 0
       if (due && due <= nowMs + 24 * 60 * 60 * 1000) followUpsDue++
       if (due && due < nowMs) overdueFollowUps++
     }
@@ -7082,8 +7126,9 @@ export const getCrmAnalytics = onCall(async (request: CallableRequest<any>) => {
     byDay[key] = 0
   }
   for (const c of customers) {
-    const t = c.createdAt?.seconds ? new Date(c.createdAt.seconds * 1000) : null
-    if (!t) continue
+    const m = toMillis(c.createdAt)
+    if (m == null) continue
+    const t = new Date(m)
     const key = `${t.getFullYear()}-${String(t.getMonth() + 1).padStart(2, '0')}-${String(t.getDate()).padStart(2, '0')}`
     if (key in byDay) byDay[key]++
   }

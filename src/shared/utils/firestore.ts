@@ -20,6 +20,7 @@ import {
 } from 'firebase/firestore'
 import { db } from '../firebase'
 import { todayKey } from './format'
+import { timestampToMillis } from './timestamp'
 
 export function ts(input?: Date): { seconds: number; nanoseconds: number } {
   const d = input || new Date()
@@ -78,8 +79,8 @@ export function sanitizeForFirestore(value: unknown, keyPath = ''): unknown {
 }
 
 export function fromTs(t?: Timestamp | { seconds: number } | null): Date | null {
-  if (!t) return null
-  return new Date('seconds' in t ? t.seconds * 1000 : (t as Timestamp).toMillis())
+  const m = timestampToMillis(t as any)
+  return m == null ? null : new Date(m)
 }
 
 export async function waitFor<T>(fn: () => Promise<T>): Promise<T> {
