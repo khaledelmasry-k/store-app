@@ -385,7 +385,7 @@ export const OrderDetailsWorkspace: FunctionalComponent<Props> = ({ id }) => {
               <div className="shipping-secure-note"><Icon name={isApiShipment ? 'cloud_sync' : 'edit_note'} ariaHidden /><span>{isApiShipment ? `شحنة API متصلة بـ${shipment.providerName || 'شركة الشحن'}؛ الشركة هي مصدر الحالة، لذلك لا تعديل يدوي هنا.` : 'شحنة يدوية: حدّث مرحلتها هنا فقط وسيتم تحديث حالة الطلب تلقائيًا.'}</span></div>
               <div className="ods-kv">
                 <div><p className="ods-kv-label">شركة الشحن</p><p className="ods-kv-value">{shipment.providerName || '—'}</p></div>
-                <div><p className="ods-kv-label">كود متابعة المتجر</p><p className="ods-kv-value ltr-text">{shipmentTrackingCode || 'بانتظار كود المتابعة'}</p></div>
+                <div><p className="ods-kv-label">{String(shipment.provider||'').toLowerCase()==='wasla' ? 'كود الشحنة في وصلة' : 'كود متابعة المتجر'}</p><p className="ods-kv-value ltr-text">{shipmentTrackingCode || 'بانتظار كود المتابعة'}</p></div>
                 <div><p className="ods-kv-label">حالة الشحن</p><p className="ods-kv-value">{SHIPMENT_STATUS_LABELS[currentShipmentStatus] || currentShipmentStatus}</p></div>
                 <div><p className="ods-kv-label">آخر تحديث</p><p className="ods-kv-value">{shipment.lastSyncedAt ? formatDateTime(shipment.lastSyncedAt) : '—'}</p></div>
                 {currentShipmentStatus === 'FAILED' && shipment.failureReason && <div><p className="ods-kv-label">سبب تعذر التسليم</p><p className="ods-kv-value">{shipment.failureReason}</p></div>}
