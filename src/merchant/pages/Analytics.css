@@ -1,251 +1,95 @@
-/* ────────────────────────────────────────────────────────────────────────────
-   Analytics — Stitch V3 "Analytics Standalone Workspace" (Phase 10)
-   Direct structure migration: KPI cards (revenue + delta, profit + cost
-   warning, margin + target track), mini stat cards, daily sales bars,
-   conversion mini-chart, order-status donut, top products table with stock
-   pills, plus the app's orders-details panel (profit chips + export).
-   ──────────────────────────────────────────────────────────────────────────── */
-
+/* Analytics — cleaned dashboard hierarchy (fix/ analytics) */
 .merchant-analytics-page {
   display: flex;
   flex-direction: column;
-  gap: 16px;
+  gap: 24px;
 }
 
-/* ── KPI cards ────────────────────────────────────────────────────────────── */
-.analytics-kpi-grid {
-  display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(260px, 1fr));
-  gap: 16px;
-}
-.analytics-kpi-card {
-  background: var(--surface-container-lowest);
-  border: 1px solid var(--outline-variant);
-  border-radius: 16px;
-  padding: 20px;
-  box-shadow: 0 1px 2px rgba(20, 27, 43, 0.05);
-  transition: box-shadow 0.15s;
-}
-.analytics-kpi-card:hover {
-  box-shadow: 0 6px 18px rgba(20, 27, 43, 0.09);
-}
-.analytics-kpi-head {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  margin-bottom: 12px;
-}
-.analytics-kpi-label {
-  font-size: 14px;
-  font-weight: 500;
-  color: var(--on-surface-variant);
-}
-.analytics-kpi-icon {
-  width: 40px;
-  height: 40px;
-  border-radius: 50%;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  font-size: 20px;
-}
-.analytics-kpi-icon .mk-icon {
-  font-size: 20px;
-}
-.analytics-kpi-icon.is-primary {
-  background: color-mix(in srgb, var(--primary-container) 30%, transparent);
-  color: var(--primary);
-}
-.analytics-kpi-icon.is-secondary {
-  background: color-mix(in srgb, var(--secondary-container) 30%, transparent);
-  color: var(--secondary);
-}
-.analytics-kpi-icon.is-muted {
-  background: var(--surface-container);
-  color: var(--on-surface-variant);
-}
-.analytics-kpi-value {
-  font-size: 26px;
-  font-weight: 800;
-  color: var(--on-surface);
-  text-align: right;
-}
-.analytics-kpi-delta {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  margin-top: 10px;
-}
-.analytics-delta-badge {
-  display: inline-flex;
-  align-items: center;
-  gap: 2px;
-  padding: 2px 8px;
-  border-radius: 6px;
-  font-size: 12px;
-  font-weight: 600;
-}
-.analytics-delta-badge.is-up {
-  background: color-mix(in srgb, var(--secondary) 10%, transparent);
-  color: var(--secondary);
-}
-.analytics-delta-badge.is-down {
-  background: color-mix(in srgb, var(--error) 10%, transparent);
-  color: var(--error);
-}
-.analytics-delta-arrow {
-  font-size: 13px;
-}
-.analytics-delta-note {
-  font-size: 12px;
-  color: var(--on-surface-variant);
-}
-.analytics-delta-neutral {
-  font-size: 12px;
-  color: var(--on-surface-variant);
-}
-.analytics-cost-warning {
-  display: flex;
-  align-items: flex-start;
-  gap: 8px;
-  margin-top: 12px;
-  padding: 10px 12px;
-  background: color-mix(in srgb, var(--error-container) 30%, transparent);
-  color: var(--on-error-container);
-  border: 1px solid color-mix(in srgb, var(--error) 20%, transparent);
-  border-radius: 10px;
-  font-size: 12px;
-  line-height: 1.6;
-}
-.analytics-cost-warning-icon {
-  font-size: 14px;
-  flex-shrink: 0;
-  margin-top: 1px;
-}
-.analytics-margin-track {
-  width: 100%;
-  height: 6px;
-  background: var(--surface-container);
-  border-radius: 999px;
-  overflow: hidden;
-  margin-top: 18px;
-}
-.analytics-margin-fill {
-  height: 100%;
-  background: var(--primary);
-  border-radius: 999px;
-  transition: width 0.4s ease;
-}
-.analytics-margin-target {
-  margin-top: 8px;
-  font-size: 12px;
-  color: var(--on-surface-variant);
-  text-align: left;
-}
-
-/* ── Mini stat cards ──────────────────────────────────────────────────────── */
-.analytics-mini-grid {
-  display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
-  gap: 16px;
-}
-.analytics-mini-card {
-  display: flex;
-  align-items: center;
-  gap: 14px;
-  background: var(--surface-container-lowest);
-  border: 1px solid var(--outline-variant);
-  border-radius: 14px;
-  padding: 16px;
-  box-shadow: 0 1px 2px rgba(20, 27, 43, 0.05);
-  transition: box-shadow 0.15s;
-}
-.analytics-mini-card:hover {
-  box-shadow: 0 4px 12px rgba(20, 27, 43, 0.08);
-}
-.analytics-mini-icon {
-  width: 48px;
-  height: 48px;
-  border-radius: 10px;
-  background: color-mix(in srgb, var(--surface-container) 50%, transparent);
-  color: var(--on-surface-variant);
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  flex-shrink: 0;
-}
-.analytics-mini-icon .mk-icon {
-  font-size: 22px;
-}
-.analytics-mini-body {
+/* Section */
+.analytics-section {
   display: flex;
   flex-direction: column;
-  gap: 2px;
+  gap: 16px;
+}
+.analytics-section-title {
+  margin: 0;
+  font-size: 15px;
+  font-weight: 700;
+  color: var(--on-surface);
+  letter-spacing: 0.01em;
+}
+.analytics-ad-note {
+  margin: -8px 0 0;
+  font-size: 12px;
+  color: var(--on-surface-variant);
+  background: var(--surface-container-low);
+  border: 1px solid var(--outline-variant);
+  border-radius: 10px;
+  padding: 10px 12px;
+}
+
+/* Primary KPIs — 4 equal cards */
+.analytics-primary-grid {
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  gap: 16px;
+  align-items: stretch;
+}
+.analytics-primary-grid > * {
+  min-height: 110px;
+  height: 100%;
+}
+
+/* Sales Performance — 2fr / 1fr */
+.analytics-sales-grid {
+  display: grid;
+  grid-template-columns: 2fr 1fr;
+  gap: 16px;
+  align-items: stretch;
+}
+.analytics-sales-grid > * {
+  min-width: 0;
+}
+
+/* Business performance */
+.analytics-business-grid {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 16px;
+  align-items: stretch;
+}
+.analytics-business-grid > * {
+  height: 100%;
+}
+
+/* Advertising KPIs */
+.analytics-ad-grid {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 16px;
+  align-items: stretch;
+}
+.analytics-ad-grid > * {
+  height: 100%;
+}
+
+/* Shared cards inside analytics — equal heights, consistent padding */
+.merchant-analytics-page .stat-card {
+  min-height: 110px;
+  display: flex;
+  gap: 14px;
+  align-items: center;
+  padding: 16px;
+}
+.merchant-analytics-page .card {
+  display: flex;
+  flex-direction: column;
+}
+.merchant-analytics-page .card-body {
   flex: 1;
 }
-.analytics-mini-label {
-  font-size: 12px;
-  font-weight: 500;
-  color: var(--on-surface-variant);
-}
-.analytics-mini-value {
-  font-size: 18px;
-  font-weight: 700;
-  color: var(--on-surface);
-}
-.analytics-mini-trend {
-  font-size: 11px;
-  font-weight: 500;
-}
-.analytics-mini-trend.is-muted {
-  color: var(--on-surface-variant);
-}
 
-/* ── Chart cards ──────────────────────────────────────────────────────────── */
-.analytics-chart-grid {
-  display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(320px, 1fr));
-  gap: 16px;
-}
-.analytics-chart-card {
-  background: var(--surface-container-lowest);
-  border: 1px solid var(--outline-variant);
-  border-radius: 16px;
-  padding: 24px;
-  box-shadow: 0 1px 2px rgba(20, 27, 43, 0.05);
-  display: flex;
-  flex-direction: column;
-}
-.analytics-chart-card.is-wide {
-  grid-column: 1 / -1;
-}
-.analytics-chart-head {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  margin-bottom: 18px;
-}
-.analytics-chart-head h3 {
-  margin: 0;
-  font-size: 17px;
-  font-weight: 700;
-  color: var(--on-surface);
-}
-.analytics-chart-sub {
-  font-size: 12px;
-  color: var(--on-surface-variant);
-}
-.analytics-view-all {
-  font-size: 13px;
-  font-weight: 500;
-  color: var(--primary);
-  text-decoration: none;
-}
-.analytics-view-all:hover {
-  text-decoration: underline;
-}
-
-/* ── Bar charts ───────────────────────────────────────────────────────────── */
+/* Bars / charts */
 .analytics-bars {
   display: flex;
   align-items: flex-end;
@@ -275,23 +119,18 @@
   max-width: 34px;
   background: var(--primary-container);
   border-radius: 6px 6px 0 0;
-  transition: background 0.15s, transform 0.15s;
-}
-
-.campaign-form { align-items: end; margin-block-end: 18px; }
-.campaign-form-action { display: flex; align-items: end; min-height: 40px; }
-.merchant-analytics-page .table-wrap { overflow-x: auto; }
-.analytics-bar-col:hover .analytics-bar {
-  background: var(--primary);
-}
-.analytics-bars.is-compact .analytics-bar {
-  max-width: 18px;
-  background: color-mix(in srgb, var(--secondary-container) 55%, transparent);
+  transition: background 0.15s;
+  min-width: 4px;
 }
 .analytics-bar-label {
   font-size: 10px;
   color: var(--on-surface-variant);
   white-space: nowrap;
+}
+.analytics-bar-col:hover .analytics-bar { background: var(--primary); }
+.analytics-bars.is-compact .analytics-bar {
+  max-width: 18px;
+  background: color-mix(in srgb, var(--secondary-container) 55%, transparent);
 }
 .analytics-conversion-value {
   font-size: 28px;
@@ -299,196 +138,19 @@
   color: var(--on-surface);
   text-align: center;
 }
-.analytics-conversion-note {
-  margin: 10px 0 0;
-  font-size: 12px;
-  color: var(--on-surface-variant);
-  text-align: center;
-}
 
-/* ── Top products / orders tables ─────────────────────────────────────────── */
-.analytics-table-scroll {
-  overflow-x: auto;
-}
-.analytics-table {
-  width: 100%;
-  border-collapse: collapse;
-  font-size: 14px;
-  white-space: nowrap;
-}
-.analytics-table thead {
-  background: var(--surface-container-lowest);
-  border-bottom: 1px solid var(--outline-variant);
-}
-.analytics-table thead th {
-  padding: 12px 14px;
-  text-align: right;
-  font-weight: 500;
-  font-size: 12px;
-  color: var(--on-surface-variant);
-}
-.analytics-table thead th.is-center,
-.analytics-table td.is-center {
-  text-align: center;
-}
-.analytics-table tbody tr {
-  border-bottom: 1px solid color-mix(in srgb, var(--outline-variant) 45%, transparent);
-}
-.analytics-table tbody tr:last-child {
-  border-bottom: 0;
-}
-.analytics-table td {
-  padding: 12px 14px;
-  color: var(--on-surface);
-  vertical-align: middle;
-}
-.analytics-product-cell {
-  font-weight: 500;
-}
-.analytics-num {
-  font-variant-numeric: tabular-nums;
-  color: var(--on-surface-variant);
-}
-.analytics-num.is-strong {
-  color: var(--on-surface);
-  font-weight: 500;
-}
-.analytics-stock-pill {
-  display: inline-flex;
-  align-items: center;
-  padding: 2px 10px;
-  border-radius: 6px;
-  font-size: 12px;
-  font-weight: 500;
-  background: color-mix(in srgb, var(--secondary-container) 30%, transparent);
-  color: var(--secondary);
-  border: 1px solid color-mix(in srgb, var(--secondary-container) 50%, transparent);
-}
-.analytics-stock-pill.is-out {
-  background: var(--error-container);
-  color: var(--on-error-container);
-  border: 1px solid color-mix(in srgb, var(--error) 20%, transparent);
-}
-.analytics-order-number {
-  font-family: var(--font-display, inherit);
-  font-size: 13px;
-  color: var(--primary);
-  font-weight: 600;
-}
-.analytics-profit-chip {
-  display: inline-flex;
-  padding: 2px 8px;
-  border-radius: 6px;
-  font-size: 12px;
-  font-weight: 500;
-  background: color-mix(in srgb, var(--secondary) 10%, transparent);
-  color: var(--secondary);
-}
-.analytics-profit-chip.is-negative {
-  background: color-mix(in srgb, var(--error) 10%, transparent);
-  color: var(--error);
-}
-.analytics-status-pill {
-  display: inline-flex;
-  padding: 2px 10px;
-  border-radius: 999px;
-  font-size: 12px;
-  font-weight: 600;
-}
-.analytics-date {
-  font-size: 13px;
-  color: var(--on-surface-variant);
-}
-
-/* ── Locked state (basic plans) ───────────────────────────────────────────── */
-.analytics-locked {
+/* Campaign */
+.campaign-summary {
   display: flex;
-  flex-direction: column;
-  align-items: center;
-  text-align: center;
-  gap: 8px;
-  background: var(--surface-container-lowest);
-  border: 1px solid var(--outline-variant);
-  border-radius: 16px;
-  padding: 40px 24px;
-}
-.analytics-locked-icon {
-  width: 72px;
-  height: 72px;
-  border-radius: 50%;
-  background: var(--surface-container-high);
-  color: var(--on-surface-variant);
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  margin-bottom: 4px;
-}
-.analytics-locked-icon .mk-icon {
-  font-size: 30px;
-}
-.analytics-locked h3 {
-  margin: 0;
-  font-size: 17px;
-  font-weight: 700;
-  color: var(--on-surface);
-}
-.analytics-locked p {
-  margin: 0 0 8px;
-  max-width: 460px;
-  font-size: 13px;
-  color: var(--on-surface-variant);
-}
-.analytics-locked-cta {
-  padding: 10px 22px;
-  border-radius: 10px;
-  background: var(--primary);
-  color: var(--on-primary);
-  font-size: 14px;
-  font-weight: 600;
-  text-decoration: none;
-  transition: background 0.15s;
-}
-.analytics-locked-cta:hover {
-  background: color-mix(in srgb, var(--primary) 88%, #000);
-}
-
-/* ── Orders details panel ─────────────────────────────────────────────────── */
-.analytics-orders-panel {
-  background: var(--surface-container-lowest);
-  border: 1px solid var(--outline-variant);
-  border-radius: 16px;
-  overflow: hidden;
-  box-shadow: 0 1px 2px rgba(20, 27, 43, 0.05);
-}
-.analytics-orders-head {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
   flex-wrap: wrap;
-  gap: 12px;
-  padding: 16px 20px;
-  border-bottom: 1px solid var(--outline-variant);
-  background: color-mix(in srgb, var(--surface-container-low) 50%, transparent);
+  gap: 16px;
+  margin-bottom: 16px;
+  font-size: 13px;
 }
-.analytics-orders-head h3 {
-  margin: 0;
-  font-size: 16px;
-  font-weight: 700;
-  color: var(--on-surface);
-}
-.analytics-orders-sub {
-  margin: 2px 0 0;
-  font-size: 12px;
-  color: var(--on-surface-variant);
-}
+.campaign-form { align-items: end; margin-block-end: 18px; }
+.campaign-form-action { display: flex; align-items: end; min-height: 40px; }
 
-/* ── Responsive ───────────────────────────────────────────────────────────── */
-@media (max-width: 900px) {
-  .analytics-chart-card.is-wide {
-    grid-column: auto;
-  }
-}
-/* ── Stitch segmented period control + error banner ───────────────────────── */
+/* Period segmented */
 .analytics-period-segmented {
   display: inline-flex;
   align-items: center;
@@ -497,7 +159,6 @@
   border-radius: 10px;
   padding: 4px;
   gap: 2px;
-  box-shadow: var(--shadow-sm);
 }
 .analytics-period-segmented button {
   padding: 7px 14px;
@@ -510,15 +171,10 @@
   cursor: pointer;
   font-family: var(--font-sans);
   white-space: nowrap;
-  transition: background 0.15s, color 0.15s;
-}
-.analytics-period-segmented button:hover {
-  background: var(--surface-container);
 }
 .analytics-period-segmented button.is-active {
   background: var(--primary-container);
   color: var(--on-primary-container);
-  box-shadow: var(--shadow-sm);
   font-weight: 700;
 }
 .analytics-error-banner {
@@ -531,46 +187,49 @@
   padding: 10px 16px;
   border-radius: 10px;
   font-size: 14px;
-  font-weight: 500;
 }
-.analytics-error-banner .mk-icon {
-  flex-shrink: 0;
+
+/* Responsive — tested breakpoints */
+@media (max-width: 1280px) {
+  .analytics-primary-grid { grid-template-columns: repeat(4, 1fr); }
+  .analytics-sales-grid { grid-template-columns: 2fr 1fr; }
 }
-.analytics-error-banner span {
-  flex: 1;
-}
-.analytics-error-banner button {
-  padding: 4px;
-  border: none;
-  border-radius: 9999px;
-  background: transparent;
-  color: inherit;
-  cursor: pointer;
-}
-.analytics-error-banner button:hover {
-  background: color-mix(in srgb, var(--error) 10%, transparent);
+@media (max-width: 1024px) {
+  .analytics-primary-grid { grid-template-columns: repeat(2, 1fr); }
+  .analytics-sales-grid { grid-template-columns: 1fr; }
+  .analytics-business-grid { grid-template-columns: repeat(2, 1fr); }
+  .analytics-ad-grid { grid-template-columns: repeat(2, 1fr); }
 }
 @media (max-width: 768px) {
-  .analytics-period-segmented {
-    width: 100%;
-    overflow-x: auto;
-  }
+  .analytics-primary-grid { grid-template-columns: repeat(2, 1fr); }
+  .analytics-business-grid { grid-template-columns: 1fr; }
+  .analytics-ad-grid { grid-template-columns: 1fr; }
+  .analytics-period-segmented { width: 100%; overflow-x: auto; }
+  .analytics-bars:not(.is-compact) .analytics-bar-col:nth-child(even) .analytics-bar-label { display: none; }
+}
+@media (max-width: 430px) {
+  .merchant-analytics-page { gap: 18px; }
+  .analytics-primary-grid { gap: 12px; }
+  .analytics-sales-grid, .analytics-business-grid, .analytics-ad-grid { gap: 12px; }
+}
+@media (max-width: 390px) {
+  .analytics-primary-grid { grid-template-columns: 1fr; }
+}
+@media (max-width: 360px) {
+  .analytics-bars { gap: 4px; }
 }
 
-/* Thinner/longer bar charts: keep axis labels readable without overlap. */
-.analytics-bar {
-  min-width: 4px;
+/* Ensure no horizontal scroll */
+.merchant-analytics-page,
+.analytics-primary-grid,
+.analytics-sales-grid,
+.analytics-business-grid,
+.analytics-ad-grid {
+  min-width: 0;
+  overflow: hidden;
 }
-
-@media (max-width: 760px) {
-  .analytics-bars:not(.is-compact) .analytics-bar-col:nth-child(even) .analytics-bar-label {
-    display: none;
-  }
-}
-
-@media (max-width: 480px) {
-  .analytics-bars:not(.is-compact) .analytics-bar-col:nth-child(3n + 2) .analytics-bar-label,
-  .analytics-bars:not(.is-compact) .analytics-bar-col:nth-child(3n) .analytics-bar-label {
-    display: none;
-  }
+.merchant-analytics-page .table-wrap,
+.merchant-analytics-page .table-scroll {
+  overflow-x: auto;
+  -webkit-overflow-scrolling: touch;
 }
