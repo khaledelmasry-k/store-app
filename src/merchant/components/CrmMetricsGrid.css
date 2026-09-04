@@ -1,0 +1,9 @@
+.crm-metrics-grid { display: grid; grid-template-columns: repeat(5, 1fr); gap: 10px; }
+.crm-metric-card { background: var(--surface-container); border: 1px solid var(--outline-variant); border-radius: 10px; padding: 12px; display: flex; flex-direction: column; gap: 4px; }
+.crm-metric-label { font-size: 11px; color: var(--text-on-surface-variant); }
+.crm-metric-value { font-size: 16px; font-weight: 700; color: var(--text-on-surface); font-variant-numeric: tabular-nums; }
+.crm-metric-sub { font-size: 11px; color: var(--text-on-surface-variant); }
+.crm-metric-card.is-skeleton { height: 72px; background: var(--surface-container-low); animation: pulse 1.2s infinite; }
+@media (max-width: 900px) { .crm-metrics-grid { grid-template-columns: repeat(2, 1fr); } }
+@media (max-width: 600px) { .crm-metrics-grid { grid-template-columns: 1fr; } }
+@keyframes pulse { 0%{opacity:.6} 50%{opacity:.3} 100%{opacity:.6} }

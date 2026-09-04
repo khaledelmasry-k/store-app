@@ -690,9 +690,15 @@ export const NAV_GROUPS: Record<'platform' | 'dashboard', NavGroup[]> = {
         },
         {
           to: '/dashboard/customers',
-          label: 'العملاء',
+          label: 'العملاء (CRM)',
           icon: 'groups',
           permission: 'customers:view',
+        },
+        {
+          to: '/dashboard/crm',
+          label: 'لوحة CRM',
+          icon: 'contacts',
+          permission: 'crm:view',
         },
       ],
     },

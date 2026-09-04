@@ -1,0 +1,14 @@
+.crm-followups { display: flex; flex-direction: column; gap: 16px; }
+.crm-followups-form { background: var(--surface-container-low); border: 1px solid var(--outline-variant); border-radius: 10px; padding: 14px; display: flex; flex-direction: column; gap: 10px; }
+.crm-followups-form h4 { margin: 0; font-size: 13px; font-weight: 700; color: var(--text-on-surface); }
+.crm-followups-list { display: flex; flex-direction: column; gap: 10px; }
+.crm-followup-row { background: var(--surface); border: 1px solid var(--outline-variant); border-radius: 10px; padding: 12px; }
+.crm-followup-row.is-overdue { border-color: var(--error); background: color-mix(in srgb, var(--error) 6%, var(--surface)); }
+.crm-followup-head { display: flex; align-items: center; justify-content: space-between; gap: 8px; }
+.crm-followup-due { display: inline-flex; align-items: center; gap: 6px; font-size: 12px; color: var(--text-on-surface); font-variant-numeric: tabular-nums; }
+.crm-followup-due small { color: var(--text-on-surface-variant); }
+.crm-followup-notes { margin: 8px 0 0; font-size: 12px; color: var(--text-on-surface-variant); line-height: 1.5; }
+.crm-followup-assignee { font-size: 11px; color: var(--text-on-surface-variant); }
+.crm-followup-actions { display: flex; gap: 6px; margin-top: 10px; }
+.crm-followup-result { margin: 8px 0 0; font-size: 12px; color: var(--primary); background: var(--surface-container); padding: 6px 8px; border-radius: 8px; }
+.crm-followups-loading { padding: 12px; font-size: 13px; color: var(--text-on-surface-variant); display: flex; gap: 8px; align-items: center; }

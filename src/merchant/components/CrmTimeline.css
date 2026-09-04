@@ -1,0 +1,14 @@
+.crm-timeline { display: flex; flex-direction: column; gap: 0; position: relative; padding-inline-start: 12px; }
+.crm-timeline::before { content: ''; position: absolute; inset-inline-start: 23px; top: 8px; bottom: 8px; width: 1px; background: var(--outline-variant); }
+.crm-timeline-row { display: flex; gap: 12px; padding: 10px 0; position: relative; }
+.crm-timeline-dot { width: 24px; height: 24px; flex-shrink: 0; border-radius: 9999px; background: var(--surface-container); border: 1px solid var(--outline-variant); display: flex; align-items: center; justify-content: center; color: var(--primary); z-index: 1; }
+.crm-timeline-dot .mk-icon { font-size: 14px; }
+.crm-timeline-content { flex: 1; min-width: 0; background: var(--surface-container-low); border: 1px solid var(--outline-variant); border-radius: 10px; padding: 10px 12px; }
+.crm-timeline-head { display: flex; align-items: center; justify-content: space-between; gap: 8px; }
+.crm-timeline-head strong { font-size: 13px; color: var(--text-on-surface); }
+.crm-timeline-time { font-size: 11px; color: var(--text-on-surface-variant); white-space: nowrap; }
+.crm-timeline-body { margin: 6px 0 0; font-size: 12px; color: var(--text-on-surface-variant); line-height: 1.5; white-space: pre-wrap; word-break: break-word; }
+.crm-timeline-meta { display: flex; gap: 6px; margin-top: 6px; flex-wrap: wrap; }
+.crm-timeline-type { font-size: 10px; padding: 2px 6px; border-radius: 9999px; background: var(--surface-variant); color: var(--text-on-surface-variant); }
+.crm-timeline-order { font-size: 11px; color: var(--primary); font-variant-numeric: tabular-nums; }
+.crm-timeline-loading { padding: 16px; display: flex; align-items: center; gap: 8px; color: var(--text-on-surface-variant); font-size: 13px; }

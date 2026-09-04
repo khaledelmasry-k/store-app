@@ -56,6 +56,7 @@ const MerchantCategories = lazy(() => import('./merchant/pages/Categories'))
 const MerchantOrders = lazy(() => import('./merchant/pages/Orders'))
 const MerchantOrderDetails = lazy(() => import('./merchant/pages/OrderDetails'))
 const MerchantCustomers = lazy(() => import('./merchant/pages/Customers'))
+const MerchantCrm = lazy(() => import('./merchant/pages/Crm'))
 const MerchantCoupons = lazy(() => import('./merchant/pages/Coupons'))
 const MerchantShipping = lazy(() => import('./merchant/pages/Shipping'))
 const MerchantAnalytics = lazy(() => import('./merchant/pages/Analytics'))
@@ -176,6 +177,7 @@ function MerchantRoutes() {
       <Route path="/orders" component={() => <MerchantOrders />} />
       <Route path="/orders/:id" component={MerchantOrderRoute} />
       <Route path="/customers" component={() => <MerchantCustomers />} />
+      <Route path="/crm" component={() => <MerchantCrm />} />
       <Route path="/coupons" component={() => <MerchantCoupons />} />
       <Route path="/shipping" component={() => <MerchantShipping />} />
       <Route path="/reports" component={() => <Redirect to="/dashboard/analytics" replace />} />
