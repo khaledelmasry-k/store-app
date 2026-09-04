@@ -1,6 +1,7 @@
 import { FunctionalComponent } from 'preact'
 import { useState } from 'preact/hooks'
 import { Icon } from './Icon'
+import productFallback from '../../../assets/brand/matjari-product-placeholder-v2.webp'
 
 interface Props {
   src?: string
@@ -11,6 +12,10 @@ interface Props {
   placeholderClassName?: string
   loading?: 'lazy' | 'eager'
   decoding?: 'async' | 'sync' | 'auto'
+  /** Branded visual used for commerce/product surfaces when no real photo exists. */
+  fallback?: 'icon' | 'product'
+  /** Called when the image fails to load (lets the parent swap to its own fallback). */
+  onError?: () => void
 }
 
 /**
@@ -25,11 +30,16 @@ export const SmartImage: FunctionalComponent<Props> = ({
   title,
   loading = 'lazy',
   decoding = 'async',
+  fallback = 'icon',
+  onError,
 }) => {
   const [failed, setFailed] = useState(false)
   const usable = src && !failed
 
   if (!usable) {
+    if (fallback === 'product') {
+      return <img src={productFallback} alt={alt} title={title} className={className || placeholderClassName} loading={loading} decoding={decoding} />
+    }
     return (
       <span
         className={`image-fallback ${placeholderClassName}`.trim()}
@@ -50,7 +60,10 @@ export const SmartImage: FunctionalComponent<Props> = ({
       className={className}
       loading={loading}
       decoding={decoding}
-      onError={() => setFailed(true)}
+      onError={() => {
+        setFailed(true)
+        onError?.()
+      }}
     />
   )
 }

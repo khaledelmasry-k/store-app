@@ -9,7 +9,7 @@ export function storeBaseUrl(): string {
   const configured = import.meta.env.VITE_STORE_BASE_URL as string | undefined
   if (configured) return configured.replace(/\/+$/, '').replace(/\/store$/, '')
   if (typeof window !== 'undefined' && window.location?.origin) return window.location.origin
-  return 'https://mk-store-app.web.app'
+  return 'https://mtjari.shop'
 }
 
 /**

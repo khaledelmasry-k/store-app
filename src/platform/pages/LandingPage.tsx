@@ -1,653 +1,75 @@
 import { FunctionalComponent } from 'preact'
 import { useEffect, useMemo, useState } from 'preact/hooks'
 import { Link } from 'wouter'
+import { BrandLogo } from '../../shared/components/brand/BrandLogo'
 import { Button } from '../../shared/components/ui/Button'
-import { BrandMark } from '../../shared/components/brand/BrandMark'
-import { useCollection } from '../../shared/hooks/useCollection'
-import { formatCurrency } from '../../shared/utils/format'
-import { EmptyState } from '../../shared/components/ui/EmptyState'
-import type { SubscriptionPlan } from '../../shared/types'
-import './LandingPage.css'
 import { Icon } from '../../shared/components/ui/Icon'
+import { CountdownTimer } from '../../shared/components/subscription/CountdownTimer'
+import { PricingCard } from '../../shared/components/subscription/PricingCard'
+import { useCollection } from '../../shared/hooks/useCollection'
+import { useTheme } from '../../shared/hooks/useTheme'
+import { CANONICAL_PLANS } from '../../shared/plans/catalog'
+import type { SubscriptionPlan } from '../../shared/types'
+import { setSeo } from '../../shared/utils/seo'
+import { getPublicPlatformConfigCallable, getPublicPromotionsCallable } from '../../shared/services/auth'
+import heroCommerceVisual from '../../assets/brand/matjari-hero-commerce-v2.webp'
+import dashboardShowcase from '../../assets/brand/matjari-dashboard-showcase-v1.png'
+import './LandingPage.css'
 
 const NAV_LINKS = [
-  { href: '#features', label: 'المميزات' },
-  { href: '#how-it-works', label: 'كيف تعمل' },
-  { href: '#sales-links', label: 'روابط البيع' },
-  { href: '#pricing', label: 'الأسعار' },
-  { href: '#faq', label: 'الأسئلة الشائعة' },
+  { href: '#features', label: 'المميزات' }, { href: '#solutions', label: 'الحلول' },
+  { href: '#pricing', label: 'الأسعار' }, { href: '#how-it-works', label: 'كيف تعمل' },
+  { href: '#faq', label: 'الأسئلة الشائعة' }, { href: '#contact', label: 'تواصل معنا' },
 ]
-
-type FvKind = 'products' | 'orders' | 'customers' | 'inventory' | 'analytics' | 'sales' | 'team' | 'storefront'
-
-const FEATURES: { icon: string; title: string; desc: string; visual: FvKind }[] = [
-  { icon: 'inventory_2', title: 'إدارة المنتجات', desc: 'أضف منتجاتك مع الصور والمتغيرات والأسعار، وحدّثها بسهولة ليبقى متجرك محدثاً دائماً.', visual: 'products' },
-  { icon: 'receipt_long', title: 'إدارة الطلبات', desc: 'تابع الطلبات من لحظة وصولها حتى التسليم، وحدّث الحالة بنقرة واحدة ليصل العميل لما طلب.', visual: 'orders' },
-  { icon: 'groups_2', title: 'إدارة العملاء', desc: 'احتفظ بسجل كامل لعملائك وتاريخ مشترياتهم، وأرسل لهم بثقة أكبر في كل مرة.', visual: 'customers' },
-  { icon: 'inventory', title: 'إدارة المخزون', desc: 'راقب مستويات المخزون وتلقّ تنبيهات عند النفاد حتى لا تفوتك أي عملية بيع.', visual: 'inventory' },
-  { icon: 'analytics', title: 'التقارير والتحليلات', desc: 'اعرف إيراداتك وطلباتك وأداء متجرك في لوحة واحدة، واتخذ قرارات مبنية على أرقام حقيقية.', visual: 'analytics' },
-  { icon: 'link', title: 'روابط البيع', desc: 'أنشئ رابط تتبع فريداً لكل بائع أو مسوّق واعرف بالضبط من جلب لك كل عملية بيع.', visual: 'sales' },
-  { icon: 'group_add', title: 'فريق العمل', desc: 'أضف أعضاء فريقك مع صلاحيات محددة لكل عضو، واسمح لكل شخص بإدارة مهامه بدقة.', visual: 'team' },
-  { icon: 'store', title: 'إدارة المتاجر', desc: 'أدر هوية متجرك ورابطه وعملتك وإعداداته من مكان واحد، واجعل متجرك يعبّر عن علامتك التجارية.', visual: 'storefront' },
-]
-
-const STEPS = [
-  { num: '01', title: 'أنشئ حسابك', desc: 'سجّل في دقائق بدون أي خبرة تقنية وابدأ رحلتك.' },
-  { num: '02', title: 'اختر خطتك', desc: 'اختر الباقة المناسبة لمرحلة نمو متجرك.' },
-  { num: '03', title: 'أنشئ متجرك وأضف منتجاتك', desc: 'خصص اسم متجرك ورابطه، وأضف منتجاتك بسهولة.' },
-  { num: '04', title: 'ابدأ البيع وتابع النتائج', desc: 'استقبل الطلبات، أدر مبيعاتك، وتابع أداء متجرك في الوقت الحقيقي.' },
-]
-
-const SALES_LINK_STEPS = [
-  { icon: 'add_link', title: 'أنشئ رابطاً لكل بائع', desc: 'اربط كل بائع أو مسوّق برابط فريد يخصه وحده.' },
-  { icon: 'share', title: 'شاركه في أي مكان', desc: 'ينشر البائع رابطك على واتساب أو تيك توك أو أي قناة يحبها.' },
-  { icon: 'shopping_cart', title: 'يصل العميل ويشتري', desc: 'يدخل العميل عبر الرابط ويتم تسجيل الزيارة تلقائياً.' },
-  { icon: 'query_stats', title: 'تابع النتائج', desc: 'تعرف عدد الزيارات والطلبات والإيرادات لكل بائع بدقة.' },
-]
-
+const FEATURES = [
+  ['inventory_2', 'إدارة المنتجات', 'أنشئ منتجاتك ومتغيراتها وأسعارها من مساحة واحدة.'],
+  ['receipt_long', 'الطلبات والعملاء', 'تابع الطلبات وبيانات العملاء في سير عمل واضح.'],
+  ['inventory', 'المخزون والمتغيرات', 'اعرف ما يتوفر لديك وتلقَّ تنبيهات المخزون المهمة.'],
+  ['local_offer', 'العروض والكوبونات', 'أطلق عروضك وكوبوناتك بمرونة تناسب متجرك.'],
+  ['analytics', 'التحليلات والأرباح', 'افهم المبيعات والتكلفة والربح بقرارات مبنية على بياناتك.'],
+  ['link', 'روابط البيع وصفحات الهبوط', 'شارك منتجاتك وتتبع مصادر البيع والحملات بسهولة.'],
+] as const
 const FAQS = [
-  { q: 'هل أحتاج إلى خبرة تقنية؟', a: 'لا، المنصة مصممة لتكون سهلة الاستخدام ولا تتطلب أي معرفة تقنية. يمكنك إنشاء متجرك وإضافة منتجاتك وإدارة طلباتك من لوحة تحكم بسيطة وواضحة.' },
-  { q: 'كيف تبدأ الطلبات بالوصول إلي؟', a: 'بعد إنشاء متجرك وإضافة منتجاتك، يمكن للعملاء زيارة رابط متجرك والبدء في الشراء مباشرة، وتصلك الطلبات فوراً في لوحة التحكم لتتمكن من إدارتها.' },
-  { q: 'هل يمكنني إضافة فريق عمل؟', a: 'نعم، يمكنك دعوة أعضاء فريقك وتحديد صلاحيات كل عضو، بحيث يدير كلٌّ مسؤولياته (مثل المنتجات أو المبيعات) ضمن نطاق محدد وآمن.' },
-  { q: 'ما هي روابط البيع وهل أستطيع متابعة أداء كل بائع؟', a: 'روابط البيع تتيح لك إنشاء رابط تتبع فريد لكل بائع أو مسوّق. تحصل على أرقام دقيقة لكل رابط (الزيارات والطلبات والمبيعات) لتعرف من يحقق أفضل أداء.' },
-  { q: 'هل يمكنني إدارة أكثر من متجر؟', a: 'حالياً يدير كل حساب متجراً خاصاً به من لوحة تحكم واحدة. دعم إدارة أكثر من متجر هو ضمن خطة تطوير قادمة وسيُعلن عنه عند إطلاقه.' },
-  { q: 'كيف تعمل الاشتراكات؟', a: 'تختار الباقة المناسبة عند التسجيل ويتم تدوين اشتراكك، ثم تراجع منصة M&#38;K Store الطلب وتفعّل حسابك ومتجرك. جميع بياناتك آمنة ومعزولة تماماً.' },
+  ['هل أحتاج إلى خبرة تقنية؟', 'لا. تبدأ بخطوات بسيطة، وتدير المنتجات والطلبات من لوحة واضحة دون إعدادات معقدة.'],
+  ['هل يمكنني البدء مجاناً؟', 'نعم، توفر باقة Free أساسيات إدارة المتجر دون اشتراك شهري.'],
+  ['هل أستطيع الترقية لاحقاً؟', 'نعم، يمكنك اختيار باقة أخرى عندما تنمو احتياجات متجرك.'],
+  ['هل بيانات التكلفة والربح عامة؟', 'لا. تبقى بيانات التكلفة والربح داخل لوحة التاجر ولا تظهر لعملائك.'],
 ]
-
-const NAV_SIDEBAR_ICONS = ['space_dashboard', 'inventory_2', 'receipt_long', 'groups', 'query_stats', 'link', 'settings']
-
-const DM_ORDERS = [
-  { n: 'ORD-0001', c: 'جديد', t: 'blue' },
-  { n: 'ORD-0002', c: 'تم الشحن', t: 'amber' },
-  { n: 'ORD-0003', c: 'تم التسليم', t: 'green' },
-]
-
-const SALES_METRICS = [
-  { label: 'الزيارات', value: '12,480', icon: 'visibility' },
-  { label: 'الطلبات', value: '1,203', icon: 'receipt_long' },
-  { label: 'المبيعات', value: '2,940,000', icon: 'payments', hint: 'ر.س' },
-  { label: 'نسبة التحويل', value: '9.6%', icon: 'trending_up' },
-]
-
-// Lightweight, decorative feature visuals — CSS compositions built from the
-// real M&K design tokens. They are pure UI representations (aria-hidden) and
-// never claim to show real platform metrics.
-function FeatureVisual({ kind }: { kind: FvKind }) {
-  if (kind === 'products') {
-    return (
-      <div className="fv fv-products" aria-hidden="true">
-        {[
-          ['#6366f1', '#8b5cf6'],
-          ['#0ea5e9', '#38bdf8'],
-          ['#16a34a', '#4ade80'],
-        ].map((g, i) => (
-          <div className="fv-product" key={i}>
-            <span className="fv-thumb" style={{ background: `linear-gradient(135deg, ${g[0]}, ${g[1]})` }} />
-            <span className="fv-line" />
-            <span className="fv-line fv-line-short" />
-            <span className="fv-price">{formatCurrency([240, 320, 550][i])}</span>
-          </div>
-        ))}
-      </div>
-    )
-  }
-  if (kind === 'orders') {
-    return (
-      <div className="fv fv-orders" aria-hidden="true">
-        {DM_ORDERS.map((o, i) => (
-          <div className="fv-order" key={i}>
-            <span className="fv-order-num">{o.n}</span>
-            <span className="fv-line fv-line-grow" />
-            <span className={`fv-chip fv-chip-${o.t}`}>{o.c}</span>
-          </div>
-        ))}
-      </div>
-    )
-  }
-  if (kind === 'customers') {
-    const rows = [
-      ['م', 'محمد أحمد', 'عميل دائم', '#8b5cf6'],
-      ['س', 'سارة علي', 'عميل جديد', '#0ea5e9'],
-      ['ك', 'كريم حسن', 'عميل جديد', '#16a34a'],
-    ]
-    return (
-      <div className="fv fv-customers" aria-hidden="true">
-        {rows.map((r, i) => (
-          <div className="fv-cust" key={i}>
-            <span className="fv-avatar" style={{ background: r[3] }}>{r[0]}</span>
-            <div className="fv-cust-mid">
-              <span className="fv-line fv-line-grow" style={{ width: `${58 - i * 6}%` }} />
-              <span className="fv-line fv-line-sm" style={{ width: '34%' }} />
-            </div>
-            <span className={`fv-chip ${i === 0 ? 'fv-chip-violet' : 'fv-chip-blue'}`}>{r[2]}</span>
-          </div>
-        ))}
-      </div>
-    )
-  }
-  if (kind === 'inventory') {
-    const rows = [
-      ['مخزون كافٍ', '82%', 'green'],
-      ['مخزون منخفض', '38%', 'amber'],
-      ['قارب على النفاد', '12%', 'red'],
-    ]
-    return (
-      <div className="fv fv-inventory" aria-hidden="true">
-        {rows.map((r, i) => (
-          <div className="fv-inv-row" key={i}>
-            <span className="fv-line fv-line-grow" style={{ width: '40%' }} />
-            <span className="fv-inv-track"><span className={`fv-inv-fill fv-inv-fill-${r[2]}`} style={{ width: r[1] }} /></span>
-            <span className={`fv-chip fv-chip-${r[2]}`}>{r[0]}</span>
-          </div>
-        ))}
-      </div>
-    )
-  }
-  if (kind === 'analytics') {
-    return (
-      <div className="fv fv-analytics" aria-hidden="true">
-        <div className="fv-bars">
-          {[...Array(12)].map((_, i) => (
-            <span key={i} className="fv-bar" style={{ height: `${18 + ((i * 37) % 62)}%` }} />
-          ))}
-        </div>
-        <div className="fv-minikpis">
-          <span className="fv-mini"><i className="fv-dot fv-dot-green" />مبيعات</span>
-          <span className="fv-mini"><i className="fv-dot fv-dot-blue" />طلبات</span>
-          <span className="fv-mini"><i className="fv-dot fv-dot-violet" />عملاء جدد</span>
-        </div>
-      </div>
-    )
-  }
-  if (kind === 'sales') {
-    const rows = [
-      ['رابط أحمد', 'facebook', 'whatsapp'],
-      ['رابط أحمد', 'whatsapp', 'instagram'],
-      ['رابط نور', 'tiktok', 'tiktok'],
-    ]
-    return (
-      <div className="fv fv-sales" aria-hidden="true">
-        {rows.map((r, i) => (
-          <div className="fv-sale" key={i}>
-            <span className="fv-link-chip"><Icon name="link" />{r[0]} · {r[1]}</span>
-            <span className="fv-line fv-line-sm" style={{ width: `${30 + i * 8}%` }} />
-          </div>
-        ))}
-      </div>
-    )
-  }
-  if (kind === 'team') {
-    const rows = [
-      ['ن', 'نور', 'violet', ['منتجات', 'طلبات']],
-      ['م', 'منى', 'blue', ['طلبات', 'عملاء']],
-      ['ع', 'عمر', 'green', ['مخزون']],
-    ]
-    return (
-      <div className="fv fv-team" aria-hidden="true">
-        {rows.map((r, i) => (
-          <div className="fv-member" key={i}>
-            <span className={`fv-avatar fv-avatar-${r[2]}`}>{r[0]}</span>
-            <div className="fv-cust-mid">
-              <span className="fv-line fv-line-grow" style={{ width: '42%' }} />
-              <span className="fv-perms">
-                {(r[3] as string[]).map((p, j) => (
-                  <span key={j} className="fv-chip fv-chip-slate">{p}</span>
-                ))}
-              </span>
-            </div>
-          </div>
-        ))}
-      </div>
-    )
-  }
-  return (
-    <div className="fv fv-storefront" aria-hidden="true">
-      <div className="fv-store-head">
-        <span className="fv-thumb fv-thumb-sm" style={{ background: 'linear-gradient(135deg, #6366f1, #8b5cf6)' }} />
-        <div className="fv-cust-mid">
-          <span className="fv-line fv-line-grow" style={{ width: '52%' }} />
-          <span className="fv-line fv-line-sm" style={{ width: '62%' }} />
-        </div>
-        <span className="fv-chip fv-chip-green">منشور</span>
-      </div>
-      <div className="fv-store-items">
-        {['#eef2ff', '#ecfeff', '#ecfdf5'].map((c, i) => (
-          <span key={i} className="fv-store-item" style={{ background: c }} />
-        ))}
-      </div>
-    </div>
-  )
+function offerIsPubliclyAvailable(plan: SubscriptionPlan) { if (plan.isPubliclyAvailable === false) return false; const raw: any = plan.launchOfferEndsAt; if (!raw) return true; const ms = typeof raw.toDate === 'function' ? raw.toDate().getTime() : typeof raw.seconds === 'number' ? raw.seconds * 1000 : new Date(raw).getTime(); return !Number.isFinite(ms) || ms > Date.now() }
+function DashboardShowcase() {
+  return <figure className="landing-dashboard-showcase" aria-label="معاينة احترافية لمنظومة متجري"><img src={dashboardShowcase} alt="معاينة احترافية لإدارة المنتجات والطلبات والمخزون والتحليلات" loading="lazy" width="1536" height="1024" /></figure>
 }
-
+/* Legacy mockup retained for compatibility with older style tokens. */
+function _DashboardMockup() {
+  return <div className="landing-mockup" aria-label="معاينة لوحة تحكم متجري"><div className="landing-mockup-bar"><i /><i /><i /><span>لوحة تحكم متجري</span></div><div className="landing-mockup-body"><aside><b /><span /><span /><span /><span /><span /></aside><div className="landing-mockup-main"><div className="landing-mockup-heading"><span>نظرة عامة</span><small>هذا الشهر</small></div><div className="landing-mockup-stats"><div><small>المبيعات</small><strong>24,580 ج.م</strong><em>+18.4%</em></div><div><small>الطلبات</small><strong>248</strong><em>+12%</em></div><div><small>الأرباح</small><strong>8,420 ج.م</strong><em>+9.2%</em></div></div><div className="landing-mockup-chart"><div className="landing-chart-bars">{[35, 52, 44, 68, 58, 78, 64, 88, 72].map((height, i) => <i key={i} style={{ height: `${height}%` }} />)}</div><span>أداء المبيعات</span></div></div></div></div>
+}
+function HeroCommerceVisual() {
+  return <figure className="landing-hero-visual" aria-label="منظومة متجري لإدارة البيع والمخزون والشحن والتحليلات">
+    <span className="landing-hero-visual-orbit landing-hero-visual-orbit--one" aria-hidden="true" />
+    <span className="landing-hero-visual-orbit landing-hero-visual-orbit--two" aria-hidden="true" />
+    <img src={heroCommerceVisual} alt="متجر إلكتروني متكامل مع المنتجات والمخزون والشحن والدفع والتحليلات" width="1536" height="1024" fetchPriority="high" />
+  </figure>
+}
 export const LandingPage: FunctionalComponent = () => {
-  const [openFaq, setOpenFaq] = useState<number | null>(0)
-  const [menuOpen, setMenuOpen] = useState(false)
-  const plansRes = useCollection<SubscriptionPlan>('plans', { orderBy: { field: 'priceMonthly' } })
-  const plans = useMemo(() => plansRes.data.filter((p) => p.active !== false), [plansRes.data])
-
-  useEffect(() => {
-    const els = Array.from(document.querySelectorAll<HTMLElement>('.reveal'))
-    if (typeof IntersectionObserver === 'undefined') {
-      els.forEach((el) => el.classList.add('in-view'))
-      return
-    }
-    const io = new IntersectionObserver(
-      (entries) => {
-        for (const e of entries) {
-          if (e.isIntersecting) {
-            e.target.classList.add('in-view')
-            io.unobserve(e.target)
-          }
-        }
-      },
-      { threshold: 0.12 },
-    )
-    els.forEach((el) => io.observe(el))
-    return () => io.disconnect()
-  }, [])
-
-  const toggleFaq = (i: number) => setOpenFaq(openFaq === i ? null : i)
-
-  const goToAnchor = (href: string) => (e: MouseEvent) => {
-    if (href.startsWith('#')) {
-      e.preventDefault()
-      const el = document.getElementById(href.slice(1))
-      if (el) {
-        const reduce = typeof window.matchMedia === 'function' && window.matchMedia('(prefers-reduced-motion: reduce)').matches
-        el.scrollIntoView({ behavior: reduce ? 'auto' : 'smooth', block: 'start' })
-      }
-    }
-    setMenuOpen(false)
-  }
-
-  return (
-    <div className="landing" dir="rtl">
-      <header className="landing-header">
-        <div className="landing-container landing-header-inner">
-          <a href="/" className="landing-brand">
-            <BrandMark small />
-            <span>M&amp;K Store</span>
-          </a>
-
-          <button
-            type="button"
-            className="landing-menu-toggle"
-            aria-label="القائمة"
-            aria-expanded={menuOpen}
-            onClick={() => setMenuOpen((v) => !v)}
-          >
-            <Icon name={menuOpen ? 'close' : 'menu'} />
-          </button>
-
-          <nav className={`landing-nav${menuOpen ? ' open' : ''}`} aria-label="التنقل الرئيسي">
-            <a href="/" className="landing-nav-link" onClick={() => setMenuOpen(false)}>الرئيسية</a>
-            {NAV_LINKS.map((l) => (
-              <a key={l.href} href={l.href} onClick={goToAnchor(l.href)} className="landing-nav-link">{l.label}</a>
-            ))}
-            <div className="landing-nav-actions">
-              <Link href="/login" className="landing-nav-btn landing-nav-btn-ghost">تسجيل الدخول</Link>
-              <Link href="/register" className="landing-nav-btn landing-nav-btn-primary">ابدأ مجاناً</Link>
-            </div>
-          </nav>
-        </div>
-      </header>
-
-      <main className="landing-main">
-        <section className="landing-hero">
-          <div className="landing-container">
-            <div className="hero-grid">
-              <div className="hero-content reveal">
-                <span className="hero-eyebrow">منصة التجارة الإلكترونية المتكاملة</span>
-                <h1>أنشئ متجرك الإلكتروني وأدر مبيعاتك من مكان واحد</h1>
-                <p>
-                  منصة M&amp;K Store تمنحك الأدوات التي تحتاجها لإدارة المنتجات والطلبات والعملاء والمخزون
-                  والمبيعات، بدون تعقيد.
-                </p>
-                <div className="hero-actions">
-                  <Link href="/register">
-                    <Button size="lg" icon="rocket_launch">ابدأ متجرك الآن</Button>
-                  </Link>
-                  <a href="#features" className="hero-cta-secondary" onClick={goToAnchor('#features')}>
-                    <Button size="lg" variant="secondary" icon="visibility">استكشف المنصة</Button>
-                  </a>
-                </div>
-                <div className="hero-trust">
-                  <Icon name="verified_user" ariaHidden />
-                  متجر، لوحة تحكم، وروابط بيع — كل شيء في مكان واحد
-                </div>
-              </div>
-
-              <div className="hero-visual reveal" aria-hidden="true">
-                <div className="dash-mockup">
-                  <div className="dash-mockup-side">
-                    <span className="dm-brand">MK</span>
-                    {NAV_SIDEBAR_ICONS.map((ic) => (
-                      <span key={ic} className="dm-nav-item"><Icon name={ic} /></span>
-                    ))}
-                  </div>
-                  <div className="dash-mockup-main">
-                    <div className="dm-topbar">
-                      <span className="dm-store"><span className="dm-store-dot" />بيت الشاي</span>
-                      <span className="dm-url">beit-el-shay.store</span>
-                    </div>
-                    <div className="dm-kpis">
-                      {['طلبات اليوم', 'مبيعات اليوم', 'المنتجات', 'العملاء'].map((k) => (
-                        <div className="dm-kpi" key={k}>
-                          <span className="dm-kpi-label">{k}</span>
-                          <span className="dm-kpi-bar" />
-                        </div>
-                      ))}
-                    </div>
-                    <div className="dm-chart">
-                      {[...Array(12)].map((_, i) => (
-                        <span key={i} className="dm-chart-bar" style={{ height: `${18 + ((i * 37) % 60)}%` }} />
-                      ))}
-                    </div>
-                    <div className="dm-orders">
-                      {DM_ORDERS.map((o, i) => (
-                        <div className="dm-order" key={i}>
-                          <span className="dm-order-num">{o.n}</span>
-                          <span className="dm-order-line" />
-                          <span className={`dm-chip dm-chip-${o.t}`}>{o.c}</span>
-                        </div>
-                      ))}
-                    </div>
-                  </div>
-                  <div className="dm-float dm-float-store">
-                    <span className="dm-float-thumb" style={{ background: 'linear-gradient(135deg, #0ea5e9, #38bdf8)' }} />
-                    <div className="dm-float-mid">
-                      <span className="dm-float-line" />
-                      <span className="dm-float-line dm-float-line-sm" />
-                    </div>
-                    <span className="dm-float-price">ج.م 320</span>
-                  </div>
-                  <span className="dm-float dm-float-chip dm-chip-green">طلب جديد</span>
-                </div>
-                <p className="hero-preview-caption">لقطة تمثيلية من لوحة تحكم M&amp;K Store</p>
-              </div>
-            </div>
-          </div>
-        </section>
-
-        <section className="landing-trust-strip" aria-label="مزايا أساسية">
-          <div className="landing-container trust-strip-inner">
-            {[
-              { icon: 'storefront', label: 'متجرك' },
-              { icon: 'receipt_long', label: 'طلباتك' },
-              { icon: 'groups', label: 'عملاؤك' },
-              { icon: 'group_add', label: 'فريقك' },
-              { icon: 'query_stats', label: 'مبيعاتك' },
-            ].map((t) => (
-              <div className="trust-strip-item" key={t.label}>
-                <Icon name={t.icon} ariaHidden />
-                <span>{t.label}</span>
-              </div>
-            ))}
-            <p className="trust-strip-tagline">كل ذلك في منصة واحدة</p>
-          </div>
-        </section>
-
-        <section id="features" className="landing-section landing-section-soft">
-          <div className="landing-container">
-            <div className="section-head reveal">
-              <span className="section-eyebrow">المميزات</span>
-              <h2>كل ما تحتاجه لإدارة متجرك</h2>
-              <p className="section-subtitle">أدوات متكاملة صُممت لتنمي مبيعاتك وتوفر عليك الوقت والجهد.</p>
-            </div>
-            <div className="features-grid">
-              {FEATURES.map((f) => (
-                <div className="feature-card lp-card reveal" key={f.title}>
-                  <div className="feature-visual">
-                    <FeatureVisual kind={f.visual} />
-                  </div>
-                  <div className="feature-body">
-                    <span className="feature-icon"><Icon name={f.icon} ariaHidden /></span>
-                    <h3>{f.title}</h3>
-                    <p>{f.desc}</p>
-                  </div>
-                </div>
-              ))}
-            </div>
-          </div>
-        </section>
-
-        <section id="how-it-works" className="landing-section">
-          <div className="landing-container">
-            <div className="section-head reveal">
-              <span className="section-eyebrow">كيف تعمل</span>
-              <h2>ابدأ في أربع خطوات بسيطة</h2>
-              <p className="section-subtitle">من التسجيل إلى أول عملية بيع — أسرع مما تتوقع.</p>
-            </div>
-            <div className="steps-grid">
-              {STEPS.map((s) => (
-                <div className="step-item lp-card reveal" key={s.num}>
-                  <span className="step-indicator" aria-hidden="true">{s.num}</span>
-                  <h3>{s.title}</h3>
-                  <p>{s.desc}</p>
-                </div>
-              ))}
-            </div>
-          </div>
-        </section>
-
-        <section className="landing-section landing-section-soft landing-showcase">
-          <div className="landing-container">
-            <div className="showcase-grid">
-              <div className="reveal">
-                <span className="section-eyebrow">لوحة تحكم احترافية</span>
-                <h2>تحكّم كامل في متجرك من مكان واحد</h2>
-                <p>
-                  المبيعات، الطلبات، المخزون، العملاء، والتقارير — كلها في لوحة واحدة مصممة لتكون واضحة
-                  وسريعة. لا صفحات مبعثرة، ولا أدوات معقدة.
-                </p>
-                <ul className="showcase-list">
-                  <li><Icon name="check_circle" ariaHidden />مؤشرات أداء حقيقية فور الطلب</li>
-                  <li><Icon name="check_circle" ariaHidden />تنبيهات مخزون تلقائية</li>
-                  <li><Icon name="check_circle" ariaHidden />تقارير ورسوم بيانية فورية</li>
-                  <li><Icon name="check_circle" ariaHidden />صلاحيات دقيقة لفريق العمل</li>
-                </ul>
-              </div>
-              <div className="showcase-visual reveal">
-                <div className="stat-cards-grid">
-                  {['المبيعات', 'الطلبات', 'المنتجات', 'العملاء'].map((label) => (
-                    <div className="stat-card lp-card" key={label}>
-                      <span className="stat-card-label">{label}</span>
-                      <span className="stat-card-line" />
-                    </div>
-                  ))}
-                </div>
-              </div>
-            </div>
-          </div>
-        </section>
-
-        <section id="sales-links" className="landing-section landing-sales-links">
-          <div className="landing-container">
-            <div className="section-head reveal">
-              <span className="section-eyebrow">روابط البيع</span>
-              <h2>خلّي كل عملية بيع قابلة للتتبع</h2>
-              <p className="section-subtitle">
-                أنشئ لكل بائع أو مسوّق رابطاً خاصاً به، واعرف من أين جاءت طلباتك ومن يحقق أفضل أداء — بدون
-                أي حسابات يدوية.
-              </p>
-            </div>
-            <div className="sales-steps-grid">
-              {SALES_LINK_STEPS.map((s) => (
-                <div className="sales-step-card lp-card reveal" key={s.title}>
-                  <span className="sales-step-icon"><Icon name={s.icon} ariaHidden /></span>
-                  <h3>{s.title}</h3>
-                  <p>{s.desc}</p>
-                </div>
-              ))}
-            </div>
-            <p className="sales-links-note">
-              بائع واحد، عدة قنوات: أحمد / Facebook، أحمد / WhatsApp، أحمد / TikTok — كل رابط بأرقامه الخاصة.
-            </p>
-            <div className="sales-metrics">
-              {SALES_METRICS.map((m) => (
-                <div className="sales-metric lp-card" key={m.label}>
-                  <span className="sales-metric-icon"><Icon name={m.icon} ariaHidden /></span>
-                  <div className="sales-metric-text">
-                    <span className="sales-metric-value">{m.value}{m.hint ? <small>{m.hint}</small> : null}</span>
-                    <span className="sales-metric-label">{m.label}</span>
-                  </div>
-                </div>
-              ))}
-            </div>
-            <p className="sales-metrics-demo">
-              <span className="demo-tag">عرض توضيحي</span>
-              الأرقام أعلاه مثال من واجهة روابط البيع لتوضيح شكل التقرير — وليست إحصائيات فعلية.
-            </p>
-          </div>
-        </section>
-
-        <section id="pricing" className="landing-section landing-section-soft">
-          <div className="landing-container">
-            <div className="section-head reveal">
-              <span className="section-eyebrow">الأسعار</span>
-              <h2>اختر الخطة المناسبة لنمو متجرك</h2>
-              <p className="section-subtitle">باقات مرنة تناسب كل مرحلة من مراحل نمو متجرك.</p>
-            </div>
-            {plans.length === 0 ? (
-              <EmptyState
-                icon="workspace_premium"
-                title="الباقات قيد الإعداد"
-                description="يتم حالياً إعداد خطط الاشتراك. سجّل الآن لتحصل على أول إشعار عند إطلاقها."
-                action={<Link href="/register"><Button icon="rocket_launch">ابدأ متجرك الآن</Button></Link>}
-              />
-            ) : (
-              <div className="pricing-grid">
-                {plans.map((p, idx) => {
-                  const isFeatured = idx === Math.floor(plans.length / 2)
-                  return (
-                    <div key={p.id} className={`pricing-card lp-card reveal${isFeatured ? ' pricing-featured' : ''}`}>
-                      {isFeatured && <div className="pricing-badge">الأكثر شيوعاً</div>}
-                      <h3>{p.name}</h3>
-                      <p className="pricing-desc">{p.description || 'باقة مميزة لإدارة متجرك'}</p>
-                      <div className="pricing-price">
-                        <span className="pricing-amount">
-                          {p.priceMonthly === 0 ? '0' : formatCurrency(p.priceMonthly)}
-                        </span>
-                        {p.priceMonthly > 0 && <span className="pricing-period">/شهرياً</span>}
-                      </div>
-                      <div className="pricing-limits-row">
-                        {typeof p.productLimit === 'number' && p.productLimit > 0 && (
-                          <p className="pricing-limits">حتى {p.productLimit} منتج</p>
-                        )}
-                        {typeof p.orderLimitPerMonth === 'number' && p.orderLimitPerMonth > 0 && (
-                          <p className="pricing-limits">حتى {p.orderLimitPerMonth} طلب شهرياً</p>
-                        )}
-                      </div>
-                      <ul className="pricing-features">
-                        {(p.features || []).map((f, fi) => (
-                          <li key={fi}><Icon name="check" ariaHidden />{f}</li>
-                        ))}
-                      </ul>
-                      <Link href={`/register?plan=${p.id}`} className="pricing-cta">
-                        <Button variant={isFeatured ? 'primary' : 'outline'} block icon="rocket_launch">
-                          ابدأ الآن
-                        </Button>
-                      </Link>
-                    </div>
-                  )
-                })}
-              </div>
-            )}
-          </div>
-        </section>
-
-        <section id="faq" className="landing-section">
-          <div className="landing-container">
-            <div className="section-head reveal">
-              <span className="section-eyebrow">الأسئلة الشائعة</span>
-              <h2>عندك سؤال؟ غالباً الجواب هنا</h2>
-            </div>
-            <div className="faq-list">
-              {FAQS.map((faq, i) => {
-                const open = openFaq === i
-                return (
-                  <div className={`faq-item${open ? ' open' : ''}`} key={i}>
-                    <button
-                      type="button"
-                      className="faq-question"
-                      onClick={() => toggleFaq(i)}
-                      aria-expanded={open}
-                      aria-controls={`faq-panel-${i}`}
-                      id={`faq-button-${i}`}
-                    >
-                      <span>{faq.q}</span>
-                      <Icon name="keyboard_arrow_down" className={`faq-icon${open ? ' rotate' : ''}`} ariaHidden />
-                    </button>
-                    <div
-                      id={`faq-panel-${i}`}
-                      role="region"
-                      aria-labelledby={`faq-button-${i}`}
-                      className="faq-answer"
-                      hidden={!open}
-                    >
-                      <p>{faq.a}</p>
-                    </div>
-                  </div>
-                )
-              })}
-            </div>
-          </div>
-        </section>
-
-        <section className="landing-cta">
-          <div className="landing-container">
-            <h2>جاهز تبدأ البيع بشكل أكثر احترافية؟</h2>
-            <p>أنشئ متجرك، أضف منتجاتك، وابدأ في استقبال الطلبات من مكان واحد.</p>
-            <div className="cta-actions">
-              <Link href="/register">
-                <Button size="lg" icon="rocket_launch">ابدأ متجرك الآن</Button>
-              </Link>
-              <a href="#pricing" onClick={goToAnchor('#pricing')}>
-                <Button size="lg" variant="secondary">تعرّف على الخطط</Button>
-              </a>
-            </div>
-          </div>
-        </section>
-      </main>
-
-      <footer className="landing-footer">
-        <div className="landing-container">
-          <div className="footer-grid">
-            <div className="footer-brand">
-              <BrandMark small />
-              <div>
-                <strong>M&amp;K Store</strong>
-                <p>منصة متكاملة لإدارة متاجر التجارة الإلكترونية.</p>
-              </div>
-            </div>
-            <div className="footer-col">
-              <h4>المنتج</h4>
-              <a href="#features" onClick={goToAnchor('#features')}>المميزات</a>
-              <a href="#how-it-works" onClick={goToAnchor('#how-it-works')}>كيف تعمل</a>
-              <a href="#pricing" onClick={goToAnchor('#pricing')}>الأسعار</a>
-              <a href="#faq" onClick={goToAnchor('#faq')}>الأسئلة الشائعة</a>
-            </div>
-            <div className="footer-col">
-              <h4>الحساب</h4>
-              <a href="/login">تسجيل الدخول</a>
-              <a href="/register">إنشاء حساب</a>
-            </div>
-            <div className="footer-col">
-              <h4>الدعم</h4>
-              <a href="#faq" onClick={goToAnchor('#faq')}>مركز المساعدة</a>
-              <a href="/contact">تواصل معنا</a>
-            </div>
-            <div className="footer-col">
-              <h4>قانوني</h4>
-              <a href="/privacy">سياسة الخصوصية</a>
-              <a href="/terms">شروط الاستخدام</a>
-            </div>
-          </div>
-          <p className="footer-copy">© {new Date().getFullYear()} M&amp;K Store. جميع الحقوق محفوظة.</p>
-        </div>
-      </footer>
-    </div>
-  )
+  const [menuOpen, setMenuOpen] = useState(false); const [yearly, setYearly] = useState(false)
+  const [enterpriseContact, setEnterpriseContact] = useState<{ number: string; enabled: boolean; message: string } | null>(null); const [promotions, setPromotions] = useState<any[]>([]); const theme = useTheme()
+  useEffect(() => { setSeo({ title: 'Matjari | متجري', description: 'أنشئ متجرك وأدر تجارتك الإلكترونية من مكان واحد.', type: 'website' }); getPublicPromotionsCallable().then((r: any) => setPromotions(r.data?.promotions || [])).catch(() => setPromotions([])); let mounted = true; getPublicPlatformConfigCallable().then((res) => { const data = res.data as any; if (mounted) setEnterpriseContact({ number: String(data?.enterpriseWhatsAppNumber || ''), enabled: data?.enterpriseWhatsAppEnabled === true, message: String(data?.enterpriseWhatsAppMessage || 'مرحبًا، أرغب في الحصول على عرض سعر لحلول Enterprise / White Label من Matjari.') }) }).catch(() => { if (mounted) setEnterpriseContact(null) }); return () => { mounted = false } }, [])
+  const plansRes = useCollection<SubscriptionPlan>('plans', {}); const plans = useMemo(() => CANONICAL_PLANS.map((canonical) => { const live = plansRes.data.find((plan) => plan.id === canonical.id || plan.name?.toLowerCase() === canonical.name.toLowerCase()); return live ? { ...canonical, ...live, id: canonical.id, sortOrder: canonical.sortOrder } : canonical }), [plansRes.data])
+  const subscriptionPlans = plans.filter((plan) => plan.billingModel !== 'one_time' && plan.active !== false && plan.isPurchasable !== false && plan.archived !== true); const lifetimeOffer = plans.find((plan) => plan.billingModel === 'one_time' && plan.isLaunchOffer !== false && plan.active !== false && plan.isPurchasable !== false && plan.archived !== true && offerIsPubliclyAvailable(plan)); const publicPromotion = promotions.find((p) => p.placement === 'pricing' && p.planId && p.promotionalPrice != null)
+  const goTo = (href: string) => (event: MouseEvent) => { if (href.startsWith('#')) { event.preventDefault(); document.getElementById(href.slice(1))?.scrollIntoView({ behavior: 'smooth', block: 'start' }) }; setMenuOpen(false) }
+  return <div className="landing" dir="rtl">
+    <header className="landing-header"><div className="landing-container landing-header-inner"><a href="/" className="landing-brand" aria-label="Matjari"><BrandLogo className="landing-primary-logo" /></a><button type="button" className="landing-menu-toggle" aria-label="القائمة" aria-expanded={menuOpen} onClick={() => setMenuOpen((open) => !open)}><Icon name={menuOpen ? 'close' : 'menu'} /></button><nav className={`landing-nav${menuOpen ? ' open' : ''}`} aria-label="التنقل الرئيسي">{NAV_LINKS.map((link) => <a key={link.label} href={link.href} className="landing-nav-link" onClick={goTo(link.href)}>{link.label}</a>)}<button type="button" className="landing-theme-toggle" aria-label="تبديل السمة" onClick={theme.toggle}><Icon name={theme.theme === 'dark' ? 'light_mode' : 'dark_mode'} /></button><Link href="/login" className="landing-nav-btn landing-nav-btn-ghost">تسجيل الدخول</Link><Link href="/register" className="landing-nav-btn landing-nav-btn-primary">ابدأ مجانًا</Link></nav></div></header>
+    <main>
+      <section className="landing-hero stitch-hero" aria-labelledby="landing-title"><div className="landing-container landing-hero-inner"><div className="landing-hero-copy"><span className="landing-eyebrow stitch-release-pill">منصة متكاملة لأصحاب التجارة الإلكترونية</span><h1 id="landing-title">كل ما تحتاجه لإدارة<br /><em>تجارتك الإلكترونية</em></h1><p>أنشئ متجرك، أدر منتجاتك وطلباتك ومبيعاتك، وتابع أرباحك من مكان واحد.</p><div className="landing-hero-actions"><Link href="/register"><Button icon="arrow_back">ابدأ مجانًا</Button></Link><a href="#features" onClick={goTo('#features')}>اكتشف المنصة <Icon name="arrow_downward" /></a></div></div><HeroCommerceVisual /></div></section>
+      <section className="landing-stats" aria-label="حقائق عن متجري"><div className="landing-container landing-stats-grid">{[['5', 'باقات مرنة'], ['3 أيام', 'تجربة مجانية للباقات المدفوعة'], ['24/7', 'متجرك متاح لعملائك'], ['1', 'لوحة تحكم موحدة']].map(([value, label]) => <div className="landing-stat" key={label}><strong>{value}</strong><span>{label}</span></div>)}</div></section>
+      <section id="features" className="landing-section landing-features"><div className="landing-container"><div className="landing-section-heading"><span>المميزات</span><h2>كل ما تحتاجه لإدارة متجرك</h2><p>منصة متكاملة تجمع عمليات البيع والإدارة في مكان واحد.</p></div><div className="landing-feature-grid">{FEATURES.map(([icon, title, description]) => <article className="landing-feature-card stitch-capability-card" key={title}><span className="landing-feature-icon stitch-capability-icon"><Icon name={icon} /></span><h3>{title}</h3><p>{description}</p></article>)}</div></div></section>
+      <section id="how-it-works" className="landing-section landing-steps"><div className="landing-container"><div className="landing-section-heading"><span>كيف تعمل</span><h2>كيف تعمل متجري؟</h2><p>ثلاث خطوات بسيطة لبدء البيع.</p></div><div className="landing-steps-grid">{[['01', 'أنشئ متجرك', 'سجّل حسابك واختر الهوية المناسبة لمتجرك.'], ['02', 'أضف منتجاتك واضبط إعداداتك', 'أدخل منتجاتك وأسعارك ومخزونك في دقائق.'], ['03', 'انشر وابدأ استقبال الطلبات', 'انشر واجهتك وابدأ استقبال الطلبات من عملائك.']].map(([number, title, text]) => <article className="landing-step" key={number}><strong>{number}</strong><h3>{title}</h3><p>{text}</p></article>)}</div></div></section>
+      <section id="solutions" className="landing-section landing-value"><div className="landing-container landing-value-grid"><div className="landing-value-copy"><span>حلول متجري</span><h2>كل تجارتك من مساحة تشغيل واحدة</h2><p>تابع المبيعات والطلبات والمخزون والأرباح وتكلفة الإعلان من مساحة تشغيل مصممة للتاجر.</p><ul><li><Icon name="check_circle" />بيانات واضحة لاتخاذ قرارات أسرع</li><li><Icon name="check_circle" />إدارة آمنة للمنتجات والطلبات</li><li><Icon name="check_circle" />تقارير ربحية داخلية للتاجر</li></ul><Link href="/register" className="landing-inline-cta">ابدأ الآن <Icon name="arrow_back" /></Link></div><DashboardShowcase /></div></section>
+      <section id="pricing" className="landing-section landing-pricing"><div className="landing-container"><div className="landing-section-heading"><span>الأسعار</span><h2>اختر الباقة المناسبة لنموك</h2><p>ابدأ مجانًا، ثم طوّر أدواتك عندما يكبر متجرك.</p><div className="landing-billing-toggle" role="group" aria-label="دورة الفوترة"><button type="button" className={!yearly ? 'is-active' : ''} onClick={() => setYearly(false)}>شهري</button><button type="button" className={yearly ? 'is-active' : ''} onClick={() => setYearly(true)}>سنوي <small>وفر 20%</small></button></div></div>{publicPromotion && <div className="landing-promotion-banner"><div><strong>عرض خاص على {publicPromotion.planName || 'الباقة المختارة'}</strong><span>سعر ترويجي لفترة محدودة</span></div>{publicPromotion.endsAt && <CountdownTimer endsAt={publicPromotion.endsAt} label="ينتهي خلال" />}</div>}<div className="landing-pricing-grid stitch-pricing-grid">{subscriptionPlans.map((plan) => <div className="landing-plan-wrap stitch-plan-wrap" key={plan.id}><PricingCard plan={plan} yearly={yearly} featured={!!plan.isPopular} /><Link href={`/register?plan=${plan.id}`} className="landing-plan-link stitch-plan-link">اختر الخطة</Link></div>)}</div>{lifetimeOffer && <section className="landing-special-offer stitch-lifetime-offer"><div><span>عرض الاستخدام الدائم</span><h2>امتلك متجرك</h2><p>حق استخدام دائم لمتجر واحد داخل Matjari وفق المزايا والحدود المحددة.</p><Link href="/register?offer=lifetime" className="landing-special-cta stitch-offer-cta">اعرف المزيد</Link></div><PricingCard plan={lifetimeOffer} displayName="امتلك متجرك" /></section>}<section id="contact" className="landing-enterprise stitch-enterprise-offer"><div><span>حلول الأعمال</span><h2>Enterprise وWhite Label</h2><p>حلول مخصصة للفرق والمؤسسات مع هوية وتجربة تناسب احتياجك.</p></div>{enterpriseContact?.enabled && /^\d{8,15}$/.test(enterpriseContact.number) ? <a href={`https://wa.me/${enterpriseContact.number}?text=${encodeURIComponent(enterpriseContact.message)}`} target="_blank" rel="noopener noreferrer" className="landing-enterprise-cta">اطلب عرض سعر</a> : <button type="button" disabled className="landing-enterprise-cta">التواصل غير متاح حاليًا</button>}</section></div></section>
+      <section id="faq" className="landing-section landing-faq"><div className="landing-container"><div className="landing-section-heading"><span>الأسئلة الشائعة</span><h2>إجابات واضحة قبل أن تبدأ</h2></div><div className="landing-faq-list rich-faq-list">{FAQS.map(([question, answer]) => <details key={question}><summary>{question}<Icon name="keyboard_arrow_down" /></summary><p>{answer}</p></details>)}</div></div></section>
+      <section className="landing-final-cta stitch-final-cta"><div className="landing-container"><span>ابدأ اليوم</span><h2>جاهز تبدأ متجرك؟</h2><p>أنشئ متجرك خلال دقائق وابدأ إدارة تجارتك بثقة.</p><Link href="/register"><Button icon="rocket_launch">ابدأ الآن مجانًا</Button></Link></div></section>
+    </main>
+    <footer className="landing-footer stitch-footer-band"><div className="landing-container landing-footer-grid"><div className="landing-footer-brand"><BrandLogo className="landing-footer-logo" /><p>منصة متكاملة لإدارة تجارتك الإلكترونية.</p></div><div><h3>المنتج</h3><a href="#features" onClick={goTo('#features')}>المميزات</a><a href="#pricing" onClick={goTo('#pricing')}>الأسعار</a><a href="#how-it-works" onClick={goTo('#how-it-works')}>كيف تعمل</a></div><div><h3>الشركة</h3><a href="#contact" onClick={goTo('#contact')}>عن متجري</a><a href="#contact" onClick={goTo('#contact')}>تواصل معنا</a></div><div><h3>الدعم</h3><a href="#faq" onClick={goTo('#faq')}>الأسئلة الشائعة</a><a href="/login">مركز المساعدة</a></div><div><h3>قانوني</h3><a href="/terms">الشروط والأحكام</a><a href="/privacy">سياسة الخصوصية</a></div></div><div className="landing-container landing-footer-copy">© {new Date().getFullYear()} Matjari — متجري. جميع الحقوق محفوظة.</div></footer>
+  </div>
 }
-
 export default LandingPage

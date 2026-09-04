@@ -1,7 +1,7 @@
 import { FunctionalComponent } from 'preact'
 import { useEffect, useState } from 'preact/hooks'
 import { onAuthStateChanged } from 'firebase/auth'
-import { doc, getDoc, onSnapshot } from 'firebase/firestore'
+import { doc, getDoc } from 'firebase/firestore'
 import { auth, db } from '../firebase'
 import { AuthContext, AuthState } from './auth-context'
 import type { User } from '../types'
@@ -18,17 +18,28 @@ export const AuthProvider: FunctionalComponent = ({ children }) => {
           setUser(null)
           return
         }
-        const snap = await getDoc(doc(db, 'users', fbUser.uid))
-        if (snap.exists()) {
+        // A profile read must not leave the whole app in an infinite bootstrap
+        // state when the network is unavailable. Auth identity is still real;
+        // the caller gets a deterministic retryable unauthenticated state.
+        const profileRead = getDoc(doc(db, 'users', fbUser.uid))
+        let timeoutId: number | undefined
+        const timeout = new Promise<never>((_, reject) => { timeoutId = window.setTimeout(() => reject(new Error('auth-profile-timeout')), 8000) })
+        try {
+          const snap = await Promise.race([profileRead, timeout])
+          if (timeoutId !== undefined) window.clearTimeout(timeoutId)
+          if (snap.exists()) {
           const userData = { id: snap.id, uid: snap.id, ...snap.data() } as unknown as User
           setUser(userData)
           setLoading(false)
           setInitialized(true)
-        } else {
+          } else {
           console.warn(`User document not found for uid=${fbUser.uid}. Please create one in Firestore.`)
           setUser(null)
           setLoading(false)
           setInitialized(true)
+          }
+        } finally {
+          if (timeoutId !== undefined) window.clearTimeout(timeoutId)
         }
       } catch (err) {
         console.error('Auth state error:', err)
@@ -40,14 +51,6 @@ export const AuthProvider: FunctionalComponent = ({ children }) => {
     })
     return () => unsub()
   }, [])
-
-  useEffect(() => {
-    if (!user) return
-    const unsub = onSnapshot(doc(db, 'users', user.uid), (snap) => {
-      if (snap.exists()) setUser({ id: snap.id, uid: snap.id, ...snap.data() } as unknown as User)
-    })
-    return () => unsub()
-  }, [user?.uid])
 
   return (
     <AuthContext.Provider

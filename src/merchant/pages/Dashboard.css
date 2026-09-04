@@ -1,0 +1,611 @@
+/* ════════════════════════════════════════════════════════════════
+   Merchant Dashboard — Stitch 5ecc1fa6e7f5 (desktop) +
+   02784270f5674093 (mobile). Element-by-element reconstruction.
+   ════════════════════════════════════════════════════════════════ */
+
+.merchant-dashboard-canonical {
+  display: flex;
+  flex-direction: column;
+  gap: 32px; /* Stitch space-y-8 */
+  max-width: 1480px;
+  margin-inline: auto;
+  padding: 32px 32px 48px; /* Stitch p-8 */
+}
+
+/* Desktop composition visible ≥768px, mobile below */
+.dashboard-desktop { display: flex; flex-direction: column; gap: 32px; }
+.dashboard-mobile { display: none; }
+
+/* ─────────── Page header (Stitch h2 text-3xl + actions row) ─────────── */
+.merchant-dashboard-canonical .internal-page-header { padding-bottom: 0; }
+
+.merchant-dashboard-canonical .page-title { font-size: clamp(18px, 1.6vw, 24px); margin-bottom: 4px; }
+
+.dashboard-header-actions { display: flex; align-items: center; gap: 12px; flex-wrap: wrap; }
+
+.dashboard-header-link { text-decoration: none; display: inline-flex; }
+
+/* ─────────── Status bar (Stitch p-4 rounded-xl flex between) ─────────── */
+.dashboard-statusbar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  flex-wrap: wrap;
+  padding: 16px; /* Stitch p-4 */
+  border: 1px solid var(--outline-variant);
+  border-radius: 12px; /* Stitch rounded-xl */
+  background: var(--surface-container-lowest);
+  box-shadow: var(--shadow-sm);
+}
+
+.dashboard-statusbar-info { display: flex; align-items: center; gap: 24px; flex-wrap: wrap; } /* Stitch gap-6 */
+
+.dashboard-statusbar-item { display: flex; align-items: center; gap: 8px; } /* Stitch gap-2 */
+
+.dashboard-statusbar-label { color: var(--text-on-surface-variant); font-size: 12px; } /* Stitch text-xs */
+
+.dashboard-statusbar-dot {
+  width: 10px; height: 10px; flex: 0 0 auto; border-radius: 999px;
+  background: var(--warning); /* default: unpublished */
+}
+
+.dashboard-statusbar-dot[data-published='true'] { background: var(--success); } /* Stitch bg-green-500 */
+
+.dashboard-statusbar-value { color: var(--text-on-surface); font-size: 14px; font-weight: 500; } /* Stitch text-sm font-medium */
+
+.dashboard-statusbar-meta { color: var(--text-on-surface-variant); font-size: 12px; } /* Stitch text-xs */
+
+.dashboard-statusbar-divider { width: 1px; height: 24px; background: var(--outline-variant); } /* Stitch w-px h-6 */
+
+.dashboard-statusbar-icon { color: var(--text-on-surface-variant); font-size: 16px; display: inline-flex; } /* Stitch text-sm */
+
+.dashboard-statusbar-action { /* Stitch px-4 py-1.5 border rounded-md text-sm */
+  padding: 6px 16px;
+  border: 1px solid var(--outline-variant);
+  border-radius: 6px;
+  background: transparent;
+  color: var(--text-on-surface);
+  font-family: var(--font-sans);
+  font-size: 14px;
+  font-weight: 500;
+  cursor: pointer;
+  transition: background-color 0.15s ease;
+}
+
+.dashboard-statusbar-action:hover { background: var(--surface-container-low); }
+.dashboard-statusbar-action:disabled { opacity: 0.6; cursor: default; }
+
+.dashboard-statusbar-actions {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
+.dashboard-statusbar-actions .btn {
+  min-height: 34px;
+  padding-inline: 12px;
+  font-size: 13px;
+}
+
+.dashboard-statusbar-actions .dashboard-header-link { display: inline-flex; }
+
+/* ─────────── Main grid (Stitch grid-cols-12 gap-6 → 8/4) ─────────── */
+.dashboard-grid {
+  display: grid;
+  grid-template-columns: minmax(0, 2fr) minmax(320px, 1fr); /* 8/4 of 12 */
+  gap: 24px; /* Stitch gap-6 */
+  align-items: start;
+}
+
+.dashboard-grid-main,
+.dashboard-grid-side { display: grid; gap: 24px; min-width: 0; } /* Stitch space-y-6 */
+
+/* ─────────── KPI cards (Stitch grid-cols-3 gap-4, p-5 rounded-xl) ─────────── */
+.dashboard-kpi-stats { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 16px; } /* Stitch gap-4 */
+
+.dashboard-kpi {
+  padding: 20px; /* Stitch p-5 */
+  border: 1px solid var(--outline-variant);
+  border-radius: 12px; /* Stitch rounded-xl */
+  background: var(--surface-container-lowest);
+  box-shadow: var(--shadow-sm);
+  min-width: 0;
+}
+
+.dashboard-kpi-top { display: flex; align-items: flex-start; justify-content: space-between; gap: 10px; margin-bottom: 16px; } /* Stitch mb-4 */
+
+.dashboard-kpi-label { color: var(--text-on-surface-variant); font-size: 14px; font-weight: 500; } /* Stitch text-sm font-medium */
+
+.dashboard-kpi-icon { color: var(--primary); font-size: 22px; flex: 0 0 auto; display: inline-flex; } /* Stitch text-primary */
+
+.dashboard-kpi-value-row { display: flex; align-items: center; gap: 8px; margin-bottom: 4px; flex-wrap: wrap; } /* Stitch mb-1 */
+
+.dashboard-kpi-value { /* Stitch text-2xl font-bold font-display */
+  color: var(--text-on-surface);
+  font-family: var(--font-display);
+  font-size: 24px;
+  font-weight: 700;
+  line-height: 1.2;
+}
+
+.dashboard-kpi-pill { /* Stitch px-2 py-0.5 bg-surface-container-highest text-[10px] rounded-full */
+  padding: 2px 8px;
+  border-radius: 999px;
+  background: var(--surface-container-highest);
+  color: var(--text-on-surface-variant);
+  font-size: 10px;
+  white-space: nowrap;
+}
+
+.dashboard-kpi-caption { color: var(--text-on-surface-variant); font-size: 12px; } /* Stitch text-xs */
+
+/* ─────────── Panels (Stitch rounded-xl overflow-hidden + head tinted) ─────────── */
+.dashboard-panel {
+  border: 1px solid var(--outline-variant);
+  border-radius: 12px;
+  background: var(--surface-container-lowest);
+  box-shadow: var(--shadow-sm);
+  overflow: hidden;
+}
+
+.dashboard-panel-head { /* Stitch px-6 py-4 border-b bg-surface-container-low/50 */
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 16px 24px;
+  border-bottom: 1px solid var(--outline-variant);
+  background: color-mix(in srgb, var(--surface-container-low) 50%, transparent);
+}
+
+.dashboard-panel-head h3 { margin: 0; color: var(--text-on-surface); font-size: 18px; font-weight: 700; } /* Stitch text-lg font-bold */
+
+.dashboard-panel-link { color: var(--primary); font-size: 14px; font-weight: 500; text-decoration: none; white-space: nowrap; } /* Stitch text-sm text-primary */
+
+.dashboard-panel-link:hover { text-decoration: underline; }
+
+/* ─────────── Shipping operations ─────────── */
+.dashboard-shipping-overview .dashboard-panel-head > div { min-width: 0; }
+.dashboard-shipping-subtitle { margin: 4px 0 0; color: var(--text-on-surface-variant); font-size: 12px; }
+.dashboard-shipping-cards { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 12px; padding: 20px 24px; }
+.dashboard-shipping-card { display: flex; align-items: center; gap: 10px; min-width: 0; padding: 14px; border: 1px solid var(--outline-variant); border-radius: 10px; background: var(--surface-container-low); color: var(--text-on-surface); text-decoration: none; transition: border-color .15s ease, transform .15s ease; }
+.dashboard-shipping-card:hover { border-color: var(--primary); transform: translateY(-1px); }
+.dashboard-shipping-card-icon { display: inline-flex; flex: 0 0 auto; align-items: center; justify-content: center; width: 34px; height: 34px; border-radius: 9px; background: var(--surface-container-highest); color: var(--primary); }
+.dashboard-shipping-card-copy { display: grid; gap: 2px; min-width: 0; }
+.dashboard-shipping-card-copy b { font-family: var(--font-display); font-size: 22px; line-height: 1; }
+.dashboard-shipping-card-copy small { color: var(--text-on-surface-variant); font-size: 12px; white-space: nowrap; }
+.dashboard-shipping-card.is-delivered .dashboard-shipping-card-icon { color: var(--success); }
+.dashboard-shipping-card.is-transit .dashboard-shipping-card-icon { color: var(--primary); }
+.dashboard-shipping-card.is-returned .dashboard-shipping-card-icon { color: var(--tertiary); }
+.dashboard-shipping-card.is-failed .dashboard-shipping-card-icon { color: var(--error); }
+.dashboard-shipping-note { display: flex; align-items: flex-start; gap: 8px; margin: 0 24px 20px; padding: 11px 12px; border-radius: 8px; background: var(--secondary-container); color: var(--on-secondary-container); font-size: 12px; line-height: 1.7; }
+.dashboard-shipping-note .icon { flex: 0 0 auto; margin-top: 2px; }
+.dashboard-shipping-note strong { font-weight: 700; }
+
+/* ─────────── Profit analysis (Stitch row list + inline alert) ─────────── */
+.dashboard-profit-body { padding: 24px; } /* Stitch p-6 */
+
+.dashboard-profit-rows { display: grid; gap: 16px; margin-bottom: 24px; } /* Stitch space-y-4 mb-6 */
+
+.dashboard-profit-row { /* Stitch flex justify-between border-b border-outline-variant/50 */
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding-bottom: 12px;
+  border-bottom: 1px solid color-mix(in srgb, var(--outline-variant) 50%, transparent);
+}
+
+.dashboard-profit-row:last-child { border-bottom: none; padding-bottom: 0; }
+
+.dashboard-profit-row span { color: var(--text-on-surface-variant); font-size: 14px; }
+
+.dashboard-profit-row strong { color: var(--text-on-surface); font-size: 14px; font-weight: 700; }
+
+.dashboard-profit-row.is-total strong { font-size: 18px; } /* Stitch text-lg */
+
+.dashboard-profit-alert { /* Stitch bg-error-container/30 border-error-container rounded-lg p-4 */
+  display: flex;
+  align-items: flex-start;
+  gap: 12px;
+  padding: 16px;
+  border: 1px solid var(--error-container);
+  border-radius: 8px;
+  background: color-mix(in srgb, var(--error-container) 30%, transparent);
+}
+
+.dashboard-profit-alert-icon { color: var(--error); font-size: 18px; display: inline-flex; margin-top: 2px; }
+
+.dashboard-profit-alert h4 { margin: 0 0 4px; color: var(--on-error-container); font-size: 14px; font-weight: 700; }
+
+.dashboard-profit-alert p { margin: 0 0 12px; color: var(--text-on-surface-variant); font-size: 12px; }
+
+/* ─────────── Latest orders table (Stitch full-width panel) ─────────── */
+.dashboard-table-wrap { overflow-x: auto; }
+
+.dashboard-table { width: 100%; border-collapse: collapse; font-size: 14px; text-align: right; }
+
+.dashboard-table thead { background: color-mix(in srgb, var(--surface-container) 50%, transparent); border-bottom: 1px solid var(--outline-variant); }
+
+.dashboard-table thead th { padding: 12px 24px; color: var(--text-on-surface-variant); font-size: 12px; font-weight: 500; white-space: nowrap; }
+
+.dashboard-table tbody tr { border-bottom: 1px solid var(--outline-variant); transition: background-color 0.15s ease; }
+
+.dashboard-table tbody tr:hover { background: color-mix(in srgb, var(--surface-container-low) 50%, transparent); }
+
+.dashboard-table tbody tr:last-child { border-bottom: none; }
+
+.dashboard-table td { padding: 16px 24px; color: var(--text-on-surface); font-weight: 500; white-space: nowrap; }
+
+.dashboard-cell-muted { color: var(--text-on-surface-variant) !important; font-weight: 400 !important; }
+
+.dashboard-order-link { color: var(--text-on-surface); text-decoration: none; font-weight: 600; }
+
+.dashboard-order-link:hover { color: var(--primary); }
+
+/* Order status pills — Stitch tone variants */
+.order-pill { display: inline-flex; align-items: center; padding: 4px 10px; border-radius: 999px; font-size: 12px; font-weight: 500; white-space: nowrap; }
+.order-pill-new { background: var(--primary-container); color: var(--on-primary-container); }
+.order-pill-contacted { background: var(--secondary-container); color: var(--on-secondary-container); }
+.order-pill-processing { background: var(--tertiary-container); color: var(--on-tertiary-container); }
+.order-pill-shipped { background: var(--surface-variant); color: var(--text-on-surface-variant); }
+.order-pill-delivered { background: var(--success-soft); color: var(--success); }
+.order-pill-cancelled { background: var(--error-container); color: var(--on-error-container); }
+.order-pill-returned { background: var(--warning-soft); color: color-mix(in srgb, var(--warning) 80%, var(--text-on-surface)); }
+
+/* ─────────── Plan usage panel (Stitch p-6, 4 progress rows) ─────────── */
+.dashboard-plan-panel { padding: 24px; } /* Stitch p-6 */
+
+.dashboard-plan-head { display: flex; align-items: center; justify-content: space-between; gap: 12px; margin-bottom: 24px; } /* Stitch mb-6 */
+
+.dashboard-plan-head h3 { margin: 0; color: var(--text-on-surface); font-size: 18px; font-weight: 700; }
+
+.dashboard-plan-badge { /* Stitch text-xs bg-tertiary-container rounded */
+  padding: 4px 8px;
+  border-radius: 4px;
+  background: var(--tertiary-container);
+  color: var(--on-tertiary-container);
+  font-size: 12px;
+  font-weight: 500;
+  white-space: nowrap;
+}
+
+.dashboard-plan-rows { display: grid; gap: 16px; margin-bottom: 24px; } /* Stitch space-y-4 mb-6 */
+
+.dashboard-usage-row { display: grid; gap: 6px; }
+
+.dashboard-usage-row-top { display: flex; align-items: center; justify-content: space-between; gap: 8px; font-size: 14px; margin-bottom: 6px; } /* Stitch text-sm mb-1.5 */
+
+.dashboard-usage-row-top span:first-child { color: var(--text-on-surface-variant); }
+
+.dashboard-usage-row-top span:last-child { color: var(--text-on-surface); font-weight: 500; }
+
+.dashboard-usage-bar { width: 100%; height: 6px; border-radius: 999px; background: var(--surface-container-highest); overflow: hidden; } /* Stitch h-1.5 */
+
+.dashboard-usage-bar-fill { display: block; height: 100%; border-radius: 999px; }
+
+.dashboard-usage-bar-fill.is-orders { background: var(--primary); }
+.dashboard-usage-bar-fill.is-products { background: var(--secondary); }
+.dashboard-usage-bar-fill.is-storage { background: var(--tertiary); }
+.dashboard-usage-bar-fill.is-staff { background: var(--primary); }
+
+.dashboard-trial {
+  display: flex;
+  align-items: center;
+  gap: 9px;
+  padding: 10px;
+  margin-bottom: 16px;
+  border-radius: 8px;
+  color: var(--primary);
+  background: var(--primary-container);
+}
+
+.dashboard-trial span { display: grid; gap: 2px; }
+.dashboard-trial strong { font-size: 12px; }
+.dashboard-trial small { color: var(--text-on-surface-variant); font-size: 11px; }
+
+/* ─────────── Inventory alerts (Stitch rows with thumb box + pill) ─────────── */
+.dashboard-alert-badge { /* Stitch bg-error-container rounded-full text-xs */
+  padding: 2px 8px;
+  border-radius: 999px;
+  background: var(--error-container);
+  color: var(--on-error-container);
+  font-size: 12px;
+  font-weight: 700;
+  white-space: nowrap;
+}
+
+.dashboard-inventory-list { padding: 0; }
+
+.dashboard-inventory-row { /* Stitch p-4 flex justify-between */
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 16px;
+  border-bottom: 1px solid var(--outline-variant);
+  font-size: 14px;
+}
+
+.dashboard-inventory-row:last-child { border-bottom: none; }
+
+.dashboard-inventory-row:hover { background: var(--surface-container-lowest); }
+
+.dashboard-inventory-main { display: flex; align-items: center; gap: 12px; min-width: 0; }
+
+.dashboard-inventory-thumb { /* Stitch w-10 h-10 bg-surface-container border rounded */
+  width: 40px;
+  height: 40px;
+  flex: 0 0 auto;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  border: 1px solid var(--outline-variant);
+  border-radius: 4px;
+  background: var(--surface-container);
+  color: var(--outline);
+  font-size: 18px;
+}
+
+.dashboard-inventory-name { overflow: hidden; color: var(--text-on-surface); font-weight: 500; text-overflow: ellipsis; white-space: nowrap; }
+
+.dashboard-inventory-pill { /* Stitch px-2 py-1 text-xs rounded */
+  padding: 4px 8px;
+  border-radius: 4px;
+  background: var(--warning-soft);
+  color: color-mix(in srgb, var(--warning) 80%, var(--text-on-surface));
+  font-size: 12px;
+  font-weight: 500;
+  white-space: nowrap;
+}
+
+.dashboard-inventory-pill.is-empty { background: var(--error-container); color: var(--on-error-container); }
+
+.dashboard-no-alert { display: flex; align-items: center; gap: 8px; padding: 16px; color: var(--success); font-size: 13px; }
+
+/* ════════════════════════════════════════════════════════════════
+   MOBILE composition (Stitch 02784270f5674093) — <768px
+   ════════════════════════════════════════════════════════════════ */
+
+@media (max-width: 768px) {
+  .merchant-dashboard-canonical { padding: 0 0 24px; gap: 0; max-width: none; }
+
+  .dashboard-desktop { display: none; }
+  .dashboard-mobile { display: flex; flex-direction: column; min-height: calc(100vh - 120px); }
+
+  /* Mobile header (Stitch h-16 px-4 fixed-like top strip) */
+  .dashboard-mobile-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 12px;
+    padding: 14px 16px;
+    border-bottom: 1px solid var(--outline-variant);
+    background: var(--surface-container-lowest);
+  }
+
+  .dashboard-mobile-brand { display: flex; align-items: center; gap: 12px; }
+
+  .dashboard-mobile-avatar { /* Stitch w-10 h-10 rounded-full */
+    width: 40px; height: 40px; flex: 0 0 auto;
+    display: inline-flex; align-items: center; justify-content: center;
+    border: 1px solid var(--outline-variant);
+    border-radius: 999px;
+    background: var(--surface-container-highest);
+    color: var(--primary);
+    font-size: 18px;
+  }
+
+  .dashboard-mobile-storeline { display: flex; align-items: center; gap: 8px; }
+
+  .dashboard-mobile-storename { color: var(--text-on-surface); font-family: var(--font-display); font-size: 18px; font-weight: 800; }
+
+  .dashboard-mobile-published { /* Stitch text-[10px] bg-tertiary-container rounded-full */
+    padding: 2px 8px;
+    border-radius: 999px;
+    background: var(--tertiary-container);
+    color: var(--on-tertiary-container);
+    font-size: 10px;
+    font-weight: 700;
+  }
+
+  .dashboard-mobile-sync {
+    width: 40px; height: 40px;
+    display: inline-flex; align-items: center; justify-content: center;
+    border: none; border-radius: 999px;
+    background: transparent;
+    color: var(--text-on-surface-variant);
+    font-size: 20px;
+    cursor: pointer;
+  }
+
+  .dashboard-mobile-sync:active { transform: scale(0.95); }
+
+  /* Main scroll area (Stitch pt-20 pb-28 px-4) */
+  .dashboard-mobile-main { padding: 24px 16px 96px; display: flex; flex-direction: column; gap: 24px; }
+
+  /* Greeting (Stitch h1 text-2xl + p text-sm) */
+  .dashboard-mobile-greeting h1 { margin: 0; color: var(--text-on-background); font-family: var(--font-display); font-size: 24px; font-weight: 700; }
+  .dashboard-mobile-greeting p { margin: 4px 0 0; color: var(--text-on-surface-variant); font-size: 14px; }
+
+  /* KPI grid (Stitch grid-cols-2 gap-3) */
+  .dashboard-mobile-kpis { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 12px; }
+
+  .dashboard-mobile-kpi { /* Stitch p-4 rounded-lg border */
+    padding: 16px;
+    border: 1px solid var(--surface-container-highest);
+    border-radius: 8px;
+    background: var(--surface-container-lowest);
+    box-shadow: var(--shadow-sm);
+    min-width: 0;
+  }
+
+  .dashboard-mobile-kpi-wide { grid-column: span 2; }
+
+  .dashboard-mobile-kpi-top { display: flex; align-items: flex-start; justify-content: space-between; gap: 8px; margin-bottom: 8px; }
+
+  .dashboard-mobile-kpi-titles { display: flex; flex-direction: column; gap: 2px; }
+
+  .dashboard-mobile-kpi-label { color: var(--text-on-surface-variant); font-size: 14px; font-weight: 500; }
+
+  .dashboard-mobile-kpi-sub { color: var(--outline); font-size: 10px; }
+
+  .dashboard-mobile-kpi-icon { color: var(--primary); font-size: 18px; display: inline-flex; }
+
+  .dashboard-mobile-kpi-value { color: var(--text-on-surface); font-family: var(--font-display); font-size: 20px; font-weight: 700; }
+
+  .dashboard-mobile-kpi-trend { color: var(--tertiary); font-size: 14px; margin-top: 8px; display: inline-flex; }
+
+  .dashboard-mobile-kpi-profit { position: relative; overflow: hidden; border-color: var(--error-container); background:
+    linear-gradient(color-mix(in srgb, var(--error) 5%, transparent), color-mix(in srgb, var(--error) 5%, transparent)), var(--surface-container-lowest); }
+
+  .dashboard-mobile-kpi-profit-inner { position: relative; z-index: 1; }
+
+  .dashboard-mobile-kpi-warn { /* Stitch bg-error-container rounded-full */
+    display: inline-flex;
+    align-items: center;
+    gap: 4px;
+    margin-top: 4px;
+    padding: 2px 8px;
+    border-radius: 999px;
+    background: var(--error-container);
+    color: var(--error);
+    font-size: 10px;
+    font-weight: 500;
+  }
+
+  .dashboard-mobile-kpi-value.is-dim { color: var(--text-on-surface-variant); opacity: 0.5; }
+
+  .dashboard-mobile-kpi-link { display: inline-flex; align-items: center; gap: 4px; margin-top: 8px; color: var(--primary); font-size: 12px; font-weight: 500; text-decoration: none; }
+
+  .dashboard-mobile-kpi-avg { display: flex; align-items: center; gap: 12px; }
+
+  .dashboard-mobile-kpi-avg-icon { /* Stitch w-10 h-10 bg-secondary-container rounded-full */
+    width: 40px; height: 40px; flex: 0 0 auto;
+    display: inline-flex; align-items: center; justify-content: center;
+    border-radius: 999px;
+    background: var(--secondary-container);
+    color: var(--on-secondary-container);
+    font-size: 18px;
+  }
+
+  .dashboard-mobile-kpi-avg-value { color: var(--text-on-surface); font-family: var(--font-display); font-size: 18px; font-weight: 700; margin-top: 8px; }
+
+  .dashboard-mobile-shipping { display: grid; gap: 12px; }
+  .dashboard-mobile-shipping .dashboard-mobile-section-head { margin-bottom: 0; }
+  .dashboard-mobile-shipping-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 10px; }
+  .dashboard-mobile-shipping-grid a { display: grid; gap: 3px; padding: 14px; border: 1px solid var(--surface-container-highest); border-radius: 8px; background: var(--surface-container-lowest); color: var(--text-on-surface); text-decoration: none; }
+  .dashboard-mobile-shipping-grid span { font-family: var(--font-display); font-size: 22px; font-weight: 700; }
+  .dashboard-mobile-shipping-grid small { color: var(--text-on-surface-variant); font-size: 12px; }
+  .dashboard-mobile-shipping > p { display: flex; align-items: flex-start; gap: 7px; margin: 0; padding: 10px 12px; border-radius: 8px; background: var(--secondary-container); color: var(--on-secondary-container); font-size: 12px; }
+
+  /* Quick actions (Stitch horizontal pill row) */
+  .dashboard-quick-actions { display: flex; align-items: center; gap: 12px; overflow-x: auto; padding-bottom: 2px; -webkit-overflow-scrolling: touch; }
+
+  .dashboard-quick-actions > a { text-decoration: none; display: inline-flex; }
+
+  .dashboard-quick-btn { /* Stitch px-5 py-2.5 rounded-full text-sm */
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    padding: 10px 20px;
+    border: 1px solid var(--outline-variant);
+    border-radius: 999px;
+    background: var(--surface-container-highest);
+    color: var(--text-on-surface);
+    font-family: var(--font-sans);
+    font-size: 14px;
+    font-weight: 500;
+    white-space: nowrap;
+    cursor: pointer;
+  }
+
+  .dashboard-quick-btn-primary { background: var(--primary); border-color: var(--primary); color: var(--on-primary); box-shadow: var(--shadow-sm); }
+
+  .dashboard-quick-btn-primary .icon { color: var(--on-primary); }
+
+  .dashboard-quick-btn:active { transform: scale(0.97); }
+
+  /* Inventory banner (Stitch bg-error-container rounded-lg) */
+  .dashboard-mobile-alert {
+    display: flex;
+    align-items: flex-start;
+    gap: 12px;
+    padding: 12px;
+    border-radius: 8px;
+    background: var(--error-container);
+    color: var(--on-error-container);
+  }
+
+  .dashboard-mobile-alert-icon { font-size: 18px; display: inline-flex; margin-top: 2px; }
+
+  .dashboard-mobile-alert h3 { margin: 0 0 4px; font-size: 14px; font-weight: 700; }
+
+  .dashboard-mobile-alert p { margin: 0; font-size: 12px; opacity: 0.9; }
+
+  .dashboard-mobile-alert-link { display: inline-block; margin-top: 8px; font-size: 12px; font-weight: 700; text-decoration: underline; color: inherit; }
+
+  /* Latest orders (Stitch cards) */
+  .dashboard-mobile-section-head { display: flex; align-items: center; justify-content: space-between; gap: 12px; margin-bottom: 16px; }
+
+  .dashboard-mobile-section-head h2 { margin: 0; color: var(--text-on-surface); font-family: var(--font-display); font-size: 18px; font-weight: 700; }
+
+  .dashboard-mobile-order-list { display: flex; flex-direction: column; gap: 12px; }
+
+  .dashboard-mobile-order-card { /* Stitch p-3 rounded-lg border */
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 12px;
+    padding: 12px;
+    border: 1px solid var(--surface-container-highest);
+    border-radius: 8px;
+    background: var(--surface-container-lowest);
+    text-decoration: none;
+  }
+
+  .dashboard-mobile-order-main { display: flex; align-items: center; gap: 12px; min-width: 0; }
+
+  .dashboard-mobile-order-icon { /* Stitch w-10 h-10 rounded-lg bg-surface-variant */
+    width: 40px; height: 40px; flex: 0 0 auto;
+    display: inline-flex; align-items: center; justify-content: center;
+    border-radius: 8px;
+    background: var(--surface-variant);
+    color: var(--text-on-surface-variant);
+    font-size: 18px;
+  }
+
+  .dashboard-mobile-order-number { color: var(--text-on-surface); font-size: 14px; font-weight: 700; }
+
+  .dashboard-mobile-order-meta { color: var(--text-on-surface-variant); font-size: 12px; margin-top: 2px; }
+
+  .dashboard-mobile-order-side { display: flex; flex-direction: column; align-items: flex-end; gap: 4px; }
+
+  .dashboard-mobile-order-amount { color: var(--text-on-surface); font-size: 14px; font-weight: 700; }
+
+  /* Plan usage (Stitch 4 bars card) */
+  .dashboard-mobile-usage h2 { margin: 0 0 16px; color: var(--text-on-surface); font-family: var(--font-display); font-size: 18px; font-weight: 700; }
+
+  .dashboard-mobile-usage-card { display: flex; flex-direction: column; gap: 16px; padding: 16px; border: 1px solid var(--surface-container-highest); border-radius: 8px; background: var(--surface-container-lowest); box-shadow: var(--shadow-sm); }
+
+  .dashboard-mobile-usage-card .dashboard-usage-row-top { font-size: 12px; }
+}
+
+/* Tablet 769–1024px: single column keeps desktop cards */
+@media (max-width: 1024px) and (min-width: 769px) {
+  .dashboard-grid { grid-template-columns: minmax(0, 1fr); }
+  .dashboard-grid-side { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+}
+
+/* Dark mode — semantic tokens only */
+[data-theme='dark'] .dashboard-statusbar,
+[data-theme='dark'] .dashboard-kpi,
+[data-theme='dark'] .dashboard-panel,
+[data-theme='dark'] .dashboard-mobile-order-card,
+[data-theme='dark'] .dashboard-mobile-usage-card {
+  border-color: var(--outline-variant);
+}
+
+[data-theme='dark'] .dashboard-statusbar-dot[data-published='true'] { background: var(--success); }

@@ -1,0 +1,24 @@
+.merchant-crm-page { display: flex; flex-direction: column; gap: 16px; }
+.crm-kpis { display: grid; grid-template-columns: repeat(6, 1fr); gap: 12px; }
+.crm-kpi-card { background: var(--surface); border: 1px solid var(--outline-variant); border-radius: 12px; padding: 16px; display: flex; flex-direction: column; gap: 6px; }
+.crm-kpi-top { display: flex; align-items: center; justify-content: space-between; }
+.crm-kpi-label { font-size: 12px; color: var(--text-on-surface-variant); }
+.crm-kpi-icon { width: 32px; height: 32px; border-radius: 8px; background: var(--surface-container); display: flex; align-items: center; justify-content: center; color: var(--primary); }
+.crm-kpi-value { font-size: 22px; font-weight: 800; color: var(--text-on-surface); font-variant-numeric: tabular-nums; }
+.crm-kpi-sub { font-size: 11px; color: var(--text-on-surface-variant); }
+.crm-grid { display: grid; grid-template-columns: 1.6fr 1fr; gap: 16px; }
+.crm-panel { background: var(--surface); border: 1px solid var(--outline-variant); border-radius: 12px; overflow: hidden; }
+.crm-panel-head { display: flex; align-items: center; justify-content: space-between; padding: 14px 16px; border-bottom: 1px solid var(--outline-variant); background: var(--surface-container-low); }
+.crm-panel-head h3 { margin: 0; font-size: 14px; font-weight: 700; color: var(--text-on-surface); }
+.crm-panel-body { padding: 16px; }
+.crm-stage-bar { display: flex; gap: 6px; margin-top: 10px; }
+.crm-stage-seg { flex: 1; height: 8px; border-radius: 9999px; background: var(--surface-variant); overflow: hidden; }
+.crm-stage-seg i { display: block; height: 100%; border-radius: 9999px; }
+.crm-follow-row { display: flex; align-items: center; gap: 10px; padding: 10px; border: 1px solid var(--outline-variant); border-radius: 10px; margin-top: 8px; }
+.crm-follow-row.is-overdue { border-color: var(--error); background: color-mix(in srgb, var(--error) 6%, var(--surface)); }
+.crm-gov-list { display: flex; flex-direction: column; gap: 8px; }
+.crm-gov-row { display: flex; align-items: center; justify-content: space-between; }
+.crm-gov-bar { height: 6px; border-radius: 9999px; background: var(--surface-variant); flex: 1; margin: 0 10px; overflow: hidden; }
+.crm-gov-bar i { display: block; height: 100%; background: var(--primary); border-radius: 9999px; }
+@media (max-width: 1100px) { .crm-kpis { grid-template-columns: repeat(3, 1fr); } .crm-grid { grid-template-columns: 1fr; } }
+@media (max-width: 640px) { .crm-kpis { grid-template-columns: repeat(2, 1fr); } }

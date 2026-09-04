@@ -1,0 +1,9 @@
+User-agent: *
+Allow: /
+
+# SPA storefront: crawl the public store routes; block private/app areas.
+Allow: /store/
+Disallow: /dashboard/
+Disallow: /platform/
+Disallow: /login
+Disallow: /register

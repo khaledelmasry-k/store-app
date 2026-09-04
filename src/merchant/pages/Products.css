@@ -1,0 +1,435 @@
+.products-page-canonical {
+  --products-gap: 20px;
+  display: flex;
+  flex-direction: column;
+  gap: var(--products-gap);
+  max-width: 1480px;
+  margin-inline: auto;
+  padding: 0 24px 48px;
+}
+
+.products-page-canonical .internal-page-header {
+  padding-bottom: 4px;
+}
+
+/* ────────────────────────────────────────── */
+/* Stitch panel chrome (surface-container-lowest, 12px radius) */
+/* ────────────────────────────────────────── */
+.products-page-canonical .workspace-section {
+  border-radius: 12px;
+  border-color: var(--outline-variant);
+  background: var(--surface-container-lowest);
+  box-shadow: var(--shadow-sm);
+}
+
+.products-page-canonical .workspace-section-head {
+  border-bottom-color: var(--outline-variant);
+  padding: 16px 24px;
+}
+
+.products-page-canonical .workspace-section-body {
+  padding: 0;
+}
+
+/* ────────────────────────────────────────── */
+/* Tabs (Stitch: primary underline on outline-variant rail) */
+/* ────────────────────────────────────────── */
+.products-page-canonical .tabs {
+  border-bottom-color: var(--outline-variant);
+  margin-bottom: 0;
+}
+
+.products-page-canonical .tab {
+  color: var(--text-on-surface-variant);
+  font-weight: 600;
+}
+
+.products-page-canonical .tab:hover {
+  color: var(--text-on-surface);
+}
+
+.products-page-canonical .tab-active {
+  color: var(--primary);
+  border-bottom-color: var(--primary);
+}
+
+.products-page-canonical .tab-count {
+  background: var(--surface-container-high);
+  color: var(--text-on-surface-variant);
+}
+
+/* ────────────────────────────────────────── */
+/* Toolbar (panel strip above the table) */
+/* ────────────────────────────────────────── */
+.products-toolbar {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  flex-wrap: wrap;
+  padding: 14px 16px;
+  border-bottom: 1px solid var(--outline-variant);
+}
+
+.products-toolbar .search-box {
+  flex: 1 1 260px;
+  min-width: 200px;
+}
+
+.products-toolbar .field {
+  margin: 0;
+}
+
+.products-page-canonical .search-box .input,
+.products-page-canonical .field select.input {
+  border-radius: 12px !important;
+  border-color: var(--outline-variant);
+  background: var(--surface-container-lowest);
+}
+
+.products-page-canonical .search-box .input:focus,
+.products-page-canonical .field select.input:focus {
+  border-color: var(--primary);
+  box-shadow: 0 0 0 3px color-mix(in srgb, var(--primary) 14%, transparent);
+}
+
+/* ────────────────────────────────────────── */
+/* Table flattened into the panel */
+/* ────────────────────────────────────────── */
+.products-page-canonical .table-wrap {
+  border: 0;
+  border-radius: 0;
+  background: transparent;
+}
+
+.products-page-canonical .table {
+  min-width: 900px;
+}
+
+.products-page-canonical .table th {
+  background: color-mix(in srgb, var(--surface-container-low) 60%, transparent);
+  color: var(--text-on-surface-variant);
+  font-size: 12px;
+  font-weight: 600;
+  letter-spacing: 0.02em;
+}
+
+.products-page-canonical .table td {
+  color: var(--text-on-surface);
+}
+
+.products-page-canonical .product-cell-thumb {
+  width: 46px;
+  height: 46px;
+  flex: 0 0 46px;
+  border: 1px solid var(--outline-variant);
+  border-radius: 10px;
+  background: var(--surface-container-low);
+  object-fit: cover;
+}
+
+/* ────────────────────────────────────────── */
+/* Inventory KPI cards (Stitch: label + icon + display value) */
+/* ────────────────────────────────────────── */
+.products-kpi-stats {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 16px;
+}
+
+.products-kpi {
+  padding: 20px;
+  border: 1px solid var(--outline-variant);
+  border-radius: 12px;
+  background: var(--surface-container-lowest);
+  box-shadow: var(--shadow-sm);
+  min-width: 0;
+}
+
+.products-kpi-top {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 10px;
+  margin-bottom: 16px;
+}
+
+.products-kpi-label {
+  color: var(--text-on-surface-variant);
+  font-size: 13px;
+  font-weight: 500;
+}
+
+.products-kpi-icon {
+  color: var(--primary);
+  font-size: 22px;
+  flex: 0 0 auto;
+}
+
+.products-kpi-value {
+  display: block;
+  color: var(--text-on-surface);
+  font-family: var(--font-display);
+  font-size: 24px;
+  font-weight: 700;
+  line-height: 1.2;
+}
+
+.products-kpi-caption {
+  display: block;
+  margin-top: 4px;
+  color: var(--text-on-surface-variant);
+  font-size: 12px;
+}
+
+.products-page-canonical .workspace-section-body .empty-state {
+  padding: 56px 24px;
+}
+
+@media (max-width: 768px) {
+  .products-page-canonical {
+    padding: 0 12px 32px;
+  }
+
+  .products-kpi-stats {
+    grid-template-columns: 1fr;
+  }
+
+  .products-toolbar {
+    padding: 12px;
+  }
+}
+/* ── Stitch plan-usage bar ────────────────────────────────────────────────── */
+.products-usage-bar {
+  margin-top: 16px;
+  background: var(--surface-container-low);
+  border: 1px solid var(--surface-container-highest);
+  border-radius: 12px;
+  padding: 14px 16px;
+}
+.products-usage-head {
+  display: flex;
+  align-items: flex-end;
+  justify-content: space-between;
+  margin-bottom: 8px;
+  gap: 8px;
+}
+.products-usage-head span {
+  font-size: 13px;
+  font-weight: 500;
+  color: var(--text-on-surface-variant);
+}
+.products-usage-head strong {
+  font-size: 13px;
+  font-weight: 700;
+  color: var(--text-on-surface);
+}
+.products-usage-track {
+  width: 100%;
+  background: var(--surface-variant);
+  border-radius: 9999px;
+  height: 8px;
+  overflow: hidden;
+}
+.products-usage-fill {
+  background: var(--secondary);
+  height: 100%;
+  border-radius: 9999px;
+  transition: width 0.3s ease;
+}
+
+/* ── Stitch error banner + retry ──────────────────────────────────────────── */
+.products-error-banner {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  background: var(--error-container);
+  color: var(--on-error-container);
+  border: 1px solid color-mix(in srgb, var(--error) 20%, transparent);
+  border-radius: 12px;
+  padding: 12px 16px;
+  margin-top: 16px;
+  font-size: 14px;
+}
+.products-error-banner .mk-icon {
+  color: var(--error);
+  flex-shrink: 0;
+}
+.products-error-banner span {
+  flex: 1;
+  font-weight: 500;
+}
+.products-error-banner button {
+  background: transparent;
+  border: none;
+  color: var(--error);
+  font-weight: 700;
+  font-size: 13px;
+  text-decoration: underline;
+  cursor: pointer;
+  font-family: var(--font-sans);
+}
+
+/* ── Stitch mobile product cards (≤768px) ────────────────────────────────── */
+.products-mobile-cards {
+  display: none;
+}
+@media (max-width: 768px) {
+  .products-mobile-cards {
+    display: flex;
+    flex-direction: column;
+    gap: 12px;
+  }
+}
+.pcard {
+  display: flex;
+  gap: 12px;
+  align-items: stretch;
+  background: var(--surface-container-lowest);
+  border: 1px solid var(--outline-variant);
+  border-radius: 12px;
+  padding: 12px;
+  box-shadow: var(--shadow-sm);
+  cursor: pointer;
+  transition: box-shadow 0.15s;
+}
+.pcard:hover {
+  box-shadow: 0 4px 12px rgba(20, 27, 43, 0.1);
+}
+.pcard-thumb {
+  width: 80px;
+  height: 80px;
+  flex-shrink: 0;
+  border-radius: 10px;
+  border: 1px solid var(--surface-container-highest);
+  background: var(--surface-container-low);
+  object-fit: cover;
+}
+.pcard-body {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  justify-content: space-between;
+}
+.pcard-top {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  gap: 8px;
+}
+.pcard-info {
+  min-width: 0;
+}
+.pcard-info h3 {
+  margin: 0 0 4px;
+  font-size: 14px;
+  font-weight: 600;
+  color: var(--text-on-surface);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.pcard-chips {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  margin-top: 2px;
+}
+.pcard-sku {
+  font-family: var(--font-display, monospace);
+  font-size: 10px;
+  color: var(--text-outline, var(--text-on-surface-variant));
+  background: var(--surface-container);
+  padding: 1px 6px;
+  border-radius: 4px;
+}
+.pcard-cat {
+  font-size: 10px;
+  color: var(--primary);
+  background: color-mix(in srgb, var(--primary) 10%, transparent);
+  padding: 2px 8px;
+  border-radius: 6px;
+  font-weight: 500;
+}
+.pcard-status {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  font-size: 10px;
+  font-weight: 500;
+  color: var(--text-on-surface-variant);
+  background: var(--surface-variant);
+  padding: 3px 8px;
+  border-radius: 9999px;
+  flex-shrink: 0;
+}
+.pcard-status-dot {
+  width: 6px;
+  height: 6px;
+  border-radius: 9999px;
+  background: var(--text-outline, var(--text-on-surface-variant));
+}
+.pcard-status.is-on {
+  color: var(--secondary);
+  background: color-mix(in srgb, var(--secondary) 10%, transparent);
+}
+.pcard-status.is-on .pcard-status-dot {
+  background: var(--secondary);
+}
+.pcard-bottom {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-end;
+  margin-top: 10px;
+  gap: 8px;
+}
+.pcard-label {
+  display: block;
+  font-size: 11px;
+  color: var(--text-on-surface-variant);
+}
+.pcard-price {
+  font-size: 14px;
+  font-weight: 700;
+  color: var(--text-on-surface);
+}
+.pcard-qty {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+}
+.pcard-qty-label {
+  font-size: 10px;
+  color: transparent;
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  min-height: 14px;
+}
+.pcard-qty-label.is-warn {
+  color: var(--error);
+}
+.pcard-qty-label .mk-icon {
+  font-size: 12px;
+}
+.pcard-qty-value {
+  font-size: 14px;
+  font-weight: 500;
+  color: var(--text-on-surface);
+  direction: ltr;
+  text-align: right;
+}
+.pcard-qty-unit {
+  font-size: 12px;
+  color: var(--text-on-surface-variant);
+  font-weight: 400;
+  margin-inline-end: 2px;
+}
+@media (max-width: 768px) {
+  .products-page-canonical .products-tab-card {
+    display: none;
+  }
+  .products-page-canonical .products-toolbar {
+    display: none;
+  }
+}

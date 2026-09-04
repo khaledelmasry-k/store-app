@@ -1,33 +1,40 @@
-import { FunctionalComponent } from 'preact'
+import { FunctionalComponent } from "preact"
 import { useState } from 'preact/hooks'
+import { Link } from 'wouter'
 import { PageHeader } from '../../shared/components/ui/PageHeader'
-import { Card } from '../../shared/components/ui/Card'
 import { StatsCard } from '../../shared/components/ui/StatsCard'
-import { Table } from '../../shared/components/ui/Table'
-import { Badge } from '../../shared/components/ui/Badge'
+import { Card } from '../../shared/components/ui/Card'
+import { EmptyState } from '../../shared/components/ui/EmptyState'
+import { Select } from '../../shared/components/ui/Select'
+import { Loading } from '../../shared/components/ui/Loading'
+import { SectionHeader } from '../../shared/components/ui/SectionHeader'
 import { Button } from '../../shared/components/ui/Button'
-import { Modal } from '../../shared/components/ui/Modal'
+import { Drawer } from '../../shared/components/ui/Drawer'
 import { Input } from '../../shared/components/ui/Input'
 import { Toggle } from '../../shared/components/ui/Toggle'
 import { ConfirmDialog } from '../../shared/components/ui/ConfirmDialog'
-import { Loading } from '../../shared/components/ui/Loading'
+import { Icon } from '../../shared/components/ui/Icon'
 import { useStore } from '../../shared/hooks/useStore'
 import { useCollection } from '../../shared/hooks/useCollection'
+import { useSubscription } from '../../shared/hooks/useSubscription'
 import { useToast } from '../../shared/hooks/useToast'
 import { storeLinksService } from '../../shared/services/system'
 import { createSalesLinkCallable } from '../../shared/services/auth'
+import { getPlanLimit, isPlanLimitUnlimited } from '../../shared/services/subscription'
 import { formatCurrency } from '../../shared/utils/format'
 import { storeBaseUrl } from '../../shared/utils/store-url'
 import type { LandingPage, Product, StoreLink, StoreLinkDestinationType } from '../../shared/types'
-import { Icon } from '../../shared/components/ui/Icon'
+import './StoreLinks.css'
 
 const DESTINATION_LABELS: Record<StoreLinkDestinationType, string> = {
   home: 'الرئيسية',
-  catalog: 'كل المنتجات',
+  catalog: 'المتجر',
   product: 'منتج محدد',
   landing: 'صفحة هبوط',
-  custom: 'مسار مخصص',
+  custom: 'رابط مخصص',
 }
+
+const SOURCE_PRESETS = ['Facebook', 'Instagram', 'TikTok', 'WhatsApp']
 
 type Draft = {
   id?: string
@@ -50,22 +57,47 @@ function randomCode(): string {
 export const MerchantStoreLinks: FunctionalComponent = () => {
   const { store } = useStore()
   const storeId = store?.id || ''
-  const linksRes = useCollection<StoreLink>('storeLinks', { storeId })
-  const links = linksRes.data.filter((l) => !l.archived)
+  const linksRes = useCollection<StoreLink>('storeLinks', { storeId, orderBy: { field: 'createdAt' } })
+  const allLinks = linksRes.data
   const productsRes = useCollection<Product>('products', { storeId })
   const landingsRes = useCollection<LandingPage>('landingPages', { storeId })
   const products = productsRes.data || []
   const landings = landingsRes.data || []
+  const { plan, resourceUsage } = useSubscription(storeId)
   const toast = useToast()
+  const [query, setQuery] = useState('')
+  const [status, setStatus] = useState('')
   const [open, setOpen] = useState(false)
+  const [saving, setSaving] = useState(false)
   const [deleteTarget, setDeleteTarget] = useState<StoreLink | null>(null)
   const [form, setForm] = useState<Draft>({
     name: '', code: '', sellerName: '', destinationType: 'home', destinationId: '', source: '', campaign: '', content: '', active: true, archived: false,
   })
 
+  const links = allLinks.filter((l) => !l.archived)
+
   const publicUrl = (code: string) => `${storeBaseUrl()}/s/${code}`
 
+  const filtered = links.filter((l) =>
+    ((l.name || '').includes(query) || (l.code || '').includes(query)) &&
+    (!status || (status === 'active' ? l.active : !l.active)),
+  )
+
+  const linksLimit = resourceUsage?.salesLinks.limit ?? getPlanLimit('salesLinks', plan)
+  const linksUnlimited = resourceUsage ? resourceUsage.salesLinks.limit <= 0 : isPlanLimitUnlimited('salesLinks', plan)
+  const atLimit = !linksUnlimited && linksLimit > 0 && links.length >= linksLimit
+
+  const openForm = (l?: StoreLink) => {
+    if (l) {
+      setForm({ id: l.id, name: l.name, code: l.code, sellerName: l.sellerName || '', destinationType: l.destinationType, destinationId: l.destinationId || '', source: l.source || '', campaign: l.campaign || '', content: l.content || '', active: l.active ?? true, archived: false })
+    } else {
+      setForm({ name: '', code: '', sellerName: '', destinationType: 'home', destinationId: '', source: '', campaign: '', content: '', active: true, archived: false })
+    }
+    setOpen(true)
+  }
+
   const submit = async () => {
+    if (saving) return
     if (!form.name) {
       toast.push('أدخل اسم الرابط', undefined, 'error')
       return
@@ -92,18 +124,28 @@ export const MerchantStoreLinks: FunctionalComponent = () => {
       totalRevenue: 0,
       createdBy: '',
     }
+    setSaving(true)
     try {
       if (form.id) {
         await storeLinksService.update(form.id, data)
         toast.push('تم تحديث الرابط')
       } else {
-        await createSalesLinkCallable({ storeId, data })
-        toast.push('تم إنشاء رابط البيع')
+        const created = await createSalesLinkCallable({ storeId, data })
+        const savedCode = String((created.data as { code?: string } | undefined)?.code || code)
+        toast.push('تم إنشاء رابط البيع', `الرابط جاهز للمشاركة: ${publicUrl(savedCode)}`, 'success')
       }
       setOpen(false)
-      setForm({ name: '', code: '', sellerName: '', destinationType: 'home', destinationId: '', source: '', campaign: '', content: '', active: true, archived: false })
     } catch (err: any) {
-      toast.push('فشل حفظ الرابط', err?.message || 'حدث خطأ غير متوقع', 'error')
+      const message = String(err?.message || '')
+      const errorCode = String(err?.code || '')
+      const detail = errorCode.includes('resource-exhausted')
+        ? 'وصلت إلى حد روابط البيع في باقتك الحالية.'
+        : errorCode.includes('already-exists')
+          ? 'الكود المختصر مستخدم بالفعل. أعد المحاولة ليتم إنشاء كود جديد.'
+          : message || 'حدث خطأ غير متوقع'
+      toast.push('تعذر حفظ رابط البيع', detail, 'error')
+    } finally {
+      setSaving(false)
     }
   }
 
@@ -140,97 +182,225 @@ export const MerchantStoreLinks: FunctionalComponent = () => {
 
   const conversionRate = (l: StoreLink) => (l.visits && l.visits > 0 ? Math.round(((l.ordersCount || 0) / l.visits) * 1000) / 10 : 0)
 
-  if (linksRes.loading || productsRes.loading || landingsRes.loading) return <Loading />
+  if (!store) return <Loading variant="screen" message="جارٍ تحميل بيانات المتجر..." />
+  if (linksRes.loading || productsRes.loading || landingsRes.loading) return <Loading variant="screen" message="جاري تحميل روابط البيع..." />
 
   const totalClicks = links.reduce((s, l) => s + (l.visits || 0), 0)
   const totalOrders = links.reduce((s, l) => s + (l.ordersCount || 0), 0)
   const totalRevenue = links.reduce((s, l) => s + (l.totalRevenue || 0), 0)
 
   return (
-    <div>
-      <PageHeader title="روابط البيع" subtitle={`${links.length} رابط`} actions={<Button icon="add" onClick={() => setOpen(true)}>رابط جديد</Button>} />
+    <div className="merchant-operations merchant-sales-links-page">
+      <PageHeader
+        breadcrumb="التسويق والإسناد"
+        title="روابط البيع"
+        subtitle="إدارة وتتبع الروابط المخصصة للحملات والمسوقين."
+        actions={<Button icon="add" onClick={() => openForm()}>إنشاء رابط جديد</Button>}
+      />
 
-      <div className="stats-grid">
+      {atLimit && (
+        <Card className="mb-2">
+          <div className="flex-between">
+            <div className="flex" style={{ gap: 10 }}>
+              <Icon name="info" className="text-amber" />
+              <div>
+                <p className="font-semibold">{plan?.name || 'الخطة الحالية'} — وصلت للحد الأقصى للروابط النشطة ({links.length}/{linksLimit})</p>
+                <p className="muted small">قم بترقية باقتك لإنشاء عدد غير محدود من روابط البيع.</p>
+              </div>
+            </div>
+            <Link to="/dashboard/subscription"><Button variant="outline" size="sm">ترقية الخطة</Button></Link>
+          </div>
+        </Card>
+      )}
+
+      <div className="stat-grid">
         <StatsCard title="إجمالي الروابط" value={links.length} icon="link" tone="primary" />
-        <StatsCard title="إجمالي النقرات" value={totalClicks} icon="visibility" tone="blue" />
-        <StatsCard title="طلبات مكتملة" value={totalOrders} icon="shopping_cart" tone="green" />
-        <StatsCard title="إيرادات مسلّمة" value={formatCurrency(totalRevenue)} icon="payments" tone="indigo" />
+        <StatsCard title="إجمالي النقرات" value={totalClicks} icon="ads_click" tone="indigo" />
+        <StatsCard title="طلبات مسلّمة" value={totalOrders} icon="local_shipping" tone="green" />
+        <StatsCard title="إيرادات مسلّمة" value={totalRevenue} currency icon="payments" tone="amber" />
       </div>
 
-      <Card>
-        <Table cardMode
-          columns={[
-            { key: 'name', header: 'الاسم' },
-            { key: 'code', header: 'الرابط', render: (l: StoreLink) => <button className="link-chip" onClick={() => copyLink(l.code)} title="نسخ الرابط"><span className="monospace small">{l.code}</span> <Icon name="content_copy" /></button> },
-            { key: 'destinationType', header: 'الوجهة', render: (l: StoreLink) => DESTINATION_LABELS[l.destinationType] || l.destinationType },
-            { key: 'visits', header: 'النقرات', render: (l: StoreLink) => <Badge tone="blue">{l.visits || 0}</Badge> },
-            { key: 'ordersCount', header: 'طلبات مسلّمة', render: (l: StoreLink) => <Badge tone="green">{l.ordersCount || 0}</Badge> },
-            { key: 'conversion', header: 'التحويل', render: (l: StoreLink) => <span className="muted small">{conversionRate(l)}%</span> },
-            { key: 'totalRevenue', header: 'الإيرادات', render: (l: StoreLink) => formatCurrency(l.totalRevenue || 0) },
-            { key: 'active', header: 'الحالة', render: (l: StoreLink) => <Badge tone={l.active ? 'green' : 'slate'}>{l.active ? 'نشط' : 'موقوف'}</Badge> },
-            { key: 'actions', header: '', render: (l: StoreLink) => (
-              <div className="flex gap-1">
-                <button className="icon-btn" onClick={() => shareLink(l)} title="مشاركة"><Icon name="share" /></button>
-                <button className="icon-btn" onClick={() => window.open(publicUrl(l.code), '_blank')} title="فتح الرابط"><Icon name="open_in_new" /></button>
-                <button className="icon-btn" onClick={() => { setForm({ id: l.id, name: l.name, code: l.code, sellerName: l.sellerName || '', destinationType: l.destinationType, destinationId: l.destinationId || '', source: l.source || '', campaign: l.campaign || '', content: l.content || '', active: l.active ?? true, archived: false }); setOpen(true) }} title="تعديل"><Icon name="edit" /></button>
-                <button className="icon-btn" onClick={() => archive(l)} title="أرشفة"><Icon name="archive" /></button>
-                <button className="icon-btn icon-btn-danger" onClick={() => setDeleteTarget(l)}><Icon name="delete" /></button>
-              </div>
-            ) },
-          ]}
-          rows={links}
-        />
-      </Card>
-
-      <Modal open={open} onClose={() => setOpen(false)} title={form.id ? 'تعديل رابط بيع' : 'رابط بيع جديد'}>
-        <Input label="اسم الرابط" value={form.name} onChange={(v) => setForm({ ...form, name: v })} required placeholder="مثال: رابط بائع أكتوبر" />
-        <div className="grid grid-2">
-          <Input label="كود التتبع" value={form.code} onChange={(v) => setForm({ ...form, code: v })} placeholder={randomCode()} hint="فارغ = يُنشأ تلقائياً" />
-          <Input label="اسم البائع (اختياري)" value={form.sellerName} onChange={(v) => setForm({ ...form, sellerName: v })} />
-        </div>
-        <div className="field">
-          <span className="field-label">الوجهة</span>
-          <select className="input" value={form.destinationType} onChange={(e) => setForm({ ...form, destinationType: (e.target as HTMLSelectElement).value as StoreLinkDestinationType })}>
-            {(Object.keys(DESTINATION_LABELS) as StoreLinkDestinationType[]).map((k) => <option key={k} value={k}>{DESTINATION_LABELS[k]}</option>)}
+      <div className="storelinks-toolbar">
+        <div className="storelinks-toolbar-group">
+          <select value={status} onChange={(e) => setStatus((e.target as HTMLSelectElement).value)} aria-label="الحالة">
+            <option value="">جميع الحالات</option>
+            <option value="active">نشط</option>
+            <option value="inactive">متوقف</option>
           </select>
         </div>
-        {form.destinationType === 'product' && (
-          <div className="field">
-            <span className="field-label">اختر المنتج</span>
-            <select className="input" value={form.destinationId} onChange={(e) => setForm({ ...form, destinationId: (e.target as HTMLSelectElement).value })}>
-              <option value="">— اختر منتجاً —</option>
-              {products.map((p) => <option key={p.id} value={p.id}>{p.name}</option>)}
-            </select>
+        <div className="storelinks-search">
+          <Icon name="search" ariaHidden />
+          <input type="text" placeholder="بحث في الروابط..." value={query} onInput={(e) => setQuery((e.target as HTMLInputElement).value)} aria-label="بحث في الروابط" />
+        </div>
+      </div>
+
+      {filtered.length === 0 && links.length === 0 ? (
+        <EmptyState
+          icon="link"
+          title="لا توجد روابط بيع"
+          description="أنشئ روابط تتبع لتسويق منتجاتك وقياس أداء الحملات."
+          action={<Button icon="add" onClick={() => openForm()}>إنشاء رابط بيع</Button>}
+        />
+      ) : filtered.length === 0 ? (
+        <EmptyState icon="search_off" title="لا توجد نتائج" description="لا توجد روابط تطابق البحث والفلترة الحالية." />
+      ) : (
+        <div className="storelinks-table">
+          <div className="storelinks-table-scroll">
+            <table>
+              <thead>
+                <tr>
+                  <th>اسم الرابط</th>
+                  <th>الكود المختصر</th>
+                  <th>الوجهة</th>
+                  <th className="center">الزيارات</th>
+                  <th className="center">الطلبات</th>
+                  <th className="center">التحويل</th>
+                  <th>الإيرادات</th>
+                  <th className="center">الحالة</th>
+                  <th>إجراءات</th>
+                </tr>
+              </thead>
+              <tbody>
+                {filtered.map((l) => (
+                  <tr key={l.id}>
+                    <td>
+                      <div className="storelinks-name">{l.name}</div>
+                      {l.sellerName && <div className="storelinks-seller">{l.sellerName}</div>}
+                    </td>
+                    <td><span className="storelinks-code" dir="ltr">/s/{l.code}</span></td>
+                    <td><span className="storelinks-dest">{DESTINATION_LABELS[l.destinationType] || l.destinationType}</span></td>
+                    <td className="center">{l.visits || 0}</td>
+                    <td className="center">{l.ordersCount || 0}</td>
+                    <td className="center">{conversionRate(l)}%</td>
+                    <td><span className="storelinks-revenue">{formatCurrency(l.totalRevenue || 0)}</span></td>
+                    <td className="center">
+                      <span className={`storelinks-status${l.active ? ' is-active' : ''}`}>{l.active ? 'نشط' : 'متوقف'}</span>
+                    </td>
+                    <td>
+                      <span className="storelinks-actions">
+                        <button className="icon-btn" onClick={() => copyLink(l.code)} title="نسخ الرابط"><Icon name="content_copy" /></button>
+                        <button className="icon-btn" onClick={() => shareLink(l)} title="مشاركة"><Icon name="share" /></button>
+                        <button className="icon-btn" onClick={() => openForm(l)} title="تعديل"><Icon name="edit" /></button>
+                        <button className="icon-btn icon-btn-danger" onClick={() => archive(l)} title="إيقاف"><Icon name="archive" /></button>
+                      </span>
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
           </div>
-        )}
-        {form.destinationType === 'landing' && (
-          <div className="field">
-            <span className="field-label">اختر صفحة الهبوط</span>
-            <select className="input" value={form.destinationId} onChange={(e) => setForm({ ...form, destinationId: (e.target as HTMLSelectElement).value })}>
-              <option value="">— اختر صفحة —</option>
-              {landings.map((l) => <option key={l.id} value={l.slug}>{l.title} ({l.slug})</option>)}
-            </select>
+        </div>
+      )}
+
+      <Drawer open={open} onClose={() => setOpen(false)} title={form.id ? 'تعديل رابط البيع' : 'إنشاء رابط مبيعات جديد'} size="lg">
+        <div className="drawer-body-stack">
+          {atLimit && (
+            <Card>
+              <div className="flex" style={{ gap: 10 }}>
+                <Icon name="info" className="text-amber" />
+                <div>
+                  <p className="font-semibold">حد الروابط ({plan?.name || 'الباقة الأساسية'})</p>
+                  <p className="muted small">لقد استهلكت {links.length}/{linksLimit} من الروابط المتاحة في باقتك الحالية.</p>
+                </div>
+              </div>
+            </Card>
+          )}
+
+          <SectionHeader title="المعلومات الأساسية" />
+          <Card>
+            <Input label="اسم الرابط (مرجع داخلي)" value={form.name} onChange={(v) => setForm({ ...form, name: v })} required placeholder="مثال: رابط بائع أكتوبر" />
+            <Input label="اسم البائع / المسوق" value={form.sellerName} onChange={(v) => setForm({ ...form, sellerName: v })} />
+          </Card>
+
+          <SectionHeader title="المصدر والتتبع (UTM)" />
+          <Card>
+            <span className="field-label">المصدر (Source)</span>
+            <div className="storelinks-source-chips">
+              {SOURCE_PRESETS.map((s) => (
+                <button key={s} type="button" className={`storelinks-source-chip${form.source === s ? ' is-active' : ''}`} onClick={() => setForm({ ...form, source: s })}>{s}</button>
+              ))}
+              <button type="button" className={`storelinks-source-chip${form.source && !SOURCE_PRESETS.includes(form.source) ? ' is-active' : ''}`} onClick={() => setForm({ ...form, source: 'مخصص' })}>
+                <Icon name="add" className="storelinks-source-add" ariaHidden /> مخصص
+              </button>
+            </div>
+            {form.source === 'مخصص' && (
+              <Input label="مصدر مخصص" value={form.source === 'مخصص' ? '' : form.source} onChange={(v) => setForm({ ...form, source: v })} placeholder="google" />
+            )}
+            <div className="grid grid-2">
+              <Input label="اسم الحملة (Campaign)" value={form.campaign} onChange={(v) => setForm({ ...form, campaign: v })} placeholder="رمضان" />
+              <Input label="المحتوى (Content)" value={form.content} onChange={(v) => setForm({ ...form, content: v })} placeholder="ad-1" />
+            </div>
+          </Card>
+
+          <SectionHeader title="الوجهة" />
+          <Card>
+            <Select
+              label="نوع الوجهة"
+              value={form.destinationType}
+              onChange={(v) => setForm({ ...form, destinationType: v as StoreLinkDestinationType })}
+              options={(Object.keys(DESTINATION_LABELS) as StoreLinkDestinationType[]).map((k) => ({ value: k, label: DESTINATION_LABELS[k] }))}
+            />
+            {form.destinationType === 'product' && (
+              <Select
+                label="المنتج المختار"
+                value={form.destinationId}
+                onChange={(v) => setForm({ ...form, destinationId: v })}
+                placeholder="— اختر منتجاً —"
+                options={products.map((p) => ({ value: p.id, label: p.name }))}
+              />
+            )}
+            {form.destinationType === 'landing' && (
+              <Select
+                label="صفحة الهبوط"
+                value={form.destinationId}
+                onChange={(v) => setForm({ ...form, destinationId: v })}
+                placeholder="— اختر صفحة —"
+                options={landings.map((l) => ({ value: l.slug, label: `${l.title} (${l.slug})` }))}
+              />
+            )}
+            {form.destinationType === 'custom' && (
+              <Input label="المسار المخصص" value={form.destinationId} onChange={(v) => setForm({ ...form, destinationId: v })} placeholder="/catalog أو /product/abc" />
+            )}
+          </Card>
+
+          <SectionHeader title="الإعدادات والمعاينة" />
+          <Card>
+            <div className="storelinks-toggle-row">
+              <div>
+                <p className="font-semibold">تفعيل الرابط</p>
+                <p className="muted small">تفعيل أو تعطيل الرابط مؤقتاً</p>
+              </div>
+              <Toggle checked={form.active} onChange={(v) => setForm({ ...form, active: v })} />
+            </div>
+            <div>
+              <span className="field-label">معاينة الرابط المختصر</span>
+              <div className="storelinks-url-preview">
+                <div className="storelinks-url-text" dir="ltr">{form.code ? `/s/${form.code}` : 'سيُنشأ الكود عند الحفظ'}</div>
+                <button type="button" className="storelinks-url-copy" onClick={() => form.code && copyLink(form.code)} title="نسخ الرابط" disabled={!form.code}><Icon name="content_copy" ariaHidden /></button>
+              </div>
+              <p className="muted small mt-1">
+                <Icon name="info" className="storelinks-attribution-icon" ariaHidden />
+                يتم تتبع بيانات التوجيه (Attribution) داخلياً.
+              </p>
+            </div>
+            {form.id && (
+              <div className="storelinks-form-danger">
+                <button className="storelinks-danger-btn" onClick={() => { setDeleteTarget(links.find((l) => l.id === form.id) || null); setOpen(false) }}>حذف الرابط</button>
+                <button className="storelinks-archive-btn" onClick={async () => { if (form.id) { await archive(links.find((l) => l.id === form.id) as StoreLink) } setOpen(false) }}>أرشفة</button>
+              </div>
+            )}
+          </Card>
+
+          <div className="storelinks-form-actions">
+            <Button variant="ghost" onClick={() => setOpen(false)} disabled={saving}>إلغاء</Button>
+            <Button icon="save" onClick={submit} loading={saving}>{form.id ? 'حفظ التغييرات' : 'حفظ وإنشاء'}</Button>
           </div>
-        )}
-        {form.destinationType === 'custom' && (
-          <Input label="المسار المخصص" value={form.destinationId} onChange={(v) => setForm({ ...form, destinationId: v })} placeholder="/catalog أو /product/abc" />
-        )}
-        <div className="grid grid-3">
-          <Input label="المصدر" value={form.source} onChange={(v) => setForm({ ...form, source: v })} placeholder="facebook" />
-          <Input label="الحملة" value={form.campaign} onChange={(v) => setForm({ ...form, campaign: v })} placeholder="رمضان" />
-          <Input label="المحتوى" value={form.content} onChange={(v) => setForm({ ...form, content: v })} placeholder="ad-1" />
         </div>
-        <div className="field">
-          <Toggle checked={form.active} onChange={(v) => setForm({ ...form, active: v })} label="نشط" />
-        </div>
-        <div className="flex flex-end">
-          <Button variant="ghost" onClick={() => setOpen(false)}>إلغاء</Button>
-          <Button onClick={submit}>حفظ</Button>
-        </div>
-      </Modal>
+      </Drawer>
 
       <ConfirmDialog open={!!deleteTarget} onCancel={() => setDeleteTarget(null)} onConfirm={async () => { if (deleteTarget) { await storeLinksService.remove(deleteTarget.id); toast.push('تم حذف الرابط'); setDeleteTarget(null) } }} title="حذف رابط البيع" description={`سيتم حذف "${deleteTarget?.name}"`} confirmLabel="حذف" />
     </div>
   )
 }
+
 export default MerchantStoreLinks

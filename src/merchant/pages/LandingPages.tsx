@@ -12,11 +12,13 @@ import { Textarea } from '../../shared/components/ui/Textarea'
 import { Toggle } from '../../shared/components/ui/Toggle'
 import { Select } from '../../shared/components/ui/Select'
 import { ConfirmDialog } from '../../shared/components/ui/ConfirmDialog'
+import { EmptyState } from '../../shared/components/ui/EmptyState'
 import { Loading } from '../../shared/components/ui/Loading'
 import { useStore } from '../../shared/hooks/useStore'
 import { useCollection } from '../../shared/hooks/useCollection'
+import { useSubscription } from '../../shared/hooks/useSubscription'
 import { useToast } from '../../shared/hooks/useToast'
-import { landingPagesService, landingSlugTaken, uniqueLandingSlug } from '../../shared/services/system'
+import { landingPagesService } from '../../shared/services/system'
 import { createLandingPageCallable } from '../../shared/services/auth'
 import { slugify, formatCurrency } from '../../shared/utils/format'
 import { storeBaseUrl } from '../../shared/utils/store-url'
@@ -24,6 +26,7 @@ import { STORE_TEMPLATES } from '../../shared/utils/themes'
 import { LandingImageUploader } from '../components/LandingImageUploader'
 import type { LandingPage, LandingPageStatus, LandingSection, LandingSectionItem, Product } from '../../shared/types'
 import { Icon } from '../../shared/components/ui/Icon'
+import './LandingPages.css'
 
 const SECTION_TYPES: { value: LandingSection['type']; label: string }[] = [
   { value: 'features', label: 'المميزات' },
@@ -118,12 +121,16 @@ export const MerchantLandingPages: FunctionalComponent = () => {
   const productsRes = useCollection<Product>('products', { storeId })
   const pages = pagesRes.data || []
   const products = productsRes.data || []
+  const { resourceUsage } = useSubscription(storeId)
   const toast = useToast()
   const [open, setOpen] = useState(false)
   const [deleteTarget, setDeleteTarget] = useState<LandingPage | null>(null)
   const [form, setForm] = useState<Draft>(emptyDraft())
+  const [query, setQuery] = useState('')
+  const [statusFilter, setStatusFilter] = useState('')
 
-  if (pagesRes.loading || productsRes.loading) return <Loading />
+  if (!store) return <Loading message="جارٍ تحميل بيانات المتجر..." />
+  if (pagesRes.loading || productsRes.loading) return <Loading message="جارٍ تحميل صفحات الهبوط..." />
 
   const publicUrl = (slug: string) => `${storeBaseUrl()}/landing/${slug}`
 
@@ -138,11 +145,6 @@ export const MerchantLandingPages: FunctionalComponent = () => {
       return
     }
     const slug = (form.slug.trim() || slugify(form.title) || 'page').toLowerCase()
-    const slugTaken = await landingSlugTaken(slug, form.id)
-    if (slugTaken) {
-      toast.push('رابط الصفحة مستخدم مسبقاً', 'اختر رابطاً آخر أو اتركه فارغاً ليُنشأ تلقائياً', 'error')
-      return
-    }
     const payload: Omit<LandingPage, 'id' | 'storeId'> = {
       slug,
       title: form.title.trim(),
@@ -193,13 +195,26 @@ export const MerchantLandingPages: FunctionalComponent = () => {
       setOpen(false)
       setForm(emptyDraft())
     } catch (err: any) {
-      toast.push('فشل حفظ الصفحة', err?.message || 'حدث خطأ غير متوقع', 'error')
+      const message = String(err?.message || '')
+      if (message.includes('مستخدم') || message.includes('already-exists')) {
+        toast.push('رابط الصفحة مستخدم مسبقاً', 'اختر رابطاً آخر أو اتركه فارغاً ليُنشأ تلقائياً', 'error')
+      } else {
+        toast.push('فشل حفظ الصفحة', message || 'حدث خطأ غير متوقع', 'error')
+      }
     }
   }
 
   const duplicate = async (p: LandingPage) => {
     const payload = draftFromPage(p)
-    payload.slug = await uniqueLandingSlug(`${p.slug || slugify(p.title) || 'page'}-copy`, p.id)
+    // Public/global slug queries are intentionally not readable from the
+    // merchant client. Generate a collision-resistant copy candidate locally;
+    // the createLandingPage callable remains the authority that validates the
+    // global slug and rejects any rare collision transactionally.
+    const copyBase = `${p.slug || slugify(p.title) || 'page'}-copy`
+    const suffix = typeof crypto !== 'undefined' && typeof crypto.randomUUID === 'function'
+      ? crypto.randomUUID().slice(0, 8)
+      : Math.random().toString(36).slice(2, 10)
+    payload.slug = `${copyBase}-${suffix}`
     payload.title = `${p.title} (نسخة)`
     payload.status = 'draft'
     try {
@@ -269,45 +284,97 @@ export const MerchantLandingPages: FunctionalComponent = () => {
   const totalPublished = pages.filter((p) => p.status === 'published' && p.active).length
   const totalViews = pages.reduce((s, p) => s + (p.views || 0), 0)
   const totalRevenue = pages.reduce((s, p) => s + (p.totalRevenue || 0), 0)
+  const pageUsage = resourceUsage?.landingPages
+  const pageLimitReached = Boolean(pageUsage && pageUsage.limit > 0 && pageUsage.used >= pageUsage.limit)
 
-  const productName = (id?: string | null) => products.find((p) => p.id === id)?.name || 'بدون منتج'
+  const productName = (id?: string | null) => products.find((p) => p.id === id)?.name || 'غير محدد'
   const templateName = (id?: string) => STORE_TEMPLATES.find((t) => t.id === id)?.name || 'مودرن'
 
+  const filteredPages = pages.filter(
+    (p) =>
+      (p.title || '').includes(query) || (p.slug || '').includes(query) || (!statusFilter || (statusFilter === 'published' ? p.status === 'published' && p.active : p.status !== 'published' || !p.active)),
+  )
+
   return (
-    <div>
-      <PageHeader title="صفحات الهبوط" subtitle={`${pages.length} صفحة`} actions={<Button icon="add" onClick={() => openEditor()}>صفحة جديدة</Button>} />
+    <div className="merchant-operations merchant-landing-pages-page">
+      <PageHeader title="صفحات الهبوط" subtitle={`${pageUsage?.used ?? pages.length}${pageUsage?.limit ? ` / ${pageUsage.limit}` : ''} صفحة`} actions={<Button icon="add" disabled={pageLimitReached} onClick={() => openEditor()}>صفحة جديدة</Button>} />
 
       <div className="stats-grid">
-        <StatsCard title="إجمالي الصفحات" value={pages.length} icon="web" tone="primary" />
-        <StatsCard title="منشورة" value={totalPublished} icon="rocket_launch" tone="green" />
+        <StatsCard title="إجمالي الصفحات" value={pages.length} icon="layers" tone="primary" />
+        <StatsCard title="الصفحات المنشورة" value={totalPublished} icon="public" tone="green" changeLabel={totalPublished === pages.length && pages.length > 0 ? '(الحد الأقصى)' : undefined} />
         <StatsCard title="إجمالي الزيارات" value={totalViews} icon="visibility" tone="blue" />
         <StatsCard title="إيرادات مسلّمة" value={formatCurrency(totalRevenue)} currency icon="payments" tone="indigo" />
       </div>
 
-      <Card>
-        <Table cardMode
-          columns={[
-            { key: 'title', header: 'العنوان' },
-            { key: 'slug', header: 'الرابط', render: (p: LandingPage) => <button className="link-chip" onClick={() => copyLink(p)} title="نسخ الرابط"><span className="monospace small">{p.slug}</span> <Icon name="content_copy" /></button> },
-            { key: 'template', header: 'القالب', render: (p: LandingPage) => templateName(p.template) },
-            { key: 'productId', header: 'المنتج', render: (p: LandingPage) => productName(p.productId) },
-            { key: 'status', header: 'الحالة', render: (p: LandingPage) => <Badge tone={p.status === 'published' && p.active ? 'green' : 'slate'}>{p.status === 'published' && p.active ? 'منشورة' : 'مسودة'}</Badge> },
-            { key: 'views', header: 'الزيارات', render: (p: LandingPage) => <Badge tone="blue">{p.views || 0}</Badge> },
-            { key: 'ordersCount', header: 'طلبات مسلّمة', render: (p: LandingPage) => <Badge tone="green">{p.ordersCount || 0}</Badge> },
-            { key: 'totalRevenue', header: 'الإيرادات', render: (p: LandingPage) => formatCurrency(p.totalRevenue || 0) },
-            { key: 'actions', header: '', render: (p: LandingPage) => (
-              <div className="flex gap-1">
-                <button className="icon-btn" onClick={() => window.open(publicUrl(p.slug), '_blank')} title="معاينة"><Icon name="open_in_new" /></button>
-                <button className="icon-btn" onClick={() => openEditor(p)} title="تعديل"><Icon name="edit" /></button>
-                <button className="icon-btn" onClick={() => setStatus(p, p.status === 'published' ? 'draft' : 'published')} title={p.status === 'published' ? 'إلغاء النشر' : 'نشر'}><Icon name={p.status === 'published' ? 'block' : 'rocket_launch'} /></button>
-                <button className="icon-btn" onClick={() => duplicate(p)} title="نسخ"><Icon name="content_copy" /></button>
-                <button className="icon-btn icon-btn-danger" onClick={() => setDeleteTarget(p)}><Icon name="delete" /></button>
-              </div>
-            ) },
-          ]}
-          rows={pages}
-        />
-      </Card>
+      <div className="lp-list-panel">
+        <div className="lp-list-toolbar">
+          <div className="lp-list-search">
+            <Icon name="search" ariaHidden />
+            <input type="text" placeholder="ابحث في الصفحات..." value={query} onInput={(e) => setQuery((e.target as HTMLInputElement).value)} aria-label="بحث في صفحات الهبوط" />
+          </div>
+          <div className="flex gap-2">
+            <select value={statusFilter} onChange={(e) => setStatusFilter((e.target as HTMLSelectElement).value)} aria-label="الحالة">
+              <option value="">جميع الحالات</option>
+              <option value="published">منشور</option>
+              <option value="draft">مسودة</option>
+            </select>
+          </div>
+        </div>
+        <div className="lp-list-scroll">
+          <table className="lp-list-table">
+            <thead>
+              <tr>
+                <th className="check-col"><input type="checkbox" aria-label="تحديد الكل" /></th>
+                <th>العنوان</th>
+                <th>الرابط (Slug)</th>
+                <th>شراء سريع</th>
+                <th>الحالة</th>
+                <th>الزيارات</th>
+                <th>الطلبات</th>
+                <th>الإيرادات</th>
+                <th className="actions-col">الإجراءات</th>
+              </tr>
+            </thead>
+            <tbody>
+              {filteredPages.map((p) => {
+                const isPublished = p.status === 'published' && p.active
+                return (
+                  <tr key={p.id}>
+                    <td className="check-col"><input type="checkbox" aria-label={`تحديد ${p.title}`} /></td>
+                    <td>
+                      <p className="lp-title">{p.title}</p>
+                      <p className="lp-template">قالب: {templateName(p.template)}</p>
+                    </td>
+                    <td><span className="lp-slug" dir="ltr">/{p.slug}</span></td>
+                    <td>{productName(p.productId) || <span className="lp-muted">غير محدد</span>}</td>
+                    <td>
+                      <span className={`lp-status${isPublished ? ' is-published' : ''}`}>
+                        <span className="lp-status-dot" />
+                        {isPublished ? 'منشور' : 'مسودة'}
+                      </span>
+                    </td>
+                    <td className="mono-num">{p.views || 0}</td>
+                    <td className="mono-num">{p.ordersCount || 0}</td>
+                    <td><span className="lp-revenue">{formatCurrency(p.totalRevenue || 0)}</span></td>
+                    <td className="actions-col">
+                      <span className="lp-actions">
+                        <button className="icon-btn" onClick={() => window.open(publicUrl(p.slug), '_blank')} title="معاينة"><Icon name="visibility" /></button>
+                        <button className="icon-btn" onClick={() => openEditor(p)} title="تعديل"><Icon name="edit" /></button>
+                        <button className="icon-btn" onClick={() => setStatus(p, isPublished ? 'draft' : 'published')} title={isPublished ? 'إلغاء النشر' : 'نشر'}><Icon name={isPublished ? 'block' : 'rocket_launch'} /></button>
+                        <button className="icon-btn" onClick={() => duplicate(p)} title="نسخ"><Icon name="content_copy" /></button>
+                        <button className="icon-btn icon-btn-danger" onClick={() => setDeleteTarget(p)} title="حذف"><Icon name="delete" /></button>
+                      </span>
+                    </td>
+                  </tr>
+                )
+              })}
+            </tbody>
+          </table>
+          {filteredPages.length === 0 && (
+            <EmptyState icon="web" title="لا توجد صفحات" description={query ? 'لا توجد نتائج للبحث.' : 'أنشئ أول صفحة هبوط للبدء.'} />
+          )}
+        </div>
+      </div>
 
       <Drawer open={open} onClose={() => setOpen(false)} title={form.id ? 'تعديل صفحة هبوط' : 'صفحة هبوط جديدة'} size="lg">
         <div className="grid grid-2">

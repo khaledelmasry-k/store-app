@@ -1,13 +1,13 @@
-# M&K Store — Product Specification
+# Matjari (متجري) — Product Specification
 
 ## Product Vision
 
-M&K Store is a multi-tenant SaaS ecommerce platform that allows businesses to create and manage online stores without technical complexity.
+Matjari is a multi-tenant SaaS ecommerce platform that allows businesses to create and manage online stores without technical complexity.
 
 ## Three System Levels
 
 ### A) Platform Admin (`/platform/*`)
-- Manages the entire M&K Store SaaS platform
+- Manages the entire Matjari SaaS platform
 - Can create/suspend/activate stores
 - Can manage merchants
 - Can view subscriptions, plans, payments, transactions

@@ -39,7 +39,7 @@ export const PlatformCustomers: FunctionalComponent = () => {
   if (customersRes.loading) return <Loading />
 
   return (
-    <div>
+    <div className="platform-operations platform-customers-page">
       <PageHeader title="عملاء المنصة" subtitle={`${totalCustomers} عميل عبر جميع المتاجر`} />
 
       <div className="stats-grid">

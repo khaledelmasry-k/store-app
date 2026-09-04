@@ -9,6 +9,7 @@ import { FilterBar } from '../../shared/components/ui/FilterBar'
 import { Pagination } from '../../shared/components/ui/Pagination'
 import { EmptyState } from '../../shared/components/ui/EmptyState'
 import { Loading } from '../../shared/components/ui/Loading'
+import { SmartImage } from '../../shared/components/ui/SmartImage'
 import { useCollection } from '../../shared/hooks/useCollection'
 import { formatCurrency } from '../../shared/utils/format'
 import type { Product } from '../../shared/types'
@@ -38,7 +39,7 @@ export const PlatformProducts: FunctionalComponent = () => {
   if (productsRes.loading) return <Loading />
 
   return (
-    <div>
+    <div className="platform-operations platform-products-page">
       <PageHeader title="منتجات المنصة" subtitle={`${totalProducts} منتج عبر جميع المتاجر`} />
 
       <div className="stats-grid">
@@ -61,7 +62,7 @@ export const PlatformProducts: FunctionalComponent = () => {
         ) : (
           <Table cardMode
             columns={[
-              { key: 'name', header: 'المنتج', render: (p: Product) => <span className="flex"><img src={p.images?.[0]} style={{ width: 36, height: 36, borderRadius: 8, objectFit: 'cover' }} /><span style={{ marginInlineStart: 8 }}>{p.name}</span></span> },
+              { key: 'name', header: 'المنتج', render: (p: Product) => <span className="flex"><SmartImage src={p.images?.[0]} alt={p.name} className="platform-product-thumb" fallback="product" /><span style={{ marginInlineStart: 8 }}>{p.name}</span></span> },
               { key: 'storeId', header: 'المتجر', render: (p: Product) => (stores.find((s: any) => s.id === p.storeId) as any)?.name || '—' },
               { key: 'price', header: 'السعر', render: (p: Product) => formatCurrency(p.price) },
               { key: 'stock', header: 'المخزون', render: (p: Product) => <Badge tone={p.stock > 0 ? 'green' : 'red'}>{p.stock}</Badge> },

@@ -1,0 +1,13 @@
+import { chromium } from 'playwright'
+const b = await chromium.launch()
+const p = await b.newPage({ viewport: { width: 1440, height: 900 } })
+await p.goto('http://localhost:4173/store/test-store-a', { waitUntil: 'domcontentloaded' })
+await p.evaluate(() => localStorage.setItem('mk-cart-test-store-a', JSON.stringify([{ productId: 'x', name: 'منتج تجريبي', price: 1, quantity: 1, lineTotal: 1, maxQty: 5 }])))
+const t0 = Date.now()
+await p.goto('http://localhost:4173/store/test-store-a/cart', { waitUntil: 'domcontentloaded' })
+await p.waitForTimeout(30000)
+console.log('elapsed:', ((Date.now()-t0)/1000).toFixed(1) + 's')
+console.log('checkout btn:', await p.getByRole('button', { name: 'إتمام الطلب' }).count())
+console.log('line count:', await p.locator('[class*=cart-line]').count())
+console.log('has item text:', await p.getByText('منتج تجريبي').count())
+await b.close()

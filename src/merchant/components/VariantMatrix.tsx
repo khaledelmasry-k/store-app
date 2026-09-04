@@ -166,6 +166,26 @@ export const VariantMatrix: FunctionalComponent<Props> = ({ colors, sizes, varia
         </div>
       )}
 
+      {variants.length > 0 && colors.length === 0 && sizes.length > 0 && (
+        <div className="variant-table mt-2">
+          <div className="variant-grid variant-grid--sizes" style={{ gridTemplateColumns: `minmax(80px, 0.8fr) minmax(110px, 1.2fr) minmax(100px, 1.1fr) minmax(90px, 1fr) minmax(120px, 1.2fr)` }}>
+            <div className="variant-cell variant-cell-head">المقاس</div>
+            <div className="variant-cell variant-cell-head">SKU</div>
+            <div className="variant-cell variant-cell-head">السعر</div>
+            <div className="variant-cell variant-cell-head">المخزون</div>
+            <div className="variant-cell variant-cell-head">الحالة</div>
+            {sizes.map((s) => (
+              <SizeVariantRow
+                key={s}
+                size={s}
+                variants={variants}
+                updateVariant={updateVariant}
+              />
+            ))}
+          </div>
+        </div>
+      )}
+
       {variants.length === 0 && hasVariants && (
         <p className="muted small mt-1">اضغط "إنشاء المتغيرات" لتوليد مجموعات الألوان والمقاسات، ثم حدد المخزون لكل متغير.</p>
       )}
@@ -232,6 +252,83 @@ function VariantRow({
         <span className="variant-cell-hex" style={{ background: (row as ColorOption).hex || '#999' }} />
       </div>
       {cols.map((s, i) => cellFor(s, i))}
+    </>
+  )
+}
+
+function SizeVariantRow({
+  size,
+  variants,
+  updateVariant,
+}: {
+  size: string
+  variants: ProductVariant[]
+  updateVariant: (index: number, patch: Partial<ProductVariant>) => void
+}) {
+  const index = variants.findIndex((v) => !(v.color || '') && (v.size || '') === size)
+  const v = index >= 0 ? variants[index] : null
+
+  return (
+    <>
+      <div className="variant-cell variant-cell-label">
+        {size}
+        {v && v.stock > 0 && <span className="variant-status variant-status--ok">متوفر</span>}
+        {v && v.stock <= 0 && <span className="variant-status variant-status--out">نفد المخزون</span>}
+        {!v && <span className="muted small">—</span>}
+      </div>
+      {v ? (
+        <>
+          <div className="variant-cell">
+            <input
+              className="input variant-sku"
+              placeholder="SKU"
+              title="SKU"
+              value={v.sku || ''}
+              onInput={(e) => updateVariant(index, { sku: (e.target as HTMLInputElement).value })}
+            />
+          </div>
+          <div className="variant-cell">
+            <input
+              className="input variant-price"
+              type="number"
+              placeholder="سعر"
+              title="السعر (اختياري)"
+              value={v.price ?? ''}
+              onInput={(e) => {
+                const val = (e.target as HTMLInputElement).value
+                updateVariant(index, { price: val === '' ? undefined : Number(val) })
+              }}
+            />
+          </div>
+          <div className="variant-cell">
+            <input
+              className="input variant-stock"
+              type="number"
+              min={0}
+              title="المخزون"
+              value={v.stock ?? 0}
+              onInput={(e) => updateVariant(index, { stock: Math.max(0, Number((e.target as HTMLInputElement).value) || 0) })}
+            />
+          </div>
+        </>
+      ) : (
+        <>
+          <div className="variant-cell" />
+          <div className="variant-cell" />
+          <div className="variant-cell" />
+        </>
+      )}
+      <div className="variant-cell">
+        {v ? (
+          v.stock > 0 ? (
+            <span className="variant-status variant-status--ok">متوفر</span>
+          ) : (
+            <span className="variant-status variant-status--out">نفد المخزون</span>
+          )
+        ) : (
+          <span className="muted small">—</span>
+        )}
+      </div>
     </>
   )
 }

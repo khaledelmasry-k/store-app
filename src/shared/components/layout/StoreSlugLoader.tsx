@@ -1,13 +1,11 @@
 import { FunctionalComponent } from 'preact'
 import { useEffect, useState } from 'preact/hooks'
 import { useLocation, useSearch } from 'wouter'
-import { collection, query, where, onSnapshot, limit as limitQuery, type QuerySnapshot } from 'firebase/firestore'
-import { db } from '../../firebase'
 import { StoreContext } from '../../contexts/store-context'
 import { useAuth } from '../../hooks/useAuth'
 import { Loading } from '../ui/Loading'
 import { EmptyState } from '../ui/EmptyState'
-import { recordStoreLinkVisitCallable, getPublicStoreStatusCallable } from '../../services/auth'
+import { recordStoreLinkVisitCallable, getPublicStoreStatusCallable, getPublicStoreCallable } from '../../services/auth'
 import { parseStoreLocation } from '../../utils/store-route'
 import { StoreUnavailable } from '../../../store/components/StoreUnavailable'
 import type { Store, PublicStoreStatus } from '../../types'
@@ -21,10 +19,15 @@ export const StoreSlugLoader: FunctionalComponent<Props> = ({ children }) => {
   const search = useSearch()
   const { slug, ref } = parseStoreLocation(loc + (search ? `?${search}` : ''))
   const { user } = useAuth()
+  const previewRequested = new URLSearchParams(search || '').get('preview') === '1'
   const [store, setStore] = useState<Store | null>(null)
+  const [previewAuthorized, setPreviewAuthorized] = useState(false)
   const [loading, setLoading] = useState(!!slug)
   const [error, setError] = useState<string | null>(null)
-  const [pubStatus, setPubStatus] = useState<PublicStoreStatus | null>(null)
+  // Explicit fail-closed initial state: an unavailable local callable must
+  // resolve to an unavailable storefront, never an infinite spinner.
+  const [pubStatus, setPubStatus] = useState<PublicStoreStatus | null>({ purchasable: false, reason: 'status_unavailable' })
+  const [statusLoading, setStatusLoading] = useState(!!slug)
 
   useEffect(() => {
     if (!slug || !ref || !store?.id) return
@@ -61,45 +64,77 @@ export const StoreSlugLoader: FunctionalComponent<Props> = ({ children }) => {
       return
     }
 
-    setLoading(true)
+    const cacheKey = `mk-public-store:${slug}`
+    let cached: { savedAt: number; store: Store } | null = null
+    try {
+      const raw = sessionStorage.getItem(cacheKey)
+      if (raw) cached = JSON.parse(raw) as { savedAt: number; store: Store }
+    } catch { /* ignore malformed local cache */ }
+
+    // Reuse the safe public projection during a shopping session so catalog
+    // and product deep-links do not repeat the cold callable on every route.
+    // The callable still refreshes in the background and remains authoritative.
+    const cacheFresh = cached && Date.now() - cached.savedAt < 60_000
+    if (cacheFresh && cached?.store) {
+      setStore(cached.store)
+      setLoading(false)
+    } else {
+      setLoading(true)
+    }
     setError(null)
-    setStore(null)
+    setPreviewAuthorized(false)
+    if (!cacheFresh) setStore(null)
 
-    const q = query(collection(db, 'stores'), where('slug', '==', slug), limitQuery(1))
-
-    const unsub = onSnapshot(
-      q,
-      (snap: QuerySnapshot) => {
-        if (!snap.empty) {
-          const doc = snap.docs[0]
-          setStore({ id: doc.id, ...doc.data() } as unknown as Store)
-        } else {
-          setStore(null)
-          setError('store_not_found')
-        }
+    let cancelled = false
+    getPublicStoreCallable({ slug, preview: previewRequested })
+      .then((res) => {
+        if (cancelled) return
+        const response = res.data as Store & { previewAuthorized?: boolean }
+        const { previewAuthorized: authorized, ...nextStore } = response
+        setPreviewAuthorized(authorized === true)
+        setStore(nextStore)
+        try { sessionStorage.setItem(cacheKey, JSON.stringify({ savedAt: Date.now(), store: nextStore })) } catch { /* ignore storage limits */ }
         setLoading(false)
-      },
-      (err) => {
+      })
+      .catch((err) => {
+        if (cancelled) return
         console.error('StoreSlugLoader error:', err)
-        setError(err.message)
+        setStore(null)
+        setError(err?.code === 'functions/not-found' ? 'store_not_found' : 'store_unavailable')
         setLoading(false)
-      },
-    )
-
-    return () => unsub()
-  }, [slug])
+      })
+    return () => { cancelled = true }
+  }, [slug, previewRequested])
 
   useEffect(() => {
     if (!slug) return
     let cancelled = false
-    setPubStatus(null)
+    setStatusLoading(true)
+    const statusKey = `mk-public-status:${slug}`
+    try {
+      const raw = sessionStorage.getItem(statusKey)
+      if (raw) {
+        const cached = JSON.parse(raw) as { savedAt: number; status: PublicStoreStatus }
+        if (Date.now() - cached.savedAt < 60_000) setPubStatus(cached.status)
+        else setPubStatus({ purchasable: false, reason: 'status_unavailable' })
+      } else setPubStatus({ purchasable: false, reason: 'status_unavailable' })
+    } catch { setPubStatus({ purchasable: false, reason: 'status_unavailable' }) }
     getPublicStoreStatusCallable({ slug })
       .then((res) => {
-        if (!cancelled) setPubStatus((res.data as PublicStoreStatus) || { purchasable: true })
+        if (!cancelled) {
+          const nextStatus = (res.data as PublicStoreStatus) || { purchasable: false, reason: 'status_unavailable' }
+          setPubStatus(nextStatus)
+          setStatusLoading(false)
+          try { sessionStorage.setItem(statusKey, JSON.stringify({ savedAt: Date.now(), status: nextStatus })) } catch { /* ignore */ }
+        }
       })
       .catch(() => {
-        // Never gate the storefront because of a status-check failure.
-        if (!cancelled) setPubStatus({ purchasable: true })
+        // Fail closed: a status-check failure must never make an unpublished
+        // or suspended store look purchasable.
+        if (!cancelled) {
+          setPubStatus({ purchasable: false, reason: 'status_unavailable' })
+          setStatusLoading(false)
+        }
       })
     return () => {
       cancelled = true
@@ -137,16 +172,23 @@ export const StoreSlugLoader: FunctionalComponent<Props> = ({ children }) => {
     )
   }
 
-  const canPreview =
-    !!user && (user.role === 'superAdmin' || ((user.role === 'merchant' || user.role === 'staff') && (user.storeIds || []).includes(store.id)))
+  // The callable verifies identity and tenant membership server-side before it
+  // returns this marker. Using that result avoids a client-profile race while
+  // keeping an unauthorized preview fail-closed.
+  const canPreview = previewRequested && previewAuthorized
 
   // A store with no active subscription is not purchasable. Data is never
   // deleted — only purchases, publishing and creation are suspended. Owners
   // and admins can still preview the storefront.
-  if (pubStatus && !pubStatus.purchasable && !canPreview) {
+  if (!canPreview && statusLoading) return <Loading />
+
+  if (!statusLoading && pubStatus && !pubStatus.purchasable && !canPreview) {
     return <StoreUnavailable storeName={store.name} reason={pubStatus.reason} />
   }
 
+  // Do not render a public commerce surface until the server has answered the
+  // publication check. Merchant/admin previews may continue while the check is
+  // pending, but public visitors must not see a fail-open storefront.
   const ctx = { store, loading: false, setStoreId: () => {} }
 
   return <StoreContext.Provider value={ctx}>{children}</StoreContext.Provider>

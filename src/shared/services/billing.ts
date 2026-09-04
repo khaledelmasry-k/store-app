@@ -1,5 +1,6 @@
 import { listDocs, getDocById, createDoc, updateDocById, deleteDocById } from '../utils/firestore'
-import type { Subscription, SubscriptionPlan, Transaction, Payment, Coupon, ShippingZone } from '../types'
+import { manageCouponCallable } from './auth'
+import type { Shipment, ShippingCompany, ShippingCompanyReview, Subscription, SubscriptionPlan, Transaction, Payment, Coupon, ShippingZone } from '../types'
 
 const subPath = 'subscriptions'
 const plansPath = 'plans'
@@ -7,6 +8,9 @@ const txnPath = 'transactions'
 const payPath = 'payments'
 const couponPath = 'coupons'
 const shippingPath = 'shipping'
+const shippingCompaniesPath = 'shippingCompanies'
+const shipmentsPath = 'shipments'
+const shippingReviewsPath = 'shippingCompanyReviews'
 
 export const subscriptionsService = {
   list: (storeId?: string) =>
@@ -42,14 +46,23 @@ export const paymentsService = {
 
 export const couponsService = {
   list: (storeId: string) => listDocs<Coupon>(couponPath, { storeId, orderBy: { field: 'createdAt' } }),
-  create: (storeId: string, data: Omit<Coupon, 'id' | 'storeId'>) => createDoc<Coupon>(couponPath, { ...data, storeId }),
-  update: (id: string, data: Record<string, unknown>) => updateDocById(couponPath, id, data),
-  remove: (id: string) => deleteDocById(couponPath, id),
+  create: (storeId: string, data: Omit<Coupon, 'id' | 'storeId'>) => manageCouponCallable({ operation: 'create', storeId, coupon: data }),
+  update: (storeId: string, id: string, data: Record<string, unknown>) => manageCouponCallable({ operation: 'update', storeId, couponId: id, coupon: data }),
+  remove: (storeId: string, id: string) => manageCouponCallable({ operation: 'delete', storeId, couponId: id }),
 }
 
 export const shippingService = {
+  // Compatibility-only zone CRUD for stores that have not migrated to a
+  // platform provider. New checkout never calls this service.
   list: (storeId: string) => listDocs<ShippingZone>(shippingPath, { storeId, orderBy: { field: 'name' } }),
   create: (storeId: string, data: Omit<ShippingZone, 'id' | 'storeId'>) => createDoc<ShippingZone>(shippingPath, { ...data, storeId }),
   update: (id: string, data: Record<string, unknown>) => updateDocById(shippingPath, id, data),
   remove: (id: string) => deleteDocById(shippingPath, id),
+}
+
+export const shippingMarketplaceService = {
+  // Historical marketplace reads; active UI uses shippingProviders callables.
+  companies: () => listDocs<ShippingCompany>(shippingCompaniesPath, { orderBy: { field: 'name' } }),
+  shipments: (storeId: string) => listDocs<Shipment>(shipmentsPath, { storeId, orderBy: { field: 'createdAt' } }),
+  reviews: (merchantId: string) => listDocs<ShippingCompanyReview>(shippingReviewsPath, { where: { merchantId: { value: merchantId } }, orderBy: { field: 'createdAt' } }),
 }

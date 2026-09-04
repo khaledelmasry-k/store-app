@@ -1,0 +1,38 @@
+.storefront-shell { min-height: 100vh; width: 100%; }
+.storefront-shell .store-content { min-width: 0; }
+
+/*
+ * Mobile storefront contract
+ * --------------------------
+ * A customer route is always rendered inside StoreLayout, so this is the
+ * final, local source of truth for phone width.  Page-specific styles may
+ * choose their internal composition, but they must never introduce a second
+ * horizontal gutter on top of the shell gutter.
+ */
+@media (max-width: 767px) {
+  .storefront-shell,
+  .storefront-shell .store-content {
+    width: 100%;
+    max-width: none;
+    min-width: 0;
+    box-sizing: border-box;
+  }
+
+  .storefront-shell .store-content {
+    margin: 0;
+    padding: 16px 16px 32px;
+  }
+
+  .storefront-shell .storefront-page,
+  .storefront-shell .storefront-home {
+    width: 100%;
+    max-width: none;
+    min-width: 0;
+    margin-inline: 0;
+    box-sizing: border-box;
+  }
+
+  .storefront-shell .storefront-page {
+    padding-block: 16px 32px;
+  }
+}

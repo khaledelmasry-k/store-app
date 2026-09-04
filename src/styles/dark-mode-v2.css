@@ -1,0 +1,305 @@
+/* Matjari Dark Mode V2
+ *
+ * This file is the single semantic appearance layer for the application.
+ * It deliberately scopes component rules to application surfaces; public
+ * storefronts use their own theme contract and are never recoloured here.
+ */
+:root {
+  --app-bg: var(--mka-bg, #f8fafc);
+  --surface-1: var(--mka-surface, #fff);
+  --surface-2: var(--mka-surface-soft, #f8fafc);
+  --surface-3: var(--mka-surface-elevated, #fff);
+  --surface-muted: #f1f5f9;
+  --text-primary: var(--mka-text, #171b2d);
+  --text-secondary: var(--mka-text-secondary, #596174);
+  --text-muted: #748096;
+  --text-inverse: #fff;
+  --border-subtle: #eef1f5;
+  --border-default: var(--mka-border, #e5e7eb);
+  --border-strong: #cbd5e1;
+  --input-bg: #fff;
+  --input-border: #d7dee8;
+  --input-placeholder: #8792a5;
+  --overlay-bg: rgb(15 23 42 / 48%);
+  --brand-primary: var(--mka-primary, #3525cd);
+  --brand-primary-hover: var(--mka-primary-hover, #2d20ae);
+  --brand-on-primary: #fff;
+  --success-bg: #e8f7ef;
+  --success-text: #146c43;
+  --warning-bg: #fff5db;
+  --warning-text: #8a5500;
+  --danger-bg: #fdebec;
+  --danger-text: #a52d35;
+  --info-bg: #e8f2ff;
+  --info-text: #1d5d9f;
+  --shadow-sm: 0 1px 3px rgb(15 23 42 / 7%);
+  --shadow-md: 0 8px 24px rgb(15 23 42 / 12%);
+  --shadow-lg: 0 20px 48px rgb(15 23 42 / 18%);
+  /* Compatibility names used by older primitives; all resolve to V2 tokens. */
+  --background: var(--app-bg);
+  --surface-container: var(--surface-2);
+  --surface-container-low: var(--surface-muted);
+  --surface-container-high: var(--surface-3);
+  --surface-variant: var(--surface-muted);
+  --foreground: var(--text-primary);
+  --muted-foreground: var(--text-secondary);
+  --outline: var(--border-default);
+  --outline-variant: var(--border-subtle);
+  --error: var(--danger-text);
+}
+
+html[data-theme='dark'] {
+  /* Compatibility aliases for legacy component declarations. New code uses
+   * the semantic names below; these aliases keep older screens coherent
+   * while they are migrated without reintroducing global descendant rules. */
+  --bg: #0d1422;
+  --surface: #141e2e;
+  --surface-2: #182438;
+  --surface-3: #1d2b42;
+  --text: #f3f6fb;
+  --text-secondary: #c2ccdc;
+  --text-muted: #96a6bd;
+  --border: #344966;
+  --border-strong: #506887;
+  --primary: #9da6ff;
+  --primary-hover: #bac0ff;
+  --primary-soft: rgb(157 166 255 / 16%);
+  --app-bg: #0d1422;
+  --surface-1: #141e2e;
+  --surface-2: #182438;
+  --surface-3: #1d2b42;
+  --surface-muted: #22324b;
+  --text-primary: #f3f6fb;
+  --text-secondary: #c2ccdc;
+  --text-muted: #96a6bd;
+  --text-inverse: #0d1422;
+  --border-subtle: #24354e;
+  --border-default: #344966;
+  --border-strong: #506887;
+  --input-bg: #111b2b;
+  --input-border: #405776;
+  --input-placeholder: #9aa9be;
+  --overlay-bg: rgb(2 8 20 / 74%);
+  --brand-primary: #9da6ff;
+  --brand-primary-hover: #bac0ff;
+  --brand-on-primary: #11162c;
+  --success-bg: #153b2c;
+  --success-text: #9be7bb;
+  --warning-bg: #493718;
+  --warning-text: #ffda86;
+  --danger-bg: #482027;
+  --danger-text: #ffadb5;
+  --info-bg: #173958;
+  --info-text: #a7d3ff;
+  --shadow-sm: 0 1px 3px rgb(0 0 0 / 26%);
+  --shadow-md: 0 8px 24px rgb(0 0 0 / 32%);
+  --shadow-lg: 0 20px 48px rgb(0 0 0 / 48%);
+}
+
+/* Application canvas and primitives. These selectors intentionally require
+ * an app/auth surface so the merchant storefront remains theme-controlled. */
+@media (max-width: 640px) {
+  /* Keep the shared trial status readable on narrow phones. The countdown is
+   * allowed to wrap inside the bar instead of expanding the page horizontally. */
+  .merchant-status-bar .merchant-status-heading,
+  .merchant-status-bar .merchant-status-countdown {
+    width: 100%;
+    min-width: 0;
+    max-width: 100%;
+    flex-wrap: wrap;
+    white-space: normal;
+  }
+  .merchant-status-bar .merchant-status-countdown strong { white-space: normal; overflow-wrap: anywhere; }
+}
+
+html[data-theme='dark'] .app-shell,
+html[data-theme='dark'] .auth-screen,
+html[data-theme='dark'] .landing {
+  background: var(--app-bg);
+  color: var(--text-primary);
+}
+
+/* Public Matjari landing (when the appearance toggle is enabled). */
+html[data-theme='dark'] .landing .landing-header {
+  background: var(--surface-1);
+  border-color: var(--border-default);
+  color: var(--text-primary);
+}
+html[data-theme='dark'] .landing .landing-nav.open { background: var(--surface-1); border-color: var(--border-default); }
+html[data-theme='dark'] .landing .landing-nav-link { color: var(--text-secondary); }
+html[data-theme='dark'] .landing .landing-nav-link:hover { color: var(--text-primary); }
+html[data-theme='dark'] .landing .landing-hero p,
+html[data-theme='dark'] .landing .landing-section-heading p,
+html[data-theme='dark'] .landing .landing-feature-card p,
+html[data-theme='dark'] .landing .landing-step p { color: var(--text-secondary); }
+html[data-theme='dark'] .landing .landing-mockup,
+html[data-theme='dark'] .landing .landing-special-offer,
+html[data-theme='dark'] .landing .landing-billing-toggle,
+html[data-theme='dark'] .landing .landing-stats,
+html[data-theme='dark'] .landing .landing-value,
+html[data-theme='dark'] .landing .landing-pricing { background: var(--surface-2); border-color: var(--border-default); color: var(--text-primary); }
+html[data-theme='dark'] .landing .landing-hero h1,
+html[data-theme='dark'] .landing .landing-section-heading h2,
+html[data-theme='dark'] .landing .landing-feature-card h3,
+html[data-theme='dark'] .landing .landing-step h3,
+html[data-theme='dark'] .landing .landing-pricing h3 { color: var(--text-primary); }
+html[data-theme='dark'] .landing .landing-hero {
+  background:
+    radial-gradient(ellipse at 50% -22%, rgba(99, 102, 241, .24) 0, rgba(99, 102, 241, .08) 34%, transparent 66%),
+    var(--app-bg);
+}
+html[data-theme='dark'] .landing .landing-hero-actions > a:not(:first-child),
+html[data-theme='dark'] .landing .landing-inline-cta,
+html[data-theme='dark'] .landing .landing-eyebrow,
+html[data-theme='dark'] .landing .landing-section-heading > span,
+html[data-theme='dark'] .landing .landing-value-copy > span {
+  color: #a5b4fc;
+}
+html[data-theme='dark'] .landing .landing-mockup {
+  background: #111a2d;
+  border-color: #334155;
+  box-shadow: 0 28px 76px rgba(0, 0, 0, .42);
+}
+html[data-theme='dark'] .landing .landing-mockup-bar {
+  color: #aebad0;
+  border-color: #334155;
+}
+html[data-theme='dark'] .landing .landing-mockup-body aside {
+  background: #151f35;
+}
+html[data-theme='dark'] .landing .landing-mockup-body aside b { background: #818cf8; }
+html[data-theme='dark'] .landing .landing-mockup-body aside span { background: #40506d; }
+html[data-theme='dark'] .landing .landing-mockup-heading span,
+html[data-theme='dark'] .landing .landing-mockup-stats strong {
+  color: #f8fafc;
+}
+html[data-theme='dark'] .landing .landing-mockup-heading small,
+html[data-theme='dark'] .landing .landing-mockup-stats small,
+html[data-theme='dark'] .landing .landing-mockup-chart > span {
+  color: #aebad0;
+}
+html[data-theme='dark'] .landing .landing-mockup-heading small,
+html[data-theme='dark'] .landing .landing-mockup-stats > div,
+html[data-theme='dark'] .landing .landing-mockup-chart {
+  background: #18243a;
+  border-color: #34445f;
+}
+html[data-theme='dark'] .landing .landing-mockup-stats em { color: #5eead4; }
+html[data-theme='dark'] .landing .landing-stats { background: #172238; }
+html[data-theme='dark'] .landing .landing-stat span { color: #aebad0; }
+html[data-theme='dark'] .landing .landing-menu-toggle {
+  background: var(--surface-2);
+  border-color: var(--border-default);
+  color: var(--text-primary);
+}
+
+html[data-theme='dark'] .app-shell .card,
+html[data-theme='dark'] .app-shell .section-panel,
+html[data-theme='dark'] .app-shell .stat-card,
+html[data-theme='dark'] .app-shell .table-wrap,
+html[data-theme='dark'] .app-shell .card-table-card,
+html[data-theme='dark'] .app-shell .modal-content,
+html[data-theme='dark'] .app-shell .drawer,
+html[data-theme='dark'] .app-shell .popover,
+html[data-theme='dark'] .app-shell .dropdown-menu,
+html[data-theme='dark'] .auth-screen .auth-card,
+html[data-theme='dark'] .landing .landing-feature-card,
+html[data-theme='dark'] .landing .landing-step,
+html[data-theme='dark'] .landing .landing-faq {
+  background: var(--surface-1);
+  color: var(--text-primary);
+  border-color: var(--border-default);
+  box-shadow: var(--shadow-sm);
+}
+
+html[data-theme='dark'] .app-shell .card-head,
+html[data-theme='dark'] .app-shell .table th {
+  background: var(--surface-2);
+  color: var(--text-secondary);
+  border-color: var(--border-default);
+}
+html[data-theme='dark'] .app-shell .table td { color: var(--text-primary); border-color: var(--border-subtle); }
+html[data-theme='dark'] .app-shell .table tbody tr:hover { background: var(--surface-muted); }
+html[data-theme='dark'] .app-shell .page-title,
+html[data-theme='dark'] .app-shell .card-title,
+html[data-theme='dark'] .app-shell .stat-value { color: var(--text-primary); }
+html[data-theme='dark'] .app-shell .page-subtitle,
+html[data-theme='dark'] .app-shell .card-subtitle,
+html[data-theme='dark'] .app-shell .field-hint,
+html[data-theme='dark'] .app-shell .muted,
+html[data-theme='dark'] .app-shell .text-muted { color: var(--text-secondary); }
+
+html[data-theme='dark'] .app-shell .input,
+html[data-theme='dark'] .app-shell input,
+html[data-theme='dark'] .app-shell select,
+html[data-theme='dark'] .app-shell textarea,
+html[data-theme='dark'] .auth-screen .input,
+html[data-theme='dark'] .auth-screen input,
+html[data-theme='dark'] .auth-screen select,
+html[data-theme='dark'] .auth-screen textarea {
+  background: var(--input-bg);
+  color: var(--text-primary);
+  border-color: var(--input-border);
+}
+html[data-theme='dark'] .app-shell .input::placeholder,
+html[data-theme='dark'] .app-shell input::placeholder,
+html[data-theme='dark'] .app-shell textarea::placeholder,
+html[data-theme='dark'] .auth-screen input::placeholder,
+html[data-theme='dark'] .auth-screen textarea::placeholder { color: var(--input-placeholder); opacity: 1; }
+html[data-theme='dark'] .app-shell .input:focus,
+html[data-theme='dark'] .app-shell input:focus,
+html[data-theme='dark'] .app-shell select:focus,
+html[data-theme='dark'] .app-shell textarea:focus,
+html[data-theme='dark'] .auth-screen input:focus,
+html[data-theme='dark'] .auth-screen textarea:focus {
+  border-color: var(--brand-primary);
+  box-shadow: 0 0 0 3px color-mix(in srgb, var(--brand-primary) 24%, transparent);
+}
+
+html[data-theme='dark'] .app-shell .btn-secondary,
+html[data-theme='dark'] .app-shell .btn-outline,
+html[data-theme='dark'] .app-shell .btn-ghost {
+  color: var(--text-primary);
+  border-color: var(--border-strong);
+  background: transparent;
+}
+html[data-theme='dark'] .app-shell .btn-secondary:hover,
+html[data-theme='dark'] .app-shell .btn-outline:hover,
+html[data-theme='dark'] .app-shell .btn-ghost:hover { background: var(--surface-muted); }
+html[data-theme='dark'] .app-shell .btn-primary,
+html[data-theme='dark'] .auth-screen .btn-primary {
+  background: var(--brand-primary);
+  color: var(--brand-on-primary);
+}
+html[data-theme='dark'] .app-shell .btn-primary:hover,
+html[data-theme='dark'] .auth-screen .btn-primary:hover { background: var(--brand-primary-hover); }
+
+html[data-theme='dark'] .app-shell .modal-backdrop { background: var(--overlay-bg); }
+html[data-theme='dark'] .app-shell .toast { background: var(--surface-3); color: var(--text-primary); border-color: var(--border-default); box-shadow: var(--shadow-md); }
+html[data-theme='dark'] .app-shell .skeleton { background: var(--surface-muted); }
+html[data-theme='dark'] .app-shell .empty-state { color: var(--text-secondary); }
+
+/* Semantic statuses keep their meaning in both appearances. */
+html[data-theme='dark'] .app-shell .badge-green,
+html[data-theme='dark'] .app-shell .status-success { background: var(--success-bg); color: var(--success-text); }
+html[data-theme='dark'] .app-shell .badge-amber,
+html[data-theme='dark'] .app-shell .status-warning { background: var(--warning-bg); color: var(--warning-text); }
+html[data-theme='dark'] .app-shell .badge-red,
+html[data-theme='dark'] .app-shell .status-danger { background: var(--danger-bg); color: var(--danger-text); }
+html[data-theme='dark'] .app-shell .badge-slate,
+html[data-theme='dark'] .app-shell .status-info { background: var(--info-bg); color: var(--info-text); }
+
+/* Shell chrome uses the same ladder as content surfaces. */
+html[data-theme='dark'] .app-shell .shell-main,
+html[data-theme='dark'] .app-shell .shell-content { background: var(--app-bg); }
+html[data-theme='dark'] .app-shell .topbar { background: var(--surface-1); border-color: var(--border-default); color: var(--text-primary); }
+html[data-theme='dark'] .app-shell .sidebar { background: var(--surface-2); border-color: var(--border-default); }
+html[data-theme='dark'] .app-shell .sidebar-link,
+html[data-theme='dark'] .app-shell .sidebar-group-header { color: var(--text-secondary); }
+html[data-theme='dark'] .app-shell .sidebar-link:hover,
+html[data-theme='dark'] .app-shell .sidebar-group-header:hover { background: var(--surface-muted); color: var(--text-primary); }
+html[data-theme='dark'] .app-shell .sidebar-link.active,
+html[data-theme='dark'] .app-shell .sidebar-group-header.active { background: color-mix(in srgb, var(--brand-primary) 18%, var(--surface-2)); color: var(--text-primary); }
+
+/* Public storefronts are intentionally excluded. Their `.store-dark` and
+ * merchant theme tokens remain the sole source of storefront appearance. */

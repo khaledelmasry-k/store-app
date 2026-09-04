@@ -1,7 +1,7 @@
 import { FunctionalComponent } from 'preact'
 import { useRef, useState } from 'preact/hooks'
 import { useToast } from '../../shared/hooks/useToast'
-import { validateImageFile, uploadProductImage, deleteProductImage } from '../../shared/services/uploads'
+import { validateImageFile, uploadProductImage, uploadErrorMessage, deleteProductImage } from '../../shared/services/uploads'
 import { uid } from '../../shared/utils/validators'
 import { Icon } from '../../shared/components/ui/Icon'
 import { SmartImage } from '../../shared/components/ui/SmartImage'
@@ -15,12 +15,13 @@ interface Uploading {
 
 interface Props {
   storeId: string
+  productId: string
   images: string[]
   onChange: (images: string[]) => void
   max?: number
 }
 
-export const ImageGalleryUploader: FunctionalComponent<Props> = ({ storeId, images, onChange, max = 8 }) => {
+export const ImageGalleryUploader: FunctionalComponent<Props> = ({ storeId, productId, images, onChange, max = 8 }) => {
   const toast = useToast()
   const inputRef = useRef<HTMLInputElement>(null)
   const imagesRef = useRef(images)
@@ -63,7 +64,7 @@ export const ImageGalleryUploader: FunctionalComponent<Props> = ({ storeId, imag
       const id = uid(6)
       setUploading((prev) => [...prev, { id, name: file.name, progress: 0 }])
       try {
-        const url = await uploadProductImage(file, storeId, (progress) => {
+        const url = await uploadProductImage(file, storeId, productId, (progress) => {
           setUploading((prev) => prev.map((u) => (u.id === id ? { ...u, progress } : u)))
         })
         const current = imagesRef.current
@@ -80,9 +81,10 @@ export const ImageGalleryUploader: FunctionalComponent<Props> = ({ storeId, imag
         onChange(next)
         index += 1
       } catch (e) {
+        const message = uploadErrorMessage(e)
         console.error('upload failed', e)
-        setUploading((prev) => prev.map((u) => (u.id === id ? { ...u, error: 'فشل رفع الصورة — تحقق من اتصالك وحاول مجدداً' } : u)))
-        toast.push('فشل رفع الصورة', 'تحقق من اتصالك وحاول مجدداً', 'error')
+        setUploading((prev) => prev.map((u) => (u.id === id ? { ...u, error: message } : u)))
+        toast.push(message, undefined, 'error')
       } finally {
         setUploading((prev) => prev.filter((u) => u.id !== id))
       }
@@ -110,8 +112,8 @@ export const ImageGalleryUploader: FunctionalComponent<Props> = ({ storeId, imag
       {images.length === 0 && uploading.length === 0 && (
         <button type="button" className="image-upload-empty" onClick={() => pickFiles()}>
           <Icon name="add_photo_alternate" />
-          <strong>إضافة صور</strong>
-          <span className="muted small">JPG، PNG، WebP أو GIF — حتى 5 ميجابايت</span>
+          <strong>اسحب وأفلت الصور هنا، أو انقر للاستعراض</strong>
+          <span className="muted small">يدعم JPG، PNG، WebP أو GIF — حتى 5 ميجابايت</span>
         </button>
       )}
 

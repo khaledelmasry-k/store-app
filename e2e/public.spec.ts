@@ -16,5 +16,5 @@ test('register renders stepper and plan cards', async ({ page }) => {
   await expect(page.locator('.auth-step')).toHaveCount(4)
   const step1 = page.locator('.auth-step').first()
   await expect(step1.locator('.auth-step-dot--active')).toBeVisible()
-  await expect(page.locator('.auth-card input')).toHaveCount(3)
+  await expect(page.locator('.auth-card input')).toHaveCount(4)
 })

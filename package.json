@@ -7,6 +7,7 @@
     "dev": "vite",
     "build": "tsc -b && vite build",
     "preview": "vite preview",
+    "qa:b1:screenshots": "playwright test --config=qa/stitch-build/b1/playwright.config.ts",
     "lint": "oxlint",
     "typecheck": "tsc -b --noEmit",
     "emulators": "firebase emulators:start",
@@ -14,7 +15,11 @@
     "verify:build": "tsc -b --noEmit && vite build --mode emulator",
     "verify:run": "bash scripts/verify-emulator.sh",
     "verify:e2e": "firebase emulators:exec --project mk-store-app --only auth,firestore,functions,storage \"npm run verify:run\"",
-    "deploy": "firebase deploy"
+    "verify:integration": "firebase emulators:exec --project mk-store-app --only auth,firestore,functions,storage \"bash scripts/verify-integration.sh\"",
+    "secrets:integration-vault:production": "node scripts/set-integration-vault-secret.mjs",
+    "deploy": "node scripts/deploy-safe.mjs",
+    "deploy:staging": "node scripts/deploy-safe.mjs staging",
+    "deploy:production": "node scripts/deploy-safe.mjs production"
   },
   "dependencies": {
     "@fontsource/ibm-plex-sans-arabic": "^5.3.0",

@@ -1,0 +1,65 @@
+/* Manual M&K V3 platform compositions. This is intentionally separate from
+   shell chrome: each core screen owns its own density and hierarchy. */
+.platform-dashboard-page,
+.platform-merchants-page,
+.platform-orders-page { max-width: 1440px; margin-inline: auto; }
+.platform-dashboard-page .platform-intro-meta { color: var(--v3-muted); font-size: 12px; }
+.platform-dashboard-page .platform-intro-dot { display: inline-block; width: 6px; height: 6px; margin-inline: 7px; border-radius: 50%; background: var(--success, #2f9e68); }
+.platform-dashboard-page .platform-feature-card { border-inline-start: 3px solid var(--v3-primary); }
+.platform-dashboard-page .stats-grid,
+.platform-merchants-page .stats-grid,
+.platform-orders-page .stats-grid { gap: 12px; }
+.platform-merchants-page .merchant-table-card,
+.platform-orders-page .platform-orders-table { overflow: hidden; }
+.platform-orders-page .platform-orders-filter-row { display: flex; gap: 12px; align-items: end; flex-wrap: wrap; padding-block-start: 12px; }
+.platform-orders-page .platform-orders-filter-row select { min-height: 40px; min-width: 210px; }
+.platform-order-details-page { max-width: 1440px; margin-inline: auto; }
+.platform-order-details-page .platform-order-overview { display: grid; grid-template-columns: minmax(0, 1.25fr) minmax(280px, .75fr); gap: 16px; }
+.platform-order-details-page .card { background: var(--mka-surface); border-color: var(--mka-border); box-shadow: 0 4px 16px rgba(31, 45, 75, .045); }
+.platform-order-details-page .platform-shipping-panel { border-inline-start: 3px solid #4f46e5; }
+.platform-order-details-page .table-wrap { overflow-x: auto; }
+.platform-order-details-page .page-header { min-height: 0; padding-block-end: 12px; }
+@media (max-width: 768px) { .platform-order-details-page .platform-order-overview { grid-template-columns: 1fr; } }
+.platform-shipping-widget { margin-block-start: 18px; }
+.platform-shipping-mini-stats { margin-block: 12px 18px; }
+.platform-shipping-widget-link { display: inline-flex; margin-block-start: 14px; color: var(--v3-primary); font-weight: 700; }
+.platform-shipping-panel { border-inline-start: 3px solid var(--v3-primary); }
+.platform-no-carrier { display: flex; flex-direction: column; gap: 4px; padding: 18px; background: var(--v3-surface-low); border-radius: 10px; }
+.promotion-admin-preview { display: flex; flex-direction: column; gap: 4px; margin-block: 16px; padding: 16px; border: 1px solid var(--outline-variant, #d9d2c4); border-radius: 14px; background: var(--surface-container-lowest, #fff); }
+.promotions-form-grid {
+  display: grid;
+  gap: 16px;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  align-items: end;
+}
+.promotions-form-grid > :first-child { grid-column: 1 / -1; }
+@media (max-width: 900px) {
+  .promotions-form-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+}
+@media (max-width: 600px) {
+  .promotions-form-grid { grid-template-columns: 1fr; }
+}
+.promotion-admin-preview span { color: var(--text-muted, #746f64); font-size: 12px; }
+.promotion-admin-preview strong { font-size: 18px; }
+.promotion-admin-preview p { margin: 0; color: var(--text-secondary, #475569); }
+
+/* Business-readable audit log presentation. Technical identifiers remain in
+   the details drawer, while the table stays scannable at every breakpoint. */
+.platform-audit-page .audit-filters { display: grid; grid-template-columns: minmax(180px, 1fr) repeat(2, minmax(150px, .5fr)); gap: 10px; margin-block: 12px 16px; }
+.platform-audit-page .audit-filters .field { margin: 0; }
+.platform-audit-page .audit-actor,
+.platform-audit-page .audit-action { display: flex; flex-direction: column; align-items: flex-start; gap: 3px; min-width: 150px; }
+.platform-audit-page .audit-actor strong { font-size: 13px; }
+.platform-audit-page .audit-actor small,
+.platform-audit-page .audit-action small { color: var(--muted-foreground); font-size: 11px; }
+.platform-audit-page .audit-date { display: inline-flex; flex-direction: column; white-space: nowrap; line-height: 1.55; }
+.platform-audit-page .audit-technical-details dl { display: grid; grid-template-columns: 145px 1fr; gap: 10px 14px; margin: 0; }
+.platform-audit-page .audit-technical-details dt { color: var(--muted-foreground); font-size: 12px; }
+.platform-audit-page .audit-technical-details dd { margin: 0; overflow-wrap: anywhere; }
+.platform-audit-page .audit-technical-details h4 { margin: 24px 0 8px; }
+.platform-audit-page .audit-technical-details pre { max-height: 320px; margin: 0; padding: 14px; overflow: auto; border: 1px solid var(--border); border-radius: var(--radius-sm); background: var(--surface-muted); direction: ltr; text-align: left; font-size: 12px; }
+@media (max-width: 768px) {
+  .platform-audit-page .audit-filters { grid-template-columns: 1fr; }
+  .platform-audit-page .audit-technical-details dl { grid-template-columns: 1fr; gap: 4px; }
+  .platform-audit-page .audit-technical-details dd { margin-bottom: 8px; }
+}

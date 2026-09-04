@@ -1,0 +1,320 @@
+/* ──────────────────────────────────────────────────────────────
+   Storefront product card — rebuilt from the real Stitch home
+   source (desktop: "Premium Consumer Storefront Home"
+   56916061f03346f78802151c20218370 · mobile: "Refined Mobile
+   Storefront Experience" 46368a57a55d4c4d95b73c89b5dd8680).
+   Token-only styling: no raw colors (except white on scrims).
+   ────────────────────────────────────────────────────────────── */
+
+.spc-card {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  background: var(--surface-elevated);
+  border: 1px solid var(--border);
+  border-radius: 16px;
+  overflow: hidden;
+  box-shadow: 0 1px 2px color-mix(in srgb, var(--foreground) 4%, transparent);
+  transition: box-shadow var(--motion-fast, 140ms) ease;
+}
+/* Structural template variants share the same commerce actions/data but use
+   distinct merchandising treatments. */
+.spc-card--minimal { border-radius: 8px; box-shadow: none; border-color: color-mix(in srgb, var(--border) 65%, transparent); }
+.spc-card--minimal .spc-media { aspect-ratio: 1 / 1.18; }
+.spc-card--minimal .spc-body { padding-inline: 4px; }
+.spc-card--bold { border-radius: 18px; border-width: 2px; box-shadow: 0 12px 28px color-mix(in srgb, var(--primary) 12%, transparent); }
+.spc-card--bold .spc-media { aspect-ratio: 1 / 1; }
+.spc-card--bold .spc-price { font-size: 1.1rem; font-weight: 800; }
+.spc-card--bold .spc-add-btn--mobile { border-radius: 8px; font-weight: 800; }
+.spc-card--elegant { border-radius: 22px; border-color: color-mix(in srgb, var(--border) 55%, var(--primary)); box-shadow: 0 8px 26px color-mix(in srgb, var(--primary) 7%, transparent); }
+.spc-card--elegant .spc-media { aspect-ratio: 3 / 4; }
+.spc-card--elegant .spc-body { padding: 18px 8px; text-align: center; }
+.spc-card--elegant .spc-price-row { justify-content: center; }
+.spc-card--market { border-radius: 6px; box-shadow: 0 1px 5px rgba(20, 30, 20, .12); }
+.spc-card--market .spc-media { aspect-ratio: 1 / 1; }
+.spc-card--market .spc-body { padding: 10px; }
+.spc-card--market .spc-price { font-size: 1.15rem; font-weight: 900; }
+.spc-card--market .spc-market-label { display: block; margin-bottom: 4px; color: var(--primary); font-size: 10px; font-weight: 800; }
+.spc-card--showcase { border: 0; border-radius: 0; background: transparent; box-shadow: none; }
+.spc-card--showcase .spc-media { aspect-ratio: 4 / 5; border-radius: 18px; }
+.spc-card--showcase .spc-body { padding: 14px 2px; }
+.spc-card--showcase .spc-title { font-size: 1.05rem; }
+.spc-card:hover {
+  box-shadow: 0 8px 24px color-mix(in srgb, var(--foreground) 10%, transparent);
+}
+
+/* Media — Stitch: relative aspect-[3/4] with hover zoom. */
+.spc-media {
+  position: relative;
+  display: block;
+  aspect-ratio: 3 / 4;
+  background: var(--surface-muted);
+  overflow: hidden;
+  text-decoration: none;
+}
+.spc-media-img {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  transition: transform 700ms ease;
+}
+.spc-card:hover .spc-media-img {
+  transform: scale(1.05);
+}
+
+/* Badges — Stitch: absolute top-3 right-3 pill. */
+.spc-badge {
+  position: absolute;
+  top: 12px;
+  inset-inline-end: 12px;
+  z-index: 2;
+  padding: 4px 12px;
+  border-radius: 9999px;
+  font-size: 12px;
+  font-weight: 700;
+  backdrop-filter: blur(4px);
+  box-shadow: 0 1px 3px color-mix(in srgb, var(--foreground) 12%, transparent);
+}
+.spc-badge--new {
+  background: color-mix(in srgb, var(--surface) 90%, transparent);
+  color: var(--primary);
+}
+.spc-badge--sale {
+  background: color-mix(in srgb, var(--danger) 92%, transparent);
+  color: var(--primary-contrast, #fff);
+}
+.spc-badge--out {
+  background: color-mix(in srgb, var(--danger) 14%, transparent);
+  color: var(--danger);
+}
+
+/* Favorite — Stitch: absolute top-3 left-3 round ghost button. */
+.spc-favorite {
+  position: absolute;
+  top: 12px;
+  inset-inline-start: 12px;
+  z-index: 2;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 34px;
+  height: 34px;
+  border: none;
+  border-radius: 9999px;
+  background: color-mix(in srgb, var(--surface) 90%, transparent);
+  color: var(--muted-foreground);
+  cursor: pointer;
+  box-shadow: 0 1px 3px color-mix(in srgb, var(--foreground) 12%, transparent);
+  transition: color var(--motion-fast, 140ms) ease, background var(--motion-fast, 140ms) ease;
+}
+.spc-favorite:hover {
+  color: var(--danger);
+  background: var(--surface);
+}
+
+/* Quick add overlay — Stitch: bottom gradient, reveals on card hover. */
+.spc-quick-add {
+  position: absolute;
+  inset-inline: 0;
+  bottom: 0;
+  z-index: 2;
+  padding: 16px;
+  background: linear-gradient(to top, color-mix(in srgb, var(--foreground) 55%, transparent), transparent);
+  transform: translateY(100%);
+  transition: transform 300ms ease-out;
+}
+.spc-card:hover .spc-quick-add {
+  transform: translateY(0);
+}
+.spc-add-btn {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  width: 100%;
+  min-height: 44px;
+  border: none;
+  border-radius: 12px;
+  background: var(--primary);
+  color: var(--primary-contrast, #fff);
+  font-family: inherit;
+  font-size: 14px;
+  font-weight: 600;
+  cursor: pointer;
+  box-shadow: 0 4px 12px color-mix(in srgb, var(--foreground) 18%, transparent);
+  transition: background var(--motion-fast, 140ms) ease, transform 120ms ease;
+}
+.spc-add-btn:hover {
+  background: var(--primary-hover, var(--primary));
+}
+.spc-add-btn:active {
+  transform: scale(0.97);
+}
+
+/* Body — Stitch: p-5 flex-col flex-grow. */
+.spc-body {
+  display: flex;
+  flex-direction: column;
+  flex: 1;
+  padding: 20px;
+}
+.spc-colors {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-bottom: 8px;
+}
+.spc-color-dot {
+  width: 12px;
+  height: 12px;
+  border-radius: 9999px;
+  background: var(--surface-muted);
+  border: 1px solid var(--border);
+  box-shadow: 0 1px 2px color-mix(in srgb, var(--foreground) 8%, transparent);
+}
+.spc-color-count {
+  font-size: 12px;
+  color: var(--muted-foreground);
+}
+.spc-title {
+  margin: 0 0 4px;
+  font-size: 18px;
+  font-weight: 600;
+  color: var(--foreground);
+  line-height: 1.35;
+}
+.spc-title a {
+  color: inherit;
+  text-decoration: none;
+  display: block;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  transition: color var(--motion-fast, 140ms) ease;
+}
+.spc-card:hover .spc-title a {
+  color: var(--primary);
+}
+.spc-category {
+  margin: 0 0 12px;
+  font-size: 14px;
+  color: var(--muted-foreground);
+  line-height: 1.5;
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+}
+
+/* Price row — Stitch: mt-auto flex justify-between. */
+.spc-price-row {
+  margin-top: auto;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+}
+.spc-price-col {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  min-width: 0;
+}
+.spc-price {
+  font-size: 20px;
+  font-weight: 700;
+  color: var(--foreground);
+  white-space: nowrap;
+}
+.spc-price--sale {
+  color: var(--danger);
+}
+.spc-old-price {
+  font-size: 14px;
+  color: var(--muted-foreground);
+  text-decoration: line-through;
+  white-space: nowrap;
+}
+
+/* Availability badge — Stitch: tertiary pill / error pill. */
+.spc-stock {
+  flex: none;
+  padding: 4px 8px;
+  border-radius: 8px;
+  font-size: 14px;
+  font-weight: 500;
+  color: var(--primary);
+  background: var(--primary-soft);
+  white-space: nowrap;
+}
+.spc-stock--out {
+  color: var(--danger);
+  background: color-mix(in srgb, var(--danger) 12%, transparent);
+}
+
+/* Mobile add button — visible only under 768px (Stitch mobile body button). */
+.spc-add-btn--mobile {
+  display: none;
+}
+
+@media (max-width: 767px) {
+  .spc-add-btn--mobile {
+    display: flex;
+    min-height: 44px;
+    margin-top: 12px;
+    border-radius: 8px;
+    font-size: 12px;
+    font-weight: 700;
+    box-shadow: none;
+  }
+  .spc-quick-add {
+    display: none;
+  }
+  .spc-body {
+    padding: 12px;
+  }
+  .spc-title {
+    font-size: 14px;
+    font-weight: 600;
+  }
+  .spc-category {
+    font-size: 12px;
+  }
+  .spc-price {
+    font-size: 14px;
+  }
+  .spc-old-price {
+    font-size: 12px;
+  }
+  .spc-stock {
+    font-size: 12px;
+    padding: 3px 6px;
+  }
+  .spc-badge {
+    font-size: 10px;
+    padding: 3px 8px;
+    top: 8px;
+  }
+  .spc-favorite {
+    top: 8px;
+    width: 30px;
+    height: 30px;
+  }
+}
+
+/* Storefront dark composition (token swaps only). */
+.store-dark .spc-card {
+  background: var(--surface-elevated);
+  border-color: var(--border);
+}
+.store-dark .spc-media {
+  background: var(--surface-hover);
+}
+.store-dark .spc-price {
+  color: var(--foreground);
+}
+.store-dark .spc-badge--new {
+  background: color-mix(in srgb, var(--surface-elevated) 90%, transparent);
+}

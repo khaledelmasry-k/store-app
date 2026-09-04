@@ -1,48 +1,66 @@
 import { FunctionalComponent } from 'preact'
-import { BrandMark } from '../brand/BrandMark'
+import { BrandLogo } from '../brand/BrandLogo'
 import { Icon } from '../ui/Icon'
+import { AuthTopBar } from './AuthTopBar'
+import authCommerceVisual from '../../../assets/brand/matjari-auth-commerce-v1.png'
+import './AuthShell.css'
 
-// Landing-matched split-screen shell for the auth pages: a branded gradient
-// panel with the core value props on one side and the auth card on the other.
-// The panel collapses to a compact brand bar on narrow viewports.
+interface AuthShellProps {
+  children: any
+  variant?: 'skeleton' | 'brand'
+}
 
-const HIGHLIGHTS = [
-  { icon: 'storefront', label: 'متجر إلكتروني كامل' },
-  { icon: 'receipt_long', label: 'إدارة الطلبات والمخزون' },
-  { icon: 'groups', label: 'سجل عملاء ومتابعة' },
-  { icon: 'query_stats', label: 'تقارير ومبيعات لحظية' },
-  { icon: 'link', label: 'روابط بيع قابلة للتتبع' },
-]
+function SkeletonPanel() {
+  return (
+    <div className="auth-panel-body" aria-hidden="true">
+      <img className="auth-panel-visual" src={authCommerceVisual} alt="" />
+    </div>
+  )
+}
 
-export const AuthShell: FunctionalComponent<{ children: any }> = ({ children }) => (
-  <div className="auth-screen auth-split">
-    <aside className="auth-panel">
-      <div className="auth-panel-top">
-        <BrandMark small />
-        <strong>M&amp;K Store</strong>
+function BrandPanel() {
+  return (
+    <div className="auth-brand-anchor" aria-hidden="true">
+      <img className="auth-panel-visual" src={authCommerceVisual} alt="" />
+      <Icon name="storefront" className="auth-brand-icon" ariaHidden />
+      <h1>ابدأ رحلة نمو متجرك اليوم</h1>
+      <p>أنشئ حسابك في دقائق وادخل إلى لوحة تحكم متجرك</p>
+      <ul>
+        <li>
+          <Icon name="check" ariaHidden />
+          لوحة تحكم ذكية
+        </li>
+        <li>
+          <Icon name="check" ariaHidden />
+          تقارير لحظية
+        </li>
+      </ul>
+    </div>
+  )
+}
+
+export const AuthShell: FunctionalComponent<AuthShellProps> = ({ children, variant = 'skeleton' }) => (
+  <div className="auth-screen auth-console">
+    <AuthTopBar />
+    <div className="auth-split">
+      <main className="auth-main">{children}</main>
+      <aside className={`auth-panel${variant === 'brand' ? ' auth-panel--brand' : ''}`}>
+        <div className="auth-panel-top">
+          <BrandLogo className="auth-panel-logo" surface={variant === 'brand' ? 'brand' : 'auto'} />
+        </div>
+        {variant === 'brand' ? <BrandPanel /> : <SkeletonPanel />}
+      </aside>
+    </div>
+    <footer className="auth-footer">
+      <div className="auth-footer-inner">
+        <span>© {new Date().getFullYear()} Matjari — متجري</span>
+        <nav className="auth-footer-links" aria-label="روابط إضافية">
+          <a href="/privacy">الخصوصية</a>
+          <a href="/terms">الشروط</a>
+          <a href="/contact">تواصل معنا</a>
+        </nav>
       </div>
-
-      <div className="auth-panel-body">
-        <span className="auth-panel-eyebrow">منصة التجارة الإلكترونية المتكاملة</span>
-        <h2>أدر متجرك ومبيعاتك من مكان واحد</h2>
-        <p>
-          إدارة المنتجات والطلبات والعملاء والمخزون والمبيعات — كل شيء في لوحة واحدة
-          بسيطة وآمنة.
-        </p>
-        <ul className="auth-panel-list">
-          {HIGHLIGHTS.map((h) => (
-            <li key={h.label}>
-              <Icon name={h.icon} ariaHidden />
-              <span>{h.label}</span>
-            </li>
-          ))}
-        </ul>
-      </div>
-
-      <p className="auth-panel-foot">© {new Date().getFullYear()} M&amp;K Store</p>
-    </aside>
-
-    <main className="auth-main">{children}</main>
+    </footer>
   </div>
 )
 

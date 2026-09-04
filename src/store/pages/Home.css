@@ -1,0 +1,571 @@
+/* ──────────────────────────────────────────────────────────────
+   Storefront home — rebuilt from the real Stitch home source
+   (desktop: "Premium Consumer Storefront Home"
+   56916061f03346f78802151c20218370 · mobile: "Refined Mobile
+   Storefront Experience" 46368a57a55d4c4d95b73c89b5dd8680).
+   Section order per Stitch: Hero → Trust band → Category strip →
+   Template personalities (desktop) → Featured products.
+   Token-only styling: no raw colors (except white on scrims).
+   ────────────────────────────────────────────────────────────── */
+
+.storefront-home {
+  width: 100%;
+  max-width: 1440px;
+  margin-inline: auto;
+  padding-block-end: 96px;
+}
+
+/* ── Shared section heading (Stitch: text-2xl font-headline font-bold) ── */
+.sf-section-title {
+  margin: 0;
+  font-size: 24px;
+  font-weight: 700;
+  color: var(--foreground);
+}
+
+/* ── Hero — Stitch: h-[600px] rounded-3xl scrim card, content start-aligned ── */
+.sf-hero {
+  position: relative;
+  height: 600px;
+  margin-block-start: 16px;
+  border-radius: 24px;
+  overflow: hidden;
+  isolation: isolate;
+  background: linear-gradient(135deg, #1b2258, #303b70);
+}
+/* Each template composes the same data sections in a different merchandising
+   rhythm; CSS order keeps the implementation single-source for data/actions. */
+.sf-home--featured-categories-products,
+.sf-home--promo-hero-offers-products,
+.sf-home--hero-collections-products,
+.sf-home--categories-promos-products,
+.sf-home--hero-story-featured-products { display: flex; flex-direction: column; }
+.sf-home--featured-categories-products .sf-hero { order: 1; }
+.sf-home--featured-categories-products .sf-section--trust { order: 2; }
+.sf-home--featured-categories-products .sf-section--categories { order: 3; }
+.sf-home--featured-categories-products .sf-section--featured { order: 4; }
+.sf-home--promo-hero-offers-products .sf-hero { order: 2; }
+.sf-home--promo-hero-offers-products .sf-section--trust { order: 1; }
+.sf-home--promo-hero-offers-products .sf-section--categories { order: 3; }
+.sf-home--promo-hero-offers-products .sf-section--featured { order: 4; }
+.sf-home--hero-collections-products .sf-hero { order: 1; }
+.sf-home--hero-collections-products .sf-section--categories { order: 2; }
+.sf-home--hero-collections-products .sf-section--featured { order: 3; }
+.sf-home--hero-collections-products .sf-section--trust { order: 4; }
+.sf-home--categories-promos-products .sf-section--categories { order: 1; }
+.sf-home--categories-promos-products .sf-hero { order: 2; }
+.sf-home--categories-promos-products .sf-section--featured { order: 3; }
+.sf-home--categories-promos-products .sf-section--trust { order: 4; }
+.sf-home--hero-story-featured-products .sf-hero { order: 1; }
+.sf-home--hero-story-featured-products .sf-section--featured { order: 2; }
+.sf-home--hero-story-featured-products .sf-section--categories { order: 3; }
+.sf-home--hero-story-featured-products .sf-section--trust { order: 4; }
+.theme-grid-four .sf-featured-grid { grid-template-columns: repeat(4, minmax(0, 1fr)); }
+.theme-grid-three .sf-featured-grid { grid-template-columns: repeat(3, minmax(0, 1fr)); }
+.theme-grid-five .sf-featured-grid { grid-template-columns: repeat(5, minmax(0, 1fr)); gap: 12px; }
+.theme-grid-two .sf-featured-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 24px; }
+.theme-hero-campaign .sf-hero { min-height: 420px; }
+.theme-hero-compact-promo .sf-hero { min-height: 260px; }
+.theme-hero-immersive .sf-hero { min-height: 560px; }
+.theme-hero-split-editorial .sf-hero { border-radius: 28px; }
+@media (max-width: 900px) {
+  .theme-grid-five .sf-featured-grid,
+  .theme-grid-four .sf-featured-grid,
+  .theme-grid-three .sf-featured-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .theme-grid-two .sf-featured-grid { grid-template-columns: 1fr; }
+}
+@media (max-width: 560px) {
+  .theme-grid-five .sf-featured-grid,
+  .theme-grid-four .sf-featured-grid,
+  .theme-grid-three .sf-featured-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 10px; }
+}
+.sf-hero-bg {
+  position: absolute;
+  inset: 0;
+  z-index: 0;
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+.sf-hero-bg--fallback {
+  background:
+    radial-gradient(circle at 18% 24%, color-mix(in srgb, var(--primary) 52%, transparent) 0, transparent 18%),
+    radial-gradient(circle at 8% 82%, color-mix(in srgb, var(--secondary, var(--primary)) 38%, transparent) 0, transparent 28%),
+    radial-gradient(ellipse at 38% 58%, color-mix(in srgb, var(--primary) 24%, transparent) 0 20%, transparent 48%),
+    linear-gradient(135deg,
+      color-mix(in srgb, var(--primary) 34%, var(--foreground)),
+      color-mix(in srgb, var(--surface-muted) 44%, var(--foreground)) 58%,
+      color-mix(in srgb, var(--primary) 18%, var(--foreground)));
+}
+.sf-hero-overlay {
+  position: absolute;
+  inset: 0;
+  z-index: 1;
+  background: linear-gradient(
+    to left,
+    color-mix(in srgb, var(--foreground) 80%, transparent),
+    color-mix(in srgb, var(--foreground) 40%, transparent),
+    transparent
+  );
+}
+.sf-hero-content {
+  position: absolute;
+  inset: 0;
+  z-index: 2;
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  align-items: flex-start;
+  width: 50%;
+  padding: 64px 96px;
+}
+.sf-hero-eyebrow {
+  margin-bottom: 16px;
+  font-size: 14px;
+  font-weight: 500;
+  letter-spacing: 0.05em;
+  text-transform: uppercase;
+  color: var(--secondary, var(--primary));
+}
+.sf-hero-title {
+  margin: 0 0 24px;
+  font-size: 60px;
+  font-weight: 700;
+  line-height: 1.2;
+  color: #fff;
+}
+.sf-hero-subtitle {
+  margin: 0 0 40px;
+  max-width: 28rem;
+  font-size: 20px;
+  line-height: 1.75;
+  color: color-mix(in srgb, var(--foreground) 30%, #fff);
+}
+.sf-hero-cta {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  padding: 16px 32px;
+  border-radius: 9999px;
+  background: var(--primary);
+  color: var(--primary-contrast, #fff);
+  font-size: 18px;
+  font-weight: 700;
+  text-decoration: none;
+  box-shadow: 0 4px 14px color-mix(in srgb, var(--foreground) 30%, transparent);
+  transition: transform 140ms ease, box-shadow 140ms ease, background 140ms ease;
+}
+.sf-hero-cta:hover {
+  transform: translateY(-2px);
+  box-shadow: 0 8px 22px color-mix(in srgb, var(--foreground) 35%, transparent);
+  background: var(--primary-hover, var(--primary));
+}
+
+/* ── Trust band — Stitch: 4-col rounded card grid ── */
+.sf-trust {
+  margin-block-start: 32px;
+}
+.sf-trust-grid {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 16px;
+  padding: 24px;
+  background: var(--surface-elevated);
+  border: 1px solid color-mix(in srgb, var(--border) 70%, transparent);
+  border-radius: 16px;
+  box-shadow: 0 1px 2px color-mix(in srgb, var(--foreground) 4%, transparent);
+}
+.sf-trust-item {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  text-align: center;
+  gap: 8px;
+  padding: 16px;
+}
+.sf-trust-icon {
+  font-size: 30px;
+  color: var(--primary);
+}
+.sf-trust-label {
+  font-size: 14px;
+  font-weight: 500;
+  color: var(--foreground);
+}
+
+/* ── Category strip — Stitch: circular snap-scroll items ── */
+.sf-categories {
+  margin-block-start: 64px;
+}
+.sf-cat-strip {
+  display: flex;
+  gap: 16px;
+  overflow-x: auto;
+  padding-block: 16px 20px;
+  scroll-snap-type: x proximity;
+  scrollbar-width: none;
+}
+.sf-cat-strip::-webkit-scrollbar {
+  display: none;
+}
+.sf-cat-item {
+  flex: none;
+  min-width: 160px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 12px;
+  scroll-snap-align: start;
+  text-decoration: none;
+}
+.sf-cat-circle {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 128px;
+  height: 128px;
+  border-radius: 9999px;
+  background: var(--surface-muted);
+  border: 4px solid transparent;
+  overflow: hidden;
+  transition: border-color var(--motion-fast, 140ms) ease, background var(--motion-fast, 140ms) ease;
+}
+.sf-cat-item:hover .sf-cat-circle {
+  border-color: var(--primary-soft);
+  background: var(--surface-hover);
+}
+.sf-cat-icon {
+  font-size: 40px;
+  color: var(--primary);
+}
+.sf-cat-name {
+  font-size: 14px;
+  font-weight: 500;
+  color: var(--foreground);
+  transition: color var(--motion-fast, 140ms) ease;
+}
+.sf-cat-item:hover .sf-cat-name {
+  color: var(--primary);
+}
+
+/* Category chips — Stitch mobile: pill chips row. */
+.sf-cat-chips {
+  display: none;
+}
+
+/* ── Template personalities — Stitch: 5-tile image strip (desktop only) ── */
+.sf-templates {
+  margin-block-start: 64px;
+}
+.sf-template-grid {
+  display: grid;
+  grid-template-columns: repeat(5, minmax(0, 1fr));
+  gap: 24px;
+  margin-block-start: 32px;
+}
+.sf-template-tile {
+  position: relative;
+  height: 192px;
+  border-radius: 12px;
+  overflow: hidden;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 4px;
+  box-shadow: 0 1px 3px color-mix(in srgb, var(--foreground) 8%, transparent);
+  transition: transform var(--motion-fast, 140ms) ease, box-shadow var(--motion-fast, 140ms) ease;
+}
+.sf-template-tile:hover {
+  transform: scale(1.02);
+  box-shadow: 0 8px 22px color-mix(in srgb, var(--foreground) 14%, transparent);
+}
+.sf-template-tile--current {
+  outline: 3px solid var(--primary);
+  outline-offset: 2px;
+}
+.sf-template-tile-overlay {
+  position: absolute;
+  inset: 0;
+  background: color-mix(in srgb, var(--foreground) 35%, transparent);
+  transition: background var(--motion-fast, 140ms) ease;
+}
+.sf-template-tile:hover .sf-template-tile-overlay {
+  background: color-mix(in srgb, var(--foreground) 45%, transparent);
+}
+.sf-template-name {
+  position: relative;
+  color: #fff;
+  font-size: 20px;
+  font-weight: 700;
+}
+.sf-template-eyebrow {
+  position: relative;
+  color: color-mix(in srgb, #fff 75%, transparent);
+  font-size: 12px;
+  font-weight: 500;
+  letter-spacing: 0.04em;
+}
+
+/* ── Featured products — Stitch: 4-col grid with view-all header ── */
+.sf-featured {
+  margin-block-start: 80px;
+}
+.sf-section-head {
+  display: flex;
+  align-items: flex-end;
+  justify-content: space-between;
+  gap: 16px;
+  margin-bottom: 32px;
+}
+.sf-section-head-text {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+.sf-featured-title {
+  margin: 0;
+  font-size: 30px;
+  font-weight: 700;
+  color: var(--foreground);
+}
+.sf-featured-subtitle {
+  margin: 0;
+  font-size: 16px;
+  color: var(--muted-foreground);
+}
+.sf-viewall {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  color: var(--primary);
+  font-size: 14px;
+  font-weight: 500;
+  text-decoration: none;
+}
+.sf-viewall:hover {
+  text-decoration: underline;
+}
+.sf-featured-grid {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 24px;
+}
+
+/* Empty state — Stitch: dashed rounded panel. */
+.sf-featured-empty {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  padding: 96px 24px;
+  text-align: center;
+  background: var(--surface-elevated);
+  border: 1px dashed color-mix(in srgb, var(--border) 70%, transparent);
+  border-radius: 16px;
+}
+.sf-empty-icon {
+  font-size: 60px;
+  color: var(--muted);
+  margin-bottom: 16px;
+}
+.sf-featured-empty h3 {
+  margin: 0;
+  font-size: 20px;
+  font-weight: 700;
+  color: var(--foreground);
+}
+.sf-featured-empty p {
+  margin: 0;
+  max-width: 28rem;
+  font-size: 14px;
+  color: var(--muted-foreground);
+}
+
+/* ── Responsive ── */
+
+@media (max-width: 1023px) {
+  .sf-featured-grid {
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+  }
+  .sf-template-grid {
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+  }
+}
+
+@media (max-width: 767px) {
+  .storefront-home {
+    padding-block-end: 64px;
+  }
+  /* Hero — Stitch mobile: full-width aspect-square, bottom-aligned content. */
+  .sf-hero {
+    height: auto;
+    aspect-ratio: 1 / 1;
+    margin-block-start: 0;
+    border-radius: 0;
+  }
+  .sf-hero-overlay {
+    background: linear-gradient(
+      to top,
+      color-mix(in srgb, var(--foreground) 80%, transparent),
+      color-mix(in srgb, var(--foreground) 30%, transparent),
+      transparent 70%
+    );
+  }
+  .sf-hero-content {
+    width: 100%;
+    justify-content: flex-end;
+    align-items: flex-start;
+    padding: 24px;
+    padding-bottom: 32px;
+  }
+  .sf-hero-eyebrow {
+    display: none;
+  }
+  .sf-hero-title {
+    margin-bottom: 8px;
+    font-size: 30px;
+    line-height: 1.25;
+  }
+  .sf-hero-subtitle {
+    margin-bottom: 16px;
+    font-size: 14px;
+    line-height: 1.6;
+  }
+  .sf-hero-cta {
+    padding: 0 24px;
+    min-height: 44px;
+    border-radius: 8px;
+    font-size: 14px;
+    font-weight: 700;
+  }
+
+  /* Trust band — Stitch mobile: horizontal scroll cards. */
+  .sf-trust {
+    margin-block-start: 0;
+  }
+  .sf-trust-grid {
+    display: flex;
+    gap: 8px;
+    overflow-x: auto;
+    padding: 0 16px;
+    background: transparent;
+    border: none;
+    border-radius: 0;
+    box-shadow: none;
+    scrollbar-width: none;
+  }
+  .sf-trust-grid::-webkit-scrollbar {
+    display: none;
+  }
+  .sf-trust-item {
+    flex: none;
+    flex-direction: row;
+    min-width: 140px;
+    gap: 8px;
+    padding: 12px;
+    background: var(--surface-muted);
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    text-align: start;
+  }
+  .sf-trust-icon {
+    font-size: 22px;
+  }
+  .sf-trust-label {
+    font-size: 12px;
+    font-weight: 600;
+  }
+
+  /* Categories — Stitch mobile: pill chips row. */
+  .sf-categories {
+    margin-block-start: 32px;
+  }
+  .sf-section-title {
+    padding-inline: 16px;
+    font-size: 20px;
+  }
+  .sf-cat-strip {
+    display: none;
+  }
+  .sf-cat-chips {
+    display: flex;
+    gap: 12px;
+    overflow-x: auto;
+    padding: 12px 16px 4px;
+    scrollbar-width: none;
+  }
+  .sf-cat-chips::-webkit-scrollbar {
+    display: none;
+  }
+  .sf-cat-chip {
+    flex: none;
+    min-height: 44px;
+    padding: 0 20px;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    border-radius: 9999px;
+    border: 1px solid var(--border);
+    background: var(--surface);
+    color: var(--foreground);
+    font-size: 14px;
+    font-weight: 500;
+    text-decoration: none;
+    white-space: nowrap;
+  }
+  .sf-cat-chip:active {
+    transform: scale(0.97);
+  }
+
+  /* Templates — hidden on mobile per Stitch mobile source. */
+  .sf-templates {
+    display: none;
+  }
+
+  /* Featured — Stitch mobile: 2-col grid. */
+  .sf-featured {
+    margin-block-start: 48px;
+  }
+  .sf-section-head {
+    padding-inline: 16px;
+    margin-bottom: 16px;
+  }
+  .sf-featured-title {
+    font-size: 20px;
+  }
+  .sf-featured-subtitle {
+    font-size: 14px;
+  }
+  .sf-featured-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 16px;
+    padding-inline: 16px;
+  }
+  .sf-featured-empty {
+    margin-inline: 16px;
+    padding: 64px 16px;
+  }
+}
+
+/* Storefront dark composition (token swaps only). */
+.store-dark .sf-hero-bg--fallback {
+  background:
+    radial-gradient(120% 90% at 80% 10%, color-mix(in srgb, var(--primary) 35%, var(--surface-elevated)), transparent 60%),
+    linear-gradient(160deg, var(--surface-hover), var(--surface-elevated));
+}
+.store-dark .sf-trust-grid {
+  background: var(--surface-elevated);
+}
+.store-dark .sf-trust-item {
+  background: var(--surface-hover);
+  border-color: var(--border);
+}
+.store-dark .sf-cat-circle {
+  background: var(--surface-hover);
+}
+.store-dark .sf-featured-empty {
+  background: var(--surface-elevated);
+}

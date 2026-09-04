@@ -6,10 +6,11 @@ import { Icon } from '../../shared/components/ui/Icon'
 import { Button } from '../../shared/components/ui/Button'
 import { SmartImage } from '../../shared/components/ui/SmartImage'
 import { useToast } from '../../shared/hooks/useToast'
-import { validateImageFile, uploadProductImage } from '../../shared/services/uploads'
+import { validateImageFile, uploadProductImage, uploadErrorMessage } from '../../shared/services/uploads'
 
 interface Props {
   storeId: string
+  productId: string
   colors: ColorOption[]
   images: string[]
   onChange: (colors: ColorOption[]) => void
@@ -29,7 +30,7 @@ const PRESET_COLORS = [
   { name: 'أصفر', hex: '#eab308' },
 ]
 
-export const ColorManager: FunctionalComponent<Props> = ({ storeId, colors, images, onChange, onImageUploaded }) => {
+export const ColorManager: FunctionalComponent<Props> = ({ storeId, productId, colors, images, onChange, onImageUploaded }) => {
   const toast = useToast()
   const [customOpen, setCustomOpen] = useState(false)
   const [customName, setCustomName] = useState('')
@@ -85,11 +86,11 @@ export const ColorManager: FunctionalComponent<Props> = ({ storeId, colors, imag
     }
     setUploadingId(colorId)
     try {
-      const url = await uploadProductImage(file, storeId)
+      const url = await uploadProductImage(file, storeId, productId)
       onImageUploaded?.(url, colorId)
     } catch (e) {
       console.error('color image upload failed', e)
-      toast.push('فشل رفع صورة اللون', 'تحقق من اتصالك وحاول مجدداً', 'error')
+      toast.push(uploadErrorMessage(e), undefined, 'error')
     } finally {
       setUploadingId(null)
     }

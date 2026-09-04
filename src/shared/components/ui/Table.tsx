@@ -38,8 +38,8 @@ export function Table<T extends { id: string }>({
     return () => window.removeEventListener('resize', onResize)
   }, [])
 
-  // On small screens card tables render as cards automatically.
-  const showCards = isMobile ? cardMode : mobileCard
+  // On small screens every table renders as cards to avoid horizontal page overflow.
+  const showCards = isMobile ? true : mobileCard
 
   return (
     <div className="table-wrap">

@@ -1,135 +1,347 @@
 import { FunctionalComponent } from 'preact'
-import { useState } from 'preact/hooks'
-import { Link } from 'wouter'
+import { useEffect, useState } from 'preact/hooks'
+import { Link, useSearch } from 'wouter'
+import { doc, updateDoc } from 'firebase/firestore'
+import { db } from '../../shared/firebase'
 import { useStore } from '../../shared/hooks/useStore'
 import { useAuth } from '../../shared/hooks/useAuth'
 import { useCollection } from '../../shared/hooks/useCollection'
-import { useToast } from '../../shared/hooks/useToast'
-import { wishlistService, addressesService } from '../../shared/services/system'
 import { Button } from '../../shared/components/ui/Button'
-import { Card } from '../../shared/components/ui/Card'
-import { Badge } from '../../shared/components/ui/Badge'
+import { Avatar } from '../../shared/components/ui/Avatar'
 import { Input } from '../../shared/components/ui/Input'
 import { Select } from '../../shared/components/ui/Select'
+import { Badge } from '../../shared/components/ui/Badge'
+import { SmartImage } from '../../shared/components/ui/SmartImage'
 import { formatCurrency, formatDateTime } from '../../shared/utils/format'
-import { STATUS_LABELS, STATUS_COLORS } from '../../shared/utils/constants'
-import { GOVER_EG } from '../../shared/utils/constants'
-import type { WishlistItem, Address, Order } from '../../shared/types'
+import { EGYPT_CITIES_BY_GOVERNORATE, GOVER_EG, STATUS_LABELS, STATUS_COLORS } from '../../shared/utils/constants'
+import { visibleOrderStatusLabel, visibleOrderStatusTone } from '../../shared/utils/order-status'
+import { logout, resetPassword } from '../../shared/services/auth'
+import { useToast } from '../../shared/hooks/useToast'
 import { Icon } from '../../shared/components/ui/Icon'
+import type { Order, Product, WishlistItem } from '../../shared/types'
+
+const NAV_ITEMS = [
+  { id: 'overview', label: 'نظرة عامة', icon: 'dashboard' },
+  { id: 'orders', label: 'طلباتي', icon: 'shopping_bag' },
+  { id: 'addresses', label: 'العناوين', icon: 'location_on' },
+  { id: 'wishlist', label: 'قائمة الأمنيات', icon: 'favorite' },
+  { id: 'security', label: 'الأمان', icon: 'shield' },
+] as const
+
+const GOVERNORATE_OPTIONS = [{ value: '', label: 'اختر المحافظة' }, ...GOVER_EG.map(g => ({ value: g, label: g }))]
 
 export const StoreAccount: FunctionalComponent = () => {
   const { store } = useStore()
-  const { user } = useAuth()
+  const { user, loading: authLoading } = useAuth()
+  const search = useSearch()
   const toast = useToast()
-  const storeId = store?.id || ''
-  const userId = user?.uid || ''
+  const [activeTab, setActiveTab] = useState(() => new URLSearchParams(search).get('tab') || 'overview')
+  const [newAddress, setNewAddress] = useState({ name: '', phone: '', governorate: '', city: '', address: '', isDefault: false })
+  const [addresses, setAddresses] = useState(user?.addresses || [])
+  const addressSignature = JSON.stringify(user?.addresses || [])
 
-  const isCustomer = user?.role === 'customer'
-  const wishlistRes = useCollection<WishlistItem>('wishlist', { userId }, isCustomer && !!userId);
+  useEffect(() => {
+    const next = new URLSearchParams(search).get('tab')
+    if (next && NAV_ITEMS.some((item) => item.id === next)) setActiveTab(next)
+  }, [search])
 
-  const wishlist = wishlistRes.data
-  const addressesRes = useCollection<Address>('addresses', { userId }, isCustomer && !!userId);
-  const addresses = addressesRes.data
-  // Always scope by customerId for customers; never fall back to fetching all
-  // store orders for guests/merchants (guests are redirected below).
-  const ordersRes = useCollection<Order>('orders', isCustomer && userId ? { storeId, where: { customerId: { value: userId } } } : { storeId: '' });
-  const orders = ordersRes.data
-  const productsRes = useCollection('products', { storeId }, isCustomer && !!userId);
-  const products = productsRes.data
+  useEffect(() => {
+    setAddresses(JSON.parse(addressSignature) as typeof addresses)
+  }, [user?.uid, addressSignature])
 
-  const myOrders = orders.filter((o) => o.phone === user?.phone || o.customerId === userId)
+const ordersRes = useCollection<Order>('orders', { where: { customerId: { value: user?.uid || '__none__' } } }, !!store?.id && !!user?.uid)
+const orders = ordersRes.data?.sort((a, b) => (b.createdAt?.seconds || 0) - (a.createdAt?.seconds || 0)) || []
+const wishlistRes = useCollection<WishlistItem>('wishlist', { where: { userId: { value: user?.uid || '__none__' } } }, !!store?.id && !!user?.uid)
+const productsRes = useCollection<Product>('products', { storeId: store?.id || '' }, !!store?.id)
+const wishlistProducts = productsRes.data.filter((product) => wishlistRes.data.some((item) => item.productId === product.id && (!item.storeId || item.storeId === store?.id)))
 
-  const [newAddress, setNewAddress] = useState({ label: '', name: '', phone: '', governorate: '', city: '', address: '' })
+  const persistAddresses = async (next: typeof addresses) => {
+    if (!user?.uid) return
+    await updateDoc(doc(db, 'users', user.uid), { addresses: next })
+    setAddresses(next)
+  }
 
-  if (!isCustomer) {
+  const saveAddress = async () => {
+    if (!user?.uid || !newAddress.name || !newAddress.phone || !newAddress.governorate || !newAddress.city || !newAddress.address) {
+      toast.push('أكمل بيانات العنوان المطلوبة', undefined, 'error')
+      return
+    }
+    const id = typeof crypto !== 'undefined' && crypto.randomUUID ? crypto.randomUUID() : `address-${Date.now()}`
+    const nextAddress = { id, label: 'عنوان', ...newAddress }
+    const next = newAddress.isDefault ? addresses.map((a) => ({ ...a, isDefault: false })).concat(nextAddress) : addresses.concat(nextAddress)
+    try {
+      await persistAddresses(next)
+      setNewAddress({ name: '', phone: '', governorate: '', city: '', address: '', isDefault: false })
+      toast.push('تم حفظ العنوان')
+    } catch {
+      toast.push('تعذر حفظ العنوان', 'حاول مرة أخرى', 'error')
+    }
+  }
+
+  const removeAddress = async (id: string) => {
+    try {
+      await persistAddresses(addresses.filter((a) => a.id !== id))
+      toast.push('تم حذف العنوان')
+    } catch {
+      toast.push('تعذر حذف العنوان', 'حاول مرة أخرى', 'error')
+    }
+  }
+
+if (authLoading) return <div className="loading-screen"><span className="spinner spinner-lg" /></div>
+
+if (!user || user.role !== 'customer') {
     return (
-      <div className="order-confirmed">
-        <div className="big-check"><Icon name="account_circle" /></div>
-        <h1 className="auth-title">تسجيل الدخول مطلوب</h1>
-        <p className="auth-subtitle">سجّل الدخول لعرض طلباتك وعناوينك ومفضلتك.</p>
-        <Link href={`/store/${store?.slug}/login`}><Button>تسجيل الدخول</Button></Link>
+      <div className="storefront-page storefront-account">
+        <div className="auth-required">
+          <Icon name="account_circle" className="auth-icon" />
+          <h1>تسجيل الدخول مطلوب</h1>
+          <p>يرجى تسجيل الدخول للوصول إلى لوحة تحكم حسابك.</p>
+          <Link href={`/store/${store?.slug}/login`}><Button icon="login">تسجيل الدخول</Button></Link>
+        </div>
       </div>
     )
   }
 
-  const addAddress = async () => {
-    if (!newAddress.address) {
-      toast.push('أدخل العنوان', undefined, 'error')
-      return
-    }
-    await addressesService.create({ ...newAddress, userId, storeId, isDefault: addresses.length === 0 })
-    toast.push('تمت إضافة العنوان')
-    setNewAddress({ label: '', name: '', phone: '', governorate: '', city: '', address: '' })
-  }
-
-  const removeWish = async (id: string) => {
-    await wishlistService.remove(id)
-    toast.push('أُزيل من المفضلة')
-  }
-
   return (
-    <div>
-      <h1 className="page-title mb-2">حسابي</h1>
-      <div className="grid grid-2">
-        <Card title="طلباتي">
-          {myOrders.length === 0 ? (
-            <p className="muted">لا توجد طلبات بعد.</p>
-          ) : (
-            myOrders.map((o) => (
-              <Link key={o.id} href={`/store/${store?.slug}/orders/${o.id}`} className="list-row list-row--link">
+    <div className="storefront-page storefront-account storefront-account--stitch">
+      <aside className="account-sidebar">
+        <div className="account-header">
+          <Avatar name={user.name} size="lg" />
+          <h2>{user.name}</h2>
+          <span className="muted small">{user.email}</span>
+        </div>
+        <nav className="account-nav" role="navigation" aria-label="تنقل الحساب">
+          {NAV_ITEMS.map((item) => (
+            <button
+              key={item.id}
+              className={`account-nav-item${activeTab === item.id ? ' active' : ''}`}
+              onClick={() => setActiveTab(item.id)}
+            >
+              <Icon name={item.icon} />
+              <span>{item.label}</span>
+            </button>
+          ))}
+          <button className="account-nav-item danger" onClick={() => logout().then(() => window.location.reload())}>
+            <Icon name="logout" />
+            <span>تسجيل الخروج</span>
+          </button>
+        </nav>
+      </aside>
+
+      <main className="account-content" role="main">
+        {activeTab === 'overview' && (
+          <section className="account-section">
+            <h2 className="section-title">نظرة عامة</h2>
+            <p className="muted">أهلاً بك، {user.name}! مرحباً بعودتك إلى متجر {store?.name}. إليك نظرة عامة على نشاط حسابك.</p>
+
+            <div className="stats-grid">
+              <article className="stat-card">
+                <span className="stat-icon"><Icon name="shopping_bag" /></span>
                 <div>
-                  <span className="monospace">{o.orderNumber}</span>
-                  <p className="muted small">{formatDateTime(o.createdAt)} • {formatCurrency(o.totalPrice)} • {o.items.length} منتج</p>
+                  <span className="stat-label">إجمالي الطلبات</span>
+                  <strong className="stat-value">{orders.length}</strong>
                 </div>
-                <Badge tone={STATUS_COLORS[o.status as keyof typeof STATUS_COLORS]}>{STATUS_LABELS[o.status as keyof typeof STATUS_LABELS] || o.status}</Badge>
-              </Link>
-            ))
-          )}
-        </Card>
-        <Card title="المفضلة">
-          {wishlist.length === 0 ? (
-            <p className="muted">لا توجد منتجات مفضلة.</p>
-          ) : (
-            wishlist.map((w) => {
-              const product = products.find((p: any) => p.id === w.productId) as any
-              return (
-                <div key={w.id} className="list-row">
-                  <span>{product?.name || 'منتج محذوف'}</span>
-                  <button className="icon-btn" onClick={() => removeWish(w.id)} type="button">
-                    <Icon name="delete" />
-                  </button>
-                </div>
-              )
-            })
-          )}
-        </Card>
-      </div>
-      <Card title="عناويني" className="mt-2">
-        {addresses.length > 0 && (
-          <div className="mb-2">
-            {addresses.map((a) => (
-              <div key={a.id} className="list-row">
+              </article>
+              <article className="stat-card">
+                <span className="stat-icon"><Icon name="attach_money" /></span>
                 <div>
-                  <strong>{a.label || a.address}</strong>
-                  <p className="muted small">{a.governorate} • {a.city} • {a.address}</p>
+                  <span className="stat-label">إجمالي الإنفاق</span>
+                  <strong className="stat-value">{formatCurrency(orders.reduce((s, o) => s + o.totalPrice, 0))}</strong>
                 </div>
-                {a.isDefault && <Badge tone="green">الافتراضي</Badge>}
+              </article>
+              <article className="stat-card">
+                <span className="stat-icon"><Icon name="local_shipping" /></span>
+                <div>
+                  <span className="stat-label">قيد التجهيز</span>
+                  <strong className="stat-value">{orders.filter(o => o.status === 'PROCESSING' || o.status === 'CONTACTED').length}</strong>
+                </div>
+              </article>
+              <article className="stat-card">
+                <span className="stat-icon"><Icon name="check_circle" /></span>
+                <div>
+                  <span className="stat-label">مكتملة</span>
+                  <strong className="stat-value">{orders.filter(o => o.status === 'DELIVERED').length}</strong>
+                </div>
+              </article>
+            </div>
+
+            <section className="recent-orders">
+              <div className="section-head">
+                <h3 className="section-title">أحدث الطلبات</h3>
+                <Link href={`/store/${store?.slug}/account?tab=orders`} className="section-viewall">عرض الكل</Link>
               </div>
-            ))}
-          </div>
+              {orders.length > 0 ? (
+                <div className="orders-list">
+                  {orders.slice(0, 3).map((o) => (
+                    <Link key={o.id} href={`/store/${store?.slug}/account/orders/${o.id}`} className="order-row">
+                      <div className="order-row-info">
+                        <span className="order-row-number monospace">{o.orderNumber}</span>
+                        <span className="order-row-date muted small">{formatDateTime(o.createdAt)}</span>
+                      </div>
+                      <div className="order-row-status">
+                        <Badge tone={visibleOrderStatusTone(o) as any}>{visibleOrderStatusLabel(o)}</Badge>
+                        <span className="order-row-total">{formatCurrency(o.totalPrice)}</span>
+                      </div>
+                    </Link>
+                  ))}
+                </div>
+              ) : (
+                <div className="empty-state">
+                  <Icon name="shopping_bag" />
+                  <p>لا توجد طلبات بعد</p>
+                  <Link href={`/store/${store?.slug}/catalog`}><Button variant="outline" className="mt-1">ابدأ التسوق</Button></Link>
+                </div>
+              )}
+            </section>
+          </section>
         )}
-        <div className="grid grid-2">
-          <Input label="اسم العنوان" value={newAddress.label} onChange={(v) => setNewAddress({ ...newAddress, label: v })} placeholder="المنزل / العمل" />
-          <Input label="الاسم" value={newAddress.name} onChange={(v) => setNewAddress({ ...newAddress, name: v })} />
-          <Input label="الهاتف" value={newAddress.phone} onChange={(v) => setNewAddress({ ...newAddress, phone: v })} />
-          <Select label="المحافظة" value={newAddress.governorate} onChange={(v) => setNewAddress({ ...newAddress, governorate: v })} options={GOVER_EG.map((g) => ({ value: g, label: g }))} placeholder="اختر المحافظة" />
-          <Input label="المدينة" value={newAddress.city} onChange={(v) => setNewAddress({ ...newAddress, city: v })} />
-          <Input label="العنوان بالتفصيل" value={newAddress.address} onChange={(v) => setNewAddress({ ...newAddress, address: v })} />
-        </div>
-        <div className="flex flex-end">
-          <Button icon="add" onClick={addAddress}>إضافة عنوان</Button>
-        </div>
-      </Card>
+
+        {activeTab === 'orders' && (
+          <section className="account-section">
+            <h2 className="section-title">جميع الطلبات</h2>
+            {orders.length > 0 ? (
+              <div className="orders-table">
+                <table>
+                  <thead>
+                    <tr>
+                      <th>رقم الطلب</th>
+                      <th>التاريخ</th>
+                      <th>الإجمالي</th>
+                      <th>الحالة</th>
+                      <th></th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {orders.map((o) => (
+                      <tr key={o.id}>
+                        <td><Link href={`/store/${store?.slug}/account/orders/${o.id}`} className="monospace">{o.orderNumber}</Link></td>
+                        <td>{formatDateTime(o.createdAt)}</td>
+                        <td>{formatCurrency(o.totalPrice)}</td>
+                        <td><Badge tone={visibleOrderStatusTone(o) as any}>{visibleOrderStatusLabel(o)}</Badge></td>
+                        <td><Link href={`/store/${store?.slug}/account/orders/${o.id}`} className="btn btn-sm btn-outline">التفاصيل</Link></td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            ) : (
+              <div className="empty-state">
+                <Icon name="shopping_bag" />
+                <p>لا توجد طلبات بعد</p>
+                <Link href={`/store/${store?.slug}/catalog`}><Button variant="outline" className="mt-1">ابدأ التسوق</Button></Link>
+              </div>
+            )}
+          </section>
+        )}
+
+        {activeTab === 'addresses' && (
+          <section className="account-section">
+            <div className="section-head">
+              <h2 className="section-title">العناوين المحفوظة</h2>
+            </div>
+            <div className="addresses-list">
+              {addresses.length > 0 ? (
+                addresses.map((addr, idx) => (
+                  <article key={idx} className="address-card">
+                    <div className="address-info">
+                      <div className="address-header">
+                        <span className="address-type">{addr.label || 'عنوان'}</span>
+                        {addr.isDefault && <Badge tone="green">الافتراضي</Badge>}
+                      </div>
+                      <address className="address-text">
+                        {addr.name}<br />
+                        {addr.address}<br />
+                        {addr.city}, {addr.governorate}<br />
+                        <a href={`tel:${addr.phone}`} className="ltr-text">{addr.phone}</a>
+                      </address>
+                    </div>
+                    <div className="address-actions">
+                      <Link href={`/store/${store?.slug}/account?editAddress=${idx}`} className="btn btn-sm btn-outline"><Icon name="edit" /> تعديل</Link>
+                      <button className="btn btn-sm btn-outline danger" onClick={() => removeAddress(addr.id)}><Icon name="delete" /> حذف</button>
+                    </div>
+                  </article>
+                ))
+              ) : (
+                <div className="empty-state">
+                  <Icon name="location_on" />
+                  <p>لا توجد عناوين محفوظة</p>
+                </div>
+              )}
+            </div>
+            <div className="add-address-form">
+              <h3>إضافة عنوان جديد</h3>
+              <div className="form-grid">
+                <Input label="الاسم" value={newAddress.name} onChange={(v) => setNewAddress({ ...newAddress, name: v })} placeholder="الاسم المستلم" />
+                <Input label="رقم الهاتف" value={newAddress.phone} onChange={(v) => setNewAddress({ ...newAddress, phone: v })} placeholder="01xxxxxxxxx" type="tel" />
+              </div>
+              <div className="form-grid">
+                <Select label="المحافظة" value={newAddress.governorate} onChange={(v) => setNewAddress({ ...newAddress, governorate: v, city: '' })} placeholder="اختر المحافظة" options={GOVERNORATE_OPTIONS} />
+                {newAddress.governorate && EGYPT_CITIES_BY_GOVERNORATE[newAddress.governorate]?.length
+                  ? <Select label="المدينة" value={newAddress.city} onChange={(v) => setNewAddress({ ...newAddress, city: v })} placeholder="اختر المدينة" options={EGYPT_CITIES_BY_GOVERNORATE[newAddress.governorate].map((city) => ({ value: city, label: city }))} />
+                  : <Input label="المدينة" value={newAddress.city} onChange={(v) => setNewAddress({ ...newAddress, city: v })} placeholder="المدينة" />}
+              </div>
+              <Input label="العنوان بالتفصيل" value={newAddress.address} onChange={(v) => setNewAddress({ ...newAddress, address: v })} placeholder="الشارع، المبنى، الشقة" />
+              <label className="checkbox-label">
+                <input type="checkbox" checked={newAddress.isDefault} onChange={(e) => setNewAddress({ ...newAddress, isDefault: (e.target as HTMLInputElement).checked })} />
+                <span>تعيين كافتراضي</span>
+              </label>
+              <Button onClick={saveAddress}>حفظ العنوان</Button>
+            </div>
+          </section>
+        )}
+
+        {activeTab === 'wishlist' && (
+          <section className="account-section">
+            <h2 className="section-title">قائمة الأمنيات</h2>
+            {wishlistProducts.length > 0 ? (
+              <div className="wishlist-grid">
+                {wishlistProducts.map((product) => (
+                  <Link key={product.id} href={`/store/${store?.slug}/product/${product.id}`} className="wishlist-card">
+                    <SmartImage src={product.images?.[0]} alt={product.name} className="wishlist-card-image" fallback="product" />
+                    <span className="wishlist-card-name">{product.name}</span>
+                    <span className="wishlist-card-price">{formatCurrency(product.price, store?.currency)}</span>
+                  </Link>
+                ))}
+              </div>
+            ) : (
+              <div className="empty-state">
+                <Icon name="favorite" />
+                <p>لا توجد منتجات في قائمة الأمنيات</p>
+                <Link href={`/store/${store?.slug}/catalog`}><Button variant="outline" className="mt-1">تصفح المنتجات</Button></Link>
+              </div>
+            )}
+          </section>
+        )}
+
+        {activeTab === 'security' && (
+          <section className="account-section">
+            <h2 className="section-title">الأمان والخصوصية</h2>
+            <div className="security-options">
+              <div className="security-card">
+                <div>
+                  <h3>تغيير كلمة المرور</h3>
+                  <p className="muted small">تحديث كلمة المرور الخاصة بحسابك</p>
+                </div>
+                <Button variant="outline" onClick={() => user.email && resetPassword(user.email).then(() => toast.push('تم إرسال رابط تغيير كلمة المرور')).catch(() => toast.push('تعذر إرسال الرابط', undefined, 'error'))}>تغيير</Button>
+              </div>
+              <div className="security-card">
+                <div>
+                  <h3>إدارة الجلسات</h3>
+                  <p className="muted small">عرض وتسجيل الخروج من الأجهزة الأخرى</p>
+                </div>
+                <Button variant="outline">إدارة</Button>
+              </div>
+              <div className="security-card">
+                <div>
+                  <h3>التحقق بخطوتين</h3>
+                  <p className="muted small">إضافة طبقة أمان إضافية لحسابك</p>
+                </div>
+                <Button variant="outline">تفعيل</Button>
+              </div>
+            </div>
+          </section>
+        )}
+      </main>
     </div>
   )
 }

@@ -1,0 +1,356 @@
+/* ──────────────────────────────────────────────────────────────
+   Storefront header — rebuilt from the real Stitch storefront
+   sources (desktop: "Premium Consumer Storefront Home"
+   56916061f03346f78802151c20218370 · mobile: "Refined Mobile
+   Storefront Experience" 46368a57a55d4c4d95b73c89b5dd8680).
+   Token-only styling: no raw colors.
+   ────────────────────────────────────────────────────────────── */
+
+.storefront-header {
+  position: sticky;
+  top: 0;
+  z-index: 50;
+  width: 100%;
+  background: var(--surface);
+  border-bottom: 1px solid var(--border);
+  box-shadow: 0 1px 2px color-mix(in srgb, var(--foreground) 5%, transparent);
+  transition: box-shadow var(--motion-fast, 140ms) ease;
+}
+.storefront-theme-strip { min-height: 28px; display: flex; align-items: center; justify-content: center; padding: 4px 16px; color: var(--primary-contrast, #fff); font-size: 11px; font-weight: 700; }
+.storefront-theme-strip--bold { background: var(--primary); }
+.storefront-theme-strip--market { background: color-mix(in srgb, var(--primary) 88%, #111); }
+.theme-header-minimal .storefront-nav { gap: 6px; }
+.theme-header-elegant .storefront-header-inner { max-width: 1180px; }
+.theme-header-elegant .storefront-brand { margin-inline: auto; order: 2; }
+.theme-header-elegant .storefront-nav { order: 1; }
+.theme-header-elegant .storefront-controls { order: 3; }
+.theme-header-showcase .storefront-header { background: transparent; border-bottom-color: transparent; }
+.theme-header-showcase .storefront-header--scrolled { background: var(--surface); border-bottom-color: var(--border); }
+.theme-header-showcase .storefront-header-inner { position: relative; z-index: 1; }
+.storefront-category-link { display: inline-flex; align-items: center; gap: 5px; min-height: 34px; padding: 0 10px; border-radius: 8px; color: var(--primary); font-size: 12px; font-weight: 700; white-space: nowrap; }
+.storefront-header--scrolled {
+  box-shadow: 0 6px 18px color-mix(in srgb, var(--foreground) 9%, transparent);
+}
+
+.storefront-header-inner {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 24px;
+  max-width: 1440px;
+  margin-inline: auto;
+  padding: 16px 32px;
+  transition: padding var(--motion-fast, 140ms) ease;
+}
+.storefront-header--scrolled .storefront-header-inner {
+  padding-block: 8px;
+}
+
+/* Brand — Stitch wordmark (text-2xl font-black text-primary). */
+.storefront-brand {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  min-width: 0;
+  color: var(--foreground);
+  text-decoration: none;
+}
+.storefront-brand .store-brand-name {
+  font-size: 24px;
+  font-weight: 800;
+  letter-spacing: -0.01em;
+  line-height: 1.2;
+  color: var(--primary);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  max-width: 40vw;
+}
+.storefront-brand img.store-logo {
+  width: 132px;
+  height: 48px;
+  max-width: 160px;
+  max-height: 56px;
+}
+.storefront-brand .store-logo--preset {
+  font-size: 36px;
+  min-width: 52px;
+  padding: 4px 12px;
+}
+
+/* Nav — Stitch: hidden md:flex, gap-8, underline-active links. */
+.storefront-nav {
+  display: flex;
+  align-items: center;
+  gap: 32px;
+}
+.storefront-nav-link {
+  padding: 4px 2px;
+  border-bottom: 2px solid transparent;
+  color: var(--muted-foreground);
+  font-size: 14px;
+  font-weight: 500;
+  white-space: nowrap;
+  text-decoration: none;
+  transition: color var(--motion-fast, 140ms) ease, background var(--motion-fast, 140ms) ease, border-color var(--motion-fast, 140ms) ease;
+}
+.storefront-nav-link:hover {
+  color: var(--primary);
+  background: var(--surface-hover);
+}
+.storefront-nav-link--active,
+.storefront-nav-link--active:hover {
+  color: var(--primary);
+  font-weight: 700;
+  border-bottom-color: var(--primary);
+  background: transparent;
+}
+
+/* Controls — Stitch: gap-4, search w-64 (>=lg), icons gap-2. */
+.storefront-controls {
+  display: flex;
+  align-items: center;
+  gap: 16px;
+}
+
+.storefront-search {
+  position: relative;
+}
+.storefront-search--desktop {
+  display: none;
+  width: 256px;
+}
+.storefront-search-input {
+  width: 100%;
+  height: 40px;
+  padding: 8px 16px 8px 40px;
+  border-radius: 9999px;
+  border: 1px solid var(--border);
+  background: var(--surface-muted);
+  color: var(--foreground);
+  font-size: 14px;
+  font-family: inherit;
+}
+.storefront-search-input::placeholder {
+  color: var(--muted-foreground);
+}
+.storefront-search-input:focus {
+  outline: none;
+  border-color: var(--primary);
+  box-shadow: 0 0 0 3px var(--primary-soft);
+}
+.storefront-search-icon {
+  position: absolute;
+  left: 12px;
+  top: 50%;
+  transform: translateY(-50%);
+  font-size: 18px;
+  color: var(--muted-foreground);
+  pointer-events: none;
+}
+
+.storefront-icons {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+.storefront-icon-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 40px;
+  height: 40px;
+  border-radius: 9999px;
+  background: transparent;
+  border: none;
+  color: var(--muted-foreground);
+  cursor: pointer;
+  text-decoration: none;
+  transition: background var(--motion-fast, 140ms) ease, color var(--motion-fast, 140ms) ease;
+}
+.storefront-icon-btn:hover {
+  background: var(--surface-muted);
+  color: var(--primary);
+}
+.storefront-icon-btn .mk-icon {
+  font-size: 22px;
+}
+.storefront-cart-btn {
+  position: relative;
+}
+.storefront-cart-badge {
+  position: absolute;
+  top: -4px;
+  right: -4px;
+  min-width: 18px;
+  height: 18px;
+  padding-inline: 4px;
+  border-radius: 9999px;
+  background: var(--danger);
+  color: #fff;
+  font-size: 10px;
+  font-weight: 700;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+.storefront-account-btn .avatar {
+  width: 26px;
+  height: 26px;
+}
+
+/* Menu button — mobile only (Stitch mobile row). */
+.storefront-menu-btn {
+  display: none;
+  align-items: center;
+  justify-content: center;
+  width: 44px;
+  height: 44px;
+  border-radius: 9999px;
+  background: transparent;
+  border: none;
+  color: var(--primary);
+  cursor: pointer;
+  transition: background var(--motion-fast, 140ms) ease;
+}
+.storefront-menu-btn:hover {
+  background: var(--surface-muted);
+}
+
+/* Mobile search row — Stitch: px-4 pb-3, h-11 pill under the top row. */
+.storefront-search-row {
+  display: none;
+  max-width: 1440px;
+  margin-inline: auto;
+  padding: 0 16px 12px;
+}
+.storefront-search--mobile {
+  display: none;
+}
+.storefront-search--mobile .storefront-search-input {
+  height: 44px;
+  padding: 8px 16px 8px 40px;
+  background: var(--surface-muted);
+}
+
+/* Mobile drawer — full-width panel below the header row. */
+.storefront-drawer {
+  position: fixed;
+  inset-block-start: 64px;
+  inset-inline: 0;
+  inset-block-end: 0;
+  z-index: 45;
+  background: var(--surface);
+  border-top: 1px solid var(--border);
+  padding: 16px;
+  overflow-y: auto;
+  box-shadow: var(--shadow-lg);
+}
+.storefront-drawer-nav {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+.storefront-drawer-link {
+  display: block;
+  padding: 12px 16px;
+  border-radius: 8px;
+  font-size: 15px;
+  font-weight: 600;
+  color: var(--foreground);
+  text-decoration: none;
+  transition: background var(--motion-fast, 140ms) ease, color var(--motion-fast, 140ms) ease;
+}
+.storefront-drawer-link:hover {
+  background: var(--surface-muted);
+  color: var(--primary);
+}
+.storefront-drawer-link--active {
+  background: var(--primary-soft);
+  color: var(--primary);
+}
+
+/* Desktop: >=768px nav visible (Stitch md:flex), no menu button. */
+@media (min-width: 768px) {
+  .storefront-menu-btn {
+    display: none;
+  }
+  .storefront-nav {
+    display: flex;
+  }
+}
+
+/* Desktop search pill (Stitch hidden lg:block). */
+@media (min-width: 1024px) {
+  .storefront-search--desktop {
+    display: block;
+  }
+}
+
+/* Mobile composition (Stitch mobile source). */
+@media (max-width: 767px) {
+  .storefront-menu-btn {
+    display: flex;
+  }
+  .storefront-nav {
+    display: none;
+  }
+  .storefront-search--desktop {
+    display: none;
+  }
+  .storefront-search--mobile {
+    display: block;
+  }
+  .storefront-search-row {
+    display: block;
+  }
+  .storefront-theme-btn {
+    display: none;
+  }
+  .storefront-header-inner {
+    height: 64px;
+    padding: 0 16px;
+    gap: 8px;
+  }
+  .storefront-brand {
+    flex: 1;
+    justify-content: center;
+  }
+  .storefront-brand .store-brand-name {
+    max-width: 46vw;
+  }
+  .storefront-icons {
+    gap: 4px;
+  }
+  .storefront-icon-btn {
+    width: 44px;
+    height: 44px;
+    color: var(--primary);
+  }
+}
+
+/* Storefront dark composition (token swaps only). */
+.store-dark .storefront-header {
+  background: var(--surface-elevated);
+  border-color: var(--border);
+}
+.store-dark .storefront-search-input {
+  background: var(--surface-hover);
+  border-color: var(--border);
+}
+.store-dark .storefront-nav-link {
+  color: var(--muted);
+}
+.store-dark .storefront-icon-btn {
+  color: var(--muted);
+}
+.store-dark .storefront-icon-btn:hover,
+.store-dark .storefront-nav-link:hover {
+  color: var(--primary);
+}
+.store-dark .storefront-drawer {
+  background: var(--surface-elevated);
+}
+.store-dark .storefront-drawer-link {
+  color: var(--foreground);
+}

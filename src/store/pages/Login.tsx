@@ -1,77 +1,207 @@
 import { FunctionalComponent } from 'preact'
 import { useState } from 'preact/hooks'
-import { useSearch } from 'wouter'
-import { useStore } from '../../shared/hooks/useStore'
+import { Link, useLocation, useParams, useSearch } from 'wouter'
+import { useAuth } from '../../shared/hooks/useAuth'
 import { useToast } from '../../shared/hooks/useToast'
+import { useStore } from '../../shared/hooks/useStore'
 import { Button } from '../../shared/components/ui/Button'
+import { doc, getDoc } from 'firebase/firestore'
+import { db } from '../../shared/firebase'
 import { Input } from '../../shared/components/ui/Input'
-import { login, signupCustomer, claimOrderCallable } from '../../shared/services/auth'
-import { Link } from 'wouter'
+import { MerchantLogo } from '../../shared/components/brand/MerchantLogo'
+import { Icon } from '../../shared/components/ui/Icon'
+import { claimOrderCallable, login, logout, signupCustomer } from '../../shared/services/auth'
 
 export const StoreLogin: FunctionalComponent = () => {
   const { store } = useStore()
+  const { loading: authLoading } = useAuth()
   const toast = useToast()
+  const [, navigate] = useLocation()
   const search = useSearch()
-  const params = new URLSearchParams(search)
-  const claimOrder = params.get('order')
-  const claimPhone = params.get('phone')
-  const [mode, setMode] = useState<'login' | 'signup'>(claimOrder || params.get('mode') === 'signup' ? 'signup' : 'login')
-  const [form, setForm] = useState({ name: '', phone: params.get('phone') || '', email: '', password: '' })
-  const [loading, setLoading] = useState(false)
+  const params = useParams<{ mode?: string; order?: string; phone?: string }>()
+  const query = new URLSearchParams(search)
 
-  const submit = async (e: Event) => {
+  const mode = query.get('mode') || params.mode || 'login'
+  const redirectOrder = query.get('order') || params.order
+  const redirectPhone = query.get('phone') || params.phone
+
+  const [password, setPassword] = useState('')
+  const [name, setName] = useState('')
+  const [email, setEmail] = useState('')
+  const [phone, setPhone] = useState(redirectPhone || '')
+  const [loading, setLoading] = useState(false)
+  const [showPassword, setShowPassword] = useState(false)
+
+  const isSignup = mode === 'signup'
+
+  const handleSubmit = async (e: Event) => {
     e.preventDefault()
-    setLoading(true)
-    try {
-      if (mode === 'signup') {
-        if (form.password.length < 6) {
-          toast.push('كلمة المرور 6 أحرف على الأقل', undefined, 'error')
-          return
-        }
-        await signupCustomer(form.email, form.password, form.name, form.phone || undefined)
-        // Link the guest order to this new account when it came from checkout.
-        if (claimOrder && claimPhone && store?.id) {
-          try {
-            await claimOrderCallable({ storeId: store.id, orderNumber: claimOrder, phone: claimPhone })
-            toast.push('تم إنشاء الحساب وربط طلبك به')
-          } catch {
-            toast.push('تم إنشاء الحساب، تعذر ربط الطلب', 'استخدم تتبع الطلب لاحقاً', 'error')
-          }
-        } else {
-          toast.push('تم إنشاء الحساب')
-        }
-      } else {
-        await login({ email: form.email, password: form.password })
-        toast.push('تم تسجيل الدخول')
+    if (isSignup) {
+      if (!name || !email || !phone || !password) {
+        toast.push('أكمل جميع الحقول', undefined, 'error')
+        return
       }
-      window.location.href = `/store/${store?.slug}/account`
-    } catch {
-      toast.push('تعذر تسجيل الدخول', 'تحقق من البيانات', 'error')
-    } finally {
-      setLoading(false)
+      setLoading(true)
+      try {
+        await signupCustomer(email, password, name, phone)
+        // A guest checkout signup carries the order context in the query
+        // string. Link that existing order after Auth creates the account;
+        // navigating to My Orders alone does not perform the claim.
+        if (redirectOrder && store?.id) {
+          await claimOrderCallable({ storeId: store.id, orderNumber: redirectOrder, phone })
+        }
+        toast.push('تم إنشاء الحساب بنجاح')
+        if (redirectOrder) {
+          navigate(`/store/${store?.slug}/account?tab=orders`)
+        } else {
+          navigate(`/store/${store?.slug}/account`)
+        }
+      } catch (err: any) {
+        toast.push('فشل إنشاء الحساب', err?.message || 'حاول مرة أخرى', 'error')
+      } finally {
+        setLoading(false)
+      }
+    } else {
+      if (!email || !password) {
+        toast.push('أدخل البريد الإلكتروني وكلمة المرور', undefined, 'error')
+        return
+      }
+      setLoading(true)
+      try {
+        const credential = await login({ email, password })
+        const profile = await getDoc(doc(db, 'users', credential.user.uid))
+        if (profile.exists() && profile.data()?.role && profile.data()?.role !== 'customer') {
+          await logout()
+          throw new Error('هذا حساب إدارة متجر. استخدم حساب عميل منفصل للتسوق ومتابعة الطلبات.')
+        }
+        toast.push('مرحباً بعودتك!')
+        if (redirectOrder) {
+          navigate(`/store/${store?.slug}/account?tab=orders`)
+        } else {
+          navigate(`/store/${store?.slug}/account`)
+        }
+      } catch (err: any) {
+        toast.push('فشل تسجيل الدخول', err?.message || 'تحقق من بياناتك', 'error')
+      } finally {
+        setLoading(false)
+      }
     }
   }
 
+  const switchMode = () => {
+    navigate(`/store/${store?.slug}/login?mode=${isSignup ? 'login' : 'signup'}${redirectOrder ? `&order=${redirectOrder}` : ''}${redirectPhone ? `&phone=${redirectPhone}` : ''}`)
+  }
+
   return (
-    <div className="auth-screen">
-      <div className="auth-card">
-        <h1 className="auth-title">{mode === 'login' ? 'تسجيل الدخول' : 'إنشاء حساب'}</h1>
-        <p className="auth-subtitle">حساب العميل على {store?.name}</p>
-        <form onSubmit={submit}>
-          {mode === 'signup' && <Input label="الاسم" value={form.name} onChange={(v) => setForm({ ...form, name: v })} required />}
-          <Input label="البريد الإلكتروني" type="email" value={form.email} onChange={(v) => setForm({ ...form, email: v })} required />
-          <Input label="كلمة المرور" type="password" value={form.password} onChange={(v) => setForm({ ...form, password: v })} required />
-          {mode === 'signup' && <Input label="رقم الهاتف (لمتابعة الطلبات)" value={form.phone} onChange={(v) => setForm({ ...form, phone: v })} placeholder="01xxxxxxxxx" required />}
-          {claimOrder && <p className="muted small">سنربط طلبك <span className="monospace">{claimOrder}</span> بحسابك بعد إنشائه.</p>}
-          <Button type="submit" block loading={loading}>{mode === 'login' ? 'تسجيل الدخول' : 'إنشاء الحساب'}</Button>
-        </form>
-        <p className="auth-switch">
-          {mode === 'login' ? 'ليس لديك حساب؟ ' : 'لديك حساب؟ '}
-          <button type="button" className="link" onClick={() => setMode(mode === 'login' ? 'signup' : 'login')} style={{ color: 'var(--primary)', fontWeight: 600 }}>
-            {mode === 'login' ? 'أنشئ حساباً' : 'سجّل الدخول'}
-          </button>
-        </p>
-        <p className="auth-switch"><Link href={`/store/${store?.slug}`}>العودة للمتجر</Link></p>
+    <div className="storefront-page storefront-login storefront-login--stitch">
+      <div className="auth-container">
+        <div className="auth-context"><Icon name="verified_user" ariaHidden /><span>تجربة تسوق آمنة وخصوصية كاملة</span></div>
+        <div className="auth-card">
+          <div className="auth-header">
+            <Link href={`/store/${store?.slug}`} className="auth-brand">
+              <MerchantLogo store={store} variant="header" />
+            </Link>
+            <h1>{isSignup ? 'أنشئ حسابك' : 'أهلاً بعودتك'}</h1>
+            <p>{isSignup ? 'احفظ بياناتك وتابع طلباتك بسهولة.' : 'سجّل دخولك لمتابعة طلباتك ومشترياتك.'}</p>
+          </div>
+
+          <div className="auth-tabs">
+            <button
+              className={`auth-tab${!isSignup ? ' active' : ''}`}
+              onClick={switchMode}
+            >
+              تسجيل الدخول
+            </button>
+            <button
+              className={`auth-tab${isSignup ? ' active' : ''}`}
+              onClick={switchMode}
+            >
+              إنشاء حساب
+            </button>
+          </div>
+
+          <form onSubmit={handleSubmit} className="auth-form">
+            {isSignup && (
+              <div className="auth-field">
+                <label>الاسم بالكامل</label>
+                <Input
+                  value={name}
+                  onChange={setName}
+                  placeholder="أحمد محمد"
+                  required
+                />
+              </div>
+            )}
+
+            <div className="auth-field">
+              <label>البريد الإلكتروني</label>
+              <Input
+                type="email"
+                value={email}
+                onChange={setEmail}
+                placeholder="you@example.com"
+                required
+              />
+            </div>
+
+            {isSignup && <div className="auth-field">
+              <label>رقم الهاتف</label>
+              <Input
+                type="tel"
+                value={phone}
+                onChange={setPhone}
+                placeholder="01xxxxxxxxx"
+                required
+              />
+            </div>}
+
+            <div className="auth-field">
+              <label>كلمة المرور</label>
+              <div className="password-input">
+                <Input
+                  type={showPassword ? 'text' : 'password'}
+                  value={password}
+                  onChange={setPassword}
+                  placeholder="كلمة المرور"
+                  required
+                />
+                <button
+                  type="button"
+                  className="password-toggle"
+                  onClick={() => setShowPassword(!showPassword)}
+                  aria-label={showPassword ? 'إخفاء كلمة المرور' : 'إظهار كلمة المرور'}
+                >
+                  <Icon name={showPassword ? 'visibility_off' : 'visibility'} />
+                </button>
+              </div>
+            </div>
+
+            {isSignup && (
+              <label className="checkbox-label">
+                <input type="checkbox" required />
+                <span>أوافق على <a href="#">الشروط والأحكام</a> و <a href="#">سياسة الخصوصية</a></span>
+              </label>
+            )}
+
+            <Button type="submit" block size="lg" loading={loading || authLoading} className="auth-submit">
+              {isSignup ? 'إنشاء حساب' : 'تسجيل الدخول'}
+            </Button>
+          </form>
+
+          <p className="auth-footer">
+            {isSignup ? 'لديك حساب بالفعل؟' : 'لا تملك حساب؟'}
+            <button className="auth-link" onClick={switchMode}>
+              {isSignup ? 'تسجيل الدخول' : 'إنشاء حساب'}
+            </button>
+          </p>
+
+          {redirectOrder && (
+            <div className="auth-redirect-notice">
+              <Icon name="info" />
+              <span>سيتم ربط الطلب <strong className="monospace">{redirectOrder}</strong> بحسابك الجديد</span>
+            </div>
+          )}
+        </div>
       </div>
     </div>
   )

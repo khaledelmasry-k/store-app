@@ -1,0 +1,2477 @@
+/* ─────────────────────────────────────────────────────────────
+   M&K Merchant shell — Wasla-style UX rebuild.
+   Flat integrated sidebar, compact attached topbar, restrained
+   active states, dense workspace, small circular pin control.
+   Scoped under .app-shell / .app-shell--dashboard so storefront,
+   platform chrome and public surfaces are untouched.
+   ───────────────────────────────────────────────────────────── */
+
+.app-shell {
+  --merchant-sidebar-width: 232px;
+  --merchant-ease: cubic-bezier(0.22, 0.61, 0.36, 1);
+  --topbar-h: 60px;
+}
+
+.app-shell--dashboard {
+  padding-top: 60px;
+}
+
+.app-shell.sidebar-unpinned {
+  --merchant-sidebar-width: 72px;
+}
+
+.app-shell .sidebar {
+  width: var(--merchant-sidebar-width);
+  transition: width 0.28s var(--merchant-ease);
+}
+
+.app-shell {
+  padding-top: var(--topbar-h);
+}
+
+.app-shell .app-shell-body {
+  display: flex;
+  min-height: calc(100vh - var(--topbar-h));
+}
+
+.app-shell .topbar {
+  position: fixed;
+  inset-block-start: 0;
+  inset-inline: 0;
+  height: var(--topbar-h);
+  width: 100%;
+  z-index: 40;
+  display: grid;
+  grid-template-columns: auto auto 1fr auto;
+  align-items: center;
+  gap: 16px;
+  padding-inline: 24px;
+}
+
+.app-shell .sidebar {
+  position: fixed;
+  inset-block-start: var(--topbar-h);
+  inset-inline-start: 0;
+  bottom: 0;
+  height: calc(100vh - var(--topbar-h));
+}
+
+.app-shell .shell-main {
+  width: calc(100% - var(--merchant-sidebar-width));
+  margin-inline-start: var(--merchant-sidebar-width);
+  transition: margin-inline-start 0.28s var(--merchant-ease), width 0.28s var(--merchant-ease);
+}
+
+/* Unpinned + hover: temporary expansion as an overlay — the workspace
+   offset stays at the rail width, the sidebar slides over the content. */
+.app-shell.sidebar-unpinned.sidebar-hover-expanded .sidebar {
+  width: 232px;
+  z-index: 30;
+  box-shadow: none;
+}
+
+/* ── Workspace: cool neutral unified (V3 --background #f6f8fc) ── */
+.app-shell--dashboard .shell-main,
+.app-shell--dashboard .shell-content {
+  background: var(--background);
+}
+
+.app-shell--dashboard .shell-content {
+  padding: 20px 24px 48px;
+  max-width: 1440px;
+  margin-inline: auto;
+}
+
+.app-shell--dashboard .shell-content > :first-child {
+  margin-block-start: 10px;
+}
+
+.app-shell--dashboard .route-surface {
+  width: 100%;
+  max-width: 1440px;
+  margin-inline: auto;
+}
+
+/* ─────────────────────────────────────────────────────────────
+   Final visual migration: Stitch V3 geometry and contrast.
+   This is presentation-only; navigation state and data handlers stay
+   in AppShell.tsx.  Keep the shell flat and let the workspace breathe.
+   ───────────────────────────────────────────────────────────── */
+.app-shell {
+  --v3-bg: var(--mka-bg);
+  --v3-surface: var(--mka-surface-elevated);
+  --v3-surface-low: var(--mka-surface-soft);
+  --v3-surface-high: #eee7dc;
+  --v3-text: var(--mka-text);
+  --v3-muted: var(--mka-text-secondary);
+  --v3-outline: var(--mka-border);
+  --v3-primary: var(--mka-primary);
+  --v3-primary-soft: var(--mka-primary-soft);
+  background: var(--v3-bg);
+  color: var(--v3-text);
+  /* The global legacy rule made the shell itself a horizontal flex row while
+     the topbar is fixed. That shrank app-shell-body to its content width and
+     produced the large blank band beside Merchant pages. */
+  display: block !important;
+}
+.app-shell .app-shell-body { display: block; width: 100%; min-width: 0; }
+.app-shell .shell-main { width: calc(100% - var(--merchant-sidebar-width)); margin-inline-start: var(--merchant-sidebar-width); }
+
+.app-shell .topbar {
+  background: var(--v3-surface);
+  border: 0;
+  border-bottom: 1px solid var(--v3-outline);
+  border-radius: 0;
+  box-shadow: none;
+  margin: 0;
+  padding-inline: 24px;
+}
+
+.app-shell .topbar-brand-name,
+.app-shell .topbar-brand-sub { color: var(--v3-text); }
+.app-shell .topbar-brand-sub { color: var(--v3-muted); }
+.topbar-brand-mark-platform {
+  display: none;
+  width: 38px;
+  height: 38px;
+  flex: 0 0 38px;
+}
+.app-shell .topbar-search {
+  min-height: 40px;
+  max-width: 560px;
+  background: var(--v3-surface-low);
+  border: 1px solid transparent;
+  border-radius: 10px;
+}
+.app-shell .topbar-search:focus-within {
+  border-color: var(--v3-primary);
+  box-shadow: 0 0 0 3px color-mix(in srgb, var(--v3-primary) 14%, transparent);
+}
+.app-shell .topbar-icon-btn { color: var(--v3-muted); }
+.app-shell .topbar-icon-btn:hover { color: var(--v3-primary); background: var(--v3-primary-soft); }
+
+.app-shell .shell-main,
+.app-shell .shell-content,
+.app-shell .route-surface {
+  background: var(--v3-bg);
+}
+.app-shell .shell-main { min-width: 0; }
+.app-shell .shell-content {
+  width: 100%;
+  max-width: none;
+  margin: 0;
+  padding: 28px 32px 52px;
+}
+.app-shell .route-surface { width: 100%; max-width: none; margin: 0; }
+.app-shell .stat-card .stat-icon { background: var(--mka-primary-soft); color: var(--mka-primary); }
+
+.app-shell--dashboard .sidebar {
+  background: var(--v3-surface);
+  color: var(--v3-text);
+  border: 0;
+  box-shadow: none;
+}
+.app-shell--dashboard .sidebar-group-header,
+.app-shell--dashboard .sidebar-child-link,
+.app-shell--dashboard .sidebar-link { color: var(--v3-text); }
+.app-shell--dashboard .sidebar-group-header { color: #34334a; }
+.app-shell--dashboard .sidebar-group-header:hover,
+.app-shell--dashboard .sidebar-child-link:hover,
+.app-shell--dashboard .sidebar-link:hover { color: var(--v3-primary); background: var(--v3-surface-low); }
+.app-shell--dashboard .sidebar-child-link.active,
+.app-shell--dashboard .sidebar-link.active { color: var(--v3-primary); background: var(--v3-primary-soft); }
+.app-shell--dashboard .sidebar-group-header.active { color: var(--v3-muted); }
+.app-shell--dashboard .sidebar-foot-user strong { color: var(--v3-text); }
+.app-shell--dashboard .sidebar-foot-user small { color: var(--v3-muted); }
+
+.app-shell--platform .sidebar {
+  background: var(--v3-surface);
+  color: #171b2d;
+  border: 0;
+  border-inline-end: 1px solid var(--v3-outline);
+  box-shadow: none;
+}
+.app-shell--platform .sidebar-group-header,
+.app-shell--platform .sidebar-child-link,
+.app-shell--platform .sidebar-link { color: #171b2d; }
+.app-shell--platform .sidebar-group-header { color: #4a4b60; }
+.app-shell--platform .sidebar-group-header:hover,
+.app-shell--platform .sidebar-child-link:hover,
+.app-shell--platform .sidebar-link:hover { color: var(--v3-primary); background: var(--v3-primary-soft); }
+.app-shell--platform .sidebar-child-link.active,
+.app-shell--platform .sidebar-link.active {
+  color: var(--v3-primary);
+  background: var(--v3-primary-soft);
+  font-weight: 700;
+  box-shadow: inset -3px 0 0 var(--v3-primary);
+}
+.app-shell--platform .sidebar-foot-user strong { color: #171b2d; }
+.app-shell--platform .sidebar-foot-user small { color: #5b5d70; }
+.app-shell--platform .sidebar-group-header,
+.app-shell--platform .sidebar-child-link,
+.app-shell--platform .sidebar-link { min-height: 38px; border-radius: 8px; }
+.app-shell--platform .sidebar-group-items { padding-block: 2px 6px; }
+.app-shell--platform .sidebar-group-label,
+.app-shell--platform .sidebar-child-link span,
+.app-shell--platform .sidebar-link span { font-weight: 500; }
+.app-shell--platform .sidebar-top { padding-block: 10px 8px; }
+.app-shell--platform .sidebar-foot { border-top: 0; }
+
+.app-shell--platform .shell-main,
+.app-shell--platform .shell-content,
+.app-shell--platform .route-surface { background: var(--mka-bg); }
+.app-shell--platform .shell-main,
+.app-shell--platform .shell-content { background: var(--mka-bg); }
+
+.app-shell .page-header {
+  background: transparent;
+  border: 0;
+  border-radius: 0;
+  box-shadow: none;
+  padding: 0 0 18px;
+  margin: 0;
+  min-height: 0;
+}
+.app-shell .page-header::after { display: none; }
+.app-shell .page-header h1,
+.app-shell .page-title { font-size: clamp(24px, 2.2vw, 30px); line-height: 1.25; color: var(--v3-text); }
+.app-shell .page-header p,
+.app-shell .page-subtitle { color: var(--v3-muted); }
+
+.app-shell .card,
+.app-shell .data-table,
+.app-shell .table-wrap {
+  background: var(--v3-surface);
+  border: 1px solid var(--v3-outline);
+  border-radius: 12px;
+  box-shadow: 0 8px 24px rgba(31, 38, 75, .05);
+}
+.app-shell .card:hover { transform: none; }
+.app-shell .input,
+.app-shell .select,
+.app-shell .textarea,
+.app-shell input,
+.app-shell select,
+.app-shell textarea {
+  background: var(--v3-surface);
+  border-color: var(--v3-outline);
+  color: var(--v3-text);
+  border-radius: 8px;
+}
+.app-shell .btn-primary { background: var(--v3-primary); border-color: var(--v3-primary); }
+.app-shell--platform .platform-page-intro {
+  display: grid;
+  gap: 4px;
+  margin-block-end: 8px;
+}
+.app-shell--platform .platform-intro-meta {
+  color: #777587;
+  font-size: 12px;
+  padding-inline: 2px;
+}
+.app-shell--platform .platform-intro-dot {
+  display: inline-block;
+  width: 6px;
+  height: 6px;
+  margin-inline: 6px;
+  border-radius: 50%;
+  background: #2e9b67;
+  vertical-align: middle;
+}
+.app-shell--platform .platform-stat-grid {
+  grid-template-columns: repeat(6, minmax(0, 1fr));
+  gap: 12px;
+}
+.app-shell--platform .platform-stat-grid > * {
+  min-height: 118px;
+  border-radius: 12px;
+}
+.app-shell--platform .platform-feature-card { padding-block: 4px; }
+.app-shell--platform .platform-plans-page > .card:first-of-type,
+.app-shell--platform .platform-payments-page > .card,
+.app-shell--platform .platform-settings-page > .card {
+  border-radius: 14px;
+}
+.app-shell--platform .platform-plans-page .segmented-control,
+.app-shell--platform .platform-payments-page .tabs {
+  margin-block: 4px 16px;
+}
+.app-shell--platform .platform-settings-page > .card {
+  padding: 4px;
+}
+.app-shell--platform .platform-settings-page > .card > .card-header,
+.app-shell--platform .platform-settings-page > .card > .card-body { padding-inline: 20px; }
+.app-shell--platform .platform-products-page .table-wrap,
+.app-shell--platform .platform-orders-page .table-wrap,
+.app-shell--platform .platform-customers-page .table-wrap { overflow: auto; }
+.app-shell--platform .platform-products-page .stats-grid,
+.app-shell--platform .platform-customers-page .stats-grid { grid-template-columns: repeat(4, minmax(0, 1fr)); }
+.app-shell--platform .platform-orders-page .orders-toolbar,
+.app-shell--platform .platform-customers-page .filter-bar { border-radius: 12px; background: var(--mka-surface-soft); padding: 12px; }
+.app-shell--platform .platform-order-details-page .order-detail-grid,
+.app-shell--platform .platform-subscription-detail-page .subscription-detail-grid { align-items: start; gap: 20px; }
+.app-shell--platform .platform-subscriptions-page .tabs,
+.app-shell--platform .platform-coupons-page .tabs { margin-block: 4px 16px; }
+.app-shell--platform .platform-reports-page .chart-card,
+.app-shell--platform .platform-reports-page .report-chart { min-height: 260px; border-radius: 14px; background: var(--mka-surface); border: 1px solid var(--mka-border); }
+.app-shell--platform .platform-audit-page table td:first-child,
+.app-shell--platform .platform-audit-page table th:first-child { font-family: ui-monospace, SFMono-Regular, Menlo, monospace; }
+.app-shell--platform .platform-notifications-page .notification-item { border-inline-start: 3px solid #4f46e5; padding-inline-start: 14px; }
+.app-shell--platform .platform-shipping-companies-page .shipping-company-card,
+.app-shell--platform .platform-store-details-page .store-overview-card { border-radius: 14px; }
+
+@media (max-width: 1180px) {
+  .app-shell--platform .platform-stat-grid { grid-template-columns: repeat(3, minmax(0, 1fr)); }
+}
+@media (max-width: 640px) {
+  .app-shell--platform .platform-stat-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+}
+
+@media (max-width: 768px) {
+  .app-shell .shell-content { padding: 20px 16px 88px; }
+  .app-shell .topbar { padding-inline: 16px; }
+}
+
+/* Final mobile drawer identity rules.  The uploaded logo is a thumbnail in
+   navigation, while the user card follows the active theme rather than
+   permanently looking like a dark-mode panel. */
+@media (max-width: 768px) {
+  .app-shell .sidebar-drawer .sidebar-console-logo-frame {
+    display: inline-flex !important;
+    width: 36px !important;
+    height: 36px !important;
+    min-width: 36px !important;
+    max-width: 36px !important;
+    min-height: 36px !important;
+    max-height: 36px !important;
+    flex: 0 0 36px !important;
+    align-items: center !important;
+    justify-content: center !important;
+    overflow: hidden !important;
+    border: 1px solid #dfe4f0 !important;
+    border-radius: 9px !important;
+    background: #fff !important;
+  }
+  .app-shell .sidebar-drawer .sidebar-console-logo-frame .merchant-console-logo {
+    display: block !important;
+    width: 100% !important;
+    height: 100% !important;
+    min-width: 0 !important;
+    min-height: 0 !important;
+    max-width: 100% !important;
+    max-height: 100% !important;
+    margin: 0 !important;
+    object-fit: contain !important;
+  }
+  .app-shell .sidebar-drawer .sidebar-foot-user {
+    background: #f3f5fb !important;
+    border: 1px solid #dfe4f0 !important;
+    color: #182033 !important;
+  }
+  .app-shell .sidebar-drawer .sidebar-foot-user strong { color: #182033 !important; }
+  .app-shell .sidebar-drawer .sidebar-foot-user small { color: #59657a !important; }
+  [data-theme='dark'] .app-shell .sidebar-drawer .sidebar-foot-user {
+    background: #17213a !important;
+    border-color: #2d3b53 !important;
+    color: #f3f6fb !important;
+  }
+  [data-theme='dark'] .app-shell .sidebar-drawer .sidebar-foot-user strong { color: #f3f6fb !important; }
+  [data-theme='dark'] .app-shell .sidebar-drawer .sidebar-foot-user small { color: #b3bdd3 !important; }
+}
+
+/* Hover expansion must use the same 256px geometry for both role shells;
+   this intentionally outranks the legacy platform-specific 224px rule. */
+.app-shell--dashboard.sidebar-unpinned.sidebar-hover-expanded .sidebar,
+.app-shell--platform.sidebar-unpinned.sidebar-hover-expanded .sidebar {
+  width: 256px !important;
+  max-width: 256px !important;
+  z-index: 30;
+}
+
+.app-shell--dashboard.sidebar-unpinned:not(.sidebar-hover-expanded) .sidebar,
+.app-shell--platform.sidebar-unpinned:not(.sidebar-hover-expanded) .sidebar {
+  width: 72px !important;
+  max-width: 72px !important;
+}
+
+/* ── Warm leftover overrides: ensure merchant uses cool tokens ── */
+.app-shell--dashboard .table td {
+  background: var(--surface-container-lowest);
+}
+
+.app-shell--dashboard .drawer {
+  background: var(--surface-container-lowest) !important;
+}
+
+.app-shell--dashboard .input,
+.app-shell--dashboard .select,
+.app-shell--dashboard .textarea {
+  background: var(--surface);
+}
+
+/* ── Sidebar: flat, integrated, below topbar, navigation only ── */
+.app-shell--dashboard .sidebar {
+  position: fixed;
+  inset-block-start: var(--topbar-h);
+  inset-inline-start: 0;
+  bottom: 0;
+  height: calc(100vh - var(--topbar-h));
+  margin: 0;
+  padding: 0;
+  border: none;
+  border-inline: none;
+  border-block: none;
+  outline: none;
+  border-radius: 0;
+  min-height: 0;
+  overflow-y: auto;
+  overflow-x: hidden;
+  background: var(--surface-muted);
+  box-shadow: none;
+  z-index: 30;
+}
+
+.app-shell--dashboard .sidebar::before {
+  display: none;
+}
+
+/* ── Sidebar top: navigation only — pin control centered ── */
+.app-shell--dashboard .sidebar-top {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  padding: 12px 12px 10px;
+  min-height: 56px;
+  border: none;
+  border-block: none;
+  outline: none;
+  box-shadow: none;
+}
+
+.sidebar-pin-btn {
+  position: relative;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 30px;
+  height: 30px;
+  flex-shrink: 0;
+  border-radius: 999px;
+  border: 1px solid transparent;
+  background: transparent;
+  cursor: pointer;
+  transition: background-color 0.15s ease, border-color 0.15s ease;
+}
+
+.sidebar-pin-btn::before {
+  content: "";
+  position: absolute;
+  width: 18px;
+  height: 18px;
+  border-radius: 999px;
+  border: 1.5px solid var(--border-strong);
+  background: var(--surface);
+  transition: border-color 0.15s ease, background 0.15s ease;
+}
+
+.sidebar-pin-btn::after {
+  content: "";
+  position: absolute;
+  width: 8px;
+  height: 8px;
+  border-radius: 999px;
+  background: var(--primary);
+  opacity: 0;
+  transform: scale(0.6);
+  transition: opacity 0.15s ease, transform 0.15s ease;
+}
+
+.sidebar-pin-btn .mk-icon {
+  display: none;
+}
+
+.sidebar-pin-btn:hover::before {
+  border-color: var(--text-muted);
+}
+
+.sidebar-pin-btn[aria-pressed='true']::before {
+  border-color: var(--primary);
+  background: var(--primary-soft);
+}
+
+.sidebar-pin-btn[aria-pressed='true']::after {
+  opacity: 1;
+  transform: scale(1);
+}
+
+.sidebar-pin-btn:hover {
+  background: transparent;
+}
+
+.sidebar-pin-btn[aria-pressed='true'] {
+  background: transparent;
+  border-color: transparent;
+}
+
+.app-shell--dashboard .sidebar-top .sidebar-pin-btn {
+  margin-inline-start: 0;
+}
+
+/* ── Navigation: compact 40–46px rhythm ── */
+.app-shell--dashboard .sidebar-nav {
+  padding: 10px 10px 16px;
+  gap: 4px;
+}
+
+.app-shell--dashboard .sidebar-group {
+  margin-block-end: 6px;
+}
+
+.app-shell--dashboard .sidebar-group,
+.app-shell--dashboard .sidebar-group-header,
+.app-shell--dashboard .sidebar-child-link,
+.app-shell--dashboard .sidebar-link,
+.app-shell--dashboard .sidebar-nav,
+.app-shell--dashboard .sidebar-foot,
+.app-shell--dashboard .sidebar-foot-user {
+  border: none;
+  border-inline: none;
+  border-block: none;
+  outline: none;
+  box-shadow: none;
+}
+
+.app-shell--dashboard .sidebar-group-header,
+.app-shell--dashboard .sidebar-child-link,
+.app-shell--dashboard .sidebar-link {
+  border: none;
+  outline: none;
+  box-shadow: none;
+  border-radius: 10px;
+  gap: 0;
+}
+
+.app-shell--dashboard .sidebar-group-header {
+  padding: 11px 12px;
+  font-size: 13px;
+  font-weight: 700;
+  color: var(--text-secondary);
+}
+
+.app-shell--dashboard .sidebar-group-icon,
+.app-shell--dashboard .sidebar-child-icon,
+.app-shell--dashboard .sidebar-chevron {
+  font-size: 18px;
+  flex-shrink: 0;
+}
+
+.app-shell--dashboard .sidebar-chevron {
+  margin-inline-start: auto;
+}
+
+.app-shell--dashboard .sidebar-child-link {
+  min-height: 42px;
+  padding: 8px 12px;
+  font-size: 14px;
+  font-weight: 500;
+  color: var(--text);
+}
+
+.app-shell--dashboard .sidebar-group-header:hover,
+.app-shell--dashboard .sidebar-child-link:hover,
+.app-shell--dashboard .sidebar-link:hover {
+  color: var(--text);
+  background: var(--surface-3);
+  border: none;
+  outline: none;
+  box-shadow: none;
+}
+
+/* Only the active child/link becomes a pill — the parent stays flat
+   (no double active highlight). */
+.app-shell--dashboard .sidebar-child-link.active,
+.app-shell--dashboard .sidebar-link.active {
+  color: var(--primary);
+  background: var(--primary-soft);
+  font-weight: 700;
+  border: none;
+  outline: none;
+  box-shadow: none;
+}
+
+.app-shell--dashboard .sidebar-group-header.active {
+  background: transparent;
+  color: var(--text-secondary);
+  border: none;
+  outline: none;
+  box-shadow: none;
+}
+
+/* ── Footer / account: flat, compact, no nested card ── */
+.app-shell--dashboard .sidebar-foot {
+  margin: 8px 0 0;
+  padding: 10px 12px 12px;
+  gap: 4px;
+  border: none;
+  border-block: none;
+  outline: none;
+  box-shadow: none;
+  border-radius: 0;
+  background: none;
+}
+
+.app-shell--dashboard .sidebar-link {
+  min-height: 42px;
+  padding: 8px 12px;
+  font-size: 14px;
+  font-weight: 500;
+  color: var(--text-secondary);
+}
+
+.app-shell--dashboard .sidebar-link .sidebar-link-icon {
+  font-size: 18px;
+}
+
+.app-shell--dashboard .sidebar-foot-user {
+  background: transparent;
+  border: none;
+  outline: none;
+  box-shadow: none;
+  border-radius: 10px;
+  padding: 8px 10px;
+  min-height: 42px;
+}
+
+.app-shell--dashboard .sidebar-foot-user strong {
+  font-size: 13px;
+  font-weight: 700;
+  color: var(--text);
+}
+
+.app-shell--dashboard .sidebar-foot-user small {
+  font-size: 11px;
+  color: var(--text-muted);
+}
+
+/* ── Label fade/slide: rows share icon spacing via label margin ── */
+.app-shell--dashboard .sidebar-brand,
+.app-shell--dashboard .sidebar-group-header,
+.app-shell--dashboard .sidebar-child-link,
+.app-shell--dashboard .sidebar-link,
+.app-shell--dashboard .sidebar-foot-user {
+  gap: 0;
+}
+
+.app-shell--dashboard .sidebar-brand-meta,
+.app-shell--dashboard .sidebar-group-label,
+.app-shell--dashboard .sidebar-child-link > span:last-child,
+.app-shell--dashboard .sidebar-link > span:last-child,
+.app-shell--dashboard .sidebar-foot-user > span:last-child {
+  min-width: 0;
+  overflow: hidden;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+  max-width: 240px;
+  opacity: 1;
+  transform: none;
+  margin-inline-start: 8px;
+  transition: max-width 0.28s var(--merchant-ease) 0.06s, opacity 0.28s var(--merchant-ease) 0.06s, transform 0.28s var(--merchant-ease) 0.06s, margin-inline-start 0.28s var(--merchant-ease) 0.06s;
+}
+
+.app-shell--dashboard .sidebar-chevron {
+  transition: transform 0.28s var(--merchant-ease) 0.06s, max-width 0.28s var(--merchant-ease) 0.06s, opacity 0.28s var(--merchant-ease) 0.06s;
+}
+
+/* ── Unpinned rail: labels shrink/slide, icons center ── */
+.app-shell.sidebar-unpinned:not(.sidebar-hover-expanded) .sidebar-top {
+  flex-direction: column;
+  justify-content: center;
+  gap: 8px;
+  padding: 12px 0 10px;
+  border-block-end: none;
+}
+
+.app-shell.sidebar-unpinned:not(.sidebar-hover-expanded) .sidebar-brand {
+  justify-content: center;
+}
+
+.app-shell.sidebar-unpinned:not(.sidebar-hover-expanded) .sidebar-top .sidebar-pin-btn {
+  margin-inline-start: 0;
+}
+
+.app-shell.sidebar-unpinned:not(.sidebar-hover-expanded) .sidebar-brand-meta,
+.app-shell.sidebar-unpinned:not(.sidebar-hover-expanded) .sidebar-group-label,
+.app-shell.sidebar-unpinned:not(.sidebar-hover-expanded) .sidebar-chevron,
+.app-shell.sidebar-unpinned:not(.sidebar-hover-expanded) .sidebar-child-link > span:last-child,
+.app-shell.sidebar-unpinned:not(.sidebar-hover-expanded) .sidebar-link > span:last-child,
+.app-shell.sidebar-unpinned:not(.sidebar-hover-expanded) .sidebar-foot-user > span:last-child {
+  max-width: 0;
+  opacity: 0;
+  transform: translateX(6px);
+  margin-inline-start: 0;
+  transition: max-width 0.28s var(--merchant-ease), opacity 0.28s var(--merchant-ease), transform 0.28s var(--merchant-ease), margin-inline-start 0.28s var(--merchant-ease);
+}
+
+.app-shell.sidebar-unpinned:not(.sidebar-hover-expanded) .sidebar-group-items {
+  display: none;
+}
+
+.app-shell.sidebar-unpinned:not(.sidebar-hover-expanded) .sidebar-nav {
+  padding: 8px 10px;
+  gap: 4px;
+}
+
+.app-shell.sidebar-unpinned:not(.sidebar-hover-expanded) .sidebar-group {
+  margin-block-end: 2px;
+}
+
+.app-shell.sidebar-unpinned:not(.sidebar-hover-expanded) .sidebar-group-header {
+  justify-content: center;
+  padding: 12px 0;
+}
+
+.app-shell.sidebar-unpinned:not(.sidebar-hover-expanded) .sidebar-group-header .sidebar-group-icon,
+.app-shell.sidebar-unpinned:not(.sidebar-hover-expanded) .sidebar-link .sidebar-link-icon {
+  font-size: 20px;
+}
+
+.app-shell.sidebar-unpinned:not(.sidebar-hover-expanded) .sidebar-foot {
+  padding: 8px 0 10px;
+  align-items: center;
+}
+
+.app-shell.sidebar-unpinned:not(.sidebar-hover-expanded) .sidebar-foot-user {
+  justify-content: center;
+  padding: 8px 0;
+}
+
+.app-shell.sidebar-unpinned:not(.sidebar-hover-expanded) .sidebar-foot > .sidebar-link {
+  justify-content: center;
+  padding: 10px 0;
+}
+
+.app-shell.sidebar-unpinned:not(.sidebar-hover-expanded) .sidebar-group-header,
+.app-shell.sidebar-unpinned:not(.sidebar-hover-expanded) .sidebar-child-link,
+.app-shell.sidebar-unpinned:not(.sidebar-hover-expanded) .sidebar-link {
+  border-radius: 999px;
+}
+
+/* Rail active indicator: compact primary pill on the active group. */
+.app-shell.sidebar-unpinned:not(.sidebar-hover-expanded) .sidebar-group-header.active,
+.app-shell.sidebar-unpinned:not(.sidebar-hover-expanded) .sidebar-child-link.active,
+.app-shell.sidebar-unpinned:not(.sidebar-hover-expanded) .sidebar-link.active {
+  background: var(--primary);
+  color: var(--primary-contrast);
+}
+
+/* ── Tooltips (rail only) ── */
+.app-shell.sidebar-unpinned:not(.sidebar-hover-expanded) [data-tip] {
+  position: relative;
+}
+
+.app-shell.sidebar-unpinned:not(.sidebar-hover-expanded) [data-tip]::after {
+  content: attr(data-tip);
+  position: absolute;
+  inset-inline-end: calc(100% + 12px);
+  top: 50%;
+  transform: translateY(-50%);
+  background: var(--text);
+  color: var(--surface);
+  padding: 6px 10px;
+  border-radius: 8px;
+  font-size: 12px;
+  font-weight: 600;
+  font-family: var(--font-sans);
+  line-height: 1.4;
+  white-space: nowrap;
+  max-width: 220px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  opacity: 0;
+  pointer-events: none;
+  transition: opacity 0.15s ease;
+  z-index: 80;
+}
+
+.app-shell.sidebar-unpinned:not(.sidebar-hover-expanded) [data-tip]:hover::after,
+.app-shell.sidebar-unpinned:not(.sidebar-hover-expanded) [data-tip]:focus-visible::after {
+  opacity: 1;
+}
+
+/* ── Subtle scrollbar: almost invisible unless hover/scroll ── */
+.app-shell--dashboard .sidebar-nav {
+  scrollbar-width: thin;
+  scrollbar-color: transparent transparent;
+}
+
+.app-shell--dashboard .sidebar-nav:hover {
+  scrollbar-color: var(--outline-variant) transparent;
+}
+
+.app-shell--dashboard .sidebar-nav::-webkit-scrollbar {
+  width: 5px;
+}
+
+.app-shell--dashboard .sidebar-nav::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+.app-shell--dashboard .sidebar-nav::-webkit-scrollbar-thumb {
+  background: transparent;
+  border-radius: 999px;
+}
+
+.app-shell--dashboard .sidebar-nav:hover::-webkit-scrollbar-thumb {
+  background: color-mix(in srgb, var(--outline-variant) 55%, transparent);
+}
+
+.app-shell--dashboard .sidebar-nav::-webkit-scrollbar-thumb:hover {
+  background: var(--border-strong);
+}
+
+/* ── Topbar: flat, fixed above sidebar, brand on inline-start (RTL right) ── */
+.app-shell--dashboard .topbar {
+  position: fixed;
+  inset-block-start: 0;
+  inset-inline: 0;
+  height: var(--topbar-h);
+  width: 100%;
+  z-index: 40;
+  margin: 0;
+  padding-inline: 24px;
+  border: none;
+  border-block-end: 1px solid rgba(23, 28, 55, 0.08);
+  border-radius: 0;
+  background: rgba(255, 255, 255, 0.82);
+  backdrop-filter: none;
+  box-shadow: none;
+  gap: 16px;
+  display: grid;
+  grid-template-columns: auto auto 1fr auto;
+  align-items: center;
+}
+
+.app-shell .topbar .sidebar-toggle {
+  display: none;
+}
+
+.app-shell .topbar-brand {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  flex-shrink: 0;
+  min-width: 0;
+  border: none;
+  outline: none;
+  box-shadow: none;
+  background: none;
+}
+
+.app-shell .topbar-brand-mark {
+  width: 36px;
+  height: 36px;
+  flex-shrink: 0;
+  border-radius: 10px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: linear-gradient(135deg, var(--primary), var(--violet));
+  color: #fff;
+  box-shadow: none;
+}
+
+.app-shell .topbar-brand-mark .mk-icon {
+  font-size: 18px;
+}
+
+.app-shell .topbar-brand-meta {
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+  line-height: 1.2;
+  min-width: 0;
+}
+
+.app-shell .topbar-brand-name {
+  font-size: 15px;
+  font-weight: 800;
+  line-height: 1.25;
+  color: var(--text);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.app-shell .topbar-brand-sub {
+  font-size: 11px;
+  font-weight: 500;
+  color: var(--text-muted);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.app-shell .topbar-search {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  width: 100%;
+  max-width: 360px;
+  justify-self: center;
+  height: 38px;
+  padding-inline: 12px;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  color: var(--text-muted);
+  transition: border-color 0.15s ease, box-shadow 0.15s ease;
+}
+
+.app-shell .topbar-search:focus-within {
+  border-color: color-mix(in srgb, var(--primary) 55%, var(--border));
+  box-shadow: 0 0 0 3px var(--primary-soft);
+}
+
+.app-shell .topbar-search .mk-icon {
+  font-size: 17px;
+  flex-shrink: 0;
+}
+
+.app-shell .topbar-search input {
+  border: none;
+  outline: none;
+  background: none;
+  font-family: var(--font-sans);
+  font-size: 13px;
+  font-weight: 500;
+  color: var(--text);
+  width: 100%;
+  min-width: 0;
+}
+
+.app-shell .topbar-search input::placeholder {
+  color: var(--text-muted);
+}
+
+/* ── Merchant page header: flat compact chrome ── */
+.app-shell--dashboard .page-header,
+.app-shell--dashboard .route-surface > .page-header,
+.app-shell--dashboard .merchant-operations > .page-header,
+.app-shell--dashboard .merchant-dashboard-canonical > .page-header {
+  margin: 0 0 18px;
+  padding: 18px 0 14px;
+  border: none;
+  border-radius: 0;
+  background: none;
+  box-shadow: none;
+  align-items: flex-end;
+  gap: 16px;
+  min-height: 0;
+  height: auto;
+}
+
+.app-shell--dashboard .page-header::after {
+  display: none;
+}
+
+.app-shell--dashboard .page-header .page-title,
+.app-shell--dashboard .merchant-dashboard-canonical .page-title {
+  font-size: 26px;
+  font-weight: 800;
+  line-height: 1.25;
+  letter-spacing: 0;
+  margin: 0;
+}
+
+.app-shell--dashboard .page-subtitle {
+  font-size: 13px;
+  margin: 6px 0 0;
+  color: var(--text-secondary);
+}
+
+.app-shell--dashboard .breadcrumb {
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--text-muted);
+  margin: 0 0 8px;
+}
+
+.app-shell--dashboard .page-actions {
+  gap: 10px;
+}
+
+.app-shell--dashboard .merchant-operations {
+  gap: 14px;
+}
+
+/* ── Shared merchant cards: lighter borders, subtle shadow,
+      smaller radius, denser padding ── */
+.app-shell--dashboard .card,
+.app-shell--dashboard .stats-card,
+.app-shell--dashboard .stat-card,
+.app-shell--dashboard .table-wrap,
+.app-shell--dashboard .order-summary,
+.app-shell--dashboard .merchant-operations .orders-table,
+.app-shell--dashboard .merchant-operations .orders-toolbar {
+  border: 1px solid var(--border);
+  border-radius: 14px;
+  background: var(--surface);
+  box-shadow: var(--shadow-sm);
+}
+
+.app-shell--dashboard .merchant-operations .card:hover,
+.app-shell--dashboard .merchant-operations .stats-card:hover {
+  transform: none;
+  box-shadow: var(--shadow-sm);
+}
+
+.app-shell--dashboard .card-head {
+  padding: 14px 18px;
+  border-block-end: 1px solid var(--border);
+  background: none;
+}
+
+.app-shell--dashboard .card-title {
+  font-size: 16px;
+  font-weight: 800;
+}
+
+.app-shell--dashboard .card-body {
+  padding: 18px;
+}
+
+.app-shell--dashboard .card-body-sm {
+  padding: 12px 14px;
+}
+
+/* ── Dark mode: neutral deep surfaces, same hierarchy ── */
+[data-theme='dark'] .app-shell--dashboard .shell-main,
+[data-theme='dark'] .app-shell--dashboard .shell-content {
+  background: #0e1220;
+}
+
+[data-theme='dark'] .app-shell--dashboard .sidebar {
+  background: #121827;
+  border: none;
+  border-inline: none;
+  border-block: none;
+  outline: none;
+  box-shadow: none;
+}
+
+[data-theme='dark'] .app-shell--dashboard .sidebar-top,
+[data-theme='dark'] .app-shell--dashboard .sidebar-foot {
+  border: none;
+  border-block: none;
+  border-inline: none;
+  outline: none;
+  box-shadow: none;
+}
+
+[data-theme='dark'] .app-shell--dashboard .sidebar-brand-name,
+[data-theme='dark'] .app-shell--dashboard .sidebar-child-link,
+[data-theme='dark'] .app-shell--dashboard .sidebar-foot-user strong {
+  color: var(--foreground);
+}
+
+[data-theme='dark'] .app-shell--dashboard .sidebar-group-header,
+[data-theme='dark'] .app-shell--dashboard .sidebar-link {
+  color: var(--text-secondary);
+}
+
+[data-theme='dark'] .app-shell--dashboard .sidebar-group-header:hover,
+[data-theme='dark'] .app-shell--dashboard .sidebar-child-link:hover,
+[data-theme='dark'] .app-shell--dashboard .sidebar-link:hover {
+  color: var(--foreground);
+  background: var(--surface-muted);
+}
+
+[data-theme='dark'] .app-shell--dashboard .sidebar-child-link.active,
+[data-theme='dark'] .app-shell--dashboard .sidebar-link.active {
+  color: var(--on-primary-container);
+  background: var(--primary-container);
+}
+
+[data-theme='dark'] .app-shell--dashboard .sidebar-group-header.active {
+  background: transparent;
+  color: var(--text-secondary);
+}
+
+[data-theme='dark'] .app-shell--dashboard .topbar {
+  background: rgba(18, 24, 39, 0.85);
+  border-block-end-color: rgba(197, 204, 236, 0.12);
+}
+
+[data-theme='dark'] .app-shell--dashboard .topbar-search {
+  background: var(--surface-2);
+  border-color: var(--border);
+}
+
+[data-theme='dark'] .app-shell--platform .sidebar {
+  background: #121827;
+  border-inline-end-color: rgba(197, 204, 236, 0.12);
+}
+
+[data-theme='dark'] .app-shell--platform .sidebar-group-header,
+[data-theme='dark'] .app-shell--platform .sidebar-link { color: var(--text-secondary); }
+
+[data-theme='dark'] .app-shell--platform .sidebar-child-link { color: var(--foreground); }
+
+[data-theme='dark'] .app-shell--platform .sidebar-group-header:hover,
+[data-theme='dark'] .app-shell--platform .sidebar-child-link:hover,
+[data-theme='dark'] .app-shell--platform .sidebar-link:hover { color: var(--foreground); background: var(--surface-muted); }
+
+[data-theme='dark'] .app-shell--platform .sidebar-child-link.active,
+[data-theme='dark'] .app-shell--platform .sidebar-link.active {
+  color: var(--on-primary-container);
+  background: var(--primary-container);
+}
+
+/* ── Platform sidebar: same console identity as the merchant shell ──
+   The SuperAdmin routes use the shared AppShell with the `platform` key.
+   Keep this explicit (rather than inheriting merchant-only rules) so the
+   platform console always receives the brand header, compact groups and the
+   active-route rail on both desktop and the mobile drawer. */
+.app-shell--platform .sidebar {
+  background: var(--surface-muted);
+  border-inline-end: 1px solid var(--border);
+  box-shadow: none;
+}
+.app-shell--platform .sidebar-top {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  min-height: 66px;
+  padding: 12px 14px;
+  border-block-end: 1px solid var(--border);
+  background: var(--surface);
+}
+.app-shell--platform .sidebar-console-brand {
+  display: inline-flex;
+  min-width: 0;
+  align-items: center;
+  gap: 10px;
+  color: var(--text);
+  text-decoration: none;
+}
+.app-shell--platform .sidebar-console-brand > span { display: grid; min-width: 0; gap: 1px; }
+.app-shell--platform .sidebar-console-brand strong { color: var(--primary); font-size: 18px; font-weight: 900; line-height: 1.1; }
+.app-shell--platform .sidebar-console-brand small { color: var(--text-muted); font-size: 11px; font-weight: 600; }
+.app-shell--platform .sidebar-console-brand:hover strong { filter: brightness(.88); }
+.app-shell--platform .sidebar-top .sidebar-pin-btn { margin: 0; }
+.app-shell--platform .sidebar-nav { padding: 12px 10px 18px; gap: 5px; }
+.app-shell--platform .sidebar-group { margin-block-end: 6px; }
+.app-shell--platform .sidebar-group-header,
+.app-shell--platform .sidebar-child-link,
+.app-shell--platform .sidebar-link { border-radius: 10px; }
+.app-shell--platform .sidebar-group-header {
+  min-height: 42px;
+  padding: 10px 12px;
+  color: var(--text-secondary);
+  font-size: 13px;
+  font-weight: 700;
+}
+.app-shell--platform .sidebar-child-link,
+.app-shell--platform .sidebar-link {
+  min-height: 40px;
+  padding: 8px 12px;
+  color: var(--text);
+  font-size: 13px;
+}
+.app-shell--platform .sidebar-child-link.active,
+.app-shell--platform .sidebar-link.active {
+  position: relative;
+  color: var(--primary);
+  background: var(--primary-soft);
+  box-shadow: inset -3px 0 0 var(--primary);
+}
+.app-shell--platform .sidebar-foot {
+  margin-top: auto;
+  padding: 12px 10px;
+  border-block-start: 1px solid var(--border);
+  background: var(--surface);
+}
+.app-shell--platform .sidebar-foot-user { border-radius: 10px; background: var(--surface-muted); }
+
+@media (max-width: 1024px) {
+  .app-shell--platform .sidebar-drawer .sidebar-top { display: flex; }
+  .app-shell--platform .sidebar-drawer .sidebar-console-brand { color: var(--text); }
+}
+
+/* ── Mobile drawer: same flat surface (visual consistency) ── */
+.sidebar-drawer {
+  background: var(--surface-muted);
+  border: none;
+  border-inline: none;
+  outline: none;
+  box-shadow: none;
+  border-radius: 0;
+}
+
+.sidebar-drawer .sidebar-top {
+  display: none;
+}
+
+.sidebar-drawer .sidebar-nav {
+  padding: 10px 12px 16px;
+}
+
+.sidebar-drawer .sidebar-brand,
+.sidebar-drawer .sidebar-group-header,
+.sidebar-drawer .sidebar-link,
+.sidebar-drawer .sidebar-foot-user small {
+  color: var(--text-secondary);
+}
+
+.sidebar-drawer .sidebar-child-link,
+.sidebar-drawer .sidebar-brand-text strong,
+.sidebar-drawer .sidebar-foot-user strong {
+  color: var(--text);
+}
+
+.sidebar-drawer .sidebar-group-header:hover,
+.sidebar-drawer .sidebar-child-link:hover,
+.sidebar-drawer .sidebar-link:hover {
+  color: var(--text);
+  background: var(--surface-3);
+}
+
+.sidebar-drawer .sidebar-child-link.active,
+.sidebar-drawer .sidebar-link.active,
+.sidebar-drawer .sidebar-group-header.active {
+  color: var(--primary);
+  background: var(--primary-soft);
+  font-weight: 700;
+}
+
+/* Merchant drawer is light in the mobile shell. The desktop sidebar keeps its
+   navy palette, but its muted text must not leak into this light drawer. */
+.app-shell--dashboard .sidebar-drawer {
+  background: var(--surface);
+  color: var(--text);
+  box-shadow: -12px 0 34px rgba(13, 20, 41, 0.18);
+}
+.app-shell--dashboard .sidebar-drawer .sidebar-brand,
+.app-shell--dashboard .sidebar-drawer .sidebar-foot { background: var(--surface); border-color: var(--border); }
+.app-shell--dashboard .sidebar-drawer .sidebar-group-header,
+.app-shell--dashboard .sidebar-drawer .sidebar-link { color: var(--text-secondary); }
+.app-shell--dashboard .sidebar-drawer .sidebar-child-link,
+.app-shell--dashboard .sidebar-drawer .sidebar-brand-text strong,
+.app-shell--dashboard .sidebar-drawer .sidebar-foot-user strong { color: var(--text); }
+.app-shell--dashboard .sidebar-drawer .sidebar-group-header:hover,
+.app-shell--dashboard .sidebar-drawer .sidebar-child-link:hover,
+.app-shell--dashboard .sidebar-drawer .sidebar-link:hover { color: var(--text); background: var(--surface-3); }
+.app-shell--dashboard .sidebar-drawer .sidebar-group-header.active,
+.app-shell--dashboard .sidebar-drawer .sidebar-child-link.active,
+.app-shell--dashboard .sidebar-drawer .sidebar-link.active { color: var(--primary); background: var(--primary-soft); }
+
+[data-theme='dark'] .sidebar-drawer {
+  background: #121827;
+}
+
+[data-theme='dark'] .sidebar-drawer .sidebar-child-link {
+  color: var(--foreground);
+}
+
+[data-theme='dark'] .sidebar-drawer .sidebar-child-link.active,
+[data-theme='dark'] .sidebar-drawer .sidebar-link.active,
+[data-theme='dark'] .sidebar-drawer .sidebar-group-header.active {
+  color: var(--on-primary-container);
+  background: var(--primary-container);
+}
+
+/* ── Fixed shell geometry overrides ── */
+.app-shell--dashboard .topbar {
+  height: 60px !important;
+  min-height: 60px !important;
+  max-height: 60px !important;
+  padding-block: 0 !important;
+}
+
+.app-shell--dashboard .sidebar {
+  top: 60px !important;
+  height: calc(100vh - 60px) !important;
+}
+
+/* ── Responsive ── */
+@media (max-width: 1024px) {
+  .app-shell {
+    --merchant-sidebar-width: 0px;
+  }
+
+  .app-shell .sidebar,
+  .app-shell.sidebar-unpinned .sidebar,
+  .app-shell.sidebar-unpinned.sidebar-hover-expanded .sidebar {
+    width: var(--merchant-sidebar-width);
+  }
+
+  .sidebar-pin-btn {
+    display: none;
+  }
+
+  .app-shell .topbar .sidebar-toggle {
+    display: inline-flex;
+  }
+
+  .app-shell .topbar-search {
+    display: none;
+  }
+
+  .app-shell .topbar {
+    right: 0;
+  }
+
+  .sidebar-drawer {
+    width: 280px;
+  }
+
+  .sidebar-drawer-header {
+    padding: 12px 16px;
+  }
+
+  .sidebar-drawer .sidebar-pin-btn {
+    display: none;
+  }
+}
+
+@media (max-width: 768px) {
+  .app-shell .topbar {
+    padding-inline: 16px;
+  }
+
+  .app-shell .topbar-brand-sub {
+    display: none;
+  }
+}
+
+@media (max-width: 480px) {
+  .app-shell .topbar-brand-name {
+    display: none;
+  }
+}
+
+@media (max-width: 430px) {
+  .app-shell .topbar {
+    padding-inline: 12px;
+    gap: 8px;
+  }
+
+  /* The bilingual wordmark cannot fit beside the mobile action cluster.
+     Use the canonical compact mark instead of letting the full logo overflow
+     its grid cell and clip into adjacent controls. */
+  .app-shell .topbar-brand--platform .topbar-brand-logo { display: none; }
+  .app-shell .topbar-brand--platform .topbar-brand-mark-platform { display: inline-flex; }
+}
+
+/* FINAL V3 OVERRIDES — keep after legacy shell rules so the migration is
+   deterministic in the cascade. Presentation only. */
+.app-shell {
+  --v3-bg: var(--mka-bg);
+  --v3-surface: var(--mka-surface-elevated);
+  --v3-surface-low: var(--mka-surface-soft);
+  --v3-text: var(--mka-text);
+  --v3-muted: var(--mka-text-secondary);
+  --v3-outline: var(--mka-border);
+  --v3-primary: var(--mka-primary);
+  --v3-primary-soft: var(--mka-primary-soft);
+  background: var(--v3-bg);
+  color: var(--v3-text);
+}
+.app-shell .topbar {
+  background: var(--v3-surface) !important;
+  border: 0 !important;
+  border-bottom: 1px solid var(--v3-outline) !important;
+  border-radius: 0 !important;
+  box-shadow: none !important;
+  margin: 0 !important;
+  padding-inline: 24px;
+}
+.app-shell .topbar-brand-name { color: var(--v3-text); }
+.app-shell .topbar-brand-sub { color: var(--v3-muted); }
+.app-shell .topbar-search {
+  min-height: 40px;
+  max-width: 560px;
+  background: var(--v3-surface-low) !important;
+  border: 1px solid transparent !important;
+  border-radius: 10px !important;
+}
+.app-shell .topbar-search:focus-within { border-color: var(--v3-primary) !important; }
+.app-shell .topbar-icon-btn { color: var(--v3-muted); }
+.app-shell .topbar-icon-btn:hover { color: var(--v3-primary); background: var(--v3-primary-soft); }
+.app-shell .shell-main,
+.app-shell .shell-content,
+.app-shell .route-surface { background: var(--v3-bg) !important; }
+.app-shell .shell-main { min-width: 0; }
+.app-shell .shell-content {
+  width: 100%;
+  max-width: none !important;
+  margin: 0 !important;
+  padding: 28px 32px 52px !important;
+}
+.app-shell .route-surface { width: 100%; max-width: none !important; margin: 0 !important; }
+
+/* Admin list surfaces stay near-white; indigo is reserved for interaction
+   emphasis rather than large decorative fills. */
+.app-shell .table-wrap,
+.app-shell .table-container,
+.app-shell .filter-bar,
+.app-shell .toolbar,
+.app-shell .list-toolbar { background: var(--mka-surface) !important; }
+.app-shell .table thead,
+.app-shell .table th { background: var(--mka-surface-soft) !important; }
+
+.app-shell--dashboard .sidebar {
+  background: var(--mka-surface-soft) !important;
+  color: var(--v3-text);
+  border: 0 !important;
+  box-shadow: none !important;
+}
+.app-shell--dashboard .sidebar-group-header,
+.app-shell--dashboard .sidebar-child-link,
+.app-shell--dashboard .sidebar-link { color: var(--v3-text) !important; }
+.app-shell--dashboard .sidebar-group-header { color: #465065 !important; }
+.app-shell--dashboard .sidebar-group-header:hover,
+.app-shell--dashboard .sidebar-child-link:hover,
+.app-shell--dashboard .sidebar-link:hover { color: var(--v3-primary) !important; background: var(--v3-surface-low) !important; }
+.app-shell--dashboard .sidebar-child-link.active,
+.app-shell--dashboard .sidebar-link.active { color: var(--v3-primary) !important; background: var(--v3-primary-soft) !important; }
+.app-shell--dashboard .sidebar-foot-user strong { color: var(--v3-text) !important; }
+.app-shell--dashboard .sidebar-foot-user small { color: var(--v3-muted) !important; }
+
+.app-shell--platform .sidebar {
+  background: var(--mka-surface-soft) !important;
+  color: #171b2d;
+  border: 0 !important;
+  box-shadow: none !important;
+}
+.app-shell--platform .sidebar-group-header,
+.app-shell--platform .sidebar-child-link,
+.app-shell--platform .sidebar-link { color: #171b2d !important; }
+.app-shell--platform .sidebar-group-header { color: #465065 !important; }
+.app-shell--platform .sidebar-group-header:hover,
+.app-shell--platform .sidebar-child-link:hover,
+.app-shell--platform .sidebar-link:hover { color: var(--v3-primary) !important; background: var(--v3-primary-soft) !important; }
+.app-shell--platform .sidebar-child-link.active,
+.app-shell--platform .sidebar-link.active { color: var(--v3-primary) !important; background: var(--v3-primary-soft) !important; }
+.app-shell--platform .sidebar-foot-user strong { color: #171b2d !important; }
+.app-shell--platform .sidebar-foot-user small { color: #5b5d70 !important; }
+
+.app-shell .page-header {
+  background: transparent !important;
+  border: 0 !important;
+  border-radius: 0 !important;
+  box-shadow: none !important;
+  padding: 0 0 18px !important;
+  margin: 0 !important;
+  min-height: 0 !important;
+}
+.app-shell .page-header::after { display: none !important; }
+.app-shell .page-header h1,
+.app-shell .page-title { font-size: clamp(24px, 2.2vw, 30px) !important; line-height: 1.25; color: var(--v3-text); }
+.app-shell .page-header p,
+.app-shell .page-subtitle { color: var(--v3-muted); }
+.app-shell .card,
+.app-shell .data-table,
+.app-shell .table-wrap {
+  background: var(--v3-surface) !important;
+  border: 1px solid var(--v3-outline) !important;
+  border-radius: 12px !important;
+  box-shadow: 0 8px 24px rgba(31, 38, 75, .05) !important;
+}
+.app-shell .card:hover { transform: none !important; }
+.app-shell .input,
+.app-shell .select,
+.app-shell .textarea,
+.app-shell input,
+.app-shell select,
+.app-shell textarea {
+  background: var(--v3-surface) !important;
+  border-color: var(--v3-outline) !important;
+  color: var(--v3-text);
+  border-radius: 8px;
+}
+.app-shell .btn-primary { background: var(--v3-primary); border-color: var(--v3-primary); }
+
+@media (max-width: 768px) {
+  .app-shell .shell-content { padding: 20px 16px 88px !important; }
+  .app-shell .topbar { padding-inline: 16px; }
+}
+.app-shell--platform .sidebar { border: 0 !important; outline: 0 !important; box-shadow: none !important; border-radius: 0 !important; background: var(--mka-surface-soft) !important; }
+.app-shell--platform .sidebar-nav { display: flex; flex-direction: column; gap: 3px; padding: 0 10px; overflow-y: auto; scrollbar-width: thin; scrollbar-color: rgba(89,97,116,.22) transparent; }
+.app-shell--platform .sidebar-nav::-webkit-scrollbar { width: 4px; }
+.app-shell--platform .sidebar-nav::-webkit-scrollbar-track { background: transparent; }
+.app-shell--platform .sidebar-nav::-webkit-scrollbar-thumb { background: rgba(89,97,116,.22); border-radius: 8px; }
+.app-shell--platform .sidebar-group { margin: 0 0 8px; }
+.app-shell--platform .sidebar-group-header { min-height: 36px !important; padding: 0 10px !important; border: 0 !important; border-radius: 7px !important; font-size: 13px; font-weight: 600; }
+.app-shell--platform .sidebar-group-items { padding: 2px 0 0; }
+.app-shell--platform .sidebar-child-link, .app-shell--platform .sidebar-link { min-height: 40px !important; padding: 0 10px !important; margin: 2px 0; border: 0 !important; border-radius: 7px !important; font-size: 14px; font-weight: 500; }
+.app-shell--platform .sidebar-group-icon, .app-shell--platform .sidebar-child-icon, .app-shell--platform .sidebar-link-icon { font-size: 19px !important; }
+.app-shell--platform .sidebar-child-link.active, .app-shell--platform .sidebar-link.active { background: var(--mka-primary-soft) !important; color: var(--mka-primary) !important; }
+.app-shell--platform .sidebar-top { padding: 8px 10px !important; }
+.app-shell--platform .sidebar-pin-btn { width: 30px !important; height: 30px !important; min-width: 30px !important; padding: 0 !important; border: 0 !important; border-radius: 50% !important; background: transparent !important; color: var(--mka-text-secondary) !important; }
+.app-shell--platform .sidebar-pin-btn .mk-icon { font-size: 17px !important; }
+.app-shell--platform .sidebar-foot { padding: 8px 10px !important; border-top: 1px solid var(--mka-border) !important; }
+.app-shell--platform .sidebar-foot-user { min-height: 38px; padding: 0 !important; background: transparent !important; border: 0 !important; }
+.app-shell--platform .sidebar-logout { min-height: 34px !important; }
+
+/* Platform must use the mobile drawer below tablet widths. Keep the desktop
+   rail out of layout so authenticated pages retain their full content width. */
+@media (max-width: 1024px) {
+  .app-shell--platform { --merchant-sidebar-width: 0px !important; }
+  .app-shell--platform .sidebar,
+  .app-shell--platform.sidebar-unpinned .sidebar,
+  .app-shell--platform.sidebar-unpinned.sidebar-hover-expanded .sidebar {
+    display: none !important;
+    width: 0 !important;
+  }
+  .app-shell--platform .shell-main {
+    width: 100% !important;
+    margin-inline-start: 0 !important;
+  }
+}
+.app-shell .page-header { min-height: 96px !important; padding: 8px 0 18px !important; background: transparent !important; border: 0 !important; border-radius: 0 !important; box-shadow: none !important; }
+.app-shell .page-eyebrow { color: var(--mka-text-secondary); font-size: 12px; font-weight: 700; margin-block-end: 5px; }
+.app-shell .page-header-end { display: flex; align-items: center; gap: 12px; flex-wrap: wrap; }
+.app-shell .card, .app-shell .section-panel, .app-shell .stat-card { background: var(--mka-surface) !important; border-color: var(--mka-border) !important; border-radius: 12px !important; box-shadow: 0 2px 10px rgba(31,45,75,.045) !important; }
+.app-shell .card-head { background: transparent !important; border-bottom-color: var(--mka-border) !important; }
+.app-shell .stat-card .stat-icon { background: var(--mka-primary-soft) !important; color: var(--mka-primary) !important; }
+
+/* Keep section labels distinct from muted metadata while remaining below
+   normal navigation emphasis. */
+.app-shell--dashboard .sidebar-group-header { color: #465065 !important; font-size: 14px !important; line-height: 20px !important; font-weight: 600 !important; }
+.app-shell--platform .sidebar-group-header { color: #465065 !important; font-size: 14px !important; line-height: 20px !important; font-weight: 600 !important; }
+[data-theme='dark'] .app-shell--dashboard .sidebar-group-header,
+[data-theme='dark'] .app-shell--platform .sidebar-group-header { color: var(--mka-text-secondary) !important; }
+
+/* Shared final list treatment: neutral-white surfaces with indigo reserved
+   for selected controls and active navigation. */
+.app-shell {
+  --sidebar-group-text: #5b6472;
+  --admin-list-white: #ffffff;
+  --admin-list-muted: #f8fafc;
+  --admin-list-border: #e5e7eb;
+}
+.app-shell--dashboard .sidebar-group-header,
+.app-shell--platform .sidebar-group-header {
+  color: var(--sidebar-group-text) !important;
+  opacity: 1;
+  font-size: 14px !important;
+  line-height: 21px !important;
+  font-weight: 600 !important;
+  padding-block: 8px;
+}
+.app-shell--dashboard .sidebar-group,
+.app-shell--platform .sidebar-group { margin-block-end: 16px; }
+.app-shell--dashboard .sidebar-group-items,
+.app-shell--platform .sidebar-group-items { padding-block-start: 6px; }
+.app-shell--dashboard .sidebar-child-link,
+.app-shell--dashboard .sidebar-link,
+.app-shell--platform .sidebar-child-link,
+.app-shell--platform .sidebar-link {
+  min-height: 42px;
+  font-size: 14px;
+  font-weight: 500;
+}
+.app-shell--dashboard .sidebar-child-icon,
+.app-shell--dashboard .sidebar-link-icon,
+.app-shell--platform .sidebar-child-icon,
+.app-shell--platform .sidebar-link-icon { width: 30px; min-width: 30px; }
+.app-shell--dashboard .table-wrap,
+.app-shell--dashboard .data-table,
+.app-shell--dashboard .filter-bar,
+.app-shell--dashboard .orders-toolbar,
+.app-shell--dashboard .view-mode-toolbar,
+.app-shell--platform .table-wrap,
+.app-shell--platform .data-table,
+.app-shell--platform .filter-bar,
+.app-shell--platform .orders-toolbar,
+.app-shell--platform .view-mode-toolbar {
+  background: var(--admin-list-white) !important;
+  border-color: var(--admin-list-border) !important;
+}
+.app-shell--dashboard .table-wrap table thead,
+.app-shell--platform .table-wrap table thead,
+.app-shell--dashboard .data-table thead,
+.app-shell--platform .data-table thead { background: var(--admin-list-muted) !important; }
+.app-shell--dashboard .table-wrap table tbody tr,
+.app-shell--platform .table-wrap table tbody tr { background: var(--admin-list-white) !important; }
+.app-shell--platform .platform-orders-page .orders-toolbar,
+.app-shell--platform .platform-customers-page .filter-bar {
+  background: var(--admin-list-white) !important;
+  border: 1px solid var(--admin-list-border) !important;
+}
+.app-shell .table tbody tr,
+.app-shell .table tbody td { background: var(--admin-list-white) !important; }
+.app-shell .table tbody tr:hover,
+.app-shell .table tbody tr:hover td { background: #f9fafb !important; }
+.app-shell .table-toolbar,
+.app-shell .table-wrap > .table-toolbar {
+  background: var(--admin-list-white) !important;
+  border-color: var(--admin-list-border) !important;
+}
+.app-shell--dashboard .sidebar-group-label,
+.app-shell--platform .sidebar-group-label {
+  color: var(--sidebar-group-text) !important;
+  opacity: 1 !important;
+  font-size: 14px !important;
+  font-weight: 600 !important;
+}
+
+/* Canonical geometry for both admin roles. */
+.app-shell {
+  --admin-sidebar-expanded: 256px;
+  /* 80px leaves a comfortable 18px gutter around the 44px icon target.
+     The former 72px rail had no safety room once borders/padding were
+     accounted for, so icons looked cropped on narrow desktop windows. */
+  --admin-sidebar-collapsed: 80px;
+  --admin-nav-item-height: 40px;
+  --admin-nav-icon-slot: 44px;
+  --admin-group-gap: 10px;
+  --merchant-sidebar-width: var(--admin-sidebar-expanded);
+}
+.app-shell.sidebar-unpinned { --merchant-sidebar-width: var(--admin-sidebar-collapsed); }
+.app-shell .sidebar { width: var(--merchant-sidebar-width); }
+.app-shell .sidebar { box-sizing: border-box; min-width: 0; max-width: var(--merchant-sidebar-width); overflow-x: hidden; }
+.app-shell.sidebar-unpinned.sidebar-hover-expanded .sidebar { width: var(--admin-sidebar-expanded); }
+.app-shell .shell-main {
+  width: calc(100% - var(--merchant-sidebar-width));
+  margin-inline-start: var(--merchant-sidebar-width);
+}
+.app-shell .sidebar-nav { gap: 0; padding: 8px 10px 12px; }
+.app-shell .sidebar-group { margin-block-end: var(--admin-group-gap) !important; }
+.app-shell .sidebar-group-header {
+  min-height: 30px !important;
+  height: 30px;
+  padding-block: 4px !important;
+  line-height: 22px !important;
+}
+.app-shell .sidebar-group-items { padding-block: 4px 0 !important; }
+.app-shell .sidebar-child-link,
+.app-shell .sidebar-link {
+  min-height: var(--admin-nav-item-height) !important;
+  height: var(--admin-nav-item-height);
+  padding-block: 4px !important;
+  margin-block: 2px;
+}
+.app-shell .sidebar-child-icon,
+.app-shell .sidebar-link-icon { width: 30px !important; min-width: 30px !important; }
+.app-shell .sidebar-top { min-height: 42px; padding-block: 6px 4px !important; }
+.app-shell .sidebar-pin-btn { width: 30px; height: 30px; margin: 0 auto; }
+
+/* Intentional icon rail: no labels, empty group rows, or stretched active bars. */
+.app-shell.sidebar-unpinned:not(.sidebar-hover-expanded) .sidebar-nav { padding-inline: 14px; }
+.app-shell.sidebar-unpinned:not(.sidebar-hover-expanded) .sidebar { overflow-x: hidden; }
+.app-shell.sidebar-unpinned:not(.sidebar-hover-expanded) .sidebar-group { margin-block-end: 4px !important; }
+.app-shell.sidebar-unpinned:not(.sidebar-hover-expanded) .sidebar-group-header {
+  width: var(--admin-nav-icon-slot);
+  height: var(--admin-nav-icon-slot);
+  min-height: var(--admin-nav-icon-slot) !important;
+  padding: 0 !important;
+  margin: 0 auto;
+  justify-content: center;
+  border-radius: 10px;
+}
+.app-shell.sidebar-unpinned:not(.sidebar-hover-expanded) .sidebar-group-label,
+.app-shell.sidebar-unpinned:not(.sidebar-hover-expanded) .sidebar-chevron,
+.app-shell.sidebar-unpinned:not(.sidebar-hover-expanded) .sidebar-group-items,
+.app-shell.sidebar-unpinned:not(.sidebar-hover-expanded) .sidebar-child-link > span:last-child,
+.app-shell.sidebar-unpinned:not(.sidebar-hover-expanded) .sidebar-link > span:last-child,
+.app-shell.sidebar-unpinned:not(.sidebar-hover-expanded) .sidebar-foot-user > span:last-child { display: none !important; }
+.app-shell.sidebar-unpinned:not(.sidebar-hover-expanded) .sidebar-group-header .sidebar-group-icon { margin: 0; }
+.app-shell.sidebar-unpinned:not(.sidebar-hover-expanded) .sidebar-child-link,
+.app-shell.sidebar-unpinned:not(.sidebar-hover-expanded) .sidebar-link {
+  width: var(--admin-nav-icon-slot);
+  height: var(--admin-nav-icon-slot);
+  min-height: var(--admin-nav-icon-slot) !important;
+  padding: 0 !important;
+  margin: 2px auto;
+  justify-content: center;
+  gap: 0;
+  border-radius: 10px;
+}
+.app-shell.sidebar-unpinned:not(.sidebar-hover-expanded) .sidebar-child-icon,
+.app-shell.sidebar-unpinned:not(.sidebar-hover-expanded) .sidebar-link-icon {
+  width: 20px !important;
+  min-width: 20px !important;
+  margin: 0;
+}
+.app-shell.sidebar-unpinned:not(.sidebar-hover-expanded) .sidebar-group-header.active,
+.app-shell.sidebar-unpinned:not(.sidebar-hover-expanded) .sidebar-child-link.active,
+.app-shell.sidebar-unpinned:not(.sidebar-hover-expanded) .sidebar-link.active {
+  background: var(--primary-soft) !important;
+  color: var(--primary) !important;
+}
+.app-shell.sidebar-unpinned:not(.sidebar-hover-expanded) .sidebar-foot { padding-inline: 0; }
+.app-shell.sidebar-unpinned:not(.sidebar-hover-expanded) .sidebar-foot-user {
+  width: var(--admin-nav-icon-slot);
+  height: var(--admin-nav-icon-slot);
+  margin-inline: auto;
+  justify-content: center;
+}
+.app-shell.sidebar-unpinned:not(.sidebar-hover-expanded) .sidebar-logout { margin-inline: auto; }
+
+/* The collapsed rail is a single canonical icon renderer for both roles. */
+.app-shell.sidebar-unpinned:not(.sidebar-hover-expanded) .sidebar-nav {
+  padding: 8px 14px 12px !important;
+  gap: 0 !important;
+}
+.app-shell.sidebar-unpinned:not(.sidebar-hover-expanded) .sidebar-group {
+  margin: 0 0 4px !important;
+}
+.app-shell.sidebar-unpinned:not(.sidebar-hover-expanded) .sidebar-group-items {
+  display: none !important;
+  padding: 0 !important;
+  margin: 0 !important;
+}
+.app-shell.sidebar-unpinned:not(.sidebar-hover-expanded) .sidebar-group-header,
+.app-shell.sidebar-unpinned:not(.sidebar-hover-expanded) .sidebar-child-link,
+.app-shell.sidebar-unpinned:not(.sidebar-hover-expanded) .sidebar-link {
+  border: 0 !important;
+  outline: 0 !important;
+  box-shadow: none !important;
+}
+.app-shell.sidebar-unpinned:not(.sidebar-hover-expanded) .sidebar-group-icon,
+.app-shell.sidebar-unpinned:not(.sidebar-hover-expanded) .sidebar-child-icon,
+.app-shell.sidebar-unpinned:not(.sidebar-hover-expanded) .sidebar-link-icon {
+  font-size: 18px !important;
+}
+.app-shell.sidebar-unpinned:not(.sidebar-hover-expanded) .sidebar-foot {
+  margin: 8px 0 0 !important;
+  padding: 8px 0 10px !important;
+  gap: 4px !important;
+  border: 0 !important;
+}
+.app-shell.sidebar-unpinned:not(.sidebar-hover-expanded) .sidebar-foot-user {
+  width: var(--admin-nav-icon-slot) !important;
+  height: var(--admin-nav-icon-slot) !important;
+  min-height: var(--admin-nav-icon-slot) !important;
+  padding: 0 !important;
+  margin-inline: auto !important;
+  border: 0 !important;
+}
+.app-shell.sidebar-unpinned:not(.sidebar-hover-expanded) .sidebar-logout {
+  width: var(--admin-nav-icon-slot) !important;
+  height: var(--admin-nav-icon-slot) !important;
+  min-height: var(--admin-nav-icon-slot) !important;
+  margin-inline: auto !important;
+}
+
+@media (max-width: 768px) {
+  .app-shell .shell-main { width: 100% !important; margin-inline-start: 0 !important; }
+  .app-shell .sidebar { display: none; }
+}
+
+/* Final hover geometry override (must remain last to neutralize legacy role
+   overrides): pre-dwell rail stays 72px; only the timed state reaches 256px. */
+.app-shell--dashboard.sidebar-unpinned:not(.sidebar-hover-expanded) .sidebar,
+.app-shell--platform.sidebar-unpinned:not(.sidebar-hover-expanded) .sidebar {
+  width: 80px !important;
+  max-width: 80px !important;
+}
+.app-shell--dashboard.sidebar-unpinned.sidebar-hover-expanded .sidebar,
+.app-shell--platform.sidebar-unpinned.sidebar-hover-expanded .sidebar {
+  width: 256px !important;
+  max-width: 256px !important;
+  z-index: 30;
+}
+
+/* Final cross-role expanded system. Merchant keeps its accepted rail rules;
+   this layer only applies when labels are visible (pinned or after the dwell
+   timer), so both expanded shells share the same row geometry. */
+.app-shell:not(.sidebar-unpinned) .sidebar-nav,
+.app-shell.sidebar-unpinned.sidebar-hover-expanded .sidebar-nav {
+  padding: 8px 10px 12px !important;
+  gap: 0 !important;
+}
+.app-shell:not(.sidebar-unpinned) .sidebar-group,
+.app-shell.sidebar-unpinned.sidebar-hover-expanded .sidebar-group {
+  margin-block-end: 10px !important;
+}
+.app-shell:not(.sidebar-unpinned) .sidebar-group-header,
+.app-shell.sidebar-unpinned.sidebar-hover-expanded .sidebar-group-header {
+  min-height: 30px !important;
+  height: 30px;
+  padding: 4px 10px !important;
+  line-height: 22px !important;
+  border-radius: 8px !important;
+}
+.app-shell:not(.sidebar-unpinned) .sidebar-group-items,
+.app-shell.sidebar-unpinned.sidebar-hover-expanded .sidebar-group-items {
+  padding-block: 4px 0 !important;
+}
+.app-shell:not(.sidebar-unpinned) .sidebar-child-link,
+.app-shell:not(.sidebar-unpinned) .sidebar-link,
+.app-shell.sidebar-unpinned.sidebar-hover-expanded .sidebar-child-link,
+.app-shell.sidebar-unpinned.sidebar-hover-expanded .sidebar-link {
+  min-height: var(--admin-nav-item-height) !important;
+  height: var(--admin-nav-item-height);
+  margin-block: 2px;
+  padding: 4px 10px !important;
+  border-radius: 8px !important;
+}
+.app-shell:not(.sidebar-unpinned) .sidebar-group-icon,
+.app-shell:not(.sidebar-unpinned) .sidebar-child-icon,
+.app-shell:not(.sidebar-unpinned) .sidebar-link-icon,
+.app-shell.sidebar-unpinned.sidebar-hover-expanded .sidebar-group-icon,
+.app-shell.sidebar-unpinned.sidebar-hover-expanded .sidebar-child-icon,
+.app-shell.sidebar-unpinned.sidebar-hover-expanded .sidebar-link-icon {
+  width: var(--admin-nav-icon-slot) !important;
+  min-width: var(--admin-nav-icon-slot) !important;
+  text-align: center;
+}
+.app-shell:not(.sidebar-unpinned) .sidebar-foot,
+.app-shell.sidebar-unpinned.sidebar-hover-expanded .sidebar-foot {
+  padding: 8px 10px 10px !important;
+  gap: 4px;
+}
+
+/* Desktop shell reservation: the permanent rail owns its column.  The
+   unpinned rail keeps the same 72px reservation even while its visual rail
+   temporarily expands over the workspace after the hover dwell. */
+@media (min-width: 769px) {
+  .app-shell .shell-main {
+    box-sizing: border-box;
+    width: calc(100% - var(--merchant-sidebar-width)) !important;
+    margin-inline-start: var(--merchant-sidebar-width) !important;
+    min-width: 0;
+    transition: width 0.28s var(--merchant-ease), margin-inline-start 0.28s var(--merchant-ease);
+  }
+}
+
+@media (max-width: 768px) {
+  .app-shell .topbar {
+    inset-inline-start: 0 !important;
+    inset-inline-end: 0 !important;
+    width: 100% !important;
+  }
+}
+
+/* Tablet/mobile uses the drawer, so no desktop rail column is reserved. */
+@media (max-width: 1024px) {
+  .app-shell {
+    --merchant-sidebar-width: 0px !important;
+  }
+
+  /* The desktop rail has no visual role below tablet size; leaving its
+     children at width:0 still allowed their labels to expand the document in
+     some RTL browsers. The drawer is the only mobile navigation surface. */
+  .app-shell > .app-shell-body > .sidebar {
+    display: none !important;
+  }
+
+  .app-shell .shell-main {
+    width: 100% !important;
+    margin-inline-start: 0 !important;
+  }
+
+  .app-shell .topbar {
+    inset-inline-start: 0 !important;
+    inset-inline-end: 0 !important;
+    width: 100% !important;
+  }
+}
+
+/* The topbar is a full-width row above the desktop body.  Sidebar
+   reservation applies only to .shell-main; it must never shrink this bar. */
+.app-shell .topbar {
+  inset-block-start: 0 !important;
+  inset-inline-start: 0 !important;
+  inset-inline-end: 0 !important;
+  width: 100% !important;
+  margin-inline: 0 !important;
+  z-index: 40 !important;
+}
+
+/* Keep the fixed rail entirely below the full-width topbar. */
+.app-shell .sidebar {
+  inset-block-start: var(--topbar-h) !important;
+  height: calc(100vh - var(--topbar-h)) !important;
+  bottom: auto !important;
+}
+
+/* One desktop topbar for both admin roles.  The role supplies identity text
+   and actions only; the row geometry and RTL order stay shared. */
+@media (min-width: 1025px) {
+  .app-shell .topbar {
+    display: grid !important;
+    direction: rtl !important;
+    grid-template-columns: auto minmax(0, 1fr) auto !important;
+    align-items: center !important;
+    gap: 16px !important;
+    height: var(--topbar-h) !important;
+    min-height: var(--topbar-h) !important;
+    max-height: var(--topbar-h) !important;
+    padding-inline: 24px !important;
+  }
+
+  .app-shell .topbar-brand { grid-column: 1; order: initial !important; }
+  .app-shell .topbar-search {
+    grid-column: 2;
+    justify-self: center;
+    margin-inline: 0 !important;
+  }
+  .app-shell .topbar-actions { grid-column: 3; order: initial !important; }
+.app-shell .topbar .sidebar-toggle { display: none !important; order: initial !important; }
+}
+
+/* Final shared rail polish: both role shells use the same flex anchors. */
+.app-shell .sidebar {
+  display: flex;
+  flex-direction: column;
+}
+.app-shell .sidebar-top {
+  flex: 0 0 auto;
+  width: 100%;
+  box-sizing: border-box;
+}
+.app-shell .sidebar-nav {
+  flex: 0 1 auto;
+  width: 100%;
+  box-sizing: border-box;
+}
+.app-shell .sidebar-foot {
+  flex: 0 0 auto;
+  width: 100%;
+  box-sizing: border-box;
+  margin-top: auto;
+}
+.app-shell.sidebar-unpinned:not(.sidebar-hover-expanded) .sidebar-top {
+  align-items: center;
+  justify-content: center;
+}
+.app-shell.sidebar-unpinned:not(.sidebar-hover-expanded) .sidebar-top .sidebar-pin-btn {
+  margin: 0 auto !important;
+}
+
+/* Collapsed footer anchor: the rail itself is the full-height flex parent. */
+.app-shell.sidebar-unpinned:not(.sidebar-hover-expanded) .sidebar {
+  display: flex !important;
+  flex-direction: column !important;
+  height: calc(100vh - var(--topbar-h)) !important;
+  height: calc(100dvh - var(--topbar-h)) !important;
+  min-height: 0 !important;
+}
+.app-shell.sidebar-unpinned:not(.sidebar-hover-expanded) .sidebar-nav {
+  flex: 0 0 auto !important;
+}
+.app-shell.sidebar-unpinned:not(.sidebar-hover-expanded) .sidebar-foot {
+  flex: 0 0 auto !important;
+  margin: 0 !important;
+  margin-block-start: 0 !important;
+  align-self: stretch;
+}
+.app-shell.sidebar-unpinned:not(.sidebar-hover-expanded) .sidebar-collapsed-spacer {
+  flex: 1 1 auto !important;
+  min-height: 0 !important;
+  width: 100%;
+  pointer-events: none;
+}
+
+/* Keep the platform rail readable in dark mode. The platform-specific legacy
+   rules above use fixed light-theme colors, so normalize them at the final
+   cascade boundary shared by every platform page. */
+[data-theme='dark'] .app-shell--platform .sidebar {
+  background: #17213a !important;
+  color: #edf2ff !important;
+}
+[data-theme='dark'] .app-shell--platform .sidebar-group-header,
+[data-theme='dark'] .app-shell--platform .sidebar-child-link,
+[data-theme='dark'] .app-shell--platform .sidebar-link {
+  color: #b3bdd3 !important;
+}
+[data-theme='dark'] .app-shell--platform .sidebar-group-header:hover,
+[data-theme='dark'] .app-shell--platform .sidebar-child-link:hover,
+[data-theme='dark'] .app-shell--platform .sidebar-link:hover {
+  color: #edf2ff !important;
+  background: #1d2a47 !important;
+}
+[data-theme='dark'] .app-shell--platform .sidebar-child-link.active,
+[data-theme='dark'] .app-shell--platform .sidebar-link.active {
+  color: #a5b4fc !important;
+  background: rgba(129, 140, 248, .16) !important;
+}
+[data-theme='dark'] .app-shell--platform .sidebar-foot-user strong {
+  color: #edf2ff !important;
+}
+[data-theme='dark'] .app-shell--platform .sidebar-foot-user small {
+  color: #b3bdd3 !important;
+}
+
+/* Final dark-token boundary. Several late V3 rules intentionally consume the
+   MKA aliases with !important, so the aliases themselves must follow the
+   active theme instead of retaining their :root light values. */
+[data-theme='dark'] .app-shell {
+  --mka-bg: #0d1422;
+  --mka-surface: #141e2e;
+  --mka-surface-soft: #111a2b;
+  --mka-surface-elevated: #182438;
+  --mka-text: #f3f6fb;
+  --mka-text-secondary: #b3bdd3;
+  --mka-border: #2d3b53;
+  --admin-list-white: #141e2e;
+  --v3-bg: var(--mka-bg);
+  --v3-surface: var(--mka-surface-elevated);
+  --v3-surface-low: var(--mka-surface-soft);
+  --v3-text: var(--mka-text);
+  --v3-muted: var(--mka-text-secondary);
+  --v3-outline: var(--mka-border);
+}
+
+/* Wasla-inspired navigation identity: a clear brand anchor, compact section
+   headers and one quiet active row. This remains shared by merchant and
+   platform consoles while retaining Matjari's indigo identity. */
+.app-shell:not(.sidebar-unpinned) .sidebar-top,
+.app-shell.sidebar-unpinned.sidebar-hover-expanded .sidebar-top {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  min-height: 62px;
+  padding: 12px 14px !important;
+  border-bottom: 1px solid var(--v3-outline);
+}
+.sidebar-console-brand {
+  display: inline-flex;
+  align-items: center;
+  min-width: 0;
+  gap: 9px;
+  color: var(--v3-text);
+  text-decoration: none;
+}
+.sidebar-console-brand .brand-mark { width: 30px; height: 30px; flex: 0 0 30px; border-radius: 9px; }
+.app-shell--dashboard .merchant-console-logo {
+  display: grid;
+  place-items: center;
+  width: 36px;
+  height: 36px;
+  flex: 0 0 36px;
+  overflow: hidden;
+  border: 1px solid var(--v3-outline);
+  border-radius: 9px;
+  background: #fff;
+  object-fit: contain;
+}
+.app-shell--dashboard .topbar .merchant-console-logo { width: 36px; height: 36px; }
+.app-shell--dashboard .sidebar-console-brand .merchant-console-logo { width: 30px; height: 30px; flex-basis: 30px; border-radius: 8px; }
+.app-shell--dashboard .sidebar-console-logo-frame--merchant {
+  color: var(--v3-primary);
+  background: var(--v3-primary-soft);
+}
+.app-shell--dashboard .sidebar-console-logo-frame--merchant .mk-icon { font-size: 19px; }
+.app-shell--dashboard .merchant-console-logo--preset { color: var(--v3-primary); background: var(--v3-primary-soft); }
+.app-shell--dashboard .merchant-console-logo--preset .mk-icon { font-size: 19px; }
+.sidebar-console-brand > span:last-child { display: grid; min-width: 0; line-height: 1.2; }
+.sidebar-console-brand strong { overflow: hidden; color: var(--v3-text); font-family: var(--font-display); font-size: 15px; font-weight: 800; text-overflow: ellipsis; white-space: nowrap; }
+.sidebar-console-brand small { margin-top: 2px; color: var(--v3-muted); font-size: 10px; font-weight: 500; }
+.app-shell:not(.sidebar-unpinned) .sidebar-top .sidebar-pin-btn,
+.app-shell.sidebar-unpinned.sidebar-hover-expanded .sidebar-top .sidebar-pin-btn { margin: 0 !important; }
+.app-shell:not(.sidebar-unpinned) .sidebar-group-header,
+.app-shell.sidebar-unpinned.sidebar-hover-expanded .sidebar-group-header {
+  color: var(--v3-muted) !important;
+  font-size: 12px !important;
+  font-weight: 600 !important;
+}
+.app-shell:not(.sidebar-unpinned) .sidebar-child-link.active,
+.app-shell:not(.sidebar-unpinned) .sidebar-link.active,
+.app-shell.sidebar-unpinned.sidebar-hover-expanded .sidebar-child-link.active,
+.app-shell.sidebar-unpinned.sidebar-hover-expanded .sidebar-link.active {
+  box-shadow: inset -3px 0 0 var(--v3-primary);
+}
+@media (max-width: 768px) {
+  .sidebar-drawer .sidebar-top { display: flex; align-items: center; justify-content: space-between; min-height: 62px; padding: 12px 14px !important; }
+  .sidebar-drawer .sidebar-console-brand { color: var(--v3-text); }
+  /* Touch targets in the mobile menu stay at least 44px without making
+     desktop navigation unnecessarily tall. */
+  .sidebar-drawer .sidebar-group-header,
+  .sidebar-drawer .sidebar-child-link,
+  .sidebar-drawer .sidebar-link { min-height: 44px !important; }
+}
+
+/* Phone navigation is rendered from the same component as the compact
+   desktop rail.  The desktop rail intentionally hides labels, but those
+   rules must never leak into the full mobile drawer.  Keep this at the end of
+   the component stylesheet so it wins regardless of lazy-CSS load order. */
+@media (max-width: 768px) {
+  .app-shell.sidebar-unpinned:not(.sidebar-hover-expanded) .sidebar-drawer .sidebar-group-label,
+  .app-shell.sidebar-unpinned:not(.sidebar-hover-expanded) .sidebar-drawer .sidebar-child-link > span:last-child,
+  .app-shell.sidebar-unpinned:not(.sidebar-hover-expanded) .sidebar-drawer .sidebar-link > span:last-child,
+  .app-shell.sidebar-unpinned:not(.sidebar-hover-expanded) .sidebar-drawer .sidebar-foot-user > span:last-child {
+    display: flex !important;
+    max-width: none !important;
+    opacity: 1 !important;
+    transform: none !important;
+    visibility: visible !important;
+  }
+  .app-shell.sidebar-unpinned:not(.sidebar-hover-expanded) .sidebar-drawer .sidebar-chevron {
+    display: inline-flex !important;
+    opacity: 1 !important;
+    visibility: visible !important;
+  }
+  .app-shell.sidebar-unpinned:not(.sidebar-hover-expanded) .sidebar-drawer .sidebar-group-items {
+    display: block !important;
+  }
+  .app-shell .sidebar-drawer {
+    background: #fff !important;
+    color: #182033 !important;
+    border-inline-end: 1px solid #e1e5f2 !important;
+    box-shadow: -12px 0 36px rgba(15, 23, 42, .18) !important;
+  }
+  .app-shell .sidebar-drawer .sidebar-group-header {
+    color: #3f4a60 !important;
+    font-size: 14px !important;
+    font-weight: 800 !important;
+  }
+  .app-shell .sidebar-drawer .sidebar-group-label {
+    color: #3f4a60 !important;
+    opacity: 1 !important;
+    font-size: 14px !important;
+    font-weight: 800 !important;
+  }
+  .app-shell .sidebar-drawer .sidebar-child-link,
+  .app-shell .sidebar-drawer .sidebar-link {
+    color: #182033 !important;
+    font-size: 15px !important;
+    font-weight: 600 !important;
+  }
+  .app-shell .sidebar-drawer .sidebar-brand-text strong,
+  .app-shell .sidebar-drawer .sidebar-console-brand strong,
+  .app-shell .sidebar-drawer .sidebar-foot-user strong { color: #182033 !important; }
+  .app-shell .sidebar-drawer .sidebar-console-brand small { color: #59657a !important; }
+  .app-shell .sidebar-drawer .sidebar-foot-user { background: #17213a !important; }
+  .app-shell .sidebar-drawer .sidebar-foot-user strong { color: #fff !important; }
+  .app-shell .sidebar-drawer .sidebar-foot-user small { color: #cbd5e1 !important; }
+
+  /* The merchant already has the four-item bottom navigation.  Showing a
+     second hamburger in the topbar made the menu look duplicated; the topbar
+     trigger remains available for the platform, which has no bottom nav. */
+  .app-shell--dashboard .topbar .sidebar-toggle { display: none !important; }
+  .app-shell--dashboard .topbar {
+    grid-template-columns: auto 1fr auto !important;
+    min-height: 64px !important;
+    height: 64px !important;
+    padding-inline: 14px !important;
+    gap: 10px !important;
+  }
+  /* A stable three-column phone header: utilities on one side, the store
+     identity centered, then an intentional empty balance column.  The former
+     natural-flow layout put every icon in one corner and looked unfinished. */
+  .app-shell--dashboard .topbar-brand {
+    grid-column: 2 !important;
+    grid-row: 1;
+    justify-self: center;
+    min-width: 0;
+    gap: 7px;
+  }
+  .app-shell--dashboard .topbar-brand-meta { display: grid !important; }
+  .app-shell--dashboard .topbar-brand-name {
+    display: block !important;
+    max-width: 140px;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+    font-size: 14px !important;
+    font-weight: 800;
+  }
+  .app-shell--dashboard .topbar-brand-sub { display: none !important; }
+  .app-shell--dashboard .topbar-actions {
+    grid-column: 1 !important;
+    grid-row: 1;
+    justify-self: start;
+    gap: 4px !important;
+  }
+  .app-shell--dashboard .topbar-actions > a[title='الدعم والمساعدة'],
+  .app-shell--dashboard .topbar-actions > button[title^='الوضع'] { display: none !important; }
+}
+
+/* Phone chrome: a deliberate three-part bar instead of a compressed desktop
+   header. The drawer account card follows the active theme rather than using
+   the old hard-coded navy surface in every mode. */
+@media (max-width: 768px) {
+  .app-shell { --topbar-h: 68px; }
+  .app-shell .topbar {
+    display: grid !important;
+    grid-template-columns: minmax(0, 1fr) auto minmax(0, 1fr) !important;
+    height: var(--topbar-h) !important;
+    min-height: var(--topbar-h) !important;
+    padding-inline: 16px !important;
+    gap: 8px !important;
+    background: var(--v3-surface) !important;
+  }
+  .app-shell .topbar-brand {
+    grid-column: 2 !important;
+    grid-row: 1;
+    justify-self: center;
+    min-width: 0;
+  }
+  .app-shell .topbar-actions {
+    grid-column: 1 !important;
+    grid-row: 1;
+    justify-self: start;
+    min-width: 0;
+    gap: 4px !important;
+  }
+  .app-shell .topbar .sidebar-toggle {
+    grid-column: 3 !important;
+    grid-row: 1;
+    justify-self: end;
+    display: inline-flex !important;
+    min-width: 44px;
+    min-height: 44px;
+  }
+  .app-shell--dashboard .topbar .sidebar-toggle { display: none !important; }
+  .app-shell--dashboard .topbar-brand-name {
+    max-width: min(34vw, 150px) !important;
+    color: var(--v3-text) !important;
+  }
+  .app-shell .sidebar-drawer .sidebar-foot-user {
+    background: var(--v3-primary-soft) !important;
+    color: var(--v3-text) !important;
+    border: 1px solid var(--v3-outline) !important;
+  }
+  .app-shell .sidebar-drawer .sidebar-foot-user strong {
+    color: var(--v3-text) !important;
+  }
+  .app-shell .sidebar-drawer .sidebar-foot-user small {
+    color: var(--v3-muted) !important;
+  }
+  [data-theme='dark'] .app-shell .sidebar-drawer .sidebar-foot-user {
+    background: #17213a !important;
+    border-color: #2d3b53 !important;
+  }
+  [data-theme='dark'] .app-shell .sidebar-drawer .sidebar-foot-user strong { color: #f3f6fb !important; }
+  [data-theme='dark'] .app-shell .sidebar-drawer .sidebar-foot-user small { color: #b3bdd3 !important; }
+}
+
+/* Canonical SuperAdmin rail.  It intentionally shares the merchant rail's
+   proportions, icon targets, footer anchor and interaction states; only the
+   navigation data differs between the two roles. */
+.app-shell--platform.sidebar-unpinned:not(.sidebar-hover-expanded) .sidebar {
+  background: var(--mka-surface-soft) !important;
+  color: var(--v3-text) !important;
+  border: 0 !important;
+  box-shadow: none !important;
+}
+.app-shell--platform.sidebar-unpinned:not(.sidebar-hover-expanded) .sidebar-top {
+  min-height: 42px !important;
+  padding: 6px 0 4px !important;
+  background: transparent !important;
+  border: 0 !important;
+}
+.app-shell--platform.sidebar-unpinned:not(.sidebar-hover-expanded) .sidebar-nav {
+  padding: 8px 14px 12px !important;
+}
+.app-shell--platform.sidebar-unpinned:not(.sidebar-hover-expanded) .sidebar-group-header {
+  color: #59657a !important;
+  background: transparent !important;
+}
+.app-shell--platform.sidebar-unpinned:not(.sidebar-hover-expanded) .sidebar-group-header.active {
+  color: var(--v3-primary) !important;
+  background: var(--v3-primary-soft) !important;
+}
+.app-shell--platform.sidebar-unpinned:not(.sidebar-hover-expanded) .sidebar-foot {
+  margin-top: 8px !important;
+  padding: 8px 0 10px !important;
+  background: transparent !important;
+  border: 0 !important;
+}
+.app-shell--platform.sidebar-unpinned:not(.sidebar-hover-expanded) .sidebar-foot-user {
+  background: transparent !important;
+  border: 0 !important;
+}
+[data-theme='dark'] .app-shell--platform.sidebar-unpinned:not(.sidebar-hover-expanded) .sidebar {
+  background: #111a2b !important;
+}
+[data-theme='dark'] .app-shell--platform.sidebar-unpinned:not(.sidebar-hover-expanded) .sidebar-group-header {
+  color: #b3bdd3 !important;
+}
+
+/* SuperAdmin now uses the Merchant rail verbatim.  The global legacy
+   .sidebar rule still contributes a three-colour ::before strip unless it is
+   explicitly neutralised here; that made the two otherwise shared rails look
+   like different components. */
+.app-shell--platform .sidebar::before {
+  content: none !important;
+  display: none !important;
+}
+.app-shell--platform .sidebar {
+  background: var(--v3-surface) !important;
+  color: var(--v3-text) !important;
+  border: 0 !important;
+  box-shadow: none !important;
+}
+.app-shell--platform .sidebar-top,
+.app-shell--platform .sidebar-foot {
+  background: transparent !important;
+  border: 0 !important;
+}
+.app-shell--platform.sidebar-unpinned:not(.sidebar-hover-expanded) .sidebar {
+  background: var(--v3-surface) !important;
+}
+.app-shell--platform.sidebar-unpinned:not(.sidebar-hover-expanded) .sidebar-group-header {
+  color: #59657a !important;
+  background: transparent !important;
+}
+.app-shell--platform.sidebar-unpinned:not(.sidebar-hover-expanded) .sidebar-group-header.active {
+  color: var(--v3-primary) !important;
+  background: var(--v3-primary-soft) !important;
+}
+[data-theme='dark'] .app-shell--platform .sidebar,
+[data-theme='dark'] .app-shell--platform.sidebar-unpinned:not(.sidebar-hover-expanded) .sidebar {
+  background: #111a2b !important;
+}
+
+/* A merchant may upload a wide storefront logo.  In the phone drawer it is
+   still an icon-sized brand mark; without an explicit constraint the source
+   image can spill through the navigation and cover its items. */
+.app-shell--dashboard .topbar-brand--has-logo .topbar-brand-meta {
+  display: none;
+}
+
+/* The search control used to have two visual fields: the label had a
+   background/border while the nested input drew another rounded surface and
+   focus ring.  Treat it as one control and move the focus treatment to the
+   outer shell only. */
+.app-shell .topbar-search {
+  position: relative;
+  display: flex;
+  align-items: center;
+  width: clamp(280px, 34vw, 520px);
+  max-width: 100%;
+  height: 42px;
+  min-height: 42px;
+  padding: 0 42px 0 14px !important;
+  background: var(--v3-surface-low) !important;
+  border: 1px solid var(--v3-outline) !important;
+  border-radius: 12px !important;
+  box-shadow: none !important;
+}
+.app-shell .topbar-search input {
+  width: 100% !important;
+  min-width: 0;
+  height: 100%;
+  padding: 0 !important;
+  background: transparent !important;
+  border: 0 !important;
+  border-radius: 0 !important;
+  box-shadow: none !important;
+  outline: 0 !important;
+}
+.app-shell .topbar-search:focus-within {
+  border-color: var(--v3-primary) !important;
+  box-shadow: 0 0 0 2px color-mix(in srgb, var(--v3-primary) 18%, transparent) !important;
+}
+.app-shell .topbar-search .mk-icon {
+  right: 14px;
+  font-size: 18px;
+}
+
+/* Account identity is one compact marker in both desktop and mobile modes.
+   Do not place a 30px avatar inside a separate framed 36px avatar button. */
+.app-shell .topbar-avatar {
+  width: 32px !important;
+  height: 32px !important;
+  border: 0 !important;
+  overflow: visible !important;
+  background: transparent !important;
+  box-shadow: none !important;
+}
+.app-shell .topbar-avatar .avatar,
+.app-shell .topbar-avatar .avatar-sm {
+  width: 32px !important;
+  height: 32px !important;
+  border: 0 !important;
+  border-radius: 50% !important;
+  box-shadow: none !important;
+  box-sizing: border-box;
+}
+
+@media (max-width: 768px) {
+  .app-shell .sidebar-drawer .merchant-console-logo {
+    width: 36px !important;
+    height: 36px !important;
+    min-width: 36px !important;
+    max-width: 36px !important;
+    min-height: 36px !important;
+    max-height: 36px !important;
+    flex: 0 0 36px !important;
+    object-fit: contain !important;
+    overflow: hidden !important;
+  }
+
+  /* The uploaded shop logo is the identity.  Repeating the shop name beside
+     it in a 390px header competes with the navigation actions and creates a
+     cramped, accidental-looking topbar. */
+  .app-shell--dashboard .topbar-brand--has-logo .topbar-brand-meta {
+    display: none !important;
+  }
+  .app-shell--dashboard .topbar-brand--has-logo {
+    gap: 0 !important;
+  }
+  .app-shell--dashboard .topbar-brand--has-logo .merchant-console-logo {
+    width: 38px !important;
+    height: 38px !important;
+    flex-basis: 38px !important;
+    border-radius: 10px !important;
+  }
+
+  /* The user marker should be one intentional circle, not a 30px avatar
+     floating inside a second 36px ring. */
+  .app-shell .topbar-avatar {
+    width: 32px !important;
+    height: 32px !important;
+    border: 0 !important;
+    overflow: visible !important;
+    background: transparent !important;
+  }
+  .app-shell .topbar-avatar .avatar,
+  .app-shell .topbar-avatar .avatar-sm {
+    width: 32px !important;
+    height: 32px !important;
+    border: 0 !important;
+    border-radius: 50% !important;
+    box-sizing: border-box;
+  }
+}
+
+/* Guaranteed last cascade for the drawer after every legacy shell rule. */
+@media (max-width: 768px) {
+  .app-shell .sidebar-drawer .sidebar-console-logo-frame {
+    display: inline-flex !important;
+    width: 36px !important;
+    height: 36px !important;
+    min-width: 36px !important;
+    max-width: 36px !important;
+    min-height: 36px !important;
+    max-height: 36px !important;
+    flex: 0 0 36px !important;
+    align-items: center !important;
+    justify-content: center !important;
+    overflow: hidden !important;
+    border: 1px solid #dfe4f0 !important;
+    border-radius: 9px !important;
+    background: #fff !important;
+  }
+  .app-shell .sidebar-drawer .sidebar-console-logo-frame .merchant-console-logo {
+    display: block !important;
+    width: 100% !important;
+    height: 100% !important;
+    min-width: 0 !important;
+    min-height: 0 !important;
+    max-width: 100% !important;
+    max-height: 100% !important;
+    margin: 0 !important;
+    object-fit: contain !important;
+  }
+  .app-shell .sidebar-drawer .sidebar-foot-user {
+    background: #f3f5fb !important;
+    border: 1px solid #dfe4f0 !important;
+    color: #182033 !important;
+  }
+  .app-shell .sidebar-drawer .sidebar-foot-user strong { color: #182033 !important; }
+  .app-shell .sidebar-drawer .sidebar-foot-user small { color: #59657a !important; }
+  [data-theme='dark'] .app-shell .sidebar-drawer .sidebar-foot-user { background: #17213a !important; border-color: #2d3b53 !important; color: #f3f6fb !important; }
+  [data-theme='dark'] .app-shell .sidebar-drawer .sidebar-foot-user strong { color: #f3f6fb !important; }
+  [data-theme='dark'] .app-shell .sidebar-drawer .sidebar-foot-user small { color: #b3bdd3 !important; }
+}
