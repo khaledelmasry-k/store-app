@@ -99,7 +99,7 @@ export const PERMISSION_GROUPS: Record<
   },
   crm: {
     label: 'إدارة العملاء (CRM)',
-    icon: 'contacts',
+    icon: 'groups',
     permissions: ['crm:view', 'crm:manage', 'crm:followups', 'crm:export', 'crm:analytics'],
   },
   inventory: {
@@ -697,7 +697,7 @@ export const NAV_GROUPS: Record<'platform' | 'dashboard', NavGroup[]> = {
         {
           to: '/dashboard/crm',
           label: 'لوحة CRM',
-          icon: 'contacts',
+          icon: 'query_stats',
           permission: 'crm:view',
         },
       ],

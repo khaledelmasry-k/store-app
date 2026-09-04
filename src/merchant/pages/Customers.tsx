@@ -75,15 +75,6 @@ export const MerchantCustomers: FunctionalComponent = () => {
     return [...set].sort()
   }, [customers])
 
-  const stagesPresent = useMemo(() => {
-    const set = new Set<string>()
-    for (const c of customers) {
-      const s = normalizeCrmStage((c as any).stage) || normalizeSegment(c.segment || '') || null
-      if (s) set.add(s as string)
-    }
-    return [...set] as string[]
-  }, [customers])
-
   const filtered = customers.filter(
     (c) =>
       ((c.name || '').toLowerCase().includes(query.toLowerCase()) || (c.phone || '').includes(query) || (c.email || '').toLowerCase().includes(query.toLowerCase()) || (c.tags || []).join(' ').toLowerCase().includes(query.toLowerCase())) &&
@@ -492,7 +483,7 @@ export const MerchantCustomers: FunctionalComponent = () => {
                       </div>
                     </div>
                     <div className="cust-detail-row">
-                      <Icon name="flag" ariaHidden />
+                      <Icon name="workspace_premium" ariaHidden />
                       <div style={{ flex: 1 }}>
                         <span>المرحلة</span>
                         <div style={{ display: 'flex', gap: 6, marginTop: 6, alignItems: 'center' }}>
@@ -504,7 +495,7 @@ export const MerchantCustomers: FunctionalComponent = () => {
                       </div>
                     </div>
                     <div className="cust-detail-row">
-                      <Icon name="label" ariaHidden />
+                      <Icon name="sell" ariaHidden />
                       <div style={{ flex: 1 }}>
                         <span>الوسوم</span>
                         <div style={{ display: 'flex', gap: 6, marginTop: 6 }}>
@@ -520,7 +511,7 @@ export const MerchantCustomers: FunctionalComponent = () => {
                     </div>
                     {(detail as any).phoneNormalized && (
                       <div className="cust-detail-row">
-                        <Icon name="phone_iphone" ariaHidden />
+                        <Icon name="smartphone" ariaHidden />
                         <div><span>الهاتف المهيأ</span><strong style={{ direction: 'ltr' }}>{(detail as any).phoneNormalized}</strong></div>
                       </div>
                     )}
@@ -541,7 +532,7 @@ export const MerchantCustomers: FunctionalComponent = () => {
                   <div style={{ display: 'flex', flexDirection: 'column', gap: 8, paddingTop: 12, borderTop: '1px solid var(--outline-variant)' }}>
                     <h3 style={{ margin: 0, fontSize: 13 }}>إضافة ملاحظة</h3>
                     <Textarea value={noteDraft} onChange={setNoteDraft} rows={2} placeholder="اكتب ملاحظة للفريق..." />
-                    <Button size="sm" icon="note_add" disabled={!noteDraft.trim()} onClick={handleAddNote}>حفظ ملاحظة</Button>
+                    <Button size="sm" icon="note" disabled={!noteDraft.trim()} onClick={handleAddNote}>حفظ ملاحظة</Button>
                   </div>
 
                   <button type="button" className="customers-edit-btn" onClick={() => openEdit(detail)}><Icon name="edit" ariaHidden /> تعديل شامل</button>

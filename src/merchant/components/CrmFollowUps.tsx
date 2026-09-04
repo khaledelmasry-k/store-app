@@ -39,7 +39,7 @@ export const CrmFollowUps: FunctionalComponent<Props> = ({ followUps, loading, o
           <Input type="datetime-local" label="تاريخ المتابعة" value={dueAt} onChange={setDueAt} />
         </div>
         <Textarea label="ملاحظات المتابعة" value={notes} onChange={setNotes} rows={2} placeholder="سبب المتابعة، ماذا يجب قوله..." />
-        <Button size="sm" icon="event" loading={saving} disabled={!dueAt} onClick={handleCreate}>إضافة متابعة</Button>
+        <Button size="sm" icon="calendar_today" loading={saving} disabled={!dueAt} onClick={handleCreate}>إضافة متابعة</Button>
       </div>
 
       <div className="crm-followups-list">

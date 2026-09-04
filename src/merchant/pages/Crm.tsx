@@ -30,7 +30,7 @@ export const MerchantCrm: FunctionalComponent = () => {
 
   const kpis = analytics ? [
     { label: 'إجمالي العملاء', value: formatNumber(analytics.totalCustomers), icon: 'groups', sub: `${analytics.newCustomers} جدد هذا الشهر` },
-    { label: 'متكررون', value: formatNumber(analytics.repeatCustomers), icon: 'repeat', sub: `${(analytics.repeatPurchaseRate * 100).toFixed(1)}% معدل التكرار` },
+    { label: 'متكررون', value: formatNumber(analytics.repeatCustomers), icon: 'sync_alt', sub: `${(analytics.repeatPurchaseRate * 100).toFixed(1)}% معدل التكرار` },
     { label: 'VIP', value: formatNumber(analytics.vip), icon: 'workspace_premium', sub: 'عملاء مميزون', tone: 'amber' },
     { label: 'معرض للخسارة', value: formatNumber(analytics.atRisk), icon: 'warning', sub: 'يحتاج متابعة', tone: 'orange' },
     { label: 'متوسط الطلب', value: formatCurrency(analytics.avgOrderValue), icon: 'receipt_long', sub: 'AOV' },
@@ -117,7 +117,7 @@ export const MerchantCrm: FunctionalComponent = () => {
                   return (
                     <div key={f.id} className={`crm-follow-row ${isOverdue ? 'is-overdue' : ''}`}>
                       <span style={{ width: 28, height: 28, borderRadius: 9999, background: isOverdue ? 'var(--error-container)' : 'var(--surface-container)', display: 'flex', alignItems: 'center', justifyContent: 'center', color: isOverdue ? 'var(--on-error-container)' : 'var(--text-on-surface-variant)' }}>
-                        <Icon name="event" ariaHidden />
+                        <Icon name="calendar_today" ariaHidden />
                       </span>
                       <div style={{ flex: 1, minWidth: 0 }}>
                         <div style={{ fontSize: 12, fontWeight: 600, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{f.customerName || f.customerId} — {f.customerPhone || ''}</div>
