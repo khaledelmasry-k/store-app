@@ -1,5 +1,5 @@
 export type TimestampLike =
-  | { seconds?: number; nanoseconds?: number; _seconds?: number; _nanoseconds?: number; toMillis?: () => number; toDate?: () => Date; seconds?: any }
+  | { seconds?: number | string; nanoseconds?: number | string; _seconds?: number | string; _nanoseconds?: number | string; toMillis?: () => number; toDate?: () => Date }
   | string
   | number
   | Date
