@@ -106,7 +106,11 @@ function inStore(resource) {
     }
 
     function canReadCustomers(storeId) {
-      return isPlatformAdmin() || (canAccessStore(storeId) && (isMerchant() || hasAnyPermission(['customers:manage', 'customers:view'])));
+      return isPlatformAdmin() || (canAccessStore(storeId) && (isMerchant() || hasAnyPermission(['customers:manage', 'customers:view', 'crm:view', 'crm:manage', 'customers:tags', 'customers:notes', 'customers:followups'])));
+    }
+
+    function canReadCrm(storeId) {
+      return isPlatformAdmin() || (canAccessStore(storeId) && (isMerchant() || hasAnyPermission(['customers:view', 'customers:manage', 'crm:view', 'crm:manage', 'crm:followups', 'crm:analytics'])));
     }
 
     // Write gates for each resource: merchant-owner or staff holding any of the
@@ -121,7 +125,11 @@ function inStore(resource) {
     }
 
     function canWriteCustomers(storeId) {
-      return isPlatformAdmin() || (canAccessStore(storeId) && (isMerchant() || hasAnyPermission(['customers:manage', 'customers:create', 'customers:edit', 'customers:delete'])));
+      return isPlatformAdmin() || (canAccessStore(storeId) && (isMerchant() || hasAnyPermission(['customers:manage', 'customers:create', 'customers:edit', 'customers:delete', 'customers:notes', 'customers:tags', 'customers:followups', 'crm:manage', 'crm:followups'])));
+    }
+
+    function canWriteCrm(storeId) {
+      return isPlatformAdmin() || (canAccessStore(storeId) && (isMerchant() || hasAnyPermission(['customers:manage', 'customers:edit', 'crm:manage', 'crm:followups'])));
     }
 
     function canWriteSettings(storeId) {
@@ -258,16 +266,43 @@ match /orders/{id} {
        allow write: if false;
      }
 
-     // ─────────────────────────────────────────────────────────────
-     // customers — merchant/admin read; write requires a customer-write granular perm
-     // ─────────────────────────────────────────────────────────────
-     match /customers/{id} {
-       allow read: if canReadCustomers(resource.data.storeId);
-       allow create: if canWriteCustomers(request.resource.data.storeId);
-       allow update: if canWriteCustomers(request.resource.data.storeId)
-         && request.resource.data.storeId == resource.data.storeId;
-       allow delete: if canWriteCustomers(resource.data.storeId);
-     }
+      // ─────────────────────────────────────────────────────────────
+      // customers — merchant/admin read; write requires a customer-write granular perm
+      // ─────────────────────────────────────────────────────────────
+      match /customers/{id} {
+        allow read: if canReadCustomers(resource.data.storeId);
+        allow create: if canWriteCustomers(request.resource.data.storeId);
+        allow update: if canWriteCustomers(request.resource.data.storeId)
+          && request.resource.data.storeId == resource.data.storeId;
+        allow delete: if canWriteCustomers(resource.data.storeId);
+      }
+
+      // ─────────────────────────────────────────────────────────────
+      // CRM — follow-ups and timeline (append-only; tenant-isolated)
+      // ─────────────────────────────────────────────────────────────
+      match /customerFollowUps/{id} {
+        allow read: if canReadCrm(resource.data.storeId);
+        allow create: if canWriteCrm(request.resource.data.storeId);
+        allow update: if canWriteCrm(request.resource.data.storeId)
+          && request.resource.data.storeId == resource.data.storeId;
+        allow delete: if canWriteCrm(resource.data.storeId);
+      }
+
+      match /customerTimeline/{id} {
+        allow read: if canReadCrm(resource.data.storeId);
+        // Timeline is callable/server-owned + merchant append via canWriteCrm
+        allow create: if canWriteCrm(request.resource.data.storeId);
+        allow update: if false;
+        allow delete: if false;
+      }
+
+      // Back-compat alias: some older clients may use `crmTimeline`
+      match /crmTimeline/{id} {
+        allow read: if canReadCrm(resource.data.storeId);
+        allow create: if canWriteCrm(request.resource.data.storeId);
+        allow update: if false;
+        allow delete: if false;
+      }
 
     // ─────────────────────────────────────────────────────────────
     // subscriptions / transactions / payments — merchant reads own store;

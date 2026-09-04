@@ -588,13 +588,19 @@ export interface Customer extends Partial<FirestoreMeta> {
   storeId: string
   name: string
   phone: string
+  /** Normalized phone digits (EG: 01XXXXXXXXX) used for dedup and lookup. */
+  phoneNormalized?: string
   email?: string
   governorate?: string
   city?: string
   area?: string
   address?: string
   segment?: string
+  /** CRM stage — canonical. Legacy `segment` is retained for back-compat. */
+  stage?: string
   note?: string
+  /** Merchant notes history (append-only, newest last). */
+  notes?: { body: string; at: { seconds: number; nanoseconds: number }; by?: string }[]
   /** GUEST (checkout without account) or REGISTERED (claimed/account). */
   type?: 'guest' | 'registered'
   /** Auth uid of the linked account when registered. */
@@ -603,6 +609,109 @@ export interface Customer extends Partial<FirestoreMeta> {
   totalSpent: number
   lastOrderAt?: { seconds: number; nanoseconds: number }
   tags?: string[]
+  /** Marketing attribution snapshots captured at last order. */
+  lastSalesLinkId?: string | null
+  lastSalesLinkCode?: string | null
+  lastCampaignId?: string | null
+  lastUtmSource?: string | null
+  lastUtmCampaign?: string | null
+  attributionSource?: string | null
+  /** CRM computed metrics cache (refreshed on order events). */
+  metrics?: CustomerMetrics
+  /** Addresses history — primary is governorate/city/address, extras in array. */
+  addresses?: CustomerAddress[]
+  /** Follow-up summary (denormalized count of pending). */
+  pendingFollowUpsCount?: number
+  nextFollowUpAt?: { seconds: number; nanoseconds: number } | null
+}
+
+export interface CustomerAddress {
+  id: string
+  label?: string
+  governorate: string
+  city: string
+  area?: string
+  address: string
+  isDefault?: boolean
+}
+
+export type CrmStage = 'lead' | 'new' | 'active' | 'repeat' | 'vip' | 'at_risk' | 'lost'
+
+export interface CustomerFollowUp extends Partial<FirestoreMeta> {
+  id: string
+  storeId: string
+  customerId: string
+  /** Customer phone snapshot for quick display without extra join. */
+  customerName?: string
+  customerPhone?: string
+  dueAt: { seconds: number; nanoseconds: number }
+  status: 'pending' | 'done' | 'cancelled' | 'overdue'
+  notes?: string
+  result?: string
+  assignedTo?: string | null
+  assignedToName?: string | null
+  createdBy?: string
+  completedAt?: { seconds: number; nanoseconds: number } | null
+}
+
+export type CustomerTimelineType =
+  | 'customer.created'
+  | 'customer.updated'
+  | 'customer.note'
+  | 'customer.tag'
+  | 'customer.stage_change'
+  | 'order.created'
+  | 'order.status_changed'
+  | 'order.cancelled'
+  | 'order.returned'
+  | 'payment'
+  | 'shipment.created'
+  | 'shipment.delivered'
+  | 'shipment.returned'
+  | 'shipment.failed'
+  | 'follow_up.created'
+  | 'follow_up.completed'
+  | 'follow_up.cancelled'
+  | 'note.added'
+  | 'notification.sent'
+
+export interface CustomerTimelineEvent extends Partial<FirestoreMeta> {
+  id: string
+  storeId: string
+  customerId: string
+  type: CustomerTimelineType
+  title: string
+  body?: string
+  orderId?: string | null
+  orderNumber?: string | null
+  shipmentId?: string | null
+  followUpId?: string | null
+  meta?: Record<string, unknown>
+  createdBy?: string
+}
+
+export interface CustomerMetrics {
+  totalOrders: number
+  deliveredOrders: number
+  cancelledOrders: number
+  returnedOrders: number
+  shippedOrders: number
+  totalRevenue: number
+  avgOrderValue: number
+  lifetimeValue: number
+  lastOrderAt?: { seconds: number; nanoseconds: number } | null
+  lastOrderNumber?: string | null
+  lastOrderStatus?: string | null
+  daysSinceLastOrder?: number | null
+  returnRate: number
+  cancellationRate: number
+  repeatPurchaseRate: number
+  frequency?: number
+  // enriched
+  products?: { productId: string; name: string; qty: number; revenue: number }[]
+  topProduct?: { productId: string; name: string } | null
+  salesLinkId?: string | null
+  campaignId?: string | null
 }
 
 export interface SubscriptionPlan extends Partial<FirestoreMeta> {

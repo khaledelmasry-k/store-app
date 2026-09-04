@@ -423,6 +423,149 @@ function normalizeShippingProviderPayload(input: any) {
   }
 }
 
+// ─────────────────────────────────────────────────────────────
+// CRM helpers — phone normalization, stage/tags, timeline
+// ─────────────────────────────────────────────────────────────
+function normalizePhoneEG(input: unknown): string {
+  if (!input) return ''
+  let digits = String(input).replace(/\D/g, '')
+  if (!digits) return ''
+  if (digits.startsWith('0020')) digits = '0' + digits.slice(4)
+  else if (digits.startsWith('20') && digits.length >= 12) {
+    const without = digits.slice(2)
+    if (without.length === 10 && without.startsWith('1')) digits = '0' + without
+    else if (without.length === 11 && without.startsWith('01')) digits = without
+    else digits = '0' + without
+  }
+  digits = digits.replace(/^0+/, '0')
+  return digits
+}
+
+const CRM_STAGES = ['lead', 'new', 'active', 'repeat', 'vip', 'at_risk', 'lost'] as const
+function normalizeCrmStage(v: unknown): string | null {
+  if (!v) return null
+  const low = String(v).toLowerCase().trim()
+  if ((CRM_STAGES as readonly string[]).includes(low)) return low
+  const legacy: Record<string, string> = { new: 'new', repeat: 'repeat', vip: 'vip', inactive: 'lost', 'جديد': 'new', 'متكرر': 'repeat', 'مكرر': 'repeat', 'مهمل': 'lost', 'نشط': 'active' }
+  return legacy[String(v)] || legacy[low] || null
+}
+
+function sanitizeTags(input: unknown): string[] {
+  if (!Array.isArray(input)) return []
+  const seen = new Set<string>()
+  const out: string[] = []
+  for (const raw of input) {
+    const tag = String(raw || '').trim().slice(0, 30)
+    if (!tag) continue
+    const key = tag.toLowerCase()
+    if (seen.has(key)) continue
+    seen.add(key)
+    out.push(tag)
+    if (out.length >= 20) break
+  }
+  return out
+}
+
+function crmStageLabel(stage: string | null | undefined): string {
+  const map: Record<string, string> = { lead: 'عميل محتمل', new: 'عميل جديد', active: 'نشط', repeat: 'متكرر', vip: 'VIP', at_risk: 'معرض للخسارة', lost: 'مفقود' }
+  return stage ? (map[String(stage)] || String(stage)) : ''
+}
+
+async function emitCustomerTimeline(tx: FirebaseFirestore.Transaction | FirebaseFirestore.Firestore, data: {
+  storeId: string
+  customerId: string
+  type: string
+  title: string
+  body?: string
+  orderId?: string | null
+  orderNumber?: string | null
+  shipmentId?: string | null
+  followUpId?: string | null
+  meta?: Record<string, unknown>
+  createdBy?: string | null
+}) {
+  const ref = db.collection('customerTimeline').doc()
+  const payload: Record<string, unknown> = {
+    id: ref.id,
+    storeId: data.storeId,
+    customerId: data.customerId,
+    type: data.type,
+    title: data.title,
+    body: data.body || null,
+    orderId: data.orderId || null,
+    orderNumber: data.orderNumber || null,
+    shipmentId: data.shipmentId || null,
+    followUpId: data.followUpId || null,
+    meta: data.meta || null,
+    createdBy: data.createdBy || null,
+    createdAt: now(),
+    updatedAt: now(),
+  }
+  if ((tx as FirebaseFirestore.Transaction).set) {
+    ;(tx as FirebaseFirestore.Transaction).set(ref, payload)
+  } else {
+    await (tx as FirebaseFirestore.Firestore).collection('customerTimeline').doc(ref.id).set(payload)
+  }
+  return ref.id
+}
+
+async function logCustomerEvent(storeId: string, customerId: string, type: string, title: string, extra: Record<string, unknown> = {}) {
+  try {
+    await db.collection('customerTimeline').add({
+      storeId,
+      customerId,
+      type,
+      title,
+      body: extra.body || null,
+      orderId: extra.orderId || null,
+      orderNumber: extra.orderNumber || null,
+      shipmentId: extra.shipmentId || null,
+      followUpId: extra.followUpId || null,
+      meta: extra.meta || null,
+      createdBy: extra.createdBy || null,
+      createdAt: now(),
+      updatedAt: now(),
+    })
+  } catch {}
+}
+
+function calcCustomerMetricsFromOrders(orders: any[]) {
+  const totalOrders = orders.length
+  const deliveredOrders = orders.filter((o) => o.status === 'DELIVERED').length
+  const cancelledOrders = orders.filter((o) => o.status === 'CANCELLED').length
+  const returnedOrders = orders.filter((o) => o.status === 'RETURNED').length
+  const shippedOrders = orders.filter((o) => o.status === 'SHIPPED').length
+  const totalRevenue = orders.filter((o) => o.status === 'DELIVERED').reduce((s: number, o: any) => s + (o.totalPrice || 0), 0)
+  const avgOrderValue = deliveredOrders > 0 ? totalRevenue / deliveredOrders : 0
+  const sorted = [...orders].sort((a, b) => (b.createdAt?.seconds || 0) - (a.createdAt?.seconds || 0))
+  const lastOrder = sorted[0] || null
+  const lastOrderAt = lastOrder?.createdAt || null
+  const lastOrderNumber = lastOrder?.orderNumber || null
+  const lastOrderStatus = lastOrder?.status || null
+  const daysSinceLastOrder = lastOrderAt ? Math.floor((Date.now() - lastOrderAt.seconds * 1000) / 86400000) : null
+  const returnRate = totalOrders > 0 ? returnedOrders / totalOrders : 0
+  const cancellationRate = totalOrders > 0 ? cancelledOrders / totalOrders : 0
+  // product breakdown
+  const productMap = new Map<string, { productId: string; name: string; qty: number; revenue: number }>()
+  for (const o of orders) {
+    for (const it of o.items || []) {
+      const key = it.productId
+      const prev = productMap.get(key) || { productId: key, name: it.name || key, qty: 0, revenue: 0 }
+      prev.qty += Number(it.quantity || 0)
+      prev.revenue += Number(it.lineTotal ?? (it.price || 0) * (it.quantity || 0))
+      productMap.set(key, prev)
+    }
+  }
+  const products = [...productMap.values()].sort((a, b) => b.revenue - a.revenue)
+  return {
+    totalOrders, deliveredOrders, cancelledOrders, returnedOrders, shippedOrders,
+    totalRevenue, avgOrderValue, lifetimeValue: totalRevenue,
+    lastOrderAt, lastOrderNumber, lastOrderStatus, daysSinceLastOrder,
+    returnRate, cancellationRate, repeatPurchaseRate: totalOrders > 1 ? 1 : 0,
+    products: products.slice(0, 10), topProduct: products[0] || null,
+  }
+}
+
 const _ALL_PERMISSIONS = [
   'products:view',
   'products:create',
@@ -436,6 +579,15 @@ const _ALL_PERMISSIONS = [
   'customers:create',
   'customers:edit',
   'customers:delete',
+  'customers:export',
+  'customers:notes',
+  'customers:tags',
+  'customers:followups',
+  'crm:view',
+  'crm:manage',
+  'crm:followups',
+  'crm:export',
+  'crm:analytics',
   'inventory:view',
   'inventory:adjust',
   'sales_links:view',
@@ -1312,13 +1464,26 @@ export const createOrder = onCall({ region: SHIPPING_FUNCTION_REGION, secrets: [
   }
 
   // Upsert, never duplicate: reuse an existing customer for the same store when
-  // the phone already exists. This keeps one Customer doc per (storeId, phone).
-  const existingCustomer = await db.collection('customers')
-    .where('storeId', '==', storeId)
-    .where('phone', '==', String(customer.phone))
-    .limit(1)
-    .get()
-  const existingCustomerDoc = existingCustomer.empty ? null : existingCustomer.docs[0]
+  // the phone already exists. Uses phoneNormalized to avoid fragmented duplicates
+  // like 010…, +2010…, 002010… Keep legacy phone match as fallback.
+  const normalizedPhone = normalizePhoneEG(customer.phone)
+  let existingCustomerDoc: FirebaseFirestore.QueryDocumentSnapshot | null = null
+  if (normalizedPhone) {
+    const byNorm = await db.collection('customers')
+      .where('storeId', '==', storeId)
+      .where('phoneNormalized', '==', normalizedPhone)
+      .limit(1)
+      .get()
+    if (!byNorm.empty) existingCustomerDoc = byNorm.docs[0]
+  }
+  if (!existingCustomerDoc) {
+    const byRaw = await db.collection('customers')
+      .where('storeId', '==', storeId)
+      .where('phone', '==', String(customer.phone))
+      .limit(1)
+      .get()
+    if (!byRaw.empty) existingCustomerDoc = byRaw.docs[0]
+  }
   const customerType = request.auth?.uid ? 'registered' : 'guest'
 
   // Resolve the coupon before the transaction, then re-read it transactionally
@@ -1624,14 +1789,21 @@ export const createOrder = onCall({ region: SHIPPING_FUNCTION_REGION, secrets: [
     if (!shipping.available) throw new HttpsError('failed-precondition', shipping.unavailableReason || 'الشحن غير متوفر لهذه الوجهة')
     shippingSnapshot = shipping.snapshot
 
-    // Customer upsert — one Customer doc per (storeId, phone). Reuse the
-    // existing doc when present, otherwise create. Never duplicates.
+    // Customer upsert — one Customer doc per (storeId, phoneNormalized).
+    // Reuse the existing doc when present, otherwise create. Never duplicates.
+    // Also maintains CRM denorm: phoneNormalized, attribution, and stage fallback.
     let customerDocId: string
+    const attributionPatch: Record<string, any> = {}
+    if (salesLinkId) { attributionPatch.lastSalesLinkId = salesLinkId; attributionPatch.lastSalesLinkCode = salesLinkRef || null }
+    if (campaignSnapshot?.id) { attributionPatch.lastCampaignId = campaignSnapshot.id; attributionPatch.attributionSource = salesLinkId ? 'sales_link' : landingPageSnapshot ? 'landing_page' : 'campaign_parameter' }
+    if (utmSource) attributionPatch.lastUtmSource = String(utmSource).slice(0, 120)
+    if (utmCampaign) attributionPatch.lastUtmCampaign = String(utmCampaign).slice(0, 120)
     if (existingCustomerDoc) {
       customerDocId = existingCustomerDoc.id
       tx.update(db.doc(`customers/${customerDocId}`), {
         name: customer.name,
         phone: customer.phone,
+        phoneNormalized: normalizedPhone || existingCustomerDoc.data()?.phoneNormalized || null,
         governorate: customer.governorate || '',
         city: customer.city || '',
         area: customer.area || '',
@@ -1642,6 +1814,7 @@ export const createOrder = onCall({ region: SHIPPING_FUNCTION_REGION, secrets: [
         totalSpent: FieldValue.increment(subtotal - discount),
         lastOrderAt: now(),
         updatedAt: now(),
+        ...attributionPatch,
       })
     } else {
       customerDocId = db.collection('customers').doc().id
@@ -1649,20 +1822,27 @@ export const createOrder = onCall({ region: SHIPPING_FUNCTION_REGION, secrets: [
         storeId,
         name: customer.name,
         phone: customer.phone,
+        phoneNormalized: normalizedPhone || null,
         governorate: customer.governorate || '',
         city: customer.city || '',
         area: customer.area || '',
         address: customer.address || '',
         segment: null,
+        stage: 'new',
+        tags: [],
         note: customer.notes || null,
+        notes: [],
         type: customerType,
         userId: request.auth?.uid || null,
         totalOrders: FieldValue.increment(1),
         totalSpent: FieldValue.increment(subtotal - discount),
         lastOrderAt: now(),
+        pendingFollowUpsCount: 0,
+        nextFollowUpAt: null,
         createdAt: now(),
         updatedAt: now(),
         createdBy: 'system',
+        ...attributionPatch,
       })
     }
 
@@ -1731,6 +1911,18 @@ export const createOrder = onCall({ region: SHIPPING_FUNCTION_REGION, secrets: [
         shippingProviderId: selectedShippingProvider?.id || null,
       },
     })
+    // CRM Timeline — order created
+    await emitCustomerTimeline(tx, {
+      storeId,
+      customerId: customerDocId,
+      type: 'order.created',
+      title: `طلب جديد ${orderNumber}`,
+      body: `إجمالي ${subtotal + shipping.fee - discount} — ${lineItems.length} منتج`,
+      orderId,
+      orderNumber,
+      meta: { totalPrice: subtotal + shipping.fee - discount, items: lineItems.length, paymentMethod: paymentMethod || 'cod' },
+      createdBy: request.auth?.uid || 'guest',
+    })
     if (!existingCustomerDoc) {
       emitIntegrationEvent(db, tx, {
         eventId: `customer-created-${customerDocId}`,
@@ -1739,6 +1931,15 @@ export const createOrder = onCall({ region: SHIPPING_FUNCTION_REGION, secrets: [
         entityType: 'customer',
         entityId: customerDocId,
         payload: { customerId: customerDocId, phone: customer.phone, type: customerType },
+      })
+      await emitCustomerTimeline(tx, {
+        storeId,
+        customerId: customerDocId,
+        type: 'customer.created',
+        title: 'عميل جديد',
+        body: `${customer.name} — ${customer.phone}`,
+        meta: { phoneNormalized: normalizedPhone },
+        createdBy: request.auth?.uid || 'guest',
       })
     }
 
@@ -5769,6 +5970,19 @@ export const updateOrderStatus = onCall(async (request: CallableRequest<{ orderI
 
   await auditLog(order.storeId, request.auth.uid, 'update_order_status', 'orders', orderId, { from: order.status, to: status })
 
+  // CRM Timeline: log status change for the linked customer
+  if (order.customerDocId) {
+    const timelineType = status === 'CANCELLED' ? 'order.cancelled' : status === 'RETURNED' ? 'order.returned' : 'order.status_changed'
+    const title = status === 'CANCELLED' ? `إلغاء الطلب ${order.orderNumber}` : status === 'RETURNED' ? `مرتجع ${order.orderNumber}` : `تغيير حالة ${order.orderNumber} إلى ${status}`
+    await logCustomerEvent(order.storeId, order.customerDocId, timelineType, title, {
+      body: `${order.status} → ${status}`,
+      orderId,
+      orderNumber: order.orderNumber,
+      createdBy: request.auth.uid,
+      meta: { from: order.status, to: status },
+    }).catch(() => {})
+  }
+
   return { ok: true }
 })
 
@@ -6530,4 +6744,352 @@ export const listPlatformPromotions = onCall(async (request: CallableRequest<any
 export const getPublicPromotions = onCall(async () => {
   const snap = await db.collection('platformPromotions').get()
   return { promotions: snap.docs.map((d) => { const p: any = d.data(); return { id: d.id, title: p.title, message: p.message, type: p.type, audienceType: p.audienceType, planId: p.planId || null, promotionalPrice: p.promotionalPrice ?? null, startsAt: p.startsAt || null, endsAt: p.endsAt || null, placement: p.placement || [], ctaLabel: p.ctaLabel || '', ctaTarget: p.ctaTarget || '', effectiveStatus: promotionState(p) } }).filter((p: any) => p.effectiveStatus === 'active' && p.audienceType === 'all_merchants' && p.placement.includes('pricing')) }
+})
+
+// ─────────────────────────────────────────────────────────────
+// CRM — Customer 360, Timeline, Tags, Stages, Follow-ups
+// ─────────────────────────────────────────────────────────────
+
+export const updateCustomerCrm = onCall(async (request: CallableRequest<any>) => {
+  if (!request.auth) throw new HttpsError('unauthenticated', 'يجب تسجيل الدخول')
+  const { storeId, customerId, patch } = request.data || {}
+  if (!storeId || !customerId || !patch || typeof patch !== 'object') throw new HttpsError('invalid-argument', 'المتجر والعميل والتعديلات مطلوبة')
+  await assertStoreAccess(request, storeId, ['customers:edit', 'customers:tags', 'customers:notes', 'crm:manage'])
+  const ref = db.doc(`customers/${customerId}`)
+  const snap = await ref.get()
+  if (!snap.exists || snap.data()?.storeId !== storeId) throw new HttpsError('not-found', 'العميل غير موجود ضمن هذا المتجر')
+  const before = snap.data()!
+  const updates: Record<string, any> = { updatedAt: now() }
+  let timelineType: string | null = null
+  let timelineTitle = ''
+  let timelineBody = ''
+
+  if ('stage' in patch) {
+    const stage = normalizeCrmStage(patch.stage)
+    if (patch.stage != null && stage == null) throw new HttpsError('invalid-argument', 'المرحلة غير صالحة')
+    updates.stage = stage
+    // keep legacy segment in sync for old UI
+    if (stage) updates.segment = stage === 'lost' ? 'inactive' : stage === 'lead' ? 'new' : stage
+    if (before.stage !== stage) {
+      timelineType = 'customer.stage_change'
+      timelineTitle = `تغيير المرحلة إلى ${crmStageLabel(stage)}`
+      timelineBody = `${before.stage || '—'} → ${stage || '—'}`
+    }
+  }
+  if ('tags' in patch) {
+    const tags = sanitizeTags(patch.tags)
+    updates.tags = tags
+    if (JSON.stringify((before.tags || []).sort()) !== JSON.stringify([...tags].sort())) {
+      timelineType = timelineType || 'customer.tag'
+      timelineTitle = timelineTitle || 'تحديث الوسوم'
+      timelineBody = tags.join('، ') || 'بدون وسوم'
+    }
+  }
+  if ('note' in patch) {
+    const note = String(patch.note || '').trim().slice(0, 2000)
+    updates.note = note || null
+    if (note && note !== before.note) {
+      // also push to notes history
+      updates.notes = FieldValue.arrayUnion({ body: note, at: Timestamp.now(), by: request.auth.uid })
+      timelineType = timelineType || 'customer.note'
+      timelineTitle = 'ملاحظة جديدة'
+      timelineBody = note.slice(0, 300)
+    }
+  }
+  if ('name' in patch) {
+    const name = String(patch.name || '').trim().slice(0, 120)
+    if (!name) throw new HttpsError('invalid-argument', 'الاسم مطلوب')
+    updates.name = name
+  }
+  if ('phone' in patch) {
+    const phone = String(patch.phone || '').trim()
+    const norm = normalizePhoneEG(phone)
+    if (!norm) throw new HttpsError('invalid-argument', 'رقم الهاتف غير صالح')
+    // dedup check: ensure no other customer owns this normalized phone
+    const dup = await db.collection('customers').where('storeId', '==', storeId).where('phoneNormalized', '==', norm).limit(5).get()
+    const conflict = dup.docs.find((d) => d.id !== customerId)
+    if (conflict) throw new HttpsError('already-exists', 'رقم الهاتف مستخدم لعميل آخر')
+    updates.phone = phone
+    updates.phoneNormalized = norm
+  }
+  if ('email' in patch) updates.email = String(patch.email || '').trim().slice(0, 200).toLowerCase() || null
+  if ('governorate' in patch) updates.governorate = String(patch.governorate || '').slice(0, 80)
+  if ('city' in patch) updates.city = String(patch.city || '').slice(0, 80)
+  if ('area' in patch) updates.area = String(patch.area || '').slice(0, 80)
+  if ('address' in patch) updates.address = String(patch.address || '').slice(0, 500)
+
+  if (Object.keys(updates).length <= 1) throw new HttpsError('invalid-argument', 'لا توجد حقول للتحديث')
+
+  await ref.update(updates)
+  if (timelineType) await logCustomerEvent(storeId, customerId, timelineType, timelineTitle, { body: timelineBody, createdBy: request.auth.uid, meta: { before: before.stage || before.segment, after: updates.stage } }).catch(() => {})
+  await auditLog(storeId, request.auth.uid, 'update_customer_crm', 'customers', customerId, { fields: Object.keys(updates) }).catch(() => {})
+  return { ok: true }
+})
+
+export const addCustomerNote = onCall(async (request: CallableRequest<any>) => {
+  if (!request.auth) throw new HttpsError('unauthenticated', 'يجب تسجيل الدخول')
+  const { storeId, customerId, body } = request.data || {}
+  if (!storeId || !customerId || !String(body || '').trim()) throw new HttpsError('invalid-argument', 'المتجر والعميل ونص الملاحظة مطلوبة')
+  await assertStoreAccess(request, storeId, ['customers:notes', 'customers:edit', 'crm:manage'])
+  const ref = db.doc(`customers/${customerId}`)
+  const snap = await ref.get()
+  if (!snap.exists || snap.data()?.storeId !== storeId) throw new HttpsError('not-found', 'العميل غير موجود')
+  const text = String(body).trim().slice(0, 2000)
+  await ref.update({
+    note: text,
+    notes: FieldValue.arrayUnion({ body: text, at: Timestamp.now(), by: request.auth.uid }),
+    updatedAt: now(),
+  })
+  await logCustomerEvent(storeId, customerId, 'note.added', 'ملاحظة جديدة', { body: text.slice(0, 300), createdBy: request.auth.uid })
+  await auditLog(storeId, request.auth.uid, 'add_customer_note', 'customers', customerId, {}).catch(() => {})
+  return { ok: true }
+})
+
+export const upsertCustomerFollowUp = onCall(async (request: CallableRequest<any>) => {
+  if (!request.auth) throw new HttpsError('unauthenticated', 'يجب تسجيل الدخول')
+  const { storeId, customerId, followUpId, dueAt, notes, assignedTo, status, result } = request.data || {}
+  if (!storeId || !customerId || !dueAt) throw new HttpsError('invalid-argument', 'المتجر والعميل وتاريخ المتابعة مطلوبة')
+  await assertStoreAccess(request, storeId, ['customers:followups', 'customers:edit', 'crm:followups', 'crm:manage'])
+  const custSnap = await db.doc(`customers/${customerId}`).get()
+  if (!custSnap.exists || custSnap.data()?.storeId !== storeId) throw new HttpsError('not-found', 'العميل غير موجود')
+  const cust = custSnap.data()!
+  const dueDate = new Date(dueAt)
+  if (isNaN(dueDate.getTime())) throw new HttpsError('invalid-argument', 'تاريخ المتابعة غير صالح')
+  const normalizedStatus = ['pending', 'done', 'cancelled', 'overdue'].includes(String(status)) ? String(status) : 'pending'
+  // overdue is derived, not directly set except via scheduler; but allow manual
+  let assignedName: string | null = null
+  if (assignedTo) {
+    const uSnap = await db.doc(`users/${assignedTo}`).get().catch(() => null)
+    if (uSnap?.exists) assignedName = String(uSnap.data()?.name || uSnap.data()?.email || assignedTo)
+  }
+  const payload: Record<string, any> = {
+    storeId,
+    customerId,
+    customerName: cust.name || '',
+    customerPhone: cust.phone || '',
+    dueAt: Timestamp.fromDate(dueDate),
+    status: normalizedStatus,
+    notes: String(notes || '').slice(0, 2000) || null,
+    result: String(result || '').slice(0, 2000) || null,
+    assignedTo: assignedTo || null,
+    assignedToName: assignedName,
+    updatedAt: now(),
+  }
+  let ref: FirebaseFirestore.DocumentReference
+  let isNew = false
+  if (followUpId) {
+    ref = db.doc(`customerFollowUps/${followUpId}`)
+    const existing = await ref.get()
+    if (!existing.exists || existing.data()?.storeId !== storeId || existing.data()?.customerId !== customerId) throw new HttpsError('not-found', 'المتابعة غير موجودة')
+    await ref.update(payload)
+  } else {
+    ref = db.collection('customerFollowUps').doc()
+    isNew = true
+    await ref.set({
+      id: ref.id,
+      ...payload,
+      createdAt: now(),
+      createdBy: request.auth.uid,
+    })
+  }
+  // Update denormalized counters on customer
+  const pendingSnap = await db.collection('customerFollowUps').where('storeId', '==', storeId).where('customerId', '==', customerId).where('status', '==', 'pending').orderBy('dueAt', 'asc').limit(1).get().catch(() => null)
+  const pendingCountSnap = await db.collection('customerFollowUps').where('storeId', '==', storeId).where('customerId', '==', customerId).where('status', '==', 'pending').get().catch(() => null)
+  const nextDue = pendingSnap && !pendingSnap.empty ? pendingSnap.docs[0].data()?.dueAt : null
+  const pendingCount = pendingCountSnap ? pendingCountSnap.size : 0
+  await db.doc(`customers/${customerId}`).update({ pendingFollowUpsCount: pendingCount, nextFollowUpAt: nextDue || null, updatedAt: now() }).catch(() => {})
+  await logCustomerEvent(storeId, customerId, isNew ? 'follow_up.created' : (normalizedStatus === 'done' ? 'follow_up.completed' : normalizedStatus === 'cancelled' ? 'follow_up.cancelled' : 'follow_up.created'), isNew ? 'متابعة جديدة' : normalizedStatus === 'done' ? 'إتمام المتابعة' : 'تحديث المتابعة', { body: payload.notes || '', followUpId: ref.id, createdBy: request.auth.uid, meta: { dueAt: dueDate.toISOString(), status: normalizedStatus } }).catch(() => {})
+  return { id: ref.id, ok: true }
+})
+
+export const listCustomerTimeline = onCall(async (request: CallableRequest<any>) => {
+  if (!request.auth) throw new HttpsError('unauthenticated', 'يجب تسجيل الدخول')
+  const { storeId, customerId, limit } = request.data || {}
+  if (!storeId || !customerId) throw new HttpsError('invalid-argument', 'المتجر والعميل مطلوبان')
+  await assertStoreAccess(request, storeId, ['customers:view', 'crm:view'])
+  const custSnap = await db.doc(`customers/${customerId}`).get()
+  if (!custSnap.exists || custSnap.data()?.storeId !== storeId) throw new HttpsError('not-found', 'العميل غير موجود')
+  const lim = Math.min(100, Math.max(10, Number(limit || 50)))
+  const snap = await db.collection('customerTimeline').where('storeId', '==', storeId).where('customerId', '==', customerId).orderBy('createdAt', 'desc').limit(lim).get()
+  return { events: snap.docs.map((d) => ({ id: d.id, ...d.data() })) }
+})
+
+export const getCustomer360 = onCall(async (request: CallableRequest<any>) => {
+  if (!request.auth) throw new HttpsError('unauthenticated', 'يجب تسجيل الدخول')
+  const { storeId, customerId } = request.data || {}
+  if (!storeId || !customerId) throw new HttpsError('invalid-argument', 'المتجر والعميل مطلوبان')
+  await assertStoreAccess(request, storeId, ['customers:view', 'crm:view'])
+  const custSnap = await db.doc(`customers/${customerId}`).get()
+  if (!custSnap.exists || custSnap.data()?.storeId !== storeId) throw new HttpsError('not-found', 'العميل غير موجود')
+  const customer = { id: custSnap.id, ...custSnap.data() }
+  // Orders: by customerDocId primary, plus phone fallback
+  const byDoc = await db.collection('orders').where('storeId', '==', storeId).where('customerDocId', '==', customerId).orderBy('createdAt', 'desc').limit(100).get().catch(() => null)
+  let orders: any[] = byDoc ? byDoc.docs.map((d) => ({ id: d.id, ...d.data() })) : []
+  if (orders.length < 100) {
+    const phone = String((customer as any).phone || '')
+    const norm = (customer as any).phoneNormalized || normalizePhoneEG(phone)
+    if (phone || norm) {
+      const variants = new Set<string>([phone, norm].filter(Boolean))
+      for (const p of variants) {
+        const extra = await db.collection('orders').where('storeId', '==', storeId).where('phone', '==', p).limit(50).get().catch(() => null)
+        if (extra && !extra.empty) {
+          for (const d of extra.docs) {
+            const data = { id: d.id, ...d.data() } as any
+            if (!orders.find((o) => o.id === data.id)) orders.push(data)
+          }
+        }
+      }
+      orders.sort((a, b) => (b.createdAt?.seconds || 0) - (a.createdAt?.seconds || 0))
+      orders = orders.slice(0, 100)
+    }
+  }
+  const shipments = orders.length
+    ? await Promise.all(orders.slice(0, 20).map(async (o) => {
+        if (!o.id) return null
+        const s = await db.collection('shipments').where('orderId', '==', o.id).limit(5).get().catch(() => null)
+        return s && !s.empty ? s.docs.map((d) => ({ id: d.id, ...d.data() })) : null
+      })).then((arr) => arr.filter(Boolean).flat() as any[])
+    : []
+  const timelineSnap = await db.collection('customerTimeline').where('storeId', '==', storeId).where('customerId', '==', customerId).orderBy('createdAt', 'desc').limit(50).get().catch(() => null)
+  const timeline = timelineSnap ? timelineSnap.docs.map((d) => ({ id: d.id, ...d.data() })) : []
+  const followUpsSnap = await db.collection('customerFollowUps').where('storeId', '==', storeId).where('customerId', '==', customerId).orderBy('dueAt', 'desc').limit(20).get().catch(() => null)
+  const followUps = followUpsSnap ? followUpsSnap.docs.map((d) => ({ id: d.id, ...d.data() })) : []
+  const metrics: any = calcCustomerMetricsFromOrders(orders)
+  // Enrich with attribution from last order
+  const last = orders[0]
+  if (last) {
+    metrics.salesLinkId = last.salesLinkId || null
+    metrics.campaignId = last.campaignId || null
+  }
+  // Also compute addresses distinct
+  const addressMap = new Map<string, any>()
+  for (const o of orders) {
+    const key = `${o.governorate || ''}|${o.city || ''}|${o.address || ''}`
+    if (!key.replace(/\|/g, '').trim()) continue
+    if (!addressMap.has(key)) addressMap.set(key, { governorate: o.governorate, city: o.city, area: o.area, address: o.address, count: 1 })
+    else addressMap.get(key).count++
+  }
+  return {
+    customer,
+    metrics,
+    orders,
+    shipments,
+    timeline,
+    followUps,
+    addresses: [...addressMap.values()].sort((a, b) => b.count - a.count).slice(0, 5),
+  }
+})
+
+export const getCrmAnalytics = onCall(async (request: CallableRequest<any>) => {
+  if (!request.auth) throw new HttpsError('unauthenticated', 'يجب تسجيل الدخول')
+  const { storeId } = request.data || {}
+  if (!storeId) throw new HttpsError('invalid-argument', 'storeId مطلوب')
+  await assertStoreAccess(request, storeId, ['customers:view', 'crm:view', 'crm:analytics', 'reports:view'])
+  const customersSnap = await db.collection('customers').where('storeId', '==', storeId).get()
+  const customers = customersSnap.docs.map((d) => d.data() as any)
+  const ordersSnap = await db.collection('orders').where('storeId', '==', storeId).get()
+  const orders = ordersSnap.docs.map((d) => d.data() as any)
+  const totalCustomers = customers.length
+  const nowMs = Date.now()
+  const weekAgo = nowMs - 7 * DAY_MS
+  const monthAgo = nowMs - 30 * DAY_MS
+  const newCustomers = customers.filter((c: any) => {
+    const t = c.createdAt?.seconds ? c.createdAt.seconds * 1000 : 0
+    return t >= monthAgo
+  }).length
+  // Stage breakdown
+  const byStage: Record<string, number> = {}
+  for (const c of customers) {
+    const s = normalizeCrmStage(c.stage) || normalizeCrmStage(c.segment) || 'new'
+    byStage[s] = (byStage[s] || 0) + 1
+  }
+  const vip = byStage['vip'] || 0
+  const atRisk = byStage['at_risk'] || 0
+  const lost = byStage['lost'] || 0
+  const repeatCustomers = customers.filter((c: any) => Number(c.totalOrders || 0) > 1).length
+  const delivered = orders.filter((o: any) => o.status === 'DELIVERED')
+  const totalRevenue = delivered.reduce((s: number, o: any) => s + Number(o.totalPrice || 0), 0)
+  const avgOrderValue = delivered.length > 0 ? totalRevenue / delivered.length : 0
+  const customerLifetimeValue = totalCustomers > 0 ? totalRevenue / totalCustomers : 0
+  const repeatPurchaseRate = totalCustomers > 0 ? repeatCustomers / totalCustomers : 0
+  // Follow-ups due
+  const followUpsSnap = await db.collection('customerFollowUps').where('storeId', '==', storeId).where('status', '==', 'pending').get().catch(() => null)
+  let followUpsDue = 0
+  let overdueFollowUps = 0
+  if (followUpsSnap && !followUpsSnap.empty) {
+    for (const d of followUpsSnap.docs) {
+      const due = d.data()?.dueAt?.seconds ? d.data().dueAt.seconds * 1000 : 0
+      if (due && due <= nowMs + 24 * 60 * 60 * 1000) followUpsDue++
+      if (due && due < nowMs) overdueFollowUps++
+    }
+  }
+  // Top governorates
+  const byGov: Record<string, number> = {}
+  for (const c of customers) {
+    const g = String(c.governorate || 'غير محدد')
+    byGov[g] = (byGov[g] || 0) + 1
+  }
+  const topGovernorates = Object.entries(byGov).sort((a, b) => b[1] - a[1]).slice(0, 5).map(([name, count]) => ({ name, count }))
+  // Recent customers trend (last 7 days)
+  const byDay: Record<string, number> = {}
+  for (let i = 6; i >= 0; i--) {
+    const d = new Date(nowMs - i * DAY_MS)
+    const key = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`
+    byDay[key] = 0
+  }
+  for (const c of customers) {
+    const t = c.createdAt?.seconds ? new Date(c.createdAt.seconds * 1000) : null
+    if (!t) continue
+    const key = `${t.getFullYear()}-${String(t.getMonth() + 1).padStart(2, '0')}-${String(t.getDate()).padStart(2, '0')}`
+    if (key in byDay) byDay[key]++
+  }
+  return {
+    totalCustomers,
+    newCustomers,
+    repeatCustomers,
+    vip,
+    atRisk,
+    lost,
+    byStage,
+    totalRevenue,
+    avgOrderValue,
+    customerLifetimeValue,
+    repeatPurchaseRate,
+    followUpsDue,
+    overdueFollowUps,
+    totalFollowUps: followUpsSnap ? followUpsSnap.size : 0,
+    topGovernorates,
+    byDay,
+  }
+})
+
+export const listCrmCustomers = onCall(async (request: CallableRequest<any>) => {
+  if (!request.auth) throw new HttpsError('unauthenticated', 'يجب تسجيل الدخول')
+  const { storeId, q, stage, tag, governorate, minOrders, maxOrders, minSpent, limit } = request.data || {}
+  if (!storeId) throw new HttpsError('invalid-argument', 'storeId مطلوب')
+  await assertStoreAccess(request, storeId, ['customers:view', 'crm:view'])
+  let query: FirebaseFirestore.Query = db.collection('customers').where('storeId', '==', storeId)
+  if (stage) {
+    const norm = normalizeCrmStage(stage)
+    if (norm) query = query.where('stage', '==', norm)
+  }
+  // Firestore cannot do array-contains + other filters efficiently for tags; fetch then filter
+  const lim = Math.min(200, Math.max(10, Number(limit || 50)))
+  query = query.orderBy('createdAt', 'desc').limit(Math.min(500, lim * 3))
+  const snap = await query.get()
+  let customers = snap.docs.map((d) => ({ id: d.id, ...d.data() } as any))
+  if (tag) {
+    const low = String(tag).toLowerCase()
+    customers = customers.filter((c: any) => Array.isArray(c.tags) && c.tags.some((t: string) => String(t).toLowerCase() === low))
+  }
+  if (governorate) customers = customers.filter((c: any) => c.governorate === governorate)
+  if (q) {
+    const needle = String(q).toLowerCase()
+    customers = customers.filter((c: any) => String(c.name || '').toLowerCase().includes(needle) || String(c.phone || '').includes(needle) || String(c.email || '').toLowerCase().includes(needle))
+  }
+  if (minOrders != null) customers = customers.filter((c: any) => Number(c.totalOrders || 0) >= Number(minOrders))
+  if (maxOrders != null) customers = customers.filter((c: any) => Number(c.totalOrders || 0) <= Number(maxOrders))
+  if (minSpent != null) customers = customers.filter((c: any) => Number(c.totalSpent || 0) >= Number(minSpent))
+  customers = customers.slice(0, lim)
+  return { customers }
 })
