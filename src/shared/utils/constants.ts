@@ -250,6 +250,8 @@ export const NOTIFICATION_TONES: Record<string, string> = {
 export const TICKET_STATUS_TONES: Record<string, string> = {
   open: 'blue',
   in_progress: 'amber',
+  waiting_merchant: 'orange',
+  waiting_support: 'violet',
   resolved: 'green',
   closed: 'slate',
 }

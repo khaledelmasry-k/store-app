@@ -1095,17 +1095,21 @@ export interface AdCampaign extends Partial<FirestoreMeta> {
   attributedRevenue?: number
 }
 
-export type TicketStatus = 'open' | 'in_progress' | 'resolved' | 'closed'
+export type TicketStatus = 'open' | 'in_progress' | 'waiting_merchant' | 'waiting_support' | 'resolved' | 'closed'
 export type TicketPriority = 'low' | 'medium' | 'high' | 'urgent'
 
 export interface Ticket extends Partial<FirestoreMeta> {
   id: string
-  storeId?: string
-  createdBy: string
+  storeId: string
   subject: string
   description: string
   status: TicketStatus
   priority: TicketPriority
+  createdBy: string
+  createdByRole?: string
+  assignedTo?: string | null
+  lastReplyAt?: { seconds: number; nanoseconds: number } | null
+  closedAt?: { seconds: number; nanoseconds: number } | null
   replies: { by: string; body: string; at: { seconds: number; nanoseconds: number } }[]
 }
 

@@ -3710,19 +3710,209 @@ export const createTicket = onCall(async (request: CallableRequest<{
   const storeSnap = await db.doc(`stores/${storeId}`).get()
   if (!storeSnap.exists || storeSnap.data()?.active === false) throw new HttpsError('not-found', 'المتجر غير موجود')
 
+  const role = await getUserRole(request.auth.uid)
   const ref = await db.collection('tickets').add({
     storeId,
     createdBy: request.auth.uid,
+    createdByRole: role || 'merchant',
     subject,
     description,
     status: 'open',
     priority,
+    assignedTo: null,
+    lastReplyAt: null,
+    closedAt: null,
     replies: [],
     createdAt: now(),
     updatedAt: now(),
   })
   await auditLog(storeId, request.auth.uid, 'create_ticket', 'tickets', ref.id, { subject })
+  // notify platform
+  const admins = await db.collection('users').where('role', '==', 'superAdmin').limit(5).get().catch(() => null)
+  if (admins) {
+    for (const admin of admins.docs) {
+      await db.collection('notifications').add({
+        userId: admin.id,
+        storeId,
+        title: 'تذكرة جديدة',
+        body: `تذكرة جديدة من ${storeId}: ${subject}`,
+        type: 'ticket',
+        read: false,
+        createdAt: now(),
+        createdBy: request.auth.uid,
+      }).catch(() => {})
+    }
+  }
   return { id: ref.id }
+})
+
+const TICKET_STATUSES = ['open', 'in_progress', 'waiting_merchant', 'waiting_support', 'resolved', 'closed'] as const
+const TICKET_PRIORITIES = ['low', 'medium', 'high', 'urgent'] as const
+
+async function assertTicketAccess(request: CallableRequest, ticketId: string, requireStoreId?: string): Promise<any> {
+  const snap = await db.doc(`tickets/${ticketId}`).get()
+  if (!snap.exists) throw new HttpsError('not-found', 'التذكرة غير موجودة')
+  const data = snap.data() as any
+  const storeId = String(data.storeId || requireStoreId || '').trim()
+  if (!storeId) throw new HttpsError('failed-precondition', 'التذكرة بدون متجر')
+  const role = await getUserRole(request.auth!.uid)
+  if (role === 'superAdmin') return data
+  await assertStoreAccess(request, storeId, 'settings:view')
+  return data
+}
+
+export const getTicket = onCall(async (request: CallableRequest<{ ticketId?: string }>) => {
+  if (!request.auth) throw new HttpsError('unauthenticated', 'يجب تسجيل الدخول')
+  const ticketId = String(request.data?.ticketId || '').trim()
+  if (!ticketId) throw new HttpsError('invalid-argument', 'ticketId مطلوب')
+  const data = await assertTicketAccess(request, ticketId)
+  return { ticket: { id: ticketId, ...data } }
+})
+
+export const listTickets = onCall(async (request: CallableRequest<{ storeId?: string; status?: string; priority?: string; query?: string }>) => {
+  if (!request.auth) throw new HttpsError('unauthenticated', 'يجب تسجيل الدخول')
+  const role = await getUserRole(request.auth!.uid)
+  const storeId = String(request.data?.storeId || '').trim()
+  const status = String(request.data?.status || '').trim()
+  const priority = String(request.data?.priority || '').trim()
+  const q = String(request.data?.query || '').trim().toLowerCase()
+  if (role !== 'superAdmin') {
+    if (!storeId) throw new HttpsError('invalid-argument', 'storeId مطلوب')
+    await assertStoreAccess(request, storeId, 'settings:view')
+    let query: FirebaseFirestore.Query = db.collection('tickets').where('storeId', '==', storeId)
+    if (status && TICKET_STATUSES.includes(status as any)) query = query.where('status', '==', status)
+    if (priority && TICKET_PRIORITIES.includes(priority as any)) query = query.where('priority', '==', priority)
+    query = query.orderBy('updatedAt', 'desc').limit(100)
+    const snap = await query.get()
+    let tickets = snap.docs.map((d) => ({ id: d.id, ...d.data() } as any))
+    if (q) tickets = tickets.filter((t) => `${t.subject} ${t.description}`.toLowerCase().includes(q))
+    return { tickets }
+  }
+  // platform
+  let query: FirebaseFirestore.Query = db.collection('tickets')
+  if (storeId) query = query.where('storeId', '==', storeId)
+  if (status && TICKET_STATUSES.includes(status as any)) query = query.where('status', '==', status)
+  if (priority && TICKET_PRIORITIES.includes(priority as any)) query = query.where('priority', '==', priority)
+  query = query.orderBy('updatedAt', 'desc').limit(100)
+  const snap = await query.get()
+  let tickets = snap.docs.map((d) => ({ id: d.id, ...d.data() } as any))
+  if (q) tickets = tickets.filter((t) => `${t.subject} ${t.description} ${t.storeId}`.toLowerCase().includes(q))
+  return { tickets }
+})
+
+export const replyTicket = onCall(async (request: CallableRequest<{ ticketId?: string; body?: string }>) => {
+  if (!request.auth) throw new HttpsError('unauthenticated', 'يجب تسجيل الدخول')
+  const ticketId = String(request.data?.ticketId || '').trim()
+  const body = String(request.data?.body || '').trim()
+  if (!ticketId || !body) throw new HttpsError('invalid-argument', 'ticketId والرسالة مطلوبان')
+  if (body.length > 5000) throw new HttpsError('invalid-argument', 'الرسالة طويلة جداً')
+  const ticket = await assertTicketAccess(request, ticketId)
+  const storeId = String(ticket.storeId)
+  const role = await getUserRole(request.auth!.uid)
+  const isPlatform = role === 'superAdmin'
+  const nextStatus = isPlatform ? 'waiting_merchant' : 'waiting_support'
+  const reply = { by: request.auth.uid, body, at: Timestamp.now(), role: isPlatform ? 'superAdmin' : 'merchant' }
+  await db.doc(`tickets/${ticketId}`).update({
+    replies: FieldValue.arrayUnion(reply),
+    lastReplyAt: now(),
+    status: ticket.status === 'closed' ? 'open' : nextStatus,
+    updatedAt: now(),
+  })
+  await auditLog(storeId, request.auth.uid, 'ticket_replied', 'tickets', ticketId, { by: role })
+  const targetUserId = isPlatform ? ticket.createdBy : null
+  // notify opposite side
+  if (isPlatform && ticket.createdBy) {
+    await db.collection('notifications').add({
+      userId: ticket.createdBy,
+      storeId,
+      title: 'رد جديد على تذكرتك',
+      body: `تم الرد على التذكرة: ${ticket.subject}`,
+      type: 'ticket',
+      read: false,
+      createdAt: now(),
+      createdBy: request.auth.uid,
+    }).catch(() => {})
+  } else if (!isPlatform) {
+    // notify platform (broadcast to superAdmins via storeId? simplified: create notification for platform)
+    const admins = await db.collection('users').where('role', '==', 'superAdmin').limit(5).get().catch(() => null)
+    if (admins) {
+      for (const admin of admins.docs) {
+        await db.collection('notifications').add({
+          userId: admin.id,
+          storeId,
+          title: 'رد جديد من التاجر',
+          body: `رد على التذكرة: ${ticket.subject}`,
+          type: 'ticket',
+          read: false,
+          createdAt: now(),
+          createdBy: request.auth.uid,
+        }).catch(() => {})
+      }
+    }
+  }
+  return { ok: true }
+})
+
+export const updateTicketStatus = onCall(async (request: CallableRequest<{ ticketId?: string; status?: string }>) => {
+  if (!request.auth) throw new HttpsError('unauthenticated', 'يجب تسجيل الدخول')
+  const ticketId = String(request.data?.ticketId || '').trim()
+  const status = String(request.data?.status || '').trim() as any
+  if (!ticketId || !status) throw new HttpsError('invalid-argument', 'ticketId والحالة مطلوبان')
+  if (!TICKET_STATUSES.includes(status)) throw new HttpsError('invalid-argument', 'حالة غير صالحة')
+  const ticket = await assertTicketAccess(request, ticketId)
+  const storeId = String(ticket.storeId)
+  const role = await getUserRole(request.auth!.uid)
+  if (role !== 'superAdmin') {
+    // merchant can only close/reopen own ticket
+    if (!['open', 'closed'].includes(status) && status !== 'open' && status !== 'closed') {
+      // allow merchant to close/reopen only
+      if (status !== 'closed' && status !== 'open') throw new HttpsError('permission-denied', 'لا تملك صلاحية تغيير الحالة')
+    }
+  }
+  const update: any = { status, updatedAt: now() }
+  if (status === 'closed') update.closedAt = now()
+  if (status === 'open' && ticket.status === 'closed') update.closedAt = FieldValue.delete()
+  await db.doc(`tickets/${ticketId}`).update(update)
+  await auditLog(storeId, request.auth.uid, 'ticket_status_changed', 'tickets', ticketId, { from: ticket.status, to: status })
+  return { ok: true }
+})
+
+export const assignTicket = onCall(async (request: CallableRequest<{ ticketId?: string; assignedTo?: string }>) => {
+  await assertPlatformAdmin(request)
+  const ticketId = String(request.data?.ticketId || '').trim()
+  const assignedTo = String(request.data?.assignedTo || '').trim() || null
+  if (!ticketId) throw new HttpsError('invalid-argument', 'ticketId مطلوب')
+  const snap = await db.doc(`tickets/${ticketId}`).get()
+  if (!snap.exists) throw new HttpsError('not-found', 'التذكرة غير موجودة')
+  await db.doc(`tickets/${ticketId}`).update({ assignedTo, updatedAt: now() })
+  await auditLog(snap.data()?.storeId || null, request.auth!.uid, 'ticket_assigned', 'tickets', ticketId, { assignedTo })
+  return { ok: true }
+})
+
+export const closeTicket = onCall(async (request: CallableRequest<{ ticketId?: string }>) => {
+  if (!request.auth) throw new HttpsError('unauthenticated', 'يجب تسجيل الدخول')
+  const ticketId = String(request.data?.ticketId || '').trim()
+  if (!ticketId) throw new HttpsError('invalid-argument', 'ticketId مطلوب')
+  const ticket = await assertTicketAccess(request, ticketId)
+  await db.doc(`tickets/${ticketId}`).update({ status: 'closed', closedAt: now(), updatedAt: now() })
+  await auditLog(String(ticket.storeId), request.auth.uid, 'ticket_closed', 'tickets', ticketId, {})
+  // notify
+  const role = await getUserRole(request.auth!.uid)
+  if (role === 'superAdmin' && ticket.createdBy) {
+    await db.collection('notifications').add({ userId: ticket.createdBy, storeId: ticket.storeId, title: 'تم إغلاق التذكرة', body: ticket.subject, type: 'ticket', read: false, createdAt: now(), createdBy: request.auth.uid }).catch(() => {})
+  }
+  return { ok: true }
+})
+
+export const reopenTicket = onCall(async (request: CallableRequest<{ ticketId?: string }>) => {
+  if (!request.auth) throw new HttpsError('unauthenticated', 'يجب تسجيل الدخول')
+  const ticketId = String(request.data?.ticketId || '').trim()
+  if (!ticketId) throw new HttpsError('invalid-argument', 'ticketId مطلوب')
+  const ticket = await assertTicketAccess(request, ticketId)
+  if (ticket.status !== 'closed' && ticket.status !== 'resolved') throw new HttpsError('failed-precondition', 'التذكرة ليست مغلقة')
+  await db.doc(`tickets/${ticketId}`).update({ status: 'open', closedAt: FieldValue.delete(), updatedAt: now() })
+  await auditLog(String(ticket.storeId), request.auth.uid, 'ticket_reopened', 'tickets', ticketId, {})
+  return { ok: true }
 })
 
 // ─────────────────────────────────────────────────────────────
