@@ -13,11 +13,13 @@ import { Select } from '../../shared/components/ui/Select'
 import { Badge } from '../../shared/components/ui/Badge'
 import { SmartImage } from '../../shared/components/ui/SmartImage'
 import { formatCurrency, formatDateTime } from '../../shared/utils/format'
-import { EGYPT_CITIES_BY_GOVERNORATE, GOVER_EG, STATUS_LABELS, STATUS_COLORS } from '../../shared/utils/constants'
+import { EGYPT_CITIES_BY_GOVERNORATE, GOVER_EG } from '../../shared/utils/constants'
 import { visibleOrderStatusLabel, visibleOrderStatusTone } from '../../shared/utils/order-status'
 import { logout, resetPassword } from '../../shared/services/auth'
 import { useToast } from '../../shared/hooks/useToast'
 import { Icon } from '../../shared/components/ui/Icon'
+import { EmptyState } from '../../shared/components/ui/EmptyState'
+import { Loading } from '../../shared/components/ui/Loading'
 import type { Order, Product, WishlistItem } from '../../shared/types'
 
 const NAV_ITEMS = [
@@ -37,6 +39,7 @@ export const StoreAccount: FunctionalComponent = () => {
   const toast = useToast()
   const [activeTab, setActiveTab] = useState(() => new URLSearchParams(search).get('tab') || 'overview')
   const [newAddress, setNewAddress] = useState({ name: '', phone: '', governorate: '', city: '', address: '', isDefault: false })
+  const [editingAddressId, setEditingAddressId] = useState<string | null>(null)
   const [addresses, setAddresses] = useState(user?.addresses || [])
   const addressSignature = JSON.stringify(user?.addresses || [])
 
@@ -66,16 +69,31 @@ const wishlistProducts = productsRes.data.filter((product) => wishlistRes.data.s
       toast.push('أكمل بيانات العنوان المطلوبة', undefined, 'error')
       return
     }
-    const id = typeof crypto !== 'undefined' && crypto.randomUUID ? crypto.randomUUID() : `address-${Date.now()}`
+    const id = editingAddressId || (typeof crypto !== 'undefined' && crypto.randomUUID ? crypto.randomUUID() : `address-${Date.now()}`)
     const nextAddress = { id, label: 'عنوان', ...newAddress }
-    const next = newAddress.isDefault ? addresses.map((a) => ({ ...a, isDefault: false })).concat(nextAddress) : addresses.concat(nextAddress)
+    const remaining = editingAddressId ? addresses.filter((a) => a.id !== editingAddressId) : addresses
+    const normalized = newAddress.isDefault ? remaining.map((a) => ({ ...a, isDefault: false })) : remaining
+    const next = normalized.concat(nextAddress)
     try {
       await persistAddresses(next)
       setNewAddress({ name: '', phone: '', governorate: '', city: '', address: '', isDefault: false })
-      toast.push('تم حفظ العنوان')
+      setEditingAddressId(null)
+      toast.push(editingAddressId ? 'تم تحديث العنوان' : 'تم حفظ العنوان')
     } catch {
       toast.push('تعذر حفظ العنوان', 'حاول مرة أخرى', 'error')
     }
+  }
+
+  const editAddress = (address: (typeof addresses)[number]) => {
+    setEditingAddressId(address.id)
+    setNewAddress({
+      name: address.name || '',
+      phone: address.phone || '',
+      governorate: address.governorate || '',
+      city: address.city || '',
+      address: address.address || '',
+      isDefault: address.isDefault === true,
+    })
   }
 
   const removeAddress = async (id: string) => {
@@ -87,7 +105,7 @@ const wishlistProducts = productsRes.data.filter((product) => wishlistRes.data.s
     }
   }
 
-if (authLoading) return <div className="loading-screen"><span className="spinner spinner-lg" /></div>
+if (authLoading) return <Loading variant="screen" message="جارٍ تحميل حسابك..." />
 
 if (!user || user.role !== 'customer') {
     return (
@@ -186,11 +204,7 @@ if (!user || user.role !== 'customer') {
                   ))}
                 </div>
               ) : (
-                <div className="empty-state">
-                  <Icon name="shopping_bag" />
-                  <p>لا توجد طلبات بعد</p>
-                  <Link href={`/store/${store?.slug}/catalog`}><Button variant="outline" className="mt-1">ابدأ التسوق</Button></Link>
-                </div>
+                <EmptyState icon="shopping_bag" title="لا توجد طلبات بعد" action={<Link href={`/store/${store?.slug}/catalog`}><Button variant="outline">ابدأ التسوق</Button></Link>} />
               )}
             </section>
           </section>
@@ -225,11 +239,7 @@ if (!user || user.role !== 'customer') {
                 </table>
               </div>
             ) : (
-              <div className="empty-state">
-                <Icon name="shopping_bag" />
-                <p>لا توجد طلبات بعد</p>
-                <Link href={`/store/${store?.slug}/catalog`}><Button variant="outline" className="mt-1">ابدأ التسوق</Button></Link>
-              </div>
+              <EmptyState icon="shopping_bag" title="لا توجد طلبات بعد" action={<Link href={`/store/${store?.slug}/catalog`}><Button variant="outline">ابدأ التسوق</Button></Link>} />
             )}
           </section>
         )}
@@ -241,8 +251,8 @@ if (!user || user.role !== 'customer') {
             </div>
             <div className="addresses-list">
               {addresses.length > 0 ? (
-                addresses.map((addr, idx) => (
-                  <article key={idx} className="address-card">
+                addresses.map((addr) => (
+                  <article key={addr.id} className="address-card">
                     <div className="address-info">
                       <div className="address-header">
                         <span className="address-type">{addr.label || 'عنوان'}</span>
@@ -256,20 +266,17 @@ if (!user || user.role !== 'customer') {
                       </address>
                     </div>
                     <div className="address-actions">
-                      <Link href={`/store/${store?.slug}/account?editAddress=${idx}`} className="btn btn-sm btn-outline"><Icon name="edit" /> تعديل</Link>
+                      <button type="button" className="btn btn-sm btn-outline" onClick={() => editAddress(addr)}><Icon name="edit" /> تعديل</button>
                       <button className="btn btn-sm btn-outline danger" onClick={() => removeAddress(addr.id)}><Icon name="delete" /> حذف</button>
                     </div>
                   </article>
                 ))
               ) : (
-                <div className="empty-state">
-                  <Icon name="location_on" />
-                  <p>لا توجد عناوين محفوظة</p>
-                </div>
+                <EmptyState icon="location_on" title="لا توجد عناوين محفوظة" />
               )}
             </div>
             <div className="add-address-form">
-              <h3>إضافة عنوان جديد</h3>
+              <h3>{editingAddressId ? 'تعديل العنوان' : 'إضافة عنوان جديد'}</h3>
               <div className="form-grid">
                 <Input label="الاسم" value={newAddress.name} onChange={(v) => setNewAddress({ ...newAddress, name: v })} placeholder="الاسم المستلم" />
                 <Input label="رقم الهاتف" value={newAddress.phone} onChange={(v) => setNewAddress({ ...newAddress, phone: v })} placeholder="01xxxxxxxxx" type="tel" />
@@ -285,7 +292,10 @@ if (!user || user.role !== 'customer') {
                 <input type="checkbox" checked={newAddress.isDefault} onChange={(e) => setNewAddress({ ...newAddress, isDefault: (e.target as HTMLInputElement).checked })} />
                 <span>تعيين كافتراضي</span>
               </label>
-              <Button onClick={saveAddress}>حفظ العنوان</Button>
+              <div className="flex gap-2">
+                <Button onClick={saveAddress}>{editingAddressId ? 'حفظ التعديلات' : 'حفظ العنوان'}</Button>
+                {editingAddressId && <Button variant="ghost" onClick={() => { setEditingAddressId(null); setNewAddress({ name: '', phone: '', governorate: '', city: '', address: '', isDefault: false }) }}>إلغاء التعديل</Button>}
+              </div>
             </div>
           </section>
         )}
@@ -304,11 +314,7 @@ if (!user || user.role !== 'customer') {
                 ))}
               </div>
             ) : (
-              <div className="empty-state">
-                <Icon name="favorite" />
-                <p>لا توجد منتجات في قائمة الأمنيات</p>
-                <Link href={`/store/${store?.slug}/catalog`}><Button variant="outline" className="mt-1">تصفح المنتجات</Button></Link>
-              </div>
+              <EmptyState icon="favorite" title="لا توجد منتجات في قائمة الأمنيات" action={<Link href={`/store/${store?.slug}/catalog`}><Button variant="outline">تصفح المنتجات</Button></Link>} />
             )}
           </section>
         )}
@@ -329,14 +335,14 @@ if (!user || user.role !== 'customer') {
                   <h3>إدارة الجلسات</h3>
                   <p className="muted small">عرض وتسجيل الخروج من الأجهزة الأخرى</p>
                 </div>
-                <Button variant="outline">إدارة</Button>
+                <Button variant="outline" disabled title="إدارة الجلسات غير متاحة حاليًا">غير متاح حاليًا</Button>
               </div>
               <div className="security-card">
                 <div>
                   <h3>التحقق بخطوتين</h3>
                   <p className="muted small">إضافة طبقة أمان إضافية لحسابك</p>
                 </div>
-                <Button variant="outline">تفعيل</Button>
+                <Button variant="outline" disabled title="التحقق بخطوتين غير متاح حاليًا">غير متاح حاليًا</Button>
               </div>
             </div>
           </section>

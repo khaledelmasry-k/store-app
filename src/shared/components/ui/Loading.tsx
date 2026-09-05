@@ -7,11 +7,12 @@ interface Props {
 }
 
 export const Loading: FunctionalComponent<Props> = ({ variant = 'screen', message }) => {
+  const visibleMessage = message || (variant === 'screen' ? 'جارٍ تحميل البيانات...' : undefined)
   if (variant === 'screen') {
     return (
       <div className="loading-screen">
         <span className="spinner spinner-lg" />
-        {message && <p className="loading-message">{message}</p>}
+        {visibleMessage && <p className="loading-message">{visibleMessage}</p>}
       </div>
     )
   }
@@ -36,7 +37,7 @@ export const Loading: FunctionalComponent<Props> = ({ variant = 'screen', messag
   return (
     <div className="loading-inline">
       <span className="spinner spinner-sm" />
-      {message && <span className="loading-message">{message}</span>}
+      {visibleMessage && <span className="loading-message">{visibleMessage}</span>}
     </div>
   )
 }

@@ -6,10 +6,10 @@ import { useDocument } from '../../shared/hooks/useDocument'
 import { Button } from '../../shared/components/ui/Button'
 import { Badge } from '../../shared/components/ui/Badge'
 import { formatCurrency, formatDateTime } from '../../shared/utils/format'
-import { STATUS_LABELS, STATUS_COLORS } from '../../shared/utils/constants'
 import { visibleOrderStatusLabel, visibleOrderStatusTone } from '../../shared/utils/order-status'
 import { OrderTimeline } from '../../shared/components/order/OrderTimeline'
 import { Icon } from '../../shared/components/ui/Icon'
+import { Loading } from '../../shared/components/ui/Loading'
 import type { Order } from '../../shared/types'
 
 interface Props {
@@ -25,7 +25,7 @@ export const StoreOrderDetails: FunctionalComponent<Props> = ({ id }) => {
 
   const ownsOrder = Boolean(order && store?.id && order.storeId === store.id && user?.role === 'customer' && order.customerId === user.uid)
 
-  if (loading) return <div className="loading-screen"><span className="spinner spinner-lg" /></div>
+  if (loading) return <Loading variant="screen" message="جارٍ تحميل تفاصيل الطلب..." />
 
   if (!order || !ownsOrder) {
     return (

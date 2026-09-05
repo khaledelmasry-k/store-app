@@ -42,7 +42,7 @@
   align-items: flex-start;
   justify-content: space-between;
   gap: 10px;
-  text-align: right;
+  text-align: start;
   background: var(--surface-container-lowest);
   border: 1px solid var(--outline-variant);
   border-radius: 12px;
@@ -74,8 +74,8 @@
 @media (max-width: 640px) { .shipping-fee-grid { grid-template-columns: 1fr; } }
 .input-with-unit { position: relative; }
 .input-with-unit .input {
-  padding-left: 56px;
-  text-align: right;
+  padding-inline-end: 56px;
+  text-align: start;
   background: var(--surface-container-lowest);
   border-color: var(--outline-variant);
   height: 44px;
@@ -83,7 +83,7 @@
 .input-with-unit .input:focus { border-color: var(--primary); box-shadow: 0 0 0 2px color-mix(in srgb, var(--primary) 20%, transparent); }
 .input-unit {
   position: absolute;
-  left: 16px;
+  inset-inline-end: 16px;
   top: 50%;
   transform: translateY(-50%);
   color: var(--text-on-surface-variant);

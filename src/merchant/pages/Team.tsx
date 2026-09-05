@@ -7,6 +7,7 @@ import { Input } from '../../shared/components/ui/Input'
 import { Select } from '../../shared/components/ui/Select'
 import { Tabs } from '../../shared/components/ui/Tabs'
 import { EmptyState } from '../../shared/components/ui/EmptyState'
+import { Loading } from '../../shared/components/ui/Loading'
 import { useStore } from '../../shared/hooks/useStore'
 import { useCollection } from '../../shared/hooks/useCollection'
 import { useToast } from '../../shared/hooks/useToast'
@@ -122,7 +123,7 @@ export const MerchantTeam: FunctionalComponent = () => {
           </div>
 
           {teamRes.loading ? (
-            <div className="loading-screen"><span className="spinner spinner-lg" /></div>
+            <Loading variant="screen" message="جارٍ تحميل أعضاء الفريق..." />
           ) : filtered.length === 0 ? (
             <EmptyState icon="group_add" title={query ? 'لا توجد نتائج' : 'لا يوجد أعضاء بعد'} description={query ? 'جرّب بحثاً آخر.' : 'ادعُ أول عضو للفريق للبدء.'} />
           ) : (
@@ -134,7 +135,6 @@ export const MerchantTeam: FunctionalComponent = () => {
                     <th>الدور</th>
                     <th>الحالة</th>
                     <th>تاريخ الانضمام</th>
-                    <th className="actions">إجراءات</th>
                   </tr>
                 </thead>
                 <tbody>
@@ -159,8 +159,6 @@ export const MerchantTeam: FunctionalComponent = () => {
                         </span>
                       </td>
                       <td><span className="muted">{formatDate(m.createdAt)}</span></td>
-                      <td className="actions">
-                      </td>
                     </tr>
                   ))}
                 </tbody>

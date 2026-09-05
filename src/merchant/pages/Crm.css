@@ -12,13 +12,36 @@
 .crm-panel-head h3 { margin: 0; font-size: 14px; font-weight: 700; color: var(--text-on-surface); }
 .crm-panel-body { padding: 16px; }
 .crm-stage-bar { display: flex; gap: 6px; margin-top: 10px; }
+.crm-stage-row { display: flex; align-items: center; gap: 8px; margin-bottom: 10px; }
+.crm-stage-label { min-width: 60px; font-size: 12px; color: var(--text-on-surface-variant); }
 .crm-stage-seg { flex: 1; height: 8px; border-radius: 9999px; background: var(--surface-variant); overflow: hidden; }
 .crm-stage-seg i { display: block; height: 100%; border-radius: 9999px; }
+.crm-stage-count { min-width: 32px; text-align: end; font-size: 12px; font-variant-numeric: tabular-nums; }
+.crm-stage-summary { display: flex; gap: 12px; margin-top: 16px; flex-wrap: wrap; color: var(--text-on-surface-variant); font-size: 11px; }
+.crm-stage-summary .is-danger, .crm-overdue-note { color: var(--error); }
+.crm-panel-link { color: var(--primary); font-size: 12px; }
+.crm-overdue-note { margin: 0 0 8px; font-size: 12px; }
 .crm-follow-row { display: flex; align-items: center; gap: 10px; padding: 10px; border: 1px solid var(--outline-variant); border-radius: 10px; margin-top: 8px; }
 .crm-follow-row.is-overdue { border-color: var(--error); background: color-mix(in srgb, var(--error) 6%, var(--surface)); }
+.crm-follow-icon { display: flex; width: 28px; height: 28px; flex: 0 0 28px; align-items: center; justify-content: center; border-radius: 50%; background: var(--surface-container); color: var(--text-on-surface-variant); }
+.crm-follow-icon.is-overdue { background: var(--error-container); color: var(--on-error-container); }
+.crm-follow-copy { flex: 1; min-width: 0; }
+.crm-follow-name, .crm-follow-notes { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.crm-follow-name { font-size: 12px; font-weight: 600; }
+.crm-follow-notes, .crm-follow-date { color: var(--text-on-surface-variant); font-size: 11px; }
+.crm-follow-date { white-space: nowrap; }
+.crm-follow-date.is-overdue { color: var(--error); }
 .crm-gov-list { display: flex; flex-direction: column; gap: 8px; }
 .crm-gov-row { display: flex; align-items: center; justify-content: space-between; }
+.crm-gov-name { min-width: 80px; font-size: 12px; }
+.crm-gov-count { font-size: 12px; font-variant-numeric: tabular-nums; }
 .crm-gov-bar { height: 6px; border-radius: 9999px; background: var(--surface-variant); flex: 1; margin: 0 10px; overflow: hidden; }
 .crm-gov-bar i { display: block; height: 100%; background: var(--primary); border-radius: 9999px; }
+.crm-growth-chart { display: flex; height: 80px; align-items: end; gap: 6px; }
+.crm-growth-column { display: flex; flex: 1; flex-direction: column; align-items: center; gap: 4px; }
+.crm-growth-value, .crm-growth-day { color: var(--text-on-surface-variant); font-size: 10px; }
+.crm-growth-day { font-size: 9px; }
+.crm-growth-bar { width: 100%; border-radius: 6px; background: var(--primary); opacity: .85; }
+.crm-repeat-note { margin-top: 12px; }
 @media (max-width: 1100px) { .crm-kpis { grid-template-columns: repeat(3, 1fr); } .crm-grid { grid-template-columns: 1fr; } }
 @media (max-width: 640px) { .crm-kpis { grid-template-columns: repeat(2, 1fr); } }

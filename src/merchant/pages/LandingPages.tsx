@@ -1,10 +1,7 @@
 import { FunctionalComponent } from 'preact'
 import { useState } from 'preact/hooks'
 import { PageHeader } from '../../shared/components/ui/PageHeader'
-import { Card } from '../../shared/components/ui/Card'
 import { StatsCard } from '../../shared/components/ui/StatsCard'
-import { Table } from '../../shared/components/ui/Table'
-import { Badge } from '../../shared/components/ui/Badge'
 import { Button } from '../../shared/components/ui/Button'
 import { Drawer } from '../../shared/components/ui/Drawer'
 import { Input } from '../../shared/components/ui/Input'
@@ -260,16 +257,6 @@ export const MerchantLandingPages: FunctionalComponent = () => {
     }
   }
 
-  const copyLink = async (p: LandingPage) => {
-    const url = publicUrl(p.slug)
-    try {
-      await navigator.clipboard.writeText(url)
-      toast.push('تم نسخ الرابط', url, 'success')
-    } catch {
-      toast.push('تعذر نسخ الرابط', undefined, 'error')
-    }
-  }
-
   const remove = async () => {
     if (!deleteTarget) return
     try {
@@ -324,7 +311,6 @@ export const MerchantLandingPages: FunctionalComponent = () => {
           <table className="lp-list-table">
             <thead>
               <tr>
-                <th className="check-col"><input type="checkbox" aria-label="تحديد الكل" /></th>
                 <th>العنوان</th>
                 <th>الرابط (Slug)</th>
                 <th>شراء سريع</th>
@@ -340,7 +326,6 @@ export const MerchantLandingPages: FunctionalComponent = () => {
                 const isPublished = p.status === 'published' && p.active
                 return (
                   <tr key={p.id}>
-                    <td className="check-col"><input type="checkbox" aria-label={`تحديد ${p.title}`} /></td>
                     <td>
                       <p className="lp-title">{p.title}</p>
                       <p className="lp-template">قالب: {templateName(p.template)}</p>

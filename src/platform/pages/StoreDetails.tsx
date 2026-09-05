@@ -14,6 +14,7 @@ import { Input } from '../../shared/components/ui/Input'
 import { Toggle } from '../../shared/components/ui/Toggle'
 import { Progress } from '../../shared/components/ui/Progress'
 import { EmptyState } from '../../shared/components/ui/EmptyState'
+import { Loading } from '../../shared/components/ui/Loading'
 import { formatCurrency, formatDate, formatNumber } from '../../shared/utils/format'
 import { storePublicUrl, ensureUniqueSlug } from '../../shared/utils/store-url'
 import { STATUS_LABELS, STATUS_COLORS, SUBSCRIPTION_STATUS_LABELS, SUBSCRIPTION_STATUS_TONES, ORDER_USAGE_LABELS, ORDER_USAGE_TONES, usageLevelFor } from '../../shared/utils/constants'
@@ -85,7 +86,7 @@ export const PlatformStoreDetails: FunctionalComponent<Props> = ({ id }) => {
     }
   }
 
-  if (storeDoc.loading) return <div className="loading-screen"><span className="spinner spinner-lg" /></div>
+  if (storeDoc.loading) return <Loading variant="screen" message="جارٍ تحميل تفاصيل المتجر..." />
 
   if (!store) {
     return (

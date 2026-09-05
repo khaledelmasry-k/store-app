@@ -57,9 +57,9 @@ export const StoreTrack: FunctionalComponent = () => {
       })
       setOrders((res.data as any)?.orders || [])
       if (!(res.data as any)?.orders?.length) setError('لا توجد طلبات مطابقة لهذه البيانات.')
-    } catch (err: any) {
+    } catch {
       setOrders([])
-      setError(err?.message || 'تعذر البحث عن الطلب')
+      setError('تعذر البحث عن الطلب الآن. تحقق من البيانات وحاول مرة أخرى.')
     } finally {
       setLoading(false)
     }

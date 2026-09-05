@@ -78,7 +78,7 @@ export const MerchantNotifications: FunctionalComponent = () => {
           <Loading />
         ) : error ? (
           <div className="notif-empty">
-            <EmptyState icon="error" title="تعذر تحميل الإشعارات" description={error.message || 'حدث خطأ أثناء جلب البيانات.'} />
+            <EmptyState icon="error" title="تعذر تحميل الإشعارات" description="تعذر جلب البيانات الآن. حاول التحديث بعد قليل." />
           </div>
         ) : visible.length === 0 ? (
           <div className="notif-empty">

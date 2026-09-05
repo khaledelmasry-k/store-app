@@ -8,6 +8,7 @@ import { useToast } from '../../shared/hooks/useToast'
 import { useAuth } from '../../shared/hooks/useAuth'
 import { useCollection } from '../../shared/hooks/useCollection'
 import { Button } from '../../shared/components/ui/Button'
+import { Loading } from '../../shared/components/ui/Loading'
 import { SmartImage } from '../../shared/components/ui/SmartImage'
 import { formatCurrency } from '../../shared/utils/format'
 import { findVariant, imageIndexForColor, sizeInStock, variantPrice, variantStock } from '../../shared/utils/product-variants'
@@ -59,7 +60,7 @@ export const StoreProduct: FunctionalComponent<Props> = ({ id }) => {
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [product?.id, product?.name, product?.description, product?.price, product?.images, store?.name, store?.slug, store?.currency, store?.logo])
 
-  if (loading) return <div className="loading-screen"><span className="spinner spinner-lg" /></div>
+  if (loading) return <Loading variant="screen" message="جارٍ تحميل المنتج..." />
 
   if (!product || product.storeId !== store?.id) {
     return (

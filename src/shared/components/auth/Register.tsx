@@ -119,8 +119,8 @@ export const Register:FunctionalComponent = () => {
       })
       toast.push('تم إنشاء حسابك بنجاح', undefined, 'success')
       setDone(true)
-    } catch (err: any) {
-      setError(err?.message || 'فشل التسجيل')
+    } catch {
+      setError('تعذر إنشاء الحساب الآن. تحقق من البيانات وحاول مرة أخرى.')
       toast.push('فشل التسجيل', undefined, 'error')
     } finally {
       setLoading(false)

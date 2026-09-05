@@ -86,7 +86,7 @@
   border-radius: 12px;
   padding: 10px;
   cursor: pointer;
-  text-align: right;
+  text-align: start;
   transition: border-color .15s ease, box-shadow .15s ease;
 }
 
@@ -126,7 +126,7 @@
 .merchant-themes-page .theme-tpl-badge {
   position: absolute;
   top: 8px;
-  left: 8px;
+  inset-inline-end: 8px;
   z-index: 1;
   background: var(--mk-primary);
   color: #fff;
@@ -555,7 +555,7 @@
   content: "";
   position: absolute;
   top: 2px;
-  left: 1px;
+  inset-inline-end: 1px;
   width: 2px;
   height: 2px;
   border-radius: 50%;

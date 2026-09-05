@@ -46,7 +46,7 @@
 }
 .tickets-search .mk-icon {
   position: absolute;
-  right: 10px;
+  inset-inline-start: 10px;
   font-size: 16px;
   color: var(--text-outline, var(--text-on-surface-variant));
   pointer-events: none;
@@ -71,7 +71,7 @@
   .tickets-list-head { flex-direction: column; align-items: stretch; }
 }
 .tickets-table-wrap { flex: 1; overflow: auto; }
-.tickets-table { width: 100%; text-align: right; border-collapse: collapse; font-size: 14px; }
+.tickets-table { width: 100%; text-align: start; border-collapse: collapse; font-size: 14px; }
 .tickets-table thead th {
   position: sticky;
   top: 0;
@@ -82,13 +82,11 @@
   font-size: 12px;
   padding: 12px 24px;
   border-bottom: 1px solid var(--outline-variant);
-  text-align: right;
+  text-align: start;
   box-shadow: 0 1px 0 var(--outline-variant);
 }
 .tickets-table tbody td { padding: 14px 24px; border-bottom: 1px solid var(--outline-variant); }
-.tickets-table tbody tr { cursor: pointer; transition: background 0.15s; }
-.tickets-table tbody tr:hover { background: var(--surface-container-highest); }
-.tickets-table tbody tr.is-selected { background: color-mix(in srgb, var(--surface-variant) 30%, transparent); }
+.tickets-table tbody tr { transition: background 0.15s; }
 .tickets-no { font-family: var(--font-mono, monospace); color: var(--primary); font-weight: 600; white-space: nowrap; }
 .tickets-subject { font-weight: 500; color: var(--text-on-surface); }
 .tickets-date { color: var(--text-on-surface-variant); white-space: nowrap; font-size: 13px; }

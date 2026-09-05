@@ -37,7 +37,6 @@ export const MerchantTickets: FunctionalComponent = () => {
   const [description, setDescription] = useState('')
   const [priority, setPriority] = useState<TicketPriority>('medium')
   const [query, setQuery] = useState('')
-  const [selectedId, setSelectedId] = useState<string | null>(null)
 
   const filtered = tickets.filter((t) => !query || t.subject.toLowerCase().includes(query.toLowerCase()))
 
@@ -118,7 +117,7 @@ export const MerchantTickets: FunctionalComponent = () => {
                   </thead>
                   <tbody>
                     {filtered.map((t) => (
-                      <tr key={t.id} className={selectedId === t.id ? 'is-selected' : ''} onClick={() => setSelectedId(t.id)}>
+                      <tr key={t.id}>
                         <td className="tickets-no">#TCK-{t.id.slice(0, 4).toUpperCase()}</td>
                         <td className="tickets-subject">{t.subject}</td>
                         <td><Badge tone={(TICKET_STATUS_TONES[t.status] as any) || 'slate'}>{STATUS_LABELS[t.status] || t.status}</Badge></td>

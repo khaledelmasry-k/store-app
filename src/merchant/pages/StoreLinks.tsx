@@ -88,6 +88,10 @@ export const MerchantStoreLinks: FunctionalComponent = () => {
   const atLimit = !linksUnlimited && linksLimit > 0 && links.length >= linksLimit
 
   const openForm = (l?: StoreLink) => {
+    if (!l && atLimit) {
+      toast.push('وصلت إلى حد روابط البيع', 'رقِّ باقتك لإنشاء رابط جديد.', 'warning')
+      return
+    }
     if (l) {
       setForm({ id: l.id, name: l.name, code: l.code, sellerName: l.sellerName || '', destinationType: l.destinationType, destinationId: l.destinationId || '', source: l.source || '', campaign: l.campaign || '', content: l.content || '', active: l.active ?? true, archived: false })
     } else {
@@ -195,7 +199,7 @@ export const MerchantStoreLinks: FunctionalComponent = () => {
         breadcrumb="التسويق والإسناد"
         title="روابط البيع"
         subtitle="إدارة وتتبع الروابط المخصصة للحملات والمسوقين."
-        actions={<Button icon="add" onClick={() => openForm()}>إنشاء رابط جديد</Button>}
+        actions={<Button icon="add" disabled={atLimit} title={atLimit ? 'وصلت إلى حد روابط البيع في باقتك الحالية' : undefined} onClick={() => openForm()}>إنشاء رابط جديد</Button>}
       />
 
       {atLimit && (
@@ -239,7 +243,7 @@ export const MerchantStoreLinks: FunctionalComponent = () => {
           icon="link"
           title="لا توجد روابط بيع"
           description="أنشئ روابط تتبع لتسويق منتجاتك وقياس أداء الحملات."
-          action={<Button icon="add" onClick={() => openForm()}>إنشاء رابط بيع</Button>}
+          action={<Button icon="add" disabled={atLimit} title={atLimit ? 'وصلت إلى حد روابط البيع في باقتك الحالية' : undefined} onClick={() => openForm()}>إنشاء رابط بيع</Button>}
         />
       ) : filtered.length === 0 ? (
         <EmptyState icon="search_off" title="لا توجد نتائج" description="لا توجد روابط تطابق البحث والفلترة الحالية." />

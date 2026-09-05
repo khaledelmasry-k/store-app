@@ -8,6 +8,7 @@ import { Input } from '../../shared/components/ui/Input'
 import { Textarea } from '../../shared/components/ui/Textarea'
 import { Select } from '../../shared/components/ui/Select'
 import { EmptyState } from '../../shared/components/ui/EmptyState'
+import { Loading } from '../../shared/components/ui/Loading'
 import { useStore } from '../../shared/hooks/useStore'
 import { useCollection } from '../../shared/hooks/useCollection'
 import { useToast } from '../../shared/hooks/useToast'
@@ -331,20 +332,12 @@ export const MerchantCustomers: FunctionalComponent = () => {
       </div>
 
       {allTags.length > 0 && (
-        <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap', marginBottom: 12 }}>
+        <div className="customer-filter-tags">
           {allTags.slice(0, 12).map((t) => (
             <button
               key={t}
               onClick={() => setTagFilter(tagFilter === t ? '' : t)}
-              style={{
-                padding: '4px 10px',
-                borderRadius: 9999,
-                border: '1px solid var(--outline-variant)',
-                background: tagFilter === t ? 'var(--primary-container)' : 'var(--surface)',
-                color: tagFilter === t ? 'var(--on-primary-container)' : 'var(--text-on-surface-variant)',
-                fontSize: 11,
-                cursor: 'pointer',
-              }}
+              className={`customer-filter-tag${tagFilter === t ? ' is-active' : ''}`}
             >
               #{t}
             </button>
@@ -355,7 +348,7 @@ export const MerchantCustomers: FunctionalComponent = () => {
       <div className="customers-layout">
         <div className="customers-table-col">
           {customersRes.loading ? (
-            <div className="loading-screen"><span className="spinner spinner-lg" /></div>
+            <Loading variant="screen" message="جارٍ تحميل العملاء..." />
           ) : filtered.length === 0 ? (
             <EmptyState
               icon="groups"
@@ -394,7 +387,7 @@ export const MerchantCustomers: FunctionalComponent = () => {
                               <span className={`cust-name${isVip ? ' is-vip' : ''}`}>{c.name}</span>
                               {c.email && <span className="cust-email">{c.email}</span>}
                             </span>
-                            {pending > 0 && <span style={{ marginInlineStart: 6, background: 'var(--error)', color: 'white', borderRadius: 9999, padding: '2px 6px', fontSize: 10 }}>{pending}</span>}
+                            {pending > 0 && <span className="cust-pending-count">{pending}</span>}
                           </span>
                         </td>
                         <td><span className="cust-phone" title={(c as any).phoneNormalized || ''}>{formatPhoneDisplay(c.phone)}</span></td>
@@ -405,9 +398,9 @@ export const MerchantCustomers: FunctionalComponent = () => {
                         <td>{stageBadge((c as any).stage || c.segment) || <span className="muted">—</span>}</td>
                         <td>
                           {(c.tags || []).length ? (
-                            <span style={{ display: 'flex', gap: 4, flexWrap: 'wrap' }}>
-                              {(c.tags || []).slice(0, 2).map((t) => <span key={t} style={{ fontSize: 10, background: 'var(--surface-variant)', padding: '2px 6px', borderRadius: 9999 }}>{t}</span>)}
-                              {(c.tags || []).length > 2 && <span style={{ fontSize: 10, color: 'var(--text-on-surface-variant)' }}>+{c.tags!.length - 2}</span>}
+                            <span className="cust-tags">
+                              {(c.tags || []).slice(0, 2).map((t) => <span key={t} className="cust-tag">{t}</span>)}
+                              {(c.tags || []).length > 2 && <span className="cust-tags-more">+{c.tags!.length - 2}</span>}
                             </span>
                           ) : <span className="muted">—</span>}
                         </td>
@@ -441,21 +434,12 @@ export const MerchantCustomers: FunctionalComponent = () => {
               <button type="button" className="customers-aside-close" onClick={() => setSelected(null)} title="إغلاق"><Icon name="close" ariaHidden /></button>
             </div>
 
-            <div style={{ display: 'flex', gap: 4, padding: '8px 12px', borderBottom: '1px solid var(--outline-variant)', background: 'var(--surface-container-lowest)' }}>
+            <div className="customer-detail-tabs">
               {(['overview', 'orders', 'timeline', 'followups'] as const).map((tab) => (
                 <button
                   key={tab}
                   onClick={() => setDetailTab(tab)}
-                  style={{
-                    flex: 1,
-                    padding: '6px 8px',
-                    borderRadius: 8,
-                    border: 'none',
-                    background: detailTab === tab ? 'var(--primary)' : 'transparent',
-                    color: detailTab === tab ? 'white' : 'var(--text-on-surface-variant)',
-                    fontSize: 12,
-                    cursor: 'pointer',
-                  }}
+                  className={detailTab === tab ? 'is-active' : ''}
                 >
                   {tab === 'overview' ? 'نظرة' : tab === 'orders' ? `الطلبات (${detailOrders.length})` : tab === 'timeline' ? `السجل (${timeline.length})` : `متابعات (${followUps.length})`}
                 </button>

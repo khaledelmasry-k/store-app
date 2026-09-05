@@ -15,6 +15,7 @@ import { Button } from '../../shared/components/ui/Button'
 import { Input } from '../../shared/components/ui/Input'
 import { Textarea } from '../../shared/components/ui/Textarea'
 import { EmptyState } from '../../shared/components/ui/EmptyState'
+import { ErrorState } from '../../shared/components/ui/ErrorState'
 import { Modal } from '../../shared/components/ui/Modal'
 import { SegmentedControl } from '../../shared/components/ui/SegmentedControl'
 import { Icon } from '../../shared/components/ui/Icon'
@@ -23,7 +24,7 @@ import { Table } from '../../shared/components/ui/Table'
 import { PricingCard } from '../../shared/components/subscription/PricingCard'
 import { Progress } from '../../shared/components/ui/Progress'
 import { formatCurrency, formatDate, formatDateTime, formatNumber } from '../../shared/utils/format'
-import { SUBSCRIPTION_STATUS_LABELS, SUBSCRIPTION_STATUS_TONES, ORDER_USAGE_LABELS, usageLevelFor } from '../../shared/utils/constants'
+import { SUBSCRIPTION_STATUS_LABELS, SUBSCRIPTION_STATUS_TONES, usageLevelFor } from '../../shared/utils/constants'
 import { usageFrom, PLAN_FEATURE_KEYS, PLAN_FEATURE_LABELS, canUseFeature, isPlanLimitUnlimited } from '../../shared/services/subscription'
 import { useToast } from '../../shared/hooks/useToast'
 import type { PlatformSettings, SubscriptionPayment, SubscriptionPlan } from '../../shared/types'
@@ -61,7 +62,7 @@ export const MerchantSubscription: FunctionalComponent = () => {
   const subscriptionParams = new URLSearchParams(location.split('?')[1] || window.location.search)
   const lifetimeIntent = subscriptionParams.get('offer') === 'lifetime'
   const toast = useToast()
-  const { subscription, plan, paymentRequests, changeRequests, purchaseRequests, status, nextAmount, launchOffer, loading, refresh, resourceUsage } = useSubscription(storeId)
+  const { subscription, plan, paymentRequests, changeRequests, purchaseRequests, status, nextAmount, launchOffer, loading, error: subscriptionError, refresh, resourceUsage } = useSubscription(storeId)
 
   const plansRes = useCollectionOnce<SubscriptionPlan>('plans', { orderBy: { field: 'priceMonthly' } })
   const allPlans = [...plansRes.data]
@@ -128,6 +129,17 @@ export const MerchantSubscription: FunctionalComponent = () => {
   const storageTone = storageLevel === 'reached' ? 'red' : storageLevel === 'near' || storageLevel === 'approaching' ? 'amber' : storageLevel === 'moderate' ? 'primary' : 'green'
 
   if (loading && !subscription) return <Loading variant="screen" message="جاري تحميل الاشتراك..." />
+
+  if (subscriptionError && !subscription) {
+    return (
+      <div className="merchant-operations merchant-subscription-page">
+        <PageHeader breadcrumb="إدارة الباقة" title="الاشتراك" subtitle="اشتراك متجرك" />
+        <Card>
+          <ErrorState description="تعذر تحميل بيانات الاشتراك الآن. حاول مرة أخرى." onRetry={() => void refresh()} />
+        </Card>
+      </div>
+    )
+  }
 
   if (!subscription) {
     return (
