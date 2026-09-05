@@ -225,7 +225,7 @@
 /* ─────────── Latest orders table (Stitch full-width panel) ─────────── */
 .dashboard-table-wrap { overflow-x: auto; }
 
-.dashboard-table { width: 100%; border-collapse: collapse; font-size: 14px; text-align: right; }
+.dashboard-table { width: 100%; border-collapse: collapse; font-size: 14px; text-align: start; }
 
 .dashboard-table thead { background: color-mix(in srgb, var(--surface-container) 50%, transparent); border-bottom: 1px solid var(--outline-variant); }
 

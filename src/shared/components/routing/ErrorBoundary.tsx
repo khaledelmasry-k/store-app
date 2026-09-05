@@ -1,4 +1,5 @@
 import { Component, VNode } from 'preact'
+import { ErrorState } from '../ui/ErrorState'
 
 interface ErrorBoundaryState {
   error: Error | null
@@ -20,13 +21,7 @@ export class ErrorBoundary extends Component<{ children: VNode }, ErrorBoundaryS
 
   render() {
     if (this.state.error) {
-      return (
-        <div style={{ padding: '4rem', textAlign: 'center' }}>
-          <h1>حدث خطأ</h1>
-          <p>{this.state.error.message}</p>
-          <button onClick={() => window.location.reload()}>إعادة التحميل</button>
-        </div>
-      )
+      return <ErrorState title="حدث خطأ غير متوقع" description="تعذر عرض هذه الصفحة. أعد تحميلها للمحاولة مرة أخرى." onRetry={() => window.location.reload()} />
     }
     return this.props.children
   }

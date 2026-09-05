@@ -273,13 +273,6 @@
 .products-mobile-cards {
   display: none;
 }
-@media (max-width: 768px) {
-  .products-mobile-cards {
-    display: flex;
-    flex-direction: column;
-    gap: 12px;
-  }
-}
 .pcard {
   display: flex;
   gap: 12px;
@@ -417,7 +410,7 @@
   font-weight: 500;
   color: var(--text-on-surface);
   direction: ltr;
-  text-align: right;
+  text-align: end;
 }
 .pcard-qty-unit {
   font-size: 12px;
@@ -426,10 +419,15 @@
   margin-inline-end: 2px;
 }
 @media (max-width: 768px) {
-  .products-page-canonical .products-tab-card {
-    display: none;
-  }
   .products-page-canonical .products-toolbar {
-    display: none;
+    display: grid;
+    grid-template-columns: minmax(0, 1fr);
+    gap: 10px;
+  }
+  .products-page-canonical .products-toolbar .search-box,
+  .products-page-canonical .products-toolbar .field,
+  .products-page-canonical .products-toolbar .input {
+    width: 100%;
+    min-width: 0;
   }
 }

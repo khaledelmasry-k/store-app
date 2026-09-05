@@ -1040,9 +1040,13 @@ textarea {
 }
 .loading-screen {
   display: flex;
+  flex-direction: column;
+  gap: 12px;
   align-items: center;
   justify-content: center;
   min-height: 60vh;
+  background: var(--background);
+  color: var(--text-on-surface);
 }
 .skeleton-wrap {
   display: flex;
@@ -4126,6 +4130,31 @@ textarea.input {
 .empty-state--inline .empty-desc {
   display: none;
 }
+
+.error-state {
+  display: flex;
+  min-height: 60vh;
+  padding: 32px 20px;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 10px;
+  background: var(--background);
+  color: var(--text-on-surface);
+  text-align: center;
+}
+.error-state-icon {
+  display: grid;
+  place-items: center;
+  width: 48px;
+  height: 48px;
+  border-radius: 50%;
+  background: var(--error-container);
+  color: var(--error);
+}
+.error-state h2,
+.error-state p { margin: 0; }
+.error-state p { max-width: 520px; color: var(--text-on-surface-variant); }
 
 /* ─────────────────────────── Card Table (Responsive) ─────────────────────────── */
 .table-toolbar {

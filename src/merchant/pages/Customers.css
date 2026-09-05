@@ -75,6 +75,9 @@
 .merchant-customers-page .customers-export:hover {
   background: var(--surface-container-high);
 }
+.customer-filter-tags { display: flex; flex-wrap: wrap; gap: 6px; margin-bottom: 12px; }
+.customer-filter-tag { padding: 4px 10px; border: 1px solid var(--outline-variant); border-radius: 9999px; background: var(--surface); color: var(--text-on-surface-variant); font: inherit; font-size: 11px; cursor: pointer; }
+.customer-filter-tag.is-active { background: var(--primary-container); color: var(--on-primary-container); }
 .merchant-customers-page .customers-layout {
   display: flex;
   gap: 16px;
@@ -169,6 +172,10 @@
   font-size: 11px;
   color: var(--text-on-surface-variant);
 }
+.merchant-customers-page .cust-pending-count { margin-inline-start: 6px; padding: 2px 6px; border-radius: 9999px; background: var(--error); color: var(--on-error); font-size: 10px; }
+.merchant-customers-page .cust-tags { display: flex; flex-wrap: wrap; gap: 4px; }
+.merchant-customers-page .cust-tag { padding: 2px 6px; border-radius: 9999px; background: var(--surface-variant); font-size: 10px; }
+.merchant-customers-page .cust-tags-more { color: var(--text-on-surface-variant); font-size: 10px; }
 .merchant-customers-page .cust-phone,
 .merchant-customers-page .cust-nums {
   font-variant-numeric: tabular-nums;
@@ -288,6 +295,9 @@
   flex-direction: column;
   gap: 20px;
 }
+.merchant-customers-page .customer-detail-tabs { display: flex; gap: 4px; padding: 8px 12px; border-bottom: 1px solid var(--outline-variant); background: var(--surface-container-lowest); }
+.merchant-customers-page .customer-detail-tabs button { flex: 1; min-height: 36px; padding: 6px 8px; border: 0; border-radius: 8px; background: transparent; color: var(--text-on-surface-variant); font: inherit; font-size: 12px; cursor: pointer; }
+.merchant-customers-page .customer-detail-tabs button.is-active { background: var(--primary); color: var(--on-primary); }
 .merchant-customers-page .customers-aside-stats {
   display: grid;
   grid-template-columns: 1fr 1fr;
@@ -480,15 +490,31 @@
     max-height: none;
     box-shadow: none;
   }
-  .merchant-customers-page .customers-toolbar .customers-divider,
-  .merchant-customers-page .customers-toolbar select {
+  .merchant-customers-page .customers-toolbar .customers-divider {
     display: none;
+  }
+  .merchant-customers-page .customers-toolbar {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
   }
   .merchant-customers-page .customers-search {
     max-width: none;
+    grid-column: 1 / -1;
+  }
+  .merchant-customers-page .customers-toolbar select,
+  .merchant-customers-page .customers-export {
+    width: 100%;
+    min-width: 0;
+    margin-inline-start: 0;
   }
 }
 @media (max-width: 768px) {
+  .merchant-customers-page .customers-toolbar {
+    grid-template-columns: minmax(0, 1fr);
+  }
+  .merchant-customers-page .customers-search {
+    grid-column: auto;
+  }
   .merchant-customers-page .cust-more {
     opacity: 1;
   }

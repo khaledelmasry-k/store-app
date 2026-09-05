@@ -95,9 +95,9 @@
 .whatsapp-template-tabs button.is-active { background: var(--primary); border-color: var(--primary); color: var(--on-primary); }
 .whatsapp-template-grid { grid-template-columns: minmax(0, 1fr) minmax(220px, .75fr); gap: 16px; }
 .whatsapp-template-textarea { min-height: 170px; line-height: 1.8; }
-.whatsapp-preview { background: #e8f6ee; border: 1px solid #b8e2c8; border-radius: 12px; padding: 14px; align-self: stretch; }
-.whatsapp-preview > span { display: block; margin-bottom: 10px; font-size: 12px; color: #256b43; font-weight: 700; }
-.whatsapp-preview-bubble { white-space: pre-wrap; background: #fff; border-radius: 10px 10px 2px 10px; padding: 12px; color: #23342a; font-size: 13px; line-height: 1.75; box-shadow: var(--shadow-sm); }
+.whatsapp-preview { background: color-mix(in srgb, var(--success) 10%, var(--surface-container-low)); border: 1px solid color-mix(in srgb, var(--success) 35%, var(--outline-variant)); border-radius: 12px; padding: 14px; align-self: stretch; }
+.whatsapp-preview > span { display: block; margin-bottom: 10px; font-size: 12px; color: var(--success); font-weight: 700; }
+.whatsapp-preview-bubble { white-space: pre-wrap; background: var(--surface-container-lowest); border: 1px solid var(--outline-variant); border-radius: 10px 10px 2px 10px; padding: 12px; color: var(--text-on-surface); font-size: 13px; line-height: 1.75; box-shadow: var(--shadow-sm); }
 .whatsapp-delivery-log { margin-top: 18px; border-top: 1px solid var(--outline-variant); padding-top: 16px; }
 .whatsapp-delivery-log > strong { display: block; font-size: 14px; }
 .whatsapp-delivery-log > p { margin: 5px 0 11px; color: var(--text-on-surface-variant); font-size: 12px; }
@@ -194,7 +194,7 @@
   font-weight: 500;
   color: var(--text-on-surface);
   outline: none;
-  text-align: right;
+  text-align: start;
 }
 .settings-slug-actions {
   display: flex;
@@ -262,7 +262,7 @@
   overflow-x: auto;
   white-space: nowrap;
   direction: ltr;
-  text-align: left;
+  text-align: end;
 }
 .settings-icon-btn {
   border: none;

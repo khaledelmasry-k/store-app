@@ -332,53 +332,6 @@
   .app-shell .topbar { padding-inline: 16px; }
 }
 
-/* Final mobile drawer identity rules.  The uploaded logo is a thumbnail in
-   navigation, while the user card follows the active theme rather than
-   permanently looking like a dark-mode panel. */
-@media (max-width: 768px) {
-  .app-shell .sidebar-drawer .sidebar-console-logo-frame {
-    display: inline-flex !important;
-    width: 36px !important;
-    height: 36px !important;
-    min-width: 36px !important;
-    max-width: 36px !important;
-    min-height: 36px !important;
-    max-height: 36px !important;
-    flex: 0 0 36px !important;
-    align-items: center !important;
-    justify-content: center !important;
-    overflow: hidden !important;
-    border: 1px solid #dfe4f0 !important;
-    border-radius: 9px !important;
-    background: #fff !important;
-  }
-  .app-shell .sidebar-drawer .sidebar-console-logo-frame .merchant-console-logo {
-    display: block !important;
-    width: 100% !important;
-    height: 100% !important;
-    min-width: 0 !important;
-    min-height: 0 !important;
-    max-width: 100% !important;
-    max-height: 100% !important;
-    margin: 0 !important;
-    object-fit: contain !important;
-  }
-  .app-shell .sidebar-drawer .sidebar-foot-user {
-    background: #f3f5fb !important;
-    border: 1px solid #dfe4f0 !important;
-    color: #182033 !important;
-  }
-  .app-shell .sidebar-drawer .sidebar-foot-user strong { color: #182033 !important; }
-  .app-shell .sidebar-drawer .sidebar-foot-user small { color: #59657a !important; }
-  [data-theme='dark'] .app-shell .sidebar-drawer .sidebar-foot-user {
-    background: #17213a !important;
-    border-color: #2d3b53 !important;
-    color: #f3f6fb !important;
-  }
-  [data-theme='dark'] .app-shell .sidebar-drawer .sidebar-foot-user strong { color: #f3f6fb !important; }
-  [data-theme='dark'] .app-shell .sidebar-drawer .sidebar-foot-user small { color: #b3bdd3 !important; }
-}
-
 /* Hover expansion must use the same 256px geometry for both role shells;
    this intentionally outranks the legacy platform-specific 224px rule. */
 .app-shell--dashboard.sidebar-unpinned.sidebar-hover-expanded .sidebar,
@@ -1320,7 +1273,7 @@
   }
 
   .app-shell .topbar {
-    right: 0;
+    inset-inline-end: 0;
   }
 
   .sidebar-drawer {
@@ -1549,9 +1502,9 @@
    for selected controls and active navigation. */
 .app-shell {
   --sidebar-group-text: #5b6472;
-  --admin-list-white: #ffffff;
-  --admin-list-muted: #f8fafc;
-  --admin-list-border: #e5e7eb;
+  --admin-list-white: var(--mka-surface);
+  --admin-list-muted: var(--mka-surface-soft);
+  --admin-list-border: var(--mka-border);
 }
 .app-shell--dashboard .sidebar-group-header,
 .app-shell--platform .sidebar-group-header {
@@ -1605,7 +1558,7 @@
 .app-shell .table tbody tr,
 .app-shell .table tbody td { background: var(--admin-list-white) !important; }
 .app-shell .table tbody tr:hover,
-.app-shell .table tbody tr:hover td { background: #f9fafb !important; }
+.app-shell .table tbody tr:hover td { background: var(--mka-surface-soft) !important; }
 .app-shell .table-toolbar,
 .app-shell .table-wrap > .table-toolbar {
   background: var(--admin-list-white) !important;
@@ -2050,7 +2003,7 @@
   overflow: hidden;
   border: 1px solid var(--v3-outline);
   border-radius: 9px;
-  background: #fff;
+  background: var(--mka-surface);
   object-fit: contain;
 }
 .app-shell--dashboard .topbar .merchant-console-logo { width: 36px; height: 36px; }
@@ -2113,35 +2066,34 @@
     display: block !important;
   }
   .app-shell .sidebar-drawer {
-    background: #fff !important;
-    color: #182033 !important;
-    border-inline-end: 1px solid #e1e5f2 !important;
+    background: var(--mka-surface) !important;
+    color: var(--mka-text) !important;
+    border-inline-end: 1px solid var(--mka-border) !important;
     box-shadow: -12px 0 36px rgba(15, 23, 42, .18) !important;
   }
   .app-shell .sidebar-drawer .sidebar-group-header {
-    color: #3f4a60 !important;
+    color: var(--mka-text-secondary) !important;
     font-size: 14px !important;
     font-weight: 800 !important;
   }
   .app-shell .sidebar-drawer .sidebar-group-label {
-    color: #3f4a60 !important;
+    color: var(--mka-text-secondary) !important;
     opacity: 1 !important;
     font-size: 14px !important;
     font-weight: 800 !important;
   }
   .app-shell .sidebar-drawer .sidebar-child-link,
   .app-shell .sidebar-drawer .sidebar-link {
-    color: #182033 !important;
+    color: var(--mka-text) !important;
     font-size: 15px !important;
     font-weight: 600 !important;
   }
   .app-shell .sidebar-drawer .sidebar-brand-text strong,
   .app-shell .sidebar-drawer .sidebar-console-brand strong,
-  .app-shell .sidebar-drawer .sidebar-foot-user strong { color: #182033 !important; }
-  .app-shell .sidebar-drawer .sidebar-console-brand small { color: #59657a !important; }
-  .app-shell .sidebar-drawer .sidebar-foot-user { background: #17213a !important; }
-  .app-shell .sidebar-drawer .sidebar-foot-user strong { color: #fff !important; }
-  .app-shell .sidebar-drawer .sidebar-foot-user small { color: #cbd5e1 !important; }
+  .app-shell .sidebar-drawer .sidebar-foot-user strong { color: var(--mka-text) !important; }
+  .app-shell .sidebar-drawer .sidebar-console-brand small { color: var(--mka-text-secondary) !important; }
+  .app-shell .sidebar-drawer .sidebar-foot-user { background: var(--mka-surface-soft) !important; }
+  .app-shell .sidebar-drawer .sidebar-foot-user small { color: var(--mka-text-secondary) !important; }
 
   /* The merchant already has the four-item bottom navigation.  Showing a
      second hamburger in the topbar made the menu look duplicated; the topbar
@@ -2363,7 +2315,7 @@
   box-shadow: 0 0 0 2px color-mix(in srgb, var(--v3-primary) 18%, transparent) !important;
 }
 .app-shell .topbar-search .mk-icon {
-  right: 14px;
+  inset-inline-start: 14px;
   font-size: 18px;
 }
 
@@ -2449,9 +2401,9 @@
     align-items: center !important;
     justify-content: center !important;
     overflow: hidden !important;
-    border: 1px solid #dfe4f0 !important;
+    border: 1px solid var(--mka-border) !important;
     border-radius: 9px !important;
-    background: #fff !important;
+    background: var(--mka-surface) !important;
   }
   .app-shell .sidebar-drawer .sidebar-console-logo-frame .merchant-console-logo {
     display: block !important;
@@ -2465,12 +2417,12 @@
     object-fit: contain !important;
   }
   .app-shell .sidebar-drawer .sidebar-foot-user {
-    background: #f3f5fb !important;
-    border: 1px solid #dfe4f0 !important;
-    color: #182033 !important;
+    background: var(--mka-surface-soft) !important;
+    border: 1px solid var(--mka-border) !important;
+    color: var(--mka-text) !important;
   }
-  .app-shell .sidebar-drawer .sidebar-foot-user strong { color: #182033 !important; }
-  .app-shell .sidebar-drawer .sidebar-foot-user small { color: #59657a !important; }
+  .app-shell .sidebar-drawer .sidebar-foot-user strong { color: var(--mka-text) !important; }
+  .app-shell .sidebar-drawer .sidebar-foot-user small { color: var(--mka-text-secondary) !important; }
   [data-theme='dark'] .app-shell .sidebar-drawer .sidebar-foot-user { background: #17213a !important; border-color: #2d3b53 !important; color: #f3f6fb !important; }
   [data-theme='dark'] .app-shell .sidebar-drawer .sidebar-foot-user strong { color: #f3f6fb !important; }
   [data-theme='dark'] .app-shell .sidebar-drawer .sidebar-foot-user small { color: #b3bdd3 !important; }

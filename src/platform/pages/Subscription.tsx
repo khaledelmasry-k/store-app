@@ -5,6 +5,7 @@ import { PageHeader } from '../../shared/components/ui/PageHeader'
 import { Card } from '../../shared/components/ui/Card'
 import { Badge } from '../../shared/components/ui/Badge'
 import { Button } from '../../shared/components/ui/Button'
+import { Loading } from '../../shared/components/ui/Loading'
 import { useDocument } from '../../shared/hooks/useDocument'
 import { getBillingSnapshotsCallable } from '../../shared/services/auth'
 import { resolveSubscriptionStatus } from '../../shared/services/subscription'
@@ -34,7 +35,7 @@ export const PlatformSubscriptionDetail: FunctionalComponent<{ id: string }> = (
     return () => { active = false }
   }, [sub?.storeId])
 
-  if (loading) return <div className="loading-screen"><span className="spinner spinner-lg" /></div>
+  if (loading) return <Loading variant="screen" message="جارٍ تحميل تفاصيل الاشتراك..." />
   if (!sub) {
     return (
       <div className="platform-operations platform-subscription-detail-page">

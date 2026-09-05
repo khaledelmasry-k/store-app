@@ -59,7 +59,7 @@ export const NotificationsTable: FunctionalComponent<Props> = ({
   if (error) {
     return (
       <Card>
-        <EmptyState icon="error" title="تعذر تحميل الإشعارات" description={error.message || 'حدث خطأ أثناء جلب البيانات.'} />
+        <EmptyState icon="error" title="تعذر تحميل الإشعارات" description="تعذر جلب البيانات الآن. حاول مرة أخرى بعد قليل." />
       </Card>
     )
   }

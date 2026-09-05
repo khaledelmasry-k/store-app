@@ -5,6 +5,7 @@ import { StatsCard } from '../../shared/components/ui/StatsCard'
 import { Badge } from '../../shared/components/ui/Badge'
 import { Button } from '../../shared/components/ui/Button'
 import { EmptyState } from '../../shared/components/ui/EmptyState'
+import { Loading } from '../../shared/components/ui/Loading'
 import { Modal } from '../../shared/components/ui/Modal'
 import { Input } from '../../shared/components/ui/Input'
 import { Toggle } from '../../shared/components/ui/Toggle'
@@ -90,7 +91,7 @@ export const MerchantCategories: FunctionalComponent = () => {
     setDeleteTarget(null)
   }
 
-  if (categoriesRes.loading) return <div className="loading-screen"><span className="spinner spinner-lg" /></div>
+  if (categoriesRes.loading) return <Loading variant="screen" message="جارٍ تحميل الفئات..." />
 
   return (
     <div className="merchant-operations merchant-categories-page">

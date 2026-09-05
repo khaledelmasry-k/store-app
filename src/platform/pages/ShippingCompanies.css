@@ -37,14 +37,14 @@
 .shipping-service-card.is-disabled { opacity:.68; }
 .shipping-service-card-head { display:flex; justify-content:space-between; align-items:flex-start; gap:12px; }
 .shipping-service-card-head strong { display:block; font-size:1rem; }
-.shipping-service-card-head .muted { display:block; margin-top:4px; direction:ltr; text-align:right; }
+.shipping-service-card-head .muted { display:block; margin-top:4px; direction:ltr; text-align:start; }
 .shipping-service-meta { display:flex; gap:8px; flex-wrap:wrap; margin:14px 0; }
 .shipping-service-meta span { background:var(--surface-muted, #f6f7fc); border:1px solid var(--border, #eceef8); border-radius:999px; padding:5px 9px; color:var(--muted, #667085); font-size:.78rem; }
 .shipping-service-actions { border-top:1px solid var(--border, #f0f1f7); padding-top:12px; }
 .shipping-zone-toolbar { display:flex; align-items:center; justify-content:space-between; gap:12px; margin:18px 0 12px; }
 .shipping-zone-table-wrap { overflow-x:auto; border:1px solid var(--shipping-border); border-radius:14px; }
 .shipping-zone-table { min-width:1050px; width:100%; border-collapse:collapse; font-size:.84rem; }
-.shipping-zone-table th, .shipping-zone-table td { padding:11px 12px; text-align:right; vertical-align:top; border-bottom:1px solid var(--border, #eef0f7); white-space:nowrap; }
+.shipping-zone-table th, .shipping-zone-table td { padding:11px 12px; text-align:start; vertical-align:top; border-bottom:1px solid var(--border, #eef0f7); white-space:nowrap; }
 .shipping-zone-table th { background:var(--surface-muted, #f8f9fd); color:var(--muted, #667085); font-size:.75rem; font-weight:700; }
 .shipping-zone-table tr:last-child td { border-bottom:0; }
 .shipping-zone-table td small { display:block; color:var(--text-muted); direction:ltr; margin-top:3px; }
@@ -73,7 +73,7 @@
 .shipping-provider-workspace .empty-desc { color:var(--muted, #667085); }
 .shipping-provider-row-main { flex:1; min-width:0; }
 .shipping-provider-row-main strong, .shipping-provider-row-main span { display:block; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
-.shipping-provider-row-main span { direction:ltr; text-align:right; margin-top:3px; }
+.shipping-provider-row-main span { direction:ltr; text-align:start; margin-top:3px; }
 .drawer-section { padding:4px 0 20px; margin-bottom:18px; border-bottom:1px solid #eef0f7; }
 .drawer-section h4 { margin:0 0 13px; font-size:1rem; }
 .drawer-section:last-of-type { border-bottom:0; }

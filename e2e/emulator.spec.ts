@@ -36,6 +36,16 @@ async function countProducts(storeId: string) {
   return snap.size
 }
 
+// Checkout renders a governed city as a select when canonical city data is
+// available, and falls back to a free-text input otherwise. Keep the E2E flow
+// aligned with that intentional application behavior.
+async function fillCheckoutCity(page: Page, city: string) {
+  const field = page.locator('.field', { hasText: 'المدينة' })
+  const select = field.locator('select')
+  if (await select.count()) await select.selectOption({ label: city })
+  else await field.locator('input').fill(city)
+}
+
 /**
  * The storefront cart test must be runnable on its own, not only after the
  * preceding registration/theme test has happened to create its fixture.
@@ -513,7 +523,7 @@ test('storefront theme vars, cart -> checkout -> order, ordersUsed increments', 
     .locator('.field', { hasText: 'المحافظة' })
     .locator('select')
     .selectOption({ label: 'القاهرة' })
-  await page.locator('.field', { hasText: 'المدينة' }).locator('input').fill('مدينة نصر')
+  await fillCheckoutCity(page, 'مدينة نصر')
   await page.locator('.field', { hasText: 'العنوان بالتفصيل' }).locator('textarea').fill('شارع 9، عمارة 4')
   await page.getByRole('button', { name: 'تأكيد الطلب' }).click()
 
@@ -639,7 +649,7 @@ test('shipping: canonical zone provider resolves fee at checkout and persists sn
     .selectOption({ label: 'القاهرة' })
   await expect(page.getByText('الشحن (القاهرة الكبرى)')).toBeVisible({ timeout: 15000 })
 
-  await page.locator('.field', { hasText: 'المدينة' }).locator('input').fill('مدينة نصر')
+  await fillCheckoutCity(page, 'مدينة نصر')
   await page.locator('.field', { hasText: 'العنوان بالتفصيل' }).locator('textarea').fill('شارع 5')
   await page.getByRole('button', { name: 'تأكيد الطلب' }).click()
   await expect(page.getByText('تم إنشاء طلبك بنجاح')).toBeVisible({ timeout: 30000 })
@@ -701,7 +711,7 @@ test('sales link: /s/:code redirects to the storefront and DELIVERED orders coun
   await page.locator('.field', { hasText: 'الاسم الكامل' }).locator('input').fill('عميل الرابط')
   await page.locator('.field', { hasText: 'رقم الهاتف' }).locator('input').fill('01099990002')
   await page.locator('.field', { hasText: 'المحافظة' }).locator('select').selectOption({ label: 'القاهرة' })
-  await page.locator('.field', { hasText: 'المدينة' }).locator('input').fill('مدينة نصر')
+  await fillCheckoutCity(page, 'مدينة نصر')
   await page.locator('.field', { hasText: 'العنوان بالتفصيل' }).locator('textarea').fill('شارع 8')
   await page.getByRole('button', { name: 'تأكيد الطلب' }).click()
   await expect(page.getByText('تم إنشاء طلبك بنجاح')).toBeVisible({ timeout: 30000 })
@@ -794,7 +804,7 @@ test('landing page: /landing/:slug renders, records a view, QuickBuy orders attr
   await page.locator('.field', { hasText: 'الاسم الكامل' }).locator('input').fill('عميل هبوط')
   await page.locator('.field', { hasText: 'رقم الهاتف' }).locator('input').fill('01099990003')
   await page.locator('.field', { hasText: 'المحافظة' }).locator('select').selectOption({ label: 'القاهرة' })
-  await page.locator('.field', { hasText: 'المدينة' }).locator('input').fill('مدينة نصر')
+  await fillCheckoutCity(page, 'مدينة نصر')
   await page.locator('.field', { hasText: 'العنوان بالتفصيل' }).locator('textarea').fill('شارع 9')
   await page.getByRole('button', { name: 'تأكيد الطلب' }).click()
   await expect(page.getByText('تم إنشاء طلبك بنجاح')).toBeVisible({ timeout: 30000 })
@@ -1131,7 +1141,7 @@ test('shipping: default provider honored (client+server) and refused-policy togg
   await page.locator('.field', { hasText: 'الاسم الكامل' }).locator('input').fill('عميل الشحن التلقائي')
   await page.locator('.field', { hasText: 'رقم الهاتف' }).locator('input').fill('01099990011')
   await page.locator('.field', { hasText: 'المحافظة' }).locator('select').selectOption({ label: 'القاهرة' })
-  await page.locator('.field', { hasText: 'المدينة' }).locator('input').fill('مدينة نصر')
+  await fillCheckoutCity(page, 'مدينة نصر')
   await page.locator('.field', { hasText: 'العنوان بالتفصيل' }).locator('textarea').fill('شارع 11')
 
   // Canonical provider is selected; the conflicting legacy flat fee is ignored.

@@ -179,7 +179,7 @@ export const StoreLogin: FunctionalComponent = () => {
             {isSignup && (
               <label className="checkbox-label">
                 <input type="checkbox" required />
-                <span>أوافق على <a href="#">الشروط والأحكام</a> و <a href="#">سياسة الخصوصية</a></span>
+                <span>أوافق على الشروط والأحكام وسياسة الخصوصية</span>
               </label>
             )}
 

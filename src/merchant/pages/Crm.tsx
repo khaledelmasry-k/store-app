@@ -2,6 +2,7 @@ import { FunctionalComponent } from 'preact'
 import { useEffect, useState } from 'preact/hooks'
 import { PageHeader } from '../../shared/components/ui/PageHeader'
 import { Button } from '../../shared/components/ui/Button'
+import { Loading } from '../../shared/components/ui/Loading'
 import { Icon } from '../../shared/components/ui/Icon'
 import { useStore } from '../../shared/hooks/useStore'
 import { useToast } from '../../shared/hooks/useToast'
@@ -47,7 +48,7 @@ export const MerchantCrm: FunctionalComponent = () => {
   const stageLabels: Record<string, string> = { lead: 'محتمل', new: 'جديد', active: 'نشط', repeat: 'متكرر', vip: 'VIP', at_risk: 'خطر', lost: 'مفقود' }
   const stageColors: Record<string, string> = { lead: 'var(--outline)', new: 'var(--primary)', active: '#22c55e', repeat: '#6366f1', vip: '#f59e0b', at_risk: '#f97316', lost: '#ef4444' }
 
-  if (loading && !analytics) return <div className="loading-screen"><span className="spinner spinner-lg" /> جاري تحميل CRM...</div>
+  if (loading && !analytics) return <Loading variant="screen" message="جارٍ تحميل لوحة CRM..." />
 
   return (
     <div className="merchant-crm-page">
@@ -82,19 +83,19 @@ export const MerchantCrm: FunctionalComponent = () => {
               const count = analytics?.byStage?.[key] || 0
               const pct = analytics?.totalCustomers ? (count / analytics.totalCustomers) * 100 : 0
               return (
-                <div key={key} style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 10 }}>
-                  <span style={{ minWidth: 60, fontSize: 12, color: 'var(--text-on-surface-variant)' }}>{stageLabels[key]}</span>
-                  <div className="crm-stage-seg" style={{ flex: 1 }}>
+                <div key={key} className="crm-stage-row">
+                  <span className="crm-stage-label">{stageLabels[key]}</span>
+                  <div className="crm-stage-seg">
                     <i style={{ width: `${pct}%`, background: stageColors[key] }} />
                   </div>
-                  <span style={{ minWidth: 32, textAlign: 'end', fontSize: 12, fontVariantNumeric: 'tabular-nums' }}>{count}</span>
+                  <span className="crm-stage-count">{count}</span>
                 </div>
               )
             })}
-            <div style={{ display: 'flex', gap: 12, marginTop: 16, flexWrap: 'wrap' }}>
-              <span style={{ fontSize: 11, color: 'var(--text-on-surface-variant)' }}>مفقود: {analytics?.lost || 0}</span>
-              <span style={{ fontSize: 11, color: 'var(--text-on-surface-variant)' }}>متابعات مستحقة: {analytics?.followUpsDue || 0}</span>
-              <span style={{ fontSize: 11, color: 'var(--error)' }}>متأخرة: {analytics?.overdueFollowUps || 0}</span>
+            <div className="crm-stage-summary">
+              <span>مفقود: {analytics?.lost || 0}</span>
+              <span>متابعات مستحقة: {analytics?.followUpsDue || 0}</span>
+              <span className="is-danger">متأخرة: {analytics?.overdueFollowUps || 0}</span>
             </div>
           </div>
         </div>
@@ -102,7 +103,7 @@ export const MerchantCrm: FunctionalComponent = () => {
         <div className="crm-panel">
           <div className="crm-panel-head">
             <h3>المتابعات المستحقة</h3>
-            <a href="/dashboard/customers" style={{ fontSize: 12, color: 'var(--primary)' }}>عرض العملاء</a>
+            <a href="/dashboard/customers" className="crm-panel-link">عرض العملاء</a>
           </div>
           <div className="crm-panel-body">
             {followUpsRes.loading ? (
@@ -111,20 +112,20 @@ export const MerchantCrm: FunctionalComponent = () => {
               <p className="muted small">لا توجد متابعات معلقة. أضف متابعات من صفحة العملاء.</p>
             ) : (
               <>
-                {overdue.length > 0 && <p style={{ fontSize: 12, color: 'var(--error)', marginBottom: 8 }}>⚠️ {overdue.length} متابعة متأخرة</p>}
+                {overdue.length > 0 && <p className="crm-overdue-note">⚠️ {overdue.length} متابعة متأخرة</p>}
                 {followUpsRes.data.slice(0, 6).map((f) => {
                   const due = timestampToMillis(f.dueAt as any) || 0
                   const isOverdue = due && due < Date.now()
                   return (
                     <div key={f.id} className={`crm-follow-row ${isOverdue ? 'is-overdue' : ''}`}>
-                      <span style={{ width: 28, height: 28, borderRadius: 9999, background: isOverdue ? 'var(--error-container)' : 'var(--surface-container)', display: 'flex', alignItems: 'center', justifyContent: 'center', color: isOverdue ? 'var(--on-error-container)' : 'var(--text-on-surface-variant)' }}>
+                      <span className={`crm-follow-icon${isOverdue ? ' is-overdue' : ''}`}>
                         <Icon name="calendar_today" ariaHidden />
                       </span>
-                      <div style={{ flex: 1, minWidth: 0 }}>
-                        <div style={{ fontSize: 12, fontWeight: 600, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{f.customerName || f.customerId} — {f.customerPhone || ''}</div>
-                        <div style={{ fontSize: 11, color: 'var(--text-on-surface-variant)', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{f.notes || 'بدون ملاحظات'}</div>
+                      <div className="crm-follow-copy">
+                        <div className="crm-follow-name">{f.customerName || f.customerId} — {f.customerPhone || ''}</div>
+                        <div className="crm-follow-notes">{f.notes || 'بدون ملاحظات'}</div>
                       </div>
-                      <span style={{ fontSize: 11, color: isOverdue ? 'var(--error)' : 'var(--text-on-surface-variant)', whiteSpace: 'nowrap' }}>
+                      <span className={`crm-follow-date${isOverdue ? ' is-overdue' : ''}`}>
                         {f.dueAt ? new Date(timestampToMillis(f.dueAt as any)!).toLocaleDateString('ar-EG') : ''}
                       </span>
                     </div>
@@ -145,9 +146,9 @@ export const MerchantCrm: FunctionalComponent = () => {
                 const pct = analytics?.totalCustomers ? (g.count / analytics.totalCustomers) * 100 : 0
                 return (
                   <div key={g.name} className="crm-gov-row">
-                    <span style={{ fontSize: 12, minWidth: 80 }}>{g.name}</span>
+                    <span className="crm-gov-name">{g.name}</span>
                     <div className="crm-gov-bar"><i style={{ width: `${pct}%` }} /></div>
-                    <span style={{ fontSize: 12, fontVariantNumeric: 'tabular-nums' }}>{g.count}</span>
+                    <span className="crm-gov-count">{g.count}</span>
                   </div>
                 )
               })}
@@ -160,15 +161,15 @@ export const MerchantCrm: FunctionalComponent = () => {
           <div className="crm-panel-head"><h3>نمو العملاء — آخر 7 أيام</h3></div>
           <div className="crm-panel-body">
             {analytics?.byDay ? (
-              <div style={{ display: 'flex', alignItems: 'end', gap: 6, height: 80 }}>
+              <div className="crm-growth-chart">
                 {Object.entries(analytics.byDay as Record<string, number>).map(([day, count]) => {
                   const max = Math.max(1, ...Object.values(analytics.byDay as Record<string, number>))
                   const h = (Number(count) / max) * 60 + 8
                   return (
-                    <div key={day} style={{ flex: 1, display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 4 }}>
-                      <span style={{ fontSize: 10, color: 'var(--text-on-surface-variant)' }}>{count}</span>
-                      <div style={{ width: '100%', height: h, background: 'var(--primary)', borderRadius: 6, opacity: 0.85 }} />
-                      <span style={{ fontSize: 9, color: 'var(--text-on-surface-variant)' }}>{day.slice(5)}</span>
+                    <div key={day} className="crm-growth-column">
+                      <span className="crm-growth-value">{count}</span>
+                      <div className="crm-growth-bar" style={{ height: h }} />
+                      <span className="crm-growth-day">{day.slice(5)}</span>
                     </div>
                   )
                 })}
@@ -176,7 +177,7 @@ export const MerchantCrm: FunctionalComponent = () => {
             ) : (
               <p className="muted small">لا توجد بيانات.</p>
             )}
-            <p className="muted small" style={{ marginTop: 12 }}>
+            <p className="muted small crm-repeat-note">
               معدل التكرار: {(analytics?.repeatPurchaseRate * 100).toFixed(1)}% — {analytics?.repeatCustomers || 0} عملاء اشتروا أكثر من مرة.
             </p>
           </div>

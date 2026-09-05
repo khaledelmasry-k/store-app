@@ -11,7 +11,7 @@ import { useCollection } from '../../shared/hooks/useCollection'
 import { Link } from 'wouter'
 import { formatCurrency, timeAgo } from '../../shared/utils/format'
 import { orderItemRevenue } from '../../shared/utils/pricing'
-import { STATUS_LABELS, STATUS_COLORS } from '../../shared/utils/constants'
+import { STATUS_LABELS } from '../../shared/utils/constants'
 import { visibleOrderStatusLabel, visibleOrderStatusTone } from '../../shared/utils/order-status'
 import type { Order, ProductCost, Shipment } from '../../shared/types'
 import './Orders.css'
@@ -163,7 +163,6 @@ export const MerchantOrders: FunctionalComponent = () => {
             <table>
               <thead>
                 <tr>
-                  <th className="check-col"><input type="checkbox" aria-label="تحديد الكل" /></th>
                   <th>الرقم</th>
                   <th>العميل</th>
                   <th>المنتجات</th>
@@ -185,37 +184,36 @@ export const MerchantOrders: FunctionalComponent = () => {
                   const statusTitle = shipmentFailed ? (shipment?.failureReason || 'تعذر التسليم. لم ترسل شركة الشحن سببًا تفصيليًا عبر الربط.') : undefined
                   return (
                     <tr key={o.id} className="order-row" onClick={() => (window.location.href = `/dashboard/orders/${o.id}`)}>
-                      <td className="check-col"><input type="checkbox" aria-label={`تحديد ${o.orderNumber}`} /></td>
-                      <td><Link href={`/dashboard/orders/${o.id}`} className="order-number">{o.orderNumber}</Link></td>
-                      <td>
+                      <td data-label="الرقم"><Link href={`/dashboard/orders/${o.id}`} className="order-number">{o.orderNumber}</Link></td>
+                      <td data-label="العميل">
                         <div className="order-customer">
                           <span className="order-customer-name">{o.customerName || '—'}</span>
                           {o.phone && <span className="order-customer-phone">{o.phone}</span>}
                         </div>
                       </td>
-                      <td><ProductsCell items={o.items} /></td>
-                      <td><span className="order-total">{formatCurrency(o.totalPrice)}</span></td>
-                      <td>
+                      <td data-label="المنتجات"><ProductsCell items={o.items} /></td>
+                      <td data-label="الإجمالي"><span className="order-total">{formatCurrency(o.totalPrice)}</span></td>
+                      <td data-label="الربح">
                         {profit == null ? (
                           <span className="order-cost-chip">تكلفة غير مكتملة</span>
                         ) : (
                           <span className={`order-profit ${profit < 0 ? 'is-negative' : ''}`}>{formatCurrency(profit)}</span>
                         )}
                       </td>
-                      <td>
+                      <td data-label="الدفع">
                         <span className="order-payment-chip">
                           <Icon name={PAYMENT_ICONS[o.paymentMethod] || 'payments'} ariaHidden />
                           {PAYMENT_LABELS[o.paymentMethod] || o.paymentMethod || '—'}
                         </span>
                       </td>
-                      <td>
+                      <td data-label="الحالة">
                         <span className={`order-status-pill ${PILL_TONES[tone] || ''}`} title={statusTitle}>
                           <span className="order-status-dot" />
                           {statusText}
                         </span>
                       </td>
-                      <td><span className="order-date">{timeAgo(o.createdAt)}</span></td>
-                      <td className="actions-col">
+                      <td data-label="التاريخ"><span className="order-date">{timeAgo(o.createdAt)}</span></td>
+                      <td data-label="الإجراءات" className="actions-col">
                         <span className="order-actions">
                           <Link href={`/dashboard/orders/${o.id}`} title="عرض التفاصيل" className="icon-btn"><Icon name="visibility" /></Link>
                           <Link href={`/dashboard/orders/${o.id}`} title="تعديل" className="icon-btn"><Icon name="edit" /></Link>
