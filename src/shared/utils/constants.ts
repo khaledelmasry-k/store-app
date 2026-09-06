@@ -613,6 +613,7 @@ export const NAV_GROUPS: Record<'platform' | 'dashboard', NavGroup[]> = {
       icon: 'storefront',
       items: [
         { to: '/platform/merchants', label: 'التجار', icon: 'storefront' },
+        { to: '/platform/crm', label: 'CRM التجار', icon: 'support_agent' },
         { to: '/platform/customers', label: 'عملاء التجار', icon: 'groups' },
       ],
     },

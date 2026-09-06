@@ -32,6 +32,7 @@ const FirebaseDiagnostics = import.meta.env.DEV
 const PlatformDashboard = lazy(() => import('./platform/pages/Dashboard'))
 const PlatformLanding = lazy(() => import('./platform/pages/LandingPage'))
 const PlatformMerchants = lazy(() => import('./platform/pages/Merchants'))
+const PlatformCrm = lazy(() => import('./platform/pages/Crm'))
 const StoreDetails = lazy(() => import('./platform/pages/StoreDetails'))
 const PlatformProducts = lazy(() => import('./platform/pages/Products'))
 const PlatformOrders = lazy(() => import('./platform/pages/Orders'))
@@ -143,6 +144,7 @@ function PlatformRoutes() {
     <ZoneRouter prefix="/platform" role="superAdmin" layout={PlatformLayout}>
       <Route path="/" component={() => <PlatformDashboard />} />
       <Route path="/merchants" component={() => <PlatformMerchants />} />
+      <Route path="/crm" component={() => <PlatformCrm />} />
       <Route path="/stores" component={() => <Redirect to="/platform/merchants" replace />} />
       <Route path="/stores/:id" component={StoreDetailsRoute} />
       <Route path="/products" component={() => <PlatformProducts />} />

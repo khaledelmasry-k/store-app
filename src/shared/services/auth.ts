@@ -82,6 +82,15 @@ export function getPublicPlatformConfigCallable() {
   return httpsCallable(getFunctions(), 'getPublicPlatformConfig')({})
 }
 
+export const getPlatformCrmDashboardCallable = () => httpsCallable(getFunctions(), 'getPlatformCrmDashboard')({})
+export const listPlatformCrmMerchantsCallable = (input: { limit?: number }) => httpsCallable(getFunctions(), 'listPlatformCrmMerchants')(input)
+export const getPlatformMerchant360Callable = (input: { merchantId: string }) => httpsCallable(getFunctions(), 'getPlatformMerchant360')(input)
+export const updatePlatformMerchantCrmCallable = (input: Record<string, unknown>) => httpsCallable(getFunctions(), 'updatePlatformMerchantCrm')(input)
+export const addPlatformMerchantNoteCallable = (input: { merchantId: string; body: string }) => httpsCallable(getFunctions(), 'addPlatformMerchantNote')(input)
+export const listPlatformMerchantNotesCallable = (input: { merchantId: string }) => httpsCallable(getFunctions(), 'listPlatformMerchantNotes')(input)
+export const upsertPlatformMerchantFollowUpCallable = (input: Record<string, unknown>) => httpsCallable(getFunctions(), 'upsertPlatformMerchantFollowUp')(input)
+export const listPlatformMerchantFollowUpsCallable = (input: { merchantId: string }) => httpsCallable(getFunctions(), 'listPlatformMerchantFollowUps')(input)
+
 export function saveEnterpriseWhatsAppSettingsCallable(input: { number: string; enabled: boolean; message?: string }) {
   return httpsCallable(getFunctions(), 'saveEnterpriseWhatsAppSettings')(input)
 }

@@ -7373,3 +7373,111 @@ export const listCrmCustomers = onCall(async (request: CallableRequest<any>) => 
   customers = customers.slice(0, lim)
   return { customers }
 })
+
+// Platform CRM V1: CRM-owned metadata is kept separate from subscription and
+// merchant source documents. All access is platform-admin-only.
+const PLATFORM_CRM_STAGES = ['lead', 'contacted', 'trial', 'onboarding', 'active', 'at_risk', 'renewal_due', 'churned', 'lost'] as const
+type PlatformCrmStage = typeof PLATFORM_CRM_STAGES[number]
+const platformCrmRef = (merchantId: string) => db.doc(`platformMerchantCrm/${merchantId}`)
+
+export const getPlatformCrmDashboard = onCall(async (request: CallableRequest<any>) => {
+  await assertPlatformAdmin(request)
+  const [storesSnap, subsSnap, ticketsSnap] = await Promise.all([
+    db.collection('stores').get(),
+    db.collection('subscriptions').get(),
+    db.collection('tickets').where('status', 'in', ['open', 'pending']).get().catch(() => ({ size: 0 } as any)),
+  ])
+  const subs = subsSnap.docs.map((d) => d.data())
+  const nowMs = Date.now()
+  const expiring = subs.filter((s) => { const t = s.expiresAt?.toMillis?.() || 0; return t > nowMs && t < nowMs + 30 * 86400000 }).length
+  return {
+    totalMerchants: storesSnap.size,
+    newLeads: 0,
+    trials: subs.filter((s) => s.status === 'trialing').length,
+    activePaid: subs.filter((s) => s.status === 'active' && Number(s.planPriceMonthly || s.normalPriceSnapshot || 0) > 0).length,
+    expiringSoon: expiring,
+    expired: subs.filter((s) => s.status === 'expired').length,
+    atRisk: 0,
+    churned: subs.filter((s) => s.status === 'cancelled').length,
+    lifetime: subs.filter((s) => s.billingModel === 'one_time').length,
+    nearOrderLimit: 0,
+    openTickets: ticketsSnap.size,
+    mrr: null,
+  }
+})
+
+export const listPlatformCrmMerchants = onCall(async (request: CallableRequest<any>) => {
+  await assertPlatformAdmin(request)
+  const limit = Math.min(50, Math.max(1, Number(request.data?.limit || 25)))
+  const storesSnap = await db.collection('stores').orderBy('createdAt', 'desc').limit(limit + 1).get()
+  const hasMore = storesSnap.size > limit
+  const docs = storesSnap.docs.slice(0, limit)
+  const rows = await Promise.all(docs.map(async (doc) => {
+    const store = doc.data()
+    const owner = store.ownerId ? await db.doc(`users/${store.ownerId}`).get() : null
+    const profile = await platformCrmRef(String(store.ownerId || doc.id)).get()
+    const sub = store.activeSubscriptionId ? await db.doc(`subscriptions/${store.activeSubscriptionId}`).get() : null
+    return { id: store.ownerId || doc.id, storeId: doc.id, storeName: store.name || '', ownerName: owner?.data()?.name || '', email: owner?.data()?.email || '', phone: owner?.data()?.phone || '', published: store.published === true, emailVerified: owner?.data()?.emailVerified === true, plan: sub?.data()?.planName || sub?.data()?.planId || null, subscriptionStatus: sub?.data()?.status || null, stage: profile.exists ? profile.data()?.stage || null : null, tags: profile.exists ? profile.data()?.tags || [] : [], assignedTo: profile.exists ? profile.data()?.assignedTo || null : null }
+  }))
+  return { merchants: rows, hasMore }
+})
+
+export const getPlatformMerchant360 = onCall(async (request: CallableRequest<any>) => {
+  await assertPlatformAdmin(request)
+  const merchantId = String(request.data?.merchantId || '').trim()
+  if (!merchantId) throw new HttpsError('invalid-argument', 'merchantId مطلوب')
+  const userSnap = await db.doc(`users/${merchantId}`).get()
+  if (!userSnap.exists || userSnap.data()?.role !== 'merchant') throw new HttpsError('not-found', 'التاجر غير موجود')
+  const storeId = String(userSnap.data()?.storeIds?.[0] || '')
+  const storeSnap = storeId ? await db.doc(`stores/${storeId}`).get() : null
+  const [products, orders, tickets, profile] = await Promise.all([
+    db.collection('products').where('storeId', '==', storeId).get(),
+    db.collection('orders').where('storeId', '==', storeId).get(),
+    db.collection('tickets').where('storeId', '==', storeId).get().catch(() => ({ size: 0 } as any)),
+    platformCrmRef(merchantId).get(),
+  ])
+  const orderData = orders.docs.map((d) => d.data())
+  return { merchantId, storeId, user: userSnap.data(), store: storeSnap?.data() || null, profile: profile.exists ? profile.data() : {}, productsCount: products.size, totalOrders: orders.size, ordersUsed: orderData.filter((o) => o.status !== 'CANCELLED').length, gmv: orderData.reduce((sum, o) => sum + Number(o.totalPrice || o.total || 0), 0), ticketsCount: tickets.size, openTickets: tickets.docs?.filter((d: any) => ['open', 'pending'].includes(d.data()?.status)).length || 0 }
+})
+
+export const updatePlatformMerchantCrm = onCall(async (request: CallableRequest<any>) => {
+  await assertPlatformAdmin(request)
+  const merchantId = String(request.data?.merchantId || '').trim()
+  if (!merchantId) throw new HttpsError('invalid-argument', 'merchantId مطلوب')
+  const merchantSnap = await db.doc(`users/${merchantId}`).get()
+  if (!merchantSnap.exists || merchantSnap.data()?.role !== 'merchant') throw new HttpsError('not-found', 'التاجر غير موجود')
+  const patch: Record<string, any> = { updatedAt: now(), updatedBy: request.auth!.uid }
+  if (request.data?.stage !== undefined) { if (!PLATFORM_CRM_STAGES.includes(request.data.stage)) throw new HttpsError('invalid-argument', 'مرحلة غير صالحة'); patch.stage = request.data.stage as PlatformCrmStage }
+  if (request.data?.tags !== undefined) patch.tags = Array.isArray(request.data.tags) ? request.data.tags.map((t: unknown) => sanitizeSensitiveText(String(t)).slice(0, 40)).slice(0, 20) : []
+  if (request.data?.assignedTo !== undefined) {
+    const assignedTo = request.data.assignedTo ? String(request.data.assignedTo) : null
+    if (assignedTo) {
+      const assignee = await db.doc(`users/${assignedTo}`).get()
+      if (!assignee.exists || !['superAdmin', 'platformStaff'].includes(String(assignee.data()?.role || ''))) throw new HttpsError('invalid-argument', 'مسؤول المنصة غير صالح')
+    }
+    patch.assignedTo = assignedTo
+  }
+  await platformCrmRef(merchantId).set(patch, { merge: true })
+  if (patch.stage) await auditLog(null, request.auth!.uid, 'crm_stage_changed', 'platformMerchantCrm', merchantId, { stage: patch.stage })
+  if (patch.tags) await auditLog(null, request.auth!.uid, 'crm_tags_changed', 'platformMerchantCrm', merchantId, { tags: patch.tags })
+  if (patch.assignedTo !== undefined) await auditLog(null, request.auth!.uid, 'crm_assignment_changed', 'platformMerchantCrm', merchantId, { assignedTo: patch.assignedTo })
+  return { ok: true }
+})
+
+export const addPlatformMerchantNote = onCall(async (request: CallableRequest<any>) => {
+  await assertPlatformAdmin(request)
+  const merchantId = String(request.data?.merchantId || '').trim(); const body = sanitizeSensitiveText(String(request.data?.body || '')).slice(0, 4000)
+  if (!merchantId || !body) throw new HttpsError('invalid-argument', 'بيانات الملاحظة غير مكتملة')
+  const merchantSnap = await db.doc(`users/${merchantId}`).get()
+  if (!merchantSnap.exists || merchantSnap.data()?.role !== 'merchant') throw new HttpsError('not-found', 'التاجر غير موجود')
+  const ref = await platformCrmRef(merchantId).collection('notes').add({ body, createdBy: request.auth!.uid, createdAt: now() })
+  await auditLog(null, request.auth!.uid, 'crm_note_added', 'platformMerchantCrm', merchantId, { noteId: ref.id })
+  return { id: ref.id }
+})
+export const listPlatformMerchantNotes = onCall(async (request: CallableRequest<any>) => { await assertPlatformAdmin(request); const merchantId = String(request.data?.merchantId || ''); if (!merchantId) throw new HttpsError('invalid-argument', 'merchantId مطلوب'); const snap = await platformCrmRef(merchantId).collection('notes').orderBy('createdAt', 'desc').limit(50).get(); return { notes: snap.docs.map((d) => ({ id: d.id, ...d.data() })) } })
+export const upsertPlatformMerchantFollowUp = onCall(async (request: CallableRequest<any>) => {
+  await assertPlatformAdmin(request); const merchantId = String(request.data?.merchantId || ''); const id = String(request.data?.id || '').trim(); const merchantSnap = await db.doc(`users/${merchantId}`).get(); if (!merchantSnap.exists || merchantSnap.data()?.role !== 'merchant') throw new HttpsError('not-found', 'التاجر غير موجود'); const assignedTo = request.data?.assignedTo ? String(request.data.assignedTo) : null; if (assignedTo) { const assignee = await db.doc(`users/${assignedTo}`).get(); if (!assignee.exists || !['superAdmin', 'platformStaff'].includes(String(assignee.data()?.role || ''))) throw new HttpsError('invalid-argument', 'مسؤول المنصة غير صالح') }; const payload = { title: sanitizeSensitiveText(String(request.data?.title || '')).slice(0, 200), dueAt: request.data?.dueAt || null, assignedTo, status: request.data?.status === 'done' ? 'done' : 'open', createdBy: request.auth!.uid, createdAt: now(), ...(request.data?.status === 'done' ? { completedAt: now() } : {}) }
+  if (!payload.title) throw new HttpsError('invalid-argument', 'عنوان المتابعة مطلوب')
+  const ref = id ? platformCrmRef(merchantId).collection('followUps').doc(id) : platformCrmRef(merchantId).collection('followUps').doc(); await ref.set(payload, { merge: true }); await auditLog(null, request.auth!.uid, id ? 'crm_followup_updated' : 'crm_followup_created', 'platformMerchantCrm', merchantId, { followUpId: ref.id }); if (payload.status === 'done') await auditLog(null, request.auth!.uid, 'crm_followup_completed', 'platformMerchantCrm', merchantId, { followUpId: ref.id }); return { id: ref.id }
+})
+export const listPlatformMerchantFollowUps = onCall(async (request: CallableRequest<any>) => { await assertPlatformAdmin(request); const merchantId = String(request.data?.merchantId || ''); const snap = await platformCrmRef(merchantId).collection('followUps').orderBy('dueAt', 'asc').limit(50).get(); return { followUps: snap.docs.map((d) => ({ id: d.id, ...d.data() })) } })
