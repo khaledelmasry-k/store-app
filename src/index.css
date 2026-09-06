@@ -126,6 +126,19 @@
   --text-5xl: clamp(2rem, 5.6vw, 2.25rem);
 }
 
+/* Email verification pending state */
+.email-verification-card { max-width: 520px; }
+.email-verification-card .auth-status-card { display: grid; gap: 14px; }
+.email-verification-message { margin: 0; }
+.email-verification-actions { display: grid; gap: 10px; margin-top: 4px; }
+.email-verification-links { display: flex; align-items: center; justify-content: center; gap: 14px; flex-wrap: wrap; margin-top: 4px; font-size: 13px; }
+.email-verification-links a { color: var(--primary); text-decoration: none; }
+.email-verification-links a:hover { text-decoration: underline; }
+@media (max-width: 520px) {
+  .email-verification-card { width: min(100%, 100%); }
+  .email-verification-links { align-items: stretch; flex-direction: column; text-align: center; }
+}
+
 /* The mobile drawer receives uploaded merchant branding.  Contain it in a
    dedicated frame so the source image's native dimensions can never turn
    navigation into a giant logo canvas. */

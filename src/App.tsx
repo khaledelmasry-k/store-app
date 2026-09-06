@@ -12,6 +12,7 @@ import { ZoneRouter } from './shared/components/routing/ZoneRouter'
 import { Login } from './shared/components/auth/Login'
 import { Register } from './shared/components/auth/Register'
 import { ForgotPassword } from './shared/components/auth/ForgotPassword'
+import { VerifyEmail } from './shared/components/auth/VerifyEmail'
 import { PlatformLayout } from './shared/components/layout/PlatformLayout'
 import { MerchantLayout } from './shared/components/layout/MerchantLayout'
 import { StorefrontShell } from './shared/components/layout/StorefrontShell'
@@ -89,7 +90,11 @@ function HomeRedirect() {
     navigatedRef.current = true
     if (!user) return
     if (user.role === 'superAdmin') navigate('/platform/', { replace: true })
-    else if ((user.role === 'merchant' || user.role === 'staff') && user.active !== false) navigate('/dashboard/', { replace: true })
+    else if ((user.role === 'merchant' || user.role === 'staff') && user.active !== false) {
+      const pendingMarker = (() => { try { return sessionStorage.getItem('matjari:email-verification-pending') === '1' } catch { return false } })()
+      const target = user.role === 'merchant' && user.emailVerificationRequired && (user.emailVerified !== true || pendingMarker) ? '/verify-email' : '/dashboard/'
+      navigate(target, { replace: true })
+    }
     // Customers have no platform dashboard — keep them on the public landing.
     else if (user.role === 'customer') return
   }, [user, initialized, loading, navigate])
@@ -241,6 +246,7 @@ export default function App() {
                   {import.meta.env.DEV && FirebaseDiagnostics && <Route path="/__dev/firebase" component={FirebaseDiagnostics} />}
                   <Route path="/register" component={Register} />
                   <Route path="/forgot-password" component={ForgotPassword} />
+                  <Route path="/verify-email" component={VerifyEmail} />
                   <Route
                     path="/privacy"
                     component={() => (

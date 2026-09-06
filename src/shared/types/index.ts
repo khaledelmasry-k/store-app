@@ -17,6 +17,10 @@ export interface User extends Partial<FirestoreMeta> {
   photoURL?: string
   phone?: string
   active: boolean
+  /** New merchant registrations must verify their Firebase email. Legacy merchants omit this flag and are grandfathered. */
+  emailVerificationRequired?: boolean
+  /** Mirrored from Firebase Auth at session bootstrap; never trusted as an authorization input by itself. */
+  emailVerified?: boolean
   /** Platform approval state for merchant onboarding. Absent on legacy users. */
   merchantStatus?: 'pending_approval' | 'active' | 'rejected' | 'suspended' | 'deleting'
   impersonatedBy?: string

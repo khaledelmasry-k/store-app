@@ -46,6 +46,14 @@ export const ZoneRouter: FunctionalComponent<ZoneRouterProps> = ({ prefix, role,
     return <Redirect to="/" replace />
   }
 
+  // New merchant owners are gated by a server-side rollout flag. Legacy
+  // merchants without the flag, staff, customers and super admins are not
+  // affected by email verification enforcement.
+  const verificationPendingMarker = (() => { try { return sessionStorage.getItem('matjari:email-verification-pending') === '1' } catch { return false } })()
+  if (user.role === 'merchant' && user.emailVerificationRequired && (user.emailVerified !== true || verificationPendingMarker)) {
+    return <Redirect to="/verify-email" replace />
+  }
+
   const merchantPending = user.role !== 'superAdmin' && (
     user.active === false ||
     (user.role === 'merchant' && user.merchantStatus != null && user.merchantStatus !== 'active')

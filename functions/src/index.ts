@@ -2264,6 +2264,7 @@ export const registerMerchant = onCall(async (request: CallableRequest<any>) => 
     phone: normalizedPhone || null,
     active: true,
     merchantStatus: 'active',
+    emailVerificationRequired: true,
     createdAt: now(),
     updatedAt: now(),
     createdBy: uid,
