@@ -70,7 +70,10 @@ export const Login: FunctionalComponent<Props> = ({ role }) => {
           setPending(true)
           return
         }
-        const target = merchantRedirect()
+        const pendingMarker = (() => { try { return sessionStorage.getItem('matjari:email-verification-pending') === '1' } catch { return false } })()
+        const target = user.role === 'merchant' && user.emailVerificationRequired && (user.emailVerified !== true || pendingMarker)
+          ? '/verify-email'
+          : merchantRedirect()
         navigate(target, { replace: true })
       }
       else if (user.role === 'customer') { navigate('/', { replace: true }) }

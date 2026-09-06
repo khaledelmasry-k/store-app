@@ -3,7 +3,7 @@ import { useEffect, useState } from 'preact/hooks'
 import { Link, useLocation } from 'wouter'
 import { Button } from '../ui/Button'
 import { AuthShell } from './AuthShell'
-import { registerMerchant } from '../../services/auth'
+import { login, registerMerchant, sendVerificationEmail } from '../../services/auth'
 import { useToast } from '../../hooks/useToast'
 import { useCollection } from '../../hooks/useCollection'
 import { formatCurrency } from '../../utils/format'
@@ -32,7 +32,7 @@ export const Register:FunctionalComponent = () => {
   useEffect(() => {
     document.title = 'Matjari | إنشاء حساب'
   }, [])
-  const [loc] = useLocation()
+  const [loc, navigate] = useLocation()
   const params = new URLSearchParams(loc.split('?')[1] || window.location.search)
   const plansRes = useCollection<SubscriptionPlan>('plans', {})
   const availablePlans = [...(plansRes.data.length ? plansRes.data : CANONICAL_PLANS)]
@@ -79,7 +79,6 @@ export const Register:FunctionalComponent = () => {
   const [showPassword, setShowPassword] = useState(false)
   const [error, setError] = useState('')
   const [loading, setLoading] = useState(false)
-  const [done, setDone] = useState(false)
 
   const canProceed = () => {
     if (step === 0) return isEmailValid(form.email) && form.password.length >= 6 && form.name.trim() && form.phone.trim().length >= 8 && termsAccepted
@@ -117,38 +116,21 @@ export const Register:FunctionalComponent = () => {
         storeRef: form.storeRef.trim() || form.storeName.trim(),
         planId,
       })
-      toast.push('تم إنشاء حسابك بنجاح', undefined, 'success')
-      setDone(true)
+      await login({ email: form.email.trim(), password: form.password })
+      try { sessionStorage.setItem('matjari:email-verification-pending', '1') } catch { /* storage may be unavailable */ }
+      try {
+        await sendVerificationEmail()
+        toast.push('تم إنشاء حسابك وإرسال رسالة التحقق', undefined, 'success')
+      } catch {
+        toast.push('تم إنشاء الحساب', 'تعذر إرسال الرسالة تلقائيًا. يمكنك إعادة الإرسال من صفحة التحقق.', 'error')
+      }
+      navigate('/verify-email', { replace: true })
     } catch {
       setError('تعذر إنشاء الحساب الآن. تحقق من البيانات وحاول مرة أخرى.')
       toast.push('فشل التسجيل', undefined, 'error')
     } finally {
       setLoading(false)
     }
-  }
-
-  if (done) {
-    const completionMessage = lifetimeMode
-      ? 'تم إنشاء حسابك ومتجرك كمسودة. بعد تسجيل الدخول ستجد عرض امتلك متجرك محدداً لإرسال طلب الشراء الآمن، ولن تتفعّل الملكية قبل اعتماد الدفع.'
-      : Number(selectedPlan?.priceMonthly || 0) <= 0
-        ? 'تم تفعيل باقة Free فورًا، وتم إنشاء متجرك كمسودة لتجهيزه قبل النشر.'
-        : `بدأت تجربتك المجانية على باقة ${selectedPlan?.name || ''} لمدة 3 أيام، وتم إنشاء متجرك كمسودة. يلزم اعتماد الدفع لاستمرار المزايا بعد انتهاء التجربة.`
-    return (
-      <AuthShell variant="brand">
-        <div className="auth-card">
-          <div className="auth-status-card">
-            <div className="auth-status-icon">
-              <Icon name="check_circle" />
-            </div>
-            <h1 className="auth-title">تم إنشاء حسابك بنجاح</h1>
-            <p className="auth-subtitle">{completionMessage}</p>
-            <Link href={`/login?role=merchant${lifetimeMode ? '&offer=lifetime' : ''}`}>
-              <Button variant="outline" block>تسجيل الدخول</Button>
-            </Link>
-          </div>
-        </div>
-      </AuthShell>
-    )
   }
 
   const strength = PASSWORD_RULES.reduce((n, r) => n + (r.test(form.password) ? 1 : 0), 0)

@@ -13,6 +13,7 @@ export interface AuthContextState {
   loading: boolean
   initialized: boolean
   state: AuthState
+  refreshUser: () => Promise<void>
 }
 
 export const AuthContext = createContext<AuthContextState>({
@@ -20,4 +21,5 @@ export const AuthContext = createContext<AuthContextState>({
   loading: true,
   initialized: false,
   state: AuthState.Uninitialized,
+  refreshUser: async () => {},
 })

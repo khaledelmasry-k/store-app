@@ -1,5 +1,7 @@
 import {
   createUserWithEmailAndPassword,
+  reload,
+  sendEmailVerification,
   sendPasswordResetEmail,
   signInWithEmailAndPassword,
   signOut,
@@ -32,6 +34,22 @@ export function login(creds: Credentials) {
 
 export function logout() {
   return signOut(auth)
+}
+
+export function sendVerificationEmail() {
+  const current = auth.currentUser
+  if (!current) return Promise.reject(new Error('auth/user-not-found'))
+  return sendEmailVerification(current, {
+    url: `${window.location.origin}/verify-email`,
+    handleCodeInApp: false,
+  })
+}
+
+export async function reloadCurrentUser() {
+  const current = auth.currentUser
+  if (!current) return null
+  await reload(current)
+  return current
 }
 
 export function resetPassword(email: string) {

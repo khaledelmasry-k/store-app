@@ -11,36 +11,50 @@ export const AuthProvider: FunctionalComponent = ({ children }) => {
   const [loading, setLoading] = useState(true)
   const [initialized, setInitialized] = useState(false)
 
+  const refreshUser = async () => {
+    const fbUser = auth.currentUser
+    if (!fbUser) {
+      setUser(null)
+      setLoading(false)
+      setInitialized(true)
+      return
+    }
+    try {
+      const profileRead = getDoc(doc(db, 'users', fbUser.uid))
+      let timeoutId: number | undefined
+      const timeout = new Promise<never>((_, reject) => { timeoutId = window.setTimeout(() => reject(new Error('auth-profile-timeout')), 8000) })
+      try {
+        const snap = await Promise.race([profileRead, timeout])
+        if (timeoutId !== undefined) window.clearTimeout(timeoutId)
+        if (snap.exists()) {
+          const userData = { id: snap.id, uid: snap.id, ...snap.data(), emailVerified: fbUser.emailVerified } as unknown as User
+          setUser(userData)
+        } else {
+          console.warn(`User document not found for uid=${fbUser.uid}. Please create one in Firestore.`)
+          setUser(null)
+        }
+      } finally {
+        if (timeoutId !== undefined) window.clearTimeout(timeoutId)
+      }
+    } catch (err) {
+      console.error('Auth state error:', err)
+      setUser(null)
+    } finally {
+      setLoading(false)
+      setInitialized(true)
+    }
+  }
+
   useEffect(() => {
     const unsub = onAuthStateChanged(auth, async (fbUser) => {
       try {
         if (!fbUser) {
           setUser(null)
+          setLoading(false)
+          setInitialized(true)
           return
         }
-        // A profile read must not leave the whole app in an infinite bootstrap
-        // state when the network is unavailable. Auth identity is still real;
-        // the caller gets a deterministic retryable unauthenticated state.
-        const profileRead = getDoc(doc(db, 'users', fbUser.uid))
-        let timeoutId: number | undefined
-        const timeout = new Promise<never>((_, reject) => { timeoutId = window.setTimeout(() => reject(new Error('auth-profile-timeout')), 8000) })
-        try {
-          const snap = await Promise.race([profileRead, timeout])
-          if (timeoutId !== undefined) window.clearTimeout(timeoutId)
-          if (snap.exists()) {
-          const userData = { id: snap.id, uid: snap.id, ...snap.data() } as unknown as User
-          setUser(userData)
-          setLoading(false)
-          setInitialized(true)
-          } else {
-          console.warn(`User document not found for uid=${fbUser.uid}. Please create one in Firestore.`)
-          setUser(null)
-          setLoading(false)
-          setInitialized(true)
-          }
-        } finally {
-          if (timeoutId !== undefined) window.clearTimeout(timeoutId)
-        }
+        await refreshUser()
       } catch (err) {
         console.error('Auth state error:', err)
         setUser(null)
@@ -58,6 +72,7 @@ export const AuthProvider: FunctionalComponent = ({ children }) => {
         user,
         loading,
         initialized,
+        refreshUser,
         state: initialized
           ? user
             ? AuthState.Authenticated
