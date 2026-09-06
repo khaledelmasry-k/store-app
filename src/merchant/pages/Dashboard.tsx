@@ -323,7 +323,7 @@ export const MerchantDashboard: FunctionalComponent = () => {
       </div>
       <div className="dashboard-shipping-cards">
         <Link href="/dashboard/orders" className="dashboard-shipping-card is-delivered">
-          <span className="dashboard-shipping-card-icon"><Icon name="task_alt" ariaHidden /></span>
+          <span className="dashboard-shipping-card-icon"><Icon name="check_circle" ariaHidden /></span>
           <span className="dashboard-shipping-card-copy"><b>{formatNumber(deliveredShipments)}</b><small>تم التسليم</small></span>
         </Link>
         <Link href="/dashboard/orders" className="dashboard-shipping-card is-transit">
@@ -335,7 +335,7 @@ export const MerchantDashboard: FunctionalComponent = () => {
           <span className="dashboard-shipping-card-copy"><b>{formatNumber(returnedShipments)}</b><small>مرتجع للمخزون</small></span>
         </Link>
         <Link href="/dashboard/orders" className="dashboard-shipping-card is-failed">
-          <span className="dashboard-shipping-card-icon"><Icon name="error_outline" ariaHidden /></span>
+          <span className="dashboard-shipping-card-icon"><Icon name="error" ariaHidden /></span>
           <span className="dashboard-shipping-card-copy"><b>{formatNumber(failedShipments)}</b><small>تعذر التسليم</small></span>
         </Link>
       </div>

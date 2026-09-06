@@ -419,7 +419,7 @@ export const MerchantShipping: FunctionalComponent = () => {
       <Card title="كشف تسويات شركات الشحن" className="mt-2" titleIcon="account_balance_wallet" subtitle="رصيدك يُحتسب من شحنات الدفع عند الاستلام التي وصلت للعميل: قيمة التحصيل ناقص رسوم الشحن المسجّلة. لا تسجّل شركات الشحن التحويل البنكي داخل API، لذلك تُؤكَّد التسوية هنا بعد استلامك التحويل فعليًا.">
         <div className="shipping-settlement-stats">
           <StatsCard title="رصيدك غير المسوّى" value={totalPendingNet} currency icon="account_balance_wallet" tone="primary" changeLabel={`${totalPendingOrders} شحنة COD مسلّمة`} />
-          <StatsCard title="ما تمّت تسويته" value={totalSettledNet} currency icon="task_alt" tone="green" changeLabel={`${settlementsRes.data.length} تسوية مسجلة`} />
+          <StatsCard title="ما تمّت تسويته" value={totalSettledNet} currency icon="check_circle" tone="green" changeLabel={`${settlementsRes.data.length} تسوية مسجلة`} />
           <StatsCard title="رسوم الشركات المسجلة" value={totalCarrierFees} currency icon="local_shipping" tone="amber" changeLabel="تُراجع مع كشف الشركة" />
         </div>
         <div className="shipping-secure-note shipping-settlement-note"><Icon name="info" ariaHidden /><span>هذه شاشة كشف ومراجعة وليست بوابة تحويل أموال: اضغط «تأكيد استلام التسوية» فقط بعد أن يحوّل لك مزود الشحن المبلغ أو يرسل كشف تسوية مطابقًا.</span></div>
