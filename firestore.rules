@@ -618,5 +618,20 @@ match /orders/{id} {
         && request.resource.data.userId == resource.data.userId;
       allow delete: if isSameUser(resource.data.userId);
     }
+
+    // Platform CRM metadata is never readable or writable by merchants,
+    // staff, or customers. Notes/follow-ups are callable-only mutations.
+    match /platformMerchantCrm/{merchantId} {
+      allow read: if isPlatformAdmin();
+      allow write: if false;
+      match /notes/{noteId} {
+        allow read: if isPlatformAdmin();
+        allow write: if false;
+      }
+      match /followUps/{followUpId} {
+        allow read: if isPlatformAdmin();
+        allow write: if false;
+      }
+    }
   }
 }

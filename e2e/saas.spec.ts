@@ -1,6 +1,7 @@
 import { test, expect, type Page } from '@playwright/test'
 import admin from 'firebase-admin'
 import { readFileSync } from 'node:fs'
+import { dismissMerchantTourIfVisible, safeClickWithTourGuard } from './helpers/tour-guard'
 
 // Point the Admin SDK at the local emulators BEFORE importing firebase-admin.
 process.env.FIRESTORE_EMULATOR_HOST = 'localhost:8080'
@@ -16,7 +17,8 @@ const db = admin.firestore()
 // ─────────────────────────────────────────────────────────────
 function uniq() {
   const p = test.info().project.name
-  return p === 'desktop' ? 'desktop' : `m${p.replace('mobile-', '')}`
+  const base = p === 'desktop' ? 'desktop' : `m${p.replace('mobile-', '')}`
+  return test.info().retry > 0 ? `${base}-retry${test.info().retry}` : base
 }
 
 async function login(page: Page, email: string, password: string) {
@@ -37,12 +39,13 @@ async function login(page: Page, email: string, password: string) {
   await page.locator('input[type="password"]').fill(password)
   await page.locator('button[type="submit"]').click()
   await page.waitForURL(/\/dashboard/, { timeout: 15000 })
+  await dismissMerchantTourIfVisible(page)
 }
 
 async function openProductDrawer(page: Page) {
   const named = page.getByRole('button', { name: 'إضافة منتج' })
-  if (await named.count()) return named.click()
-  return page.locator('.page-header button').first().click()
+  if (await named.count()) return safeClickWithTourGuard(page, named)
+  return safeClickWithTourGuard(page, page.locator('.page-header button').first())
 }
 
 async function latestSub(storeId: string) {
@@ -76,7 +79,8 @@ async function makeFreeStore(tag: string, extraProducts = 0) {
     theme: { primary: '#6366f1', secondary: '#f59e0b', darkMode: false },
     createdAt: us(), updatedAt: us(), createdBy: 'saas-spec',
   })
-  const subscription = await db.collection('subscriptions').add({
+  const subscription = db.collection('subscriptions').doc(`${storeId}-subscription`)
+  await subscription.set({
     storeId, planId: 'plan-free', planName: 'الأساسية', status: 'active', billingCycle: 'monthly',
     periodNumber: 0, ordersUsed: 0, normalPriceSnapshot: 0, launchPriceSnapshot: 0,
     limitsSnapshot: { storageLimit: 200 },
@@ -88,7 +92,7 @@ async function makeFreeStore(tag: string, extraProducts = 0) {
     storageUsed: 0,
   })
   for (let i = 0; i < extraProducts; i++) {
-    await db.collection('products').add({
+    await db.collection('products').doc(`${storeId}-product-${i}`).set({
       storeId, name: `منتج الباقة المجانية ${tag}-${i}`, price: 10 + i, stock: 1, active: true,
       images: [], variants: [], colors: [], sizes: [],
       createdAt: us(), updatedAt: us(), createdBy: 'saas-spec',
@@ -157,12 +161,12 @@ test('merchant requests free → growth; entitlements remain locked until paymen
   await login(page, email, password)
   await page.goto('/dashboard/subscription', { waitUntil: 'domcontentloaded' })
   await expect(page.getByRole('button', { name: 'تغيير الباقة' })).toBeVisible({ timeout: 15000 })
-  await page.getByRole('button', { name: 'تغيير الباقة' }).click()
+  await safeClickWithTourGuard(page, page.getByRole('button', { name: 'تغيير الباقة' }))
 
   // Pick the Growth plan from the modal and confirm. The modal is scoped away
   // from the featured card above; the target card is identified by its exact
   // plan-name heading so ordering never matters.
-  await page.locator('.modal .mk-pricing-card').filter({ has: page.getByRole('heading', { name: 'GROWTH', exact: true }) }).getByRole('button', { name: 'اختيار' }).click()
+  await safeClickWithTourGuard(page, page.locator('.modal .mk-pricing-card').filter({ has: page.getByRole('heading', { name: 'GROWTH', exact: true }) }).getByRole('button', { name: 'اختيار' }))
   await page.getByRole('button', { name: 'تأكيد التغيير' }).click()
   await expect(page.getByText('تم إنشاء طلب تغيير الباقة')).toBeVisible({ timeout: 15000 })
   await expect.poll(async () => (await latestSub(storeId))?.planId, { timeout: 15000 }).toBe('plan-free')
@@ -200,7 +204,7 @@ test('variant product creation works after upgrade but is denied on free', async
   // Part 2: an unpaid Growth request does not unlock it.
   await page.goto('/dashboard/subscription', { waitUntil: 'domcontentloaded' })
   await page.getByRole('button', { name: 'تغيير الباقة' }).click()
-  await page.locator('.modal .mk-pricing-card').filter({ has: page.getByRole('heading', { name: 'GROWTH', exact: true }) }).getByRole('button', { name: 'اختيار' }).click()
+  await safeClickWithTourGuard(page, page.locator('.modal .mk-pricing-card').filter({ has: page.getByRole('heading', { name: 'GROWTH', exact: true }) }).getByRole('button', { name: 'اختيار' }))
   await page.getByRole('button', { name: 'تأكيد التغيير' }).click()
   await expect(page.getByText('تم إنشاء طلب تغيير الباقة')).toBeVisible({ timeout: 15000 })
   await expect.poll(async () => (await latestSub(free.storeId))?.planId, { timeout: 15000 }).toBe('plan-free')
@@ -234,6 +238,10 @@ test('storage quota meter reflects uploaded files on the subscription page', asy
   await page.getByRole('button', { name: 'حفظ المنتج' }).click()
   await expect(page.locator('.drawer')).toHaveCount(0, { timeout: 15000 })
   expect(await productCount(storeId)).toBe(1)
+
+  await expect.poll(async () => Number((await db.collection('stores').doc(storeId).get()).data()?.storageUsed || 0), {
+    timeout: 30000,
+  }).toBeGreaterThan(0)
 
   // The subscription page loads the authoritative storage usage (server-computed).
   await page.goto('/dashboard/subscription', { waitUntil: 'domcontentloaded' })

@@ -218,7 +218,7 @@ export const MerchantSettings: FunctionalComponent = () => {
         subtitle="إدارة معلومات المتجر الأساسية، الروابط، وحالة النشر"
         actions={
           <div className="settings-header-actions">
-            {user?.role === 'merchant' && <Button variant="outline" icon="menu_book" onClick={showStartGuide}>إظهار دليل البداية</Button>}
+            {user?.role === 'merchant' && <Button variant="outline" icon="policy" onClick={showStartGuide}>إظهار دليل البداية</Button>}
             {user?.role === 'merchant' && <Button variant="outline" icon="help" onClick={async () => { await usersService.update(user.uid, { onboardingTourCompleted: false, onboardingTourSkipped: false, onboardingTourVersion: 0 }); window.location.reload() }}>إعادة الجولة التعريفية</Button>}
             <Button variant="outline" onClick={resetForm}>إلغاء</Button>
             <Button icon="save" onClick={save} loading={saving}>حفظ</Button>

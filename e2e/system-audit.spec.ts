@@ -78,12 +78,14 @@ test('returned shipment restores inventory exactly once', async () => {
     })
 
     const update = httpsCallable<{ shipmentId: string; status: string }, { ok: boolean }>(client.functions, 'updateShipmentStatus')
+    await update({ shipmentId, status: 'RETURNING' })
     await update({ shipmentId, status: 'RETURNED' })
     expect((await adminDb.doc(`products/${productId}`).get()).data()?.stock).toBe(5)
     expect((await adminDb.doc(`orders/${orderId}`).get()).data()).toMatchObject({ status: 'RETURNED', stockRestored: true })
 
-    // Duplicate provider delivery must be idempotent.
-    await update({ shipmentId, status: 'RETURNED' })
+    // A repeated terminal merchant transition is rejected, and must not
+    // restore inventory a second time.
+    await expect(update({ shipmentId, status: 'RETURNED' })).rejects.toThrow('هذا الانتقال غير متاح')
     expect((await adminDb.doc(`products/${productId}`).get()).data()?.stock).toBe(5)
   } finally {
     await Promise.all([

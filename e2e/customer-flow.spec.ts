@@ -1,6 +1,7 @@
 import { test, expect, type Page } from '@playwright/test'
 import admin from 'firebase-admin'
 import { readFileSync } from 'node:fs'
+import { dismissMerchantTourIfVisible, safeClickWithTourGuard } from './helpers/tour-guard'
 
 // Point the Admin SDK at the local emulators BEFORE importing firebase-admin.
 process.env.FIRESTORE_EMULATOR_HOST = 'localhost:8080'
@@ -119,18 +120,22 @@ async function login(page: Page, role: 'platform' | 'merchant', email: string, p
   await page.locator('input[type="password"]').fill(password)
   await page.locator('button[type="submit"]').click()
   await page.waitForURL(/\/dashboard|\/platform/, { timeout: 15000 })
+  await dismissMerchantTourIfVisible(page)
 }
+
 
 async function setMerchantOrderStatus(page: Page, label: string, orderId?: string) {
   // Rehydrate after each callable mutation so the next menu is derived from
   // the confirmed server state, not a live-listener render in flight.
   await page.reload({ waitUntil: 'domcontentloaded' })
+  await dismissMerchantTourIfVisible(page)
   const mobile = await page.evaluate(() => window.innerWidth < 768)
   const update = mobile
     ? page.getByRole('button', { name: 'تحديث الحالة', exact: true }).last()
     : page.getByRole('button', { name: 'تحديث الحالة', exact: true }).first()
   await expect(update).toBeVisible({ timeout: 15000 })
-  await update.click({ force: true })
+  await dismissMerchantTourIfVisible(page)
+  await safeClickWithTourGuard(page, update)
   if (mobile) await expect(page.locator('.ods-sheet-backdrop')).toBeVisible({ timeout: 5000 })
   const menu = mobile ? page.locator('.ods-sheet .ods-status-menu') : page.locator('.ods-status-dropdown .ods-status-menu')
   // A realtime order snapshot can replace the workspace between the click and
@@ -139,7 +144,8 @@ async function setMerchantOrderStatus(page: Page, label: string, orderId?: strin
   try {
     await expect(menu).toBeVisible({ timeout: 1500 })
   } catch {
-    await update.click({ force: true })
+    await dismissMerchantTourIfVisible(page)
+    await safeClickWithTourGuard(page, update)
     await expect(menu).toBeVisible({ timeout: 5000 })
   }
   const confirm = page.getByRole('button', { name: 'تأكيد التحديث', exact: true })
@@ -153,10 +159,11 @@ async function setMerchantOrderStatus(page: Page, label: string, orderId?: strin
     await menu.getByRole('button').filter({ hasText: label }).last().click()
   }
   await expect(confirm).toBeVisible({ timeout: 5000 })
+  await dismissMerchantTourIfVisible(page)
   const statusPromise = page.waitForResponse((response) =>
     response.request().method() === 'POST' && response.url().includes('/updateOrderStatus'),
   )
-  await confirm.click()
+  await safeClickWithTourGuard(page, confirm)
   const statusResponse = await statusPromise
   if (!statusResponse.ok()) {
     const body = await statusResponse.text().catch(() => '')

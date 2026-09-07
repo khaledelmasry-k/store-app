@@ -33,11 +33,16 @@ test('platform presents subscriptions, lifetime launch offer, and enterprise sep
   await expect(page.getByText('عرض الشراء لمرة واحدة')).toBeVisible()
   const lifetime = page.locator('.plan-grid').nth(1).locator('.plan-pricing-card').first()
   await expect(lifetime).toContainText('امتلك متجرك')
+  const closeResponse = page.waitForResponse((response) => response.request().method() === 'POST' && response.url().includes('/savePlan'))
   await lifetime.getByRole('button', { name: 'إغلاق العرض' }).click()
-  // Verify the persisted UI state instead of relying on the short-lived toast.
-  await expect(lifetime.getByRole('button', { name: 'فتح العرض' })).toBeVisible({ timeout: 10000 })
+  expect((await closeResponse).ok()).toBe(true)
+  // Reload the persisted plan; this surface does not optimistically mutate
+  // its local plan object while the callable is in flight.
   await page.reload({ waitUntil: 'domcontentloaded' })
   await expect(page.locator('.plan-pricing-card--lifetime').first()).toContainText('مغلق')
+  const openResponse = page.waitForResponse((response) => response.request().method() === 'POST' && response.url().includes('/savePlan'))
   await page.locator('.plan-pricing-card--lifetime').first().getByRole('button', { name: 'فتح العرض' }).click()
-  await expect(page.locator('.plan-pricing-card--lifetime').first().getByRole('button', { name: 'إغلاق العرض' })).toBeVisible({ timeout: 10000 })
+  expect((await openResponse).ok()).toBe(true)
+  await page.reload({ waitUntil: 'domcontentloaded' })
+  await expect(page.locator('.plan-pricing-card--lifetime').first().getByRole('button', { name: 'إغلاق العرض' })).toBeVisible({ timeout: 15000 })
 })
