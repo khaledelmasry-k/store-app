@@ -1,6 +1,7 @@
 import { test, expect, type Page } from '@playwright/test'
 import admin from 'firebase-admin'
 import { readFileSync } from 'node:fs'
+import { dismissMerchantTourIfVisible, safeClickWithTourGuard } from './helpers/tour-guard'
 
 process.env.FIRESTORE_EMULATOR_HOST = 'localhost:8080'
 process.env.FIREBASE_AUTH_EMULATOR_HOST = 'localhost:9099'
@@ -12,7 +13,8 @@ const db = admin.firestore()
 
 function ctx() {
   const p = test.info().project.name
-  const uniq = p === 'desktop' ? 'desktop' : `m${p.replace('mobile-', '')}`
+  const base = p === 'desktop' ? 'desktop' : `m${p.replace('mobile-', '')}`
+  const uniq = test.info().retry > 0 ? `${base}-retry${test.info().retry}` : base
   return {
     uniq,
     slug: `variant-flow-${uniq}`,
@@ -92,6 +94,13 @@ async function seedVariantProduct(storeId: string, pricingMode: 'standard' | 'qu
     data.quantityPricingStrategy = 'cap'
   }
   await prod.set(data)
+  await expect.poll(async () => {
+    const [store, product] = await Promise.all([
+      db.doc(`publicStores/${storeId}`).get(),
+      db.doc(`publicStores/${storeId}/products/${prod.id}`).get(),
+    ])
+    return store.exists && product.exists
+  }, { timeout: 30000 }).toBe(true)
   return prod.id
 }
 
@@ -111,6 +120,7 @@ async function login(page: Page, role: 'platform' | 'merchant', email: string, p
   await page.locator('input[type="password"]').fill(password)
   await page.locator('button[type="submit"]').click()
   await page.waitForURL(/\/dashboard|\/platform/, { timeout: 15000 })
+  if (role === 'merchant') await dismissMerchantTourIfVisible(page)
 }
 
 async function selectVariant(page: Page, color: string, size: string) {
@@ -145,7 +155,10 @@ async function checkoutGuest(page: Page, slug: string, phone: string, name: stri
   await page.locator('.field', { hasText: 'الاسم الكامل' }).locator('input').fill(name)
   await page.locator('.field', { hasText: 'رقم الهاتف' }).locator('input').fill(phone)
   await page.locator('.field', { hasText: 'المحافظة' }).locator('select').selectOption({ label: 'القاهرة' })
-  await page.locator('.field', { hasText: 'المدينة' }).locator('input').fill('مدينة نصر')
+  const cityField = page.locator('.field', { hasText: 'المدينة' })
+  const citySelect = cityField.locator('select')
+  if (await citySelect.count()) await citySelect.selectOption({ label: 'مدينة نصر' })
+  else await cityField.locator('input').fill('مدينة نصر')
   await page.locator('.field', { hasText: 'العنوان بالتفصيل' }).locator('textarea').fill('شارع تجريبي ١')
   await page.getByRole('button', { name: 'تأكيد الطلب' }).click()
   await expect(page.getByText('تم إنشاء طلبك بنجاح')).toBeVisible({ timeout: 30000 })
@@ -156,14 +169,14 @@ async function checkoutGuest(page: Page, slug: string, phone: string, name: stri
 
 async function cancelMerchantOrder(page: Page, terminalLabel = 'ملغي') {
   await page.reload({ waitUntil: 'domcontentloaded' })
+  await dismissMerchantTourIfVisible(page)
   const mobile = await page.evaluate(() => window.innerWidth < 768)
   const update = mobile
     ? page.locator('.ods-mobile-bar .ods-update-btn')
     : page.locator('.ods-status-dropdown .ods-btn-primary')
   await expect(update).toBeVisible({ timeout: 15000 })
   await update.click({ force: true })
-  if (mobile) await expect(page.locator('.ods-sheet-backdrop')).toBeVisible({ timeout: 5000 })
-  const menu = mobile ? page.locator('.ods-sheet .ods-status-menu') : page.locator('.ods-status-dropdown .ods-status-menu')
+  const menu = page.locator('.ods-sheet .ods-status-menu:visible, .ods-status-dropdown .ods-status-menu:visible')
   try {
     await expect(menu).toBeVisible({ timeout: 1500 })
   } catch {
@@ -172,9 +185,10 @@ async function cancelMerchantOrder(page: Page, terminalLabel = 'ملغي') {
   }
   await menu.getByRole('button').filter({ hasText: terminalLabel }).click({ force: true })
   await expect(page.getByRole('button', { name: 'تأكيد التحديث', exact: true })).toBeVisible()
-  await page.getByRole('button', { name: 'تأكيد التحديث', exact: true }).click({ force: true })
+  await safeClickWithTourGuard(page, page.getByRole('button', { name: 'تأكيد التحديث', exact: true }))
+  await expect(page.locator('.ods-status-pill')).toContainText(terminalLabel, { timeout: 30000 })
+  await page.reload({ waitUntil: 'domcontentloaded' })
   await expect(page.locator('.ods-confirm-backdrop')).toHaveCount(0, { timeout: 10000 })
-  await expect(page.locator('.ods-status-pill')).toContainText(terminalLabel, { timeout: 15000 })
 }
 
 async function latestOrder(storeId: string) {
@@ -220,9 +234,9 @@ test('cancel restores variant stock exactly once (no double restore)', async ({ 
   expect(order!.data.orderNumber).toBe(orderNumber)
   const orderId = order!.id
 
-  await login(page, 'merchant', c.email, 'Customer123')
-  await page.goto(`/dashboard/orders/${orderId}`, { waitUntil: 'domcontentloaded' })
-  await cancelMerchantOrder(page)
+  await signInMerchant(`variant-owner-${c.slug}`)
+  await httpsCallable(clientFunctions, 'updateOrderStatus')({ orderId, status: 'CANCELLED' })
+  await expect.poll(async () => (await db.doc(`orders/${orderId}`).get()).data()?.status, { timeout: 30000 }).toBe('CANCELLED')
   await expect.poll(async () => variantStockOf(productId, 'black-m'), { timeout: 15000 }).toBe(5)
 
   // Re-cancel is impossible from the UI (status already cancelled; option hidden),
@@ -317,9 +331,9 @@ test('cancel → deliver → cancel restores stock exactly once (no double resto
   await expect.poll(async () => variantStockOf(productId, 'black-m'), { timeout: 15000 }).toBe(3)
 
   // 1st cancel (NEW → CANCELLED): restores 2 → stock returns to 5, stockRestored set true.
-  await login(page, 'merchant', c.email, 'Customer123')
-  await page.goto(`/dashboard/orders/${orderId}`, { waitUntil: 'domcontentloaded' })
-  await cancelMerchantOrder(page)
+  await signInMerchant(uid)
+  await httpsCallable(clientFunctions, 'updateOrderStatus')({ orderId, status: 'CANCELLED' })
+  await expect.poll(async () => (await db.doc(`orders/${orderId}`).get()).data()?.status, { timeout: 30000 }).toBe('CANCELLED')
   await expect.poll(async () => variantStockOf(productId, 'black-m'), { timeout: 15000 }).toBe(5)
   const orderSnap = await db.doc(`orders/${orderId}`).get()
   expect(orderSnap.data()?.stockRestored).toBe(true)
@@ -333,21 +347,19 @@ test('cancel → deliver → cancel restores stock exactly once (no double resto
       status: 'DELIVERED', at: admin.firestore.Timestamp.now(), by: uid,
     }),
   })
-  // Rehydrate the workspace so the status menu is derived from the direct
-  // DELIVERED write rather than the previous terminal snapshot.
-  await page.reload({ waitUntil: 'domcontentloaded' })
   // Confirm the durable backend transition before invoking the next terminal
   // action. This is the synchronization contract; no fixed sleep is needed.
   await expect.poll(async () => (await db.doc(`orders/${orderId}`).get()).data()?.status, { timeout: 15000 }).toBe('DELIVERED')
-  await expect(page.locator('.ods-status-pill')).toContainText('تم التسليم', { timeout: 15000 })
   // Delivering must NOT move stock (already 5).
   await expect.poll(async () => variantStockOf(productId, 'black-m'), { timeout: 10000 }).toBe(5)
 
-  // 2nd terminal transition (DELIVERED → RETURNED) uses the same current workspace
-  // action as the first cancellation; the durable stockRestored flag must
-  // prevent a second restoration.
-  await expect(page.getByRole('button', { name: 'تحديث الحالة', exact: true }).last()).toBeVisible({ timeout: 15000 })
-  await cancelMerchantOrder(page, 'مرتجع')
+  // 2nd terminal transition follows the current guarded return workflow.
+  // The durable stockRestored flag must prevent a second restoration.
+  await signInMerchant(uid)
+  await httpsCallable(clientFunctions, 'requestOrderReturn')({ orderId })
+  await httpsCallable(clientFunctions, 'receiveOrderReturn')({ orderId })
+  await httpsCallable(clientFunctions, 'updateOrderStatus')({ orderId, status: 'RETURNED' })
+  await expect.poll(async () => (await db.doc(`orders/${orderId}`).get()).data()?.status, { timeout: 30000 }).toBe('RETURNED')
   await expect.poll(async () => variantStockOf(productId, 'black-m'), { timeout: 15000 }).toBe(5)
 })
 

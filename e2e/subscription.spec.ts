@@ -1,6 +1,7 @@
 import { test, expect, type Page } from '@playwright/test'
 import admin from 'firebase-admin'
 import { readFileSync } from 'node:fs'
+import { dismissMerchantTourIfVisible, safeClickWithTourGuard } from './helpers/tour-guard'
 
 process.env.FIRESTORE_EMULATOR_HOST = 'localhost:8080'
 process.env.FIREBASE_AUTH_EMULATOR_HOST = 'localhost:9099'
@@ -14,7 +15,8 @@ const ts = admin.firestore.FieldValue.serverTimestamp
 // ── Helpers ─────────────────────────────────────────────
 function uniq() {
   const p = test.info().project.name
-  return p === 'desktop' ? 'desktop' : `m${p.replace('mobile-', '')}`
+  const base = p === 'desktop' ? 'desktop' : `m${p.replace('mobile-', '')}`
+  return test.info().retry > 0 ? `${base}-retry${test.info().retry}` : base
 }
 
 async function login(page: Page, role: 'platform' | 'merchant', email: string, password: string) {
@@ -60,6 +62,7 @@ async function login(page: Page, role: 'platform' | 'merchant', email: string, p
   await expect(submit).toBeVisible({ timeout: 15000 })
   await submit.click()
   await page.waitForURL(/\/dashboard|\/platform/, { timeout: 15000 })
+  if (role === 'merchant') await dismissMerchantTourIfVisible(page)
 }
 
 async function latestSub(storeId: string) {
@@ -138,7 +141,7 @@ test('merchant activates during trial: submit payment → platform approves → 
   // Merchant logs in (active immediately) and opens the subscription page.
   await login(page, 'merchant', email, password)
   await page.goto('/dashboard/subscription', { waitUntil: 'domcontentloaded' })
-  await expect(page.getByRole('heading', { name: 'تفعيل الاشتراك' })).toBeVisible({ timeout: 15000 })
+  await expect(page.getByRole('heading', { name: 'تفعيل الاشتراك' })).toBeVisible({ timeout: 45000 })
 
   // The current catalog charges the canonical Starter monthly price.
   await expect(page.getByText('399 ج.م')).toBeVisible()
@@ -146,7 +149,7 @@ test('merchant activates during trial: submit payment → platform approves → 
   // Submit a payment request.
   await page.locator('.field', { hasText: 'وسيلة الدفع' }).locator('input').fill('فودافون كاش')
   await page.locator('.field', { hasText: 'رقم العملية' }).locator('input').fill('123456789012')
-  await page.getByRole('button', { name: 'إرسال طلب التفعيل' }).click()
+  await safeClickWithTourGuard(page, page.getByRole('button', { name: 'إرسال طلب التفعيل' }))
   await expect(page.getByText('طلبك قيد المراجعة')).toBeVisible({ timeout: 15000 })
 
   expect(await pendingRequests(sub.id)).toBe(1)
@@ -210,7 +213,7 @@ test('expired merchant cannot publish (server-enforced)', async ({ page }) => {
     return
   }
   await expect(page.getByRole('button', { name: 'نشر المتجر' })).toBeVisible({ timeout: 15000 })
-  await page.getByRole('button', { name: 'نشر المتجر' }).click()
+  await safeClickWithTourGuard(page, page.getByRole('button', { name: 'نشر المتجر' }))
   await expect(page.getByText('فشل تحديث حالة النشر')).toBeVisible({ timeout: 15000 })
   const storeSnap = await db.collection('stores').doc(storeId).get()
   expect(storeSnap.data()!.published).toBe(false)

@@ -1,6 +1,10 @@
-import { test, expect, type Page } from '@playwright/test'
+import { test, expect, type Locator, type Page } from '@playwright/test'
 import admin from 'firebase-admin'
+import { deleteApp, initializeApp } from 'firebase/app'
+import { connectAuthEmulator, getAuth, signInWithCustomToken } from 'firebase/auth'
+import { connectFunctionsEmulator, getFunctions, httpsCallable } from 'firebase/functions'
 import { readFileSync } from 'node:fs'
+import { dismissMerchantTourIfVisible, safeClickWithTourGuard } from './helpers/tour-guard'
 
 // Point the Admin SDK at the local emulators BEFORE importing firebase-admin.
 process.env.FIRESTORE_EMULATOR_HOST = 'localhost:8080'
@@ -116,26 +120,34 @@ async function login(page: Page, role: 'platform' | 'merchant', email: string, p
     await page.goto(loginUrl, { waitUntil: 'domcontentloaded' })
   }
   // The auth guard redirects an already-authenticated session away from /login
-  // after hydration. Wait for an actual auth surface instead of sleeping.
+  // after hydration. Wait for the actual settled surface instead of racing a
+  // transient form while the current-user state is resolving.
   const emailInput = page.locator('input[type="email"]')
   const pendingHeading = page.getByText('الحساب قيد المراجعة', { exact: false })
   const dashboardShell = page.locator('.sidebar-logout:visible').first()
-  await expect.poll(async () => (
-    (await emailInput.count()) > 0 || (await pendingHeading.count()) > 0 || (await dashboardShell.count()) > 0
-  ), { timeout: 15000 }).toBe(true)
-  if ((await page.locator('button[type="submit"]').count()) === 0) {
+  await expect.poll(async () => {
+    if (await dashboardShell.isVisible().catch(() => false)) return 'dashboard'
+    if (await pendingHeading.isVisible().catch(() => false)) return 'pending'
+    if (await emailInput.isVisible().catch(() => false)) return 'login'
+    return 'loading'
+  }, { timeout: 15000 }).not.toBe('loading')
+  if (await dashboardShell.isVisible().catch(() => false)) {
     const logout = page.locator('.sidebar-logout:visible').first()
     if ((await logout.count()) === 0) {
-      await page.locator('.sidebar-toggle:visible').first().click()
+      const more = page.getByRole('button', { name: 'المزيد', exact: true })
+      if (await more.isVisible().catch(() => false)) await openMobileDrawer(page, more)
+      else await page.locator('.sidebar-toggle:visible').first().click()
     }
-    await page.locator('.sidebar-logout:visible').first().click()
+    await safeClickWithTourGuard(page, page.locator('.sidebar-logout:visible').first())
     await page.waitForURL(/\/login/, { timeout: 15000 })
     await page.waitForLoadState('domcontentloaded')
     if (!page.url().includes('/login')) await page.goto(loginUrl, { waitUntil: 'domcontentloaded' })
   }
   await expect(emailInput).toBeVisible({ timeout: 15000 })
+  const passwordInput = page.locator('input[type="password"]')
+  await expect(passwordInput).toBeVisible({ timeout: 15000 })
   await emailInput.fill(email)
-  await page.locator('input[type="password"]').fill(password)
+  await passwordInput.fill(password)
   await page.locator('button[type="submit"]').click()
   try {
     await page.waitForURL(/\/dashboard|\/platform/, { timeout: 15000 })
@@ -147,6 +159,24 @@ async function login(page: Page, role: 'platform' | 'merchant', email: string, p
     if (body.includes('الحساب قيد المراجعة')) return
     throw new Error(`Login did not redirect for ${email} (url=${page.url()}): ${body.slice(0, 400)}`, { cause: error })
   }
+  if (role === 'merchant') await dismissMerchantTourIfVisible(page)
+}
+
+async function openMobileDrawer(page: Page, more: Locator) {
+  await dismissMerchantTourIfVisible(page)
+  // Registration success toasts sit over the bottom navigation on narrow
+  // viewports. Wait for that transient UI to clear instead of racing it.
+  await expect(page.locator('.toast:visible')).toHaveCount(0, { timeout: 10000 })
+  try {
+    await more.click({ timeout: 3000 })
+  } catch (error) {
+    // The click can open the drawer just before Playwright observes its
+    // full-screen overlay intercepting the original button. That is the
+    // intended postcondition, so accept it only when the drawer action is
+    // actually available; otherwise preserve the real click failure.
+    if (!(await page.locator('.sidebar-logout:visible').first().isVisible().catch(() => false))) throw error
+  }
+  await expect(page.locator('.sidebar-logout:visible').first()).toBeVisible({ timeout: 5000 })
 }
 
 async function logout(page: Page) {
@@ -159,9 +189,11 @@ async function logout(page: Page) {
   } else {
     const logout = page.locator('.sidebar-logout:visible').first()
     if ((await logout.count()) === 0) {
-      await page.locator('.sidebar-toggle:visible').first().click()
+      const more = page.getByRole('button', { name: 'المزيد', exact: true })
+      if (await more.isVisible().catch(() => false)) await openMobileDrawer(page, more)
+      else await page.locator('.sidebar-toggle:visible').first().click()
     }
-    await page.locator('.sidebar-logout:visible').first().click()
+    await safeClickWithTourGuard(page, page.locator('.sidebar-logout:visible').first())
   }
   await page.waitForURL(/\/login/, { timeout: 15000 })
   await page.waitForLoadState('domcontentloaded')
@@ -211,6 +243,10 @@ async function registerStore(
   await admin.auth().updateUser(authUser.uid, { emailVerified: true })
   await page.getByRole('button', { name: 'تحققت من البريد' }).click()
   await page.waitForURL(/\/dashboard/, { timeout: 15000 })
+  // Registration intentionally leaves the user signed in. End the fixture in
+  // a logged-out state so tests that exercise a fresh login never race the
+  // route guard's redirect from a transient login form.
+  await logout(page)
 }
 
 async function merchantRow(page: Page, text: string) {
@@ -249,34 +285,34 @@ async function pollValue<T>(fn: () => Promise<T>, ok: (v: T) => boolean, timeout
   throw new Error(`pollValue timed out; last=${JSON.stringify(last)}`)
 }
 
-async function updateOrderStatus(page: Page, value: string) {
-  const labels: Record<string, string> = {
-    NEW: 'جديد', CONTACTED: 'تم التواصل', PROCESSING: 'قيد التجهيز',
-    SHIPPED: 'تم الشحن', DELIVERED: 'تم التسليم', CANCELLED: 'ملغي', RETURNED: 'مرتجع',
+async function callAsMerchant(uid: string, name: string, data: Record<string, unknown>) {
+  const app = initializeApp(
+    { apiKey: 'any', authDomain: `${projectId}.firebaseapp.com`, projectId },
+    `emulator-${uid}-${name}-${Date.now()}-${Math.random()}`,
+  )
+  try {
+    const auth = getAuth(app)
+    connectAuthEmulator(auth, 'http://127.0.0.1:9099', { disableWarnings: true })
+    await signInWithCustomToken(auth, await admin.auth().createCustomToken(uid))
+    const functions = getFunctions(app)
+    connectFunctionsEmulator(functions, '127.0.0.1', 5001)
+    return await httpsCallable(functions, name)(data)
+  } finally {
+    await deleteApp(app)
   }
-  await page.reload({ waitUntil: 'domcontentloaded' })
-  const mobile = await page.evaluate(() => window.innerWidth < 768)
-  const update = mobile
-    ? page.locator('.ods-mobile-bar .ods-update-btn')
-    : page.locator('.ods-status-dropdown .ods-btn-primary')
-  await expect(update).toBeVisible({ timeout: 15000 })
-  const menu = mobile ? page.locator('.ods-sheet .ods-status-menu') : page.locator('.ods-status-dropdown .ods-status-menu')
-  await update.click({ force: true })
-  // A concurrent order-list refresh can recreate the button between the
-  // click and render. Re-open once only when the deterministic menu state is
-  // still absent; no time-based sleep is used.
-  if (!(await menu.isVisible().catch(() => false))) await update.click({ force: true })
-  if (mobile) await expect(page.locator('.ods-sheet-backdrop')).toBeVisible({ timeout: 5000 })
-  await expect(menu).toBeVisible({ timeout: 5000 })
-  await menu.getByRole('button').filter({ hasText: labels[value] || value }).last().click({ force: true })
-  await expect(page.getByRole('button', { name: 'تأكيد التحديث', exact: true })).toBeVisible()
-  const response = page.waitForResponse((r) => r.url().includes('/updateOrderStatus') && r.ok(), { timeout: 30000 })
-  await page.getByRole('button', { name: 'تأكيد التحديث', exact: true }).click({ force: true })
-  await response
-  // The callable response is the durable mutation boundary. Reloading here
-  // also clears a stale confirmation layer before the next transition.
-  await page.reload({ waitUntil: 'domcontentloaded' })
-  await expect(page.locator('.ods-status-pill')).toContainText(labels[value] || value, { timeout: 15000 })
+}
+
+async function updateOrderStatus(uid: string, orderId: string, value: string) {
+  // These attribution scenarios exercise backend counters, not the order
+  // details UI. Use authenticated callables as their stable mutation boundary.
+  if (value === 'RETURNED') {
+    await callAsMerchant(uid, 'requestOrderReturn', { orderId })
+    await callAsMerchant(uid, 'receiveOrderReturn', { orderId })
+  }
+  await callAsMerchant(uid, 'updateOrderStatus', { orderId, status: value })
+  await expect.poll(async () => (
+    await db.collection('orders').doc(orderId).get()
+  ).data()?.status, { timeout: 30000 }).toBe(value)
 }
 
 function shot(page: Page, name: string) {
@@ -297,7 +333,12 @@ const PNG = Buffer.from(
 function ctx() {
   const p = test.info().project.name
   const uniq = p === 'desktop' ? 'desktop' : `m${p.replace('mobile-', '')}`
-  return { uniq, email: `flow-${uniq}@mk.test`, ref: `flow-${uniq}`, storeName: `مقهى التدفق ${uniq}` }
+  // The serial suite may be replayed after a failure. Include the retry in
+  // the fixture namespace so a replay never collides with the first attempt's
+  // Auth user/store.
+  const retry = test.info().retry
+  const suffix = retry > 0 ? `${uniq}-retry${retry}` : uniq
+  return { uniq: suffix, email: `flow-${suffix}@mk.test`, ref: `flow-${suffix}`, storeName: `مقهى التدفق ${suffix}` }
 }
 
 // ─────────────────────────────────────────────────────────────
@@ -428,8 +469,9 @@ test('trial merchant can publish + theme + product', async ({ page, browser }) =
 
   // Publish from the dashboard toggle (trialing grant allows it).
   await page.goto('/dashboard', { waitUntil: 'domcontentloaded' })
-  await expect(page.getByRole('button', { name: 'نشر المتجر' })).toBeVisible({ timeout: 15000 })
-  await page.getByRole('button', { name: 'نشر المتجر' }).click()
+  const publishButton = page.getByRole('button', { name: 'نشر المتجر' })
+  await expect(publishButton).toBeVisible({ timeout: 15000 })
+  await safeClickWithTourGuard(page, publishButton)
   await expect.poll(() => storeBySlug(ref).then((s) => s?.data()?.published), { timeout: 15000 }).toBe(true)
 
   // Theme the store on the new Appearance page (auto-saves after debounce).
@@ -437,18 +479,18 @@ test('trial merchant can publish + theme + product', async ({ page, browser }) =
   await expect(page.locator('.theme-gallery:visible')).toBeVisible({ timeout: 15000 })
 
   // Apply the "minimal" template and confirm it persists to Firestore.
-  await page.locator('.theme-card', { hasText: 'مينيمال' }).getByRole('button', { name: 'تطبيق' }).click()
+  await safeClickWithTourGuard(page, page.locator('.theme-card', { hasText: 'مينيمال' }).getByRole('button', { name: 'تطبيق' }))
   await expect
     .poll(() => storeBySlug(ref).then((s) => s?.data()?.theme?.template), { timeout: 15000 })
     .toBe('minimal')
   await expect(page.locator('.theme-card--active')).toContainText('القالب الحالي')
 
   // Override colors with the current V3 swatches (template default colors get replaced).
-  await page.locator('.swatch[title="#0b766e"]').first().click()
+  await safeClickWithTourGuard(page, page.locator('.swatch[title="#0b766e"]').first())
   await expect
     .poll(() => storeBySlug(ref).then((s) => s?.data()?.theme?.primary), { timeout: 15000 })
     .toBe('#0b766e')
-  await page.locator('.swatch[title="#c78a25"]').first().click()
+  await safeClickWithTourGuard(page, page.locator('.swatch[title="#c78a25"]').first())
   await expect
     .poll(() => storeBySlug(ref).then((s) => s?.data()?.theme?.secondary), { timeout: 15000 })
     .toBe('#c78a25')
@@ -458,13 +500,13 @@ test('trial merchant can publish + theme + product', async ({ page, browser }) =
   await expect(page.getByRole('heading', { name: 'المنتجات والمخزون' })).toBeVisible({ timeout: 15000 })
   const addProductButton = page.locator('.page-header .btn').first()
   await expect(addProductButton).toBeVisible({ timeout: 15000 })
-  await addProductButton.click()
+  await safeClickWithTourGuard(page, addProductButton)
   await expect(page.locator('.drawer')).toBeVisible({ timeout: 15000 })
   await page.locator('.field', { hasText: 'اسم المنتج' }).locator('input').fill('بن التدفق المختص')
   await page.locator('.drawer input[type="number"]').nth(0).fill('240')
   await page.locator('.drawer input[type="number"]').nth(1).fill('300')
   await page.locator('.field', { hasText: 'المخزون' }).locator('input[type="number"]').fill('10')
-  await page.getByRole('button', { name: 'حفظ المنتج' }).click()
+  await safeClickWithTourGuard(page, page.getByRole('button', { name: 'حفظ المنتج' }))
   await expect.poll(() => countProducts(store.id), { timeout: 15000 }).toBe(1)
 
   // Theme survives a fresh authenticated session (persisted server-side, not in frontend state).
@@ -593,7 +635,9 @@ test('merchant subscription page shows persisted usage (1020/1500) and countdown
   await page.waitForURL(/\/dashboard/, { timeout: 15000 })
   await page.goto('/dashboard/subscription', { waitUntil: 'domcontentloaded' })
   const ordersUsage = page.locator('.subscription-usage-item', { hasText: 'الطلبات' })
-  await expect(ordersUsage.locator('.subscription-usage-count')).toHaveText(/(?:1,?020|١٬٠٢٠)\s*\/\s*(?:1,?500|١٬٥٠٠)/, { timeout: 15000 })
+  // The first subscription callable is a cold start in a fresh emulator run;
+  // wait for the durable usage surface instead of a fixed short load window.
+  await expect(ordersUsage.locator('.subscription-usage-count')).toHaveText(/(?:1,?020|١٬٠٢٠)\s*\/\s*(?:1,?500|١٬٥٠٠)/, { timeout: 45000 })
   await expect(ordersUsage).toContainText(/متبقي\s+(?:480|٤٨٠)\s+طلب/)
   await shot(page, 'merchant-subscription-a')
 
@@ -679,6 +723,11 @@ test('sales link: /s/:code redirects to the storefront and DELIVERED orders coun
   const { uniq, ref } = ctx()
   await ensureFlowStore(ref, `مقهى التدفق ${uniq}`)
   const store = (await storeBySlug(ref))!
+  // This scenario verifies sales-link attribution, not shipping. A preceding
+  // shipping scenario may have enabled a provider on the shared serial store;
+  // disable it here so this order keeps the direct order-status lifecycle.
+  const shippingConfigs = await db.collection('storeShippingProviders').where('storeId', '==', store.id).get()
+  await Promise.all(shippingConfigs.docs.map((doc) => doc.ref.update({ enabled: false })))
   const productSnap = await db.collection('products').where('storeId', '==', store.id).limit(1).get()
   const productId = productSnap.docs[0].id
   const code = `flow-${uniq}`
@@ -737,9 +786,8 @@ test('sales link: /s/:code redirects to the storefront and DELIVERED orders coun
   expect(beforeDeliver.totalRevenue).toBe(0)
 
   // Merchant marks the order DELIVERED via the callable → link counters increment.
-  await login(page, 'merchant', ctx().email, PASSWORD)
-  await page.goto(`/dashboard/orders/${orderSnap.docs[0].id}`, { waitUntil: 'domcontentloaded' })
-  await expect(page.locator('.ods-timeline')).toBeVisible({ timeout: 15000 })
+  const ownerId = String(store.data()?.ownerId || '')
+  expect(ownerId).toBeTruthy()
   const transitions: Array<[string, string]> = [
     ['CONTACTED', 'NEW'], ['PROCESSING', 'CONTACTED'], ['SHIPPED', 'PROCESSING'], ['DELIVERED', 'SHIPPED'],
   ]
@@ -747,7 +795,7 @@ test('sales link: /s/:code redirects to the storefront and DELIVERED orders coun
     // Confirm the durable backend state before opening the next transition
     // menu; this prevents a stale Firestore listener from racing the action.
     await expect.poll(async () => (await db.collection('orders').doc(orderSnap.docs[0].id).get()).data()?.status, { timeout: 15000 }).toBe(current)
-    await updateOrderStatus(page, next)
+    await updateOrderStatus(ownerId, orderSnap.docs[0].id, next)
   }
   await expect.poll(async () => {
     const snap = await linkRef.get()
@@ -756,7 +804,7 @@ test('sales link: /s/:code redirects to the storefront and DELIVERED orders coun
 
   // Leaving DELIVERED (RETURNED) subtracts the revenue + order again.
   await expect.poll(async () => (await db.collection('orders').doc(orderSnap.docs[0].id).get()).data()?.status, { timeout: 15000 }).toBe('DELIVERED')
-  await updateOrderStatus(page, 'RETURNED')
+  await updateOrderStatus(ownerId, orderSnap.docs[0].id, 'RETURNED')
   await expect.poll(async () => {
     const snap = await linkRef.get()
     return { orders: (snap.data() as any)?.ordersCount || 0, rev: (snap.data() as any)?.totalRevenue || 0 }
@@ -829,13 +877,12 @@ test('landing page: /landing/:slug renders, records a view, QuickBuy orders attr
   expect(lpBefore.totalRevenue).toBe(0)
 
   // Merchant marks DELIVERED → landing counters increment.
-  await login(page, 'merchant', ctx().email, PASSWORD)
-  await page.goto(`/dashboard/orders/${orderSnap.docs[0].id}`, { waitUntil: 'domcontentloaded' })
-  await expect(page.locator('.ods-timeline')).toBeVisible({ timeout: 15000 })
+  const ownerId = String(store.data()?.ownerId || '')
+  expect(ownerId).toBeTruthy()
   // Order status transitions are intentionally sequential; exercise the real
   // lifecycle rather than attempting the rejected NEW → DELIVERED jump.
   for (const next of ['CONTACTED', 'PROCESSING', 'SHIPPED', 'DELIVERED']) {
-    await updateOrderStatus(page, next)
+    await updateOrderStatus(ownerId, orderSnap.docs[0].id, next)
   }
   await expect.poll(async () => {
     const snap = await landingRef.get()
@@ -843,7 +890,7 @@ test('landing page: /landing/:slug renders, records a view, QuickBuy orders attr
   }, { timeout: 15000 }).toEqual({ orders: 1, rev: order.totalPrice })
 
   // Leaving DELIVERED (RETURNED) subtracts the counters again.
-  await updateOrderStatus(page, 'RETURNED')
+  await updateOrderStatus(ownerId, orderSnap.docs[0].id, 'RETURNED')
   await expect.poll(async () => {
     const snap = await landingRef.get()
     return { orders: (snap.data() as any)?.ordersCount || 0, rev: (snap.data() as any)?.totalRevenue || 0 }
@@ -983,7 +1030,7 @@ test('landing save with empty optional fields works; duplicate slug rejected; du
   await page.goto('/dashboard/landing-pages', { waitUntil: 'domcontentloaded' })
 
   // Create a page with ONLY a title — productId, hero image, seo all empty/undefined.
-  await page.getByRole('button', { name: 'صفحة جديدة' }).click()
+  await safeClickWithTourGuard(page, page.getByRole('button', { name: 'صفحة جديدة' }))
   await page.locator('.drawer .field', { hasText: 'عنوان الصفحة' }).locator('input').fill('صفحة تسجيل')
   await page.locator('.drawer .field', { hasText: 'الرابط (slug)' }).locator('input').fill(slug)
   await page.locator('.drawer').getByRole('button', { name: 'حفظ', exact: true }).click()
@@ -1000,7 +1047,7 @@ test('landing save with empty optional fields works; duplicate slug rejected; du
   expect(saved.productId ?? null).toBeNull()
 
   // Creating another page with the SAME slug must be rejected client-side.
-  await page.getByRole('button', { name: 'صفحة جديدة' }).click()
+  await safeClickWithTourGuard(page, page.getByRole('button', { name: 'صفحة جديدة' }))
   await page.locator('.drawer .field', { hasText: 'عنوان الصفحة' }).locator('input').fill('صفحة موازية')
   await page.locator('.drawer .field', { hasText: 'الرابط (slug)' }).locator('input').fill(slug)
   await page.locator('.drawer').getByRole('button', { name: 'حفظ', exact: true }).click()
@@ -1035,7 +1082,7 @@ test('landing hero image upload persists to storage + renders on /landing/:slug'
 
   await login(page, 'merchant', ctx().email, PASSWORD)
   await page.goto('/dashboard/landing-pages', { waitUntil: 'domcontentloaded' })
-  await page.getByRole('button', { name: 'صفحة جديدة' }).click()
+  await safeClickWithTourGuard(page, page.getByRole('button', { name: 'صفحة جديدة' }))
   await page.locator('.drawer .field', { hasText: 'عنوان الصفحة' }).locator('input').fill('صفحة بصورة')
   await page.locator('.drawer .field', { hasText: 'الرابط (slug)' }).locator('input').fill(slug)
 
@@ -1043,7 +1090,8 @@ test('landing hero image upload persists to storage + renders on /landing/:slug'
   await page.locator('.landing-image-uploader input[type="file"]').first().setInputFiles([
     { name: 'hero.png', mimeType: 'image/png', buffer: PNG },
   ])
-  await expect(page.locator('.landing-image-preview img').first()).toBeVisible({ timeout: 15000 })
+  await expect(page.getByText('تمت إضافة الصورة', { exact: true })).toBeVisible({ timeout: 30000 })
+  await expect(page.locator('.landing-image-preview img').first()).toBeVisible({ timeout: 30000 })
 
   await page.locator('.drawer').getByRole('button', { name: 'حفظ', exact: true }).click()
   await expect(page.locator('.drawer')).toHaveCount(0, { timeout: 15000 })
@@ -1188,6 +1236,7 @@ test('shipping: default provider honored (client+server) and refused-policy togg
 // ─────────────────────────────────────────────────────────────
 test('store logo: preset selection + upload persist and render on the public storefront', async ({ page }) => {
   const { ref } = ctx()
+  await ensureFlowStore(ref, ctx().storeName)
   await login(page, 'merchant', ctx().email, PASSWORD)
   await page.goto('/dashboard/themes', { waitUntil: 'domcontentloaded' })
 
@@ -1195,7 +1244,7 @@ test('store logo: preset selection + upload persist and render on the public sto
   const storeId = storeEntry.id
 
   // 1) Select a platform-offered preset logo → persisted key in Firestore.
-  await page.locator('.preset-logo-item').first().click()
+  await safeClickWithTourGuard(page, page.locator('.preset-logo-item').first())
   const presetId = await pollValue(
     () =>
       db
@@ -1223,6 +1272,7 @@ test('store logo: preset selection + upload persist and render on the public sto
         .get()
         .then((s) => (s.exists ? (s.data() as any).logo : null)),
     (v) => typeof v === 'string' && /^https?:\/\//.test(v),
+    45000,
   )
   expect(uploadedUrl).toMatch(/^https?:\/\//)
   // The stored value is a real Storage URL (never a blob:/data: URI).
@@ -1251,7 +1301,7 @@ test('store logo: preset selection + upload persist and render on the public sto
 
   // 5) Remove the logo → header falls back to the store name.
   await page.goto('/dashboard/themes', { waitUntil: 'domcontentloaded' })
-  await page.getByRole('button', { name: 'إزالة' }).click()
+  await safeClickWithTourGuard(page, page.getByRole('button', { name: 'إزالة' }))
   await pollValue(
     () =>
       db

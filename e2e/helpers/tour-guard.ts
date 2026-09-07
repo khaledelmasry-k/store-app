@@ -3,6 +3,10 @@ import { expect, type Locator, type Page } from '@playwright/test'
 export async function dismissMerchantTourIfVisible(page: Page) {
   const overlay = page.locator('.merchant-tour-overlay:visible').first()
   if (await overlay.count() === 0) return
+  const neverAgain = overlay.getByRole('checkbox', { name: /لا تعرض هذا الدليل مرة أخرى/ }).first()
+  if (await neverAgain.count() && !(await neverAgain.isChecked().catch(() => false))) {
+    await neverAgain.check({ force: true })
+  }
   const dismiss = overlay.getByRole('button', { name: /فهمت، أكمل للوحة|تخطي الجولة/ }).first()
   if (await dismiss.count()) await dismiss.click()
   await expect(page.locator('.merchant-tour-overlay:visible')).toHaveCount(0, { timeout: 5000 })
