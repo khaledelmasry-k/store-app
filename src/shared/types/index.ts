@@ -25,6 +25,8 @@ export interface User extends Partial<FirestoreMeta> {
   merchantStatus?: 'pending_approval' | 'active' | 'rejected' | 'suspended' | 'deleting'
   impersonatedBy?: string
   impersonatedUntil?: { seconds: number; nanoseconds: number }
+  impersonatedStoreId?: string
+  impersonatedMerchantId?: string
   addresses?: UserAddress[]
   onboardingTourCompleted?: boolean
   onboardingTourSkipped?: boolean

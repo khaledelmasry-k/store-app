@@ -24,6 +24,7 @@ import {
   permanentlyDeleteMerchantCallable,
   reactivateMerchantCallable,
   suspendMerchantCallable,
+  startImpersonation,
   type MerchantDeletionPreview,
 } from '../../shared/services/auth'
 import { slugify, formatDate, formatNumber } from '../../shared/utils/format'
@@ -442,6 +443,7 @@ export const PlatformMerchants: FunctionalComponent = () => {
                     {(r.subStatus === 'pending' || (r as any).subStatus === 'pending_approval') && r.subId && (
                       <Button size="sm" icon="check" loading={busyId === r.storeId} onClick={() => approve(r)}>موافقة</Button>
                     )}
+                    {r.ownerId && r.ownerRole === 'merchant' && <Button variant="soft" size="sm" icon="support_agent" onClick={async () => { try { await startImpersonation(r.storeId); window.location.href = '/dashboard' } catch (err: any) { toast.push('تعذر بدء وضع الدعم', err?.message || 'حاول مرة أخرى', 'error') } }}>الدخول كالتاجر</Button>}
                     {r.merchantStatus === 'suspended' ? (
                       <Button variant="outline" size="sm" icon="refresh" loading={busyId === r.storeId} onClick={() => changeMerchantStatus(r, 'reactivate')}>إعادة التفعيل</Button>
                     ) : r.merchantStatus !== 'deleting' ? (

@@ -322,9 +322,9 @@ export const AppShell: FunctionalComponent<Props> = ({ navKey, brand, brandLogo,
       {impersonating && (
         <div className="impersonation-banner">
           <Icon name="admin_panel_settings" />
-          <span>أنت تتصفح المتجر كتاجر (وضع التجسس من مدير المنصة)</span>
+          <span>أنت الآن داخل حساب {user?.name || 'التاجر'} بوضع الدعم</span>
           <button type="button" className="btn btn-primary btn-sm" onClick={handleExitImpersonation} disabled={exiting}>
-            {exiting ? 'جاري الخروج...' : 'الخروج من وضع التجسس'}
+            {exiting ? 'جاري الخروج...' : 'العودة إلى إدارة المنصة'}
           </button>
         </div>
       )}

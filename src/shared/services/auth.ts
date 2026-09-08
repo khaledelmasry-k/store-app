@@ -4,6 +4,7 @@ import {
   sendEmailVerification,
   sendPasswordResetEmail,
   signInWithEmailAndPassword,
+  signInWithCustomToken,
   signOut,
 } from 'firebase/auth'
 import { doc, serverTimestamp, setDoc } from 'firebase/firestore'
@@ -248,6 +249,13 @@ export function impersonateCallable(input: Record<string, unknown>) {
   const functions = getFunctions()
   const fn = httpsCallable(functions, 'impersonate')
   return fn(input)
+}
+
+export async function startImpersonation(storeId: string) {
+  const result: any = await impersonateCallable({ storeId })
+  if (!result.data?.customToken) throw new Error('لم يتم إنشاء جلسة الدعم')
+  await signInWithCustomToken(auth, result.data.customToken)
+  return result.data
 }
 
 export function exitImpersonationCallable() {

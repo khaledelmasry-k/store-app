@@ -668,6 +668,12 @@ async function assertPlatformAdmin(request: CallableRequest) {
   if (role !== 'superAdmin') throw new HttpsError('permission-denied', 'صلاحيات غير كافية')
 }
 
+async function assertNotImpersonating(request: CallableRequest) {
+  if (!request.auth) throw new HttpsError('unauthenticated', 'يجب تسجيل الدخول')
+  const snap = await db.doc(`users/${request.auth.uid}`).get()
+  if (snap.data()?.impersonatedBy) throw new HttpsError('permission-denied', 'هذا الإجراء غير متاح في وضع الدعم')
+}
+
 const DEFAULT_ENTERPRISE_WHATSAPP_MESSAGE = 'مرحبًا، أرغب في الحصول على عرض سعر لحلول Enterprise / White Label من Matjari.'
 const WHATSAPP_AUTOMATION_EVENTS = ['order.created', 'shipment.created', 'shipment.delivered', 'shipment.returned'] as const
 const DEFAULT_WHATSAPP_TEMPLATES: Record<typeof WHATSAPP_AUTOMATION_EVENTS[number], string> = {
@@ -2858,6 +2864,7 @@ export const getStoreWhatsAppAutomation = onCall(async (request: CallableRequest
 
 export const saveStoreWhatsAppMetaConnection = onCall({ region: SHIPPING_FUNCTION_REGION, secrets: [integrationVaultKey] }, async (request: CallableRequest<{ storeId?: string; phoneNumberId?: string; accessToken?: string }>) => {
   if (!request.auth) throw new HttpsError('unauthenticated', 'يجب تسجيل الدخول')
+  await assertNotImpersonating(request)
   const storeId = String(request.data?.storeId || '').trim()
   const phoneNumberId = String(request.data?.phoneNumberId || '').trim()
   const accessToken = String(request.data?.accessToken || '').trim()
@@ -5237,6 +5244,7 @@ export const getMerchantShippingProviders = onCall(async (request: CallableReque
 
 export const saveIntegrationCredentials = onCall({ region: SHIPPING_FUNCTION_REGION, secrets: [integrationVaultKey] }, async (request: CallableRequest<any>) => {
   if (!request.auth) throw new HttpsError('unauthenticated', 'يجب تسجيل الدخول')
+  await assertNotImpersonating(request)
   const storeId = String(request.data?.storeId || '').trim()
   const providerId = String(request.data?.providerId || '').trim()
   if (!storeId || !providerId) throw new HttpsError('invalid-argument', 'storeId و providerId مطلوبان')
@@ -6484,9 +6492,12 @@ export const impersonate = onCall(async (request: CallableRequest<{ storeId?: st
   await db.doc(`users/${ownerId}`).update({
     impersonatedBy: request.auth!.uid,
     impersonatedUntil: expiry,
+    impersonatedStoreId: storeId,
+    impersonatedMerchantId: ownerId,
   })
+  await db.collection('auditLogs').add({ storeId, userId: request.auth!.uid, action: 'impersonation_started', resource: 'users', resourceId: ownerId, actorSuperAdminId: request.auth!.uid, merchantId: ownerId, createdAt: now(), createdBy: request.auth!.uid })
 
-  return { customToken: token, storeId }
+  return { customToken: token, storeId, merchantId: ownerId }
 })
 
 // ─────────────────────────────────────────────────────────────
@@ -6505,6 +6516,8 @@ export const exitImpersonation = onCall(async (request: CallableRequest) => {
   await db.doc(`users/${request.auth.uid}`).update({
     impersonatedBy: FieldValue.delete(),
     impersonatedUntil: FieldValue.delete(),
+    impersonatedStoreId: FieldValue.delete(),
+    impersonatedMerchantId: FieldValue.delete(),
   })
   // Record the exit in the admin's audit trail
   await db.collection('auditLogs').add({
@@ -6513,6 +6526,9 @@ export const exitImpersonation = onCall(async (request: CallableRequest) => {
     action: 'impersonation_exited',
     resource: 'users',
     resourceId: request.auth.uid,
+    actorSuperAdminId: adminUid,
+    merchantId: request.auth.uid,
+    storeId: user.impersonatedStoreId || null,
     createdAt: now(),
     createdBy: adminUid,
   })
