@@ -97,7 +97,7 @@ export const PlatformPlans: FunctionalComponent = () => {
       description: form.description || '',
       priceMonthly: Number(form.priceMonthly),
       priceYearly: Number(form.priceYearly || 0),
-      trialDays: Number(form.trialDays ?? 3),
+      trialDays: Number(form.trialDays ?? 0),
       launchPrice: Number(form.launchPrice || 0),
       launchEnabled: !!form.launchEnabled,
        productLimit: Number(form.productLimit || 10),
@@ -188,6 +188,9 @@ export const PlatformPlans: FunctionalComponent = () => {
             ].filter(Boolean).join('، ') || 'أساسي' },
           ]}
         />
+        <p className="muted small" style={{ marginTop: 12 }}>
+          BUSINESS — باقة تاريخية محفوظة للتوافق مع الاشتراكات القائمة (غير معروضة للبيع)
+        </p>
       </Card>
 
       <div className="flex-between mb-2">
@@ -226,7 +229,7 @@ export const PlatformPlans: FunctionalComponent = () => {
                 {p.billingModel !== 'one_time' && p.launchEnabled && Number(p.launchPrice) > 0 && (
                   <div className="plan-pricing-launch">أول شهر {formatPriceEgp(p.launchPrice)} (خصم إطلاق)</div>
                 )}
-                {p.billingModel !== 'one_time' && Number(p.priceMonthly || 0) > 0 && Number(p.trialDays ?? 3) > 0 && <div className="plan-pricing-trial">تجربة مجانية {Number(p.trialDays ?? 3)} يوم</div>}
+                {p.billingModel !== 'one_time' && Number(p.priceMonthly || 0) > 0 && Number(p.trialDays ?? 0) > 0 && <div className="plan-pricing-trial">تجربة مجانية {Number(p.trialDays ?? 0)} يوم</div>}
                 <ul className="plan-pricing-features">
                   {displayFeatures.map((f, i) => (
                     <li key={i}>
@@ -344,7 +347,7 @@ export const PlatformPlans: FunctionalComponent = () => {
           <p className="muted small">المقاعد المستخدمة يديرها الخادم ولا يمكن تعديلها من الواجهة.</p>
         </>}
         {form.billingModel !== 'one_time' && <div className="grid grid-2">
-          <Input label="مدة التجربة (أيام)" type="number" value={form.trialDays ?? 3} onChange={(v) => setForm({ ...form, trialDays: Math.max(1, Number(v)) })} hint="من يوم إلى 90 يوماً للباقة المدفوعة" />
+          <Input label="مدة التجربة (أيام)" type="number" value={form.trialDays ?? 0} onChange={(v) => setForm({ ...form, trialDays: Math.min(90, Math.max(0, Number(v))) })} hint="صفر للباقات المدفوعة بلا تجربة مستقلة؛ Free الحالية 30 يومًا" />
           <Input label="سعر الإطلاق (الشهر الأول)" type="number" value={form.launchPrice || ''} onChange={(v) => setForm({ ...form, launchPrice: Number(v) })} />
         </div>}
         {form.billingModel !== 'one_time' && <div className="field">

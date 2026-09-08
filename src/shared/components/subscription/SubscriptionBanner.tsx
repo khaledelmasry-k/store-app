@@ -38,8 +38,8 @@ export const SubscriptionBanner: FunctionalComponent = () => {
         tone: urgent ? 'warn' : 'info',
         icon: urgent ? 'hourglass_top' : 'schedule',
         message: urgent ? 'تجربتك المجانية تنتهي قريبًا' : 'الفترة التجريبية نشطة',
-        sub: `باقة ${plan?.name || subscription.planName || ''} — بكامل المزايا.`,
-        cta: { label: 'فعّل الباقة', to: '/dashboard/subscription' },
+        sub: `باقة ${plan?.name || subscription.planName || ''} — شهر مجاني واحد، وبياناتك تظل محفوظة بعد الانتهاء.`,
+        cta: { label: 'اختر باقتك', to: '/dashboard/subscription' },
       }
     }
     if (status === 'active') {
@@ -57,7 +57,7 @@ export const SubscriptionBanner: FunctionalComponent = () => {
         icon: 'error',
         message: 'انتهت الفترة التجريبية — يلزم التفعيل',
         sub: 'بيانات متجرك محفوظة بالكامل. فعّل باقتك لاستكمال البيع.',
-        cta: { label: 'فعّل الباقة', to: '/dashboard/subscription' },
+        cta: { label: 'اختر باقتك', to: '/dashboard/subscription' },
       }
     }
     if (status === 'suspended') {

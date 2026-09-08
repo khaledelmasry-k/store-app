@@ -55,7 +55,7 @@ async function fillCheckoutCity(page: Page, city: string) {
  * preceding registration/theme test has happened to create its fixture.
  * Converge a deterministic local store/product without touching seeded data.
  */
-async function ensureFlowStore(ref: string, name: string) {
+async function ensureFlowStore(ref: string, name: string, preserveTrial = false) {
   const existing = await storeBySlug(ref)
   const storeId = existing?.id || `flow-owner-${ref}`
   const ownerEmail = `${ref}@mk.test`
@@ -85,7 +85,7 @@ async function ensureFlowStore(ref: string, name: string) {
     const ownerId = String(existing.data()?.ownerId || '')
     if (ownerId) await db.collection('users').doc(ownerId).set({ active: true, merchantStatus: 'active' }, { merge: true })
     const sub = await latestSub(existing.id)
-    if (sub) {
+    if (sub && (!preserveTrial || sub.status !== 'trialing')) {
       const currentLimits = (sub.limitsSnapshot || {}) as Record<string, unknown>
       await db.collection('subscriptions').doc(sub.id).set({
         status: 'active',
@@ -222,8 +222,8 @@ async function registerStore(
   // The responsive registration UI uses the compact pill selector at every
   // breakpoint; desktop cards are a presentation layer, not the selection
   // contract. Assert the stable control instead of a desktop-only class.
-  await expect(page.locator('.register-plan-pill')).toHaveCount(5)
-  for (const planName of ['FREE', 'STARTER', 'GROWTH', 'BUSINESS', 'PRO']) {
+  await expect(page.locator('.register-plan-pill')).toHaveCount(4)
+  for (const planName of ['FREE', 'STARTER', 'GROWTH', 'PRO']) {
     await expect(page.getByRole('button', { name: new RegExp(`^${planName}\\b`) })).toHaveCount(1)
   }
   // The compact plan strip is the canonical selection control. Using it
@@ -342,7 +342,7 @@ function ctx() {
 }
 
 // ─────────────────────────────────────────────────────────────
-test('paid SaaS registration starts one server-controlled three-day trial immediately', async ({ page }) => {
+test('pricing intent registration starts one server-controlled 30-day Free trial', async ({ page }) => {
   const { email, storeName, ref } = ctx()
   await registerStore(page, {
     email,
@@ -359,18 +359,19 @@ test('paid SaaS registration starts one server-controlled three-day trial immedi
   const sub = await latestSub(store!.id)
   expect(sub).not.toBeNull()
   expect(sub!.status).toBe('trialing')
-  expect(sub!.planId).toBe('plan-starter')
+  expect(sub!.planId).toBe('plan-free')
+  expect(sub!.postTrialPlanId).toBe('plan-starter')
   expect(sub!.trialUsed).toBe(true)
   expect(sub!.trialStartedAt).toBeTruthy()
   expect(sub!.trialEndsAt).toBeTruthy()
   const trialDuration = sub!.trialEndsAt.toMillis() - sub!.trialStartedAt.toMillis()
-  expect(trialDuration).toBe(3 * 86400000)
-  expect(sub!.normalPriceSnapshot).toBe(399)
-  expect(sub!.launchPriceSnapshot).toBe(399)
+  expect(trialDuration).toBe(30 * 86400000)
+  expect(sub!.normalPriceSnapshot).toBe(0)
+  expect(sub!.launchPriceSnapshot).toBe(0)
   expect(sub!.launchUsed).toBeFalsy()
 })
 
-test('Free registration activates immediately without trial and keeps store draft', async ({ page }) => {
+test('Free registration starts the single 30-day trial and keeps store draft', async ({ page }) => {
   const { uniq } = ctx()
   const suffix = `${uniq}-${Date.now()}`
   const email = `approval-${suffix}@mk.test`
@@ -380,11 +381,12 @@ test('Free registration activates immediately without trial and keeps store draf
 
   const freeStore = (await pollValue(() => storeBySlug(ref), (s) => s != null))!
   const freeSub = (await latestSub(freeStore.id))!
-  expect(freeSub.status).toBe('active')
+  expect(freeSub.status).toBe('trialing')
   expect(freeSub.planId).toBe('plan-free')
-  expect(freeSub.trialUsed).toBe(false)
-  expect(freeSub.trialStartedAt).toBeFalsy()
-  expect(freeSub.trialEndsAt).toBeFalsy()
+  expect(freeSub.trialUsed).toBe(true)
+  expect(freeSub.trialStartedAt).toBeTruthy()
+  expect(freeSub.trialEndsAt).toBeTruthy()
+  expect(freeSub.trialEndsAt.toMillis() - freeSub.trialStartedAt.toMillis()).toBe(30 * 86400000)
   expect(freeStore.data()?.published).toBe(false)
   expect(freeStore.data()?.storeStatus).toBe('draft')
 
@@ -395,9 +397,9 @@ test('Free registration activates immediately without trial and keeps store draf
   await expect(page.getByRole('heading', { name: 'المنتجات والمخزون' })).toBeVisible({ timeout: 15000 })
 })
 
-test('Growth, Business, and Pro registrations each start an immediate three-day trial', async ({ page }) => {
+test('Starter, Growth, and Pro pricing intents all start the same Free month', async ({ page }) => {
   const { uniq } = ctx()
-  for (const planName of ['GROWTH', 'BUSINESS', 'PRO']) {
+  for (const planName of ['STARTER', 'GROWTH', 'PRO']) {
     const suffix = `${planName.toLowerCase()}-${uniq}-${Date.now()}`
     const ref = `auto-trial-${suffix}`
     await registerStore(page, {
@@ -411,9 +413,10 @@ test('Growth, Business, and Pro registrations each start an immediate three-day 
     const store = (await pollValue(() => storeBySlug(ref), (value) => value != null))!
     const sub = (await latestSub(store.id))!
     expect(sub.status).toBe('trialing')
-    expect(sub.planId).toBe(`plan-${planName.toLowerCase()}`)
+    expect(sub.planId).toBe('plan-free')
+    expect(sub.postTrialPlanId).toBe(`plan-${planName.toLowerCase()}`)
     expect(sub.trialUsed).toBe(true)
-    expect(sub.trialEndsAt.toMillis() - sub.trialStartedAt.toMillis()).toBe(3 * 86400000)
+    expect(sub.trialEndsAt.toMillis() - sub.trialStartedAt.toMillis()).toBe(30 * 86400000)
     expect(store.data()?.storeStatus).toBe('draft')
     expect(store.data()?.published).toBe(false)
   }
@@ -543,7 +546,9 @@ test('trial merchant can publish + theme + product', async ({ page, browser }) =
 test('storefront theme vars, cart -> checkout -> order, ordersUsed increments', async ({ page }) => {
   const { uniq, ref, storeName } = ctx()
   const slug = ref
-  await ensureFlowStore(slug, storeName)
+  // Keep the just-registered merchant on the real Free trial for the launch
+  // path. Standalone fixtures still converge to an active paid grant.
+  await ensureFlowStore(slug, storeName, true)
   await page.goto(`/store/${slug}`, { waitUntil: 'domcontentloaded' })
 
   // Theme CSS variables applied on the store shell.

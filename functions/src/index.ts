@@ -975,6 +975,8 @@ async function auditLog(storeId: string | null, userId: string, action: string, 
 const DAY_MS = 86400000
 const PERIOD_DAYS = 30
 const YEAR_DAYS = 365
+const FREE_TRIAL_DAYS = 30
+const PUBLIC_PAID_PLAN_IDS = new Set(['plan-starter', 'plan-growth', 'plan-pro'])
 const PLAN_FEATURE_KEYS = [
   'quantityPricing', 'variantInventory', 'coupons', 'analytics', 'whatsappAutomation',
 ]
@@ -2174,11 +2176,13 @@ export const deleteProduct = onCall(async (request: CallableRequest<{ storeId?: 
 
 // ─────────────────────────────────────────────────────────────
 // 4. registerMerchant — tenant + store + owner creation.
-//     Free activates immediately; paid SaaS plans start one server-timed trial.
-//     Store publication remains an independent, explicit merchant action.
+//     Every new merchant starts one server-timed 30-day Free trial. A plan
+//     selected on the public pricing page is upgrade intent only and never
+//     grants paid entitlements before payment approval. Store publication
+//     remains an independent, explicit merchant action.
 // ─────────────────────────────────────────────────────────────
 export const registerMerchant = onCall(async (request: CallableRequest<any>) => {
-  const { email, password, name, phone, storeName, storeRef, planId, billingCycle } = request.data || {}
+  const { email, password, name, phone, storeName, storeRef, planId } = request.data || {}
   if (!email || !password || !name || !storeName) throw new HttpsError('invalid-argument', 'بيانات التسجيل غير مكتملة')
 
   const uid = db.collection('users').doc().id
@@ -2210,44 +2214,33 @@ export const registerMerchant = onCall(async (request: CallableRequest<any>) => 
     slug = `${baseSlug}-${attempt}`
   }
 
-  // Resolve the plan: explicit planId → settings.defaultPlanId → first active plan.
-  let resolvedPlanId = planId && planId !== 'pending' ? String(planId) : ''
-  let planSnap: admin.firestore.DocumentSnapshot | admin.firestore.QueryDocumentSnapshot | null = null
-  if (resolvedPlanId) {
-    planSnap = await db.doc(`plans/${resolvedPlanId}`).get()
-    if (!planSnap.exists || !planSnap.data()?.active || planSnap.data()?.isPurchasable === false || planSnap.data()?.archived === true) planSnap = null
-  }
-  if (!planSnap) {
-    const settingsSnap = await db.doc('settings/platform').get().catch(() => null)
-    const defaultPlanId = settingsSnap?.exists ? settingsSnap.data()?.defaultPlanId : ''
-    if (defaultPlanId) {
-      planSnap = await db.doc(`plans/${defaultPlanId}`).get()
-      if (!planSnap.exists || !planSnap.data()?.active || planSnap.data()?.isPurchasable === false || planSnap.data()?.archived === true) planSnap = null
-    }
-  }
-  if (!planSnap) {
-    const activePlanQuery = await db.collection('plans').where('active', '==', true).get()
-    const available = activePlanQuery.docs.find((d) => d.data()?.isPurchasable !== false && d.data()?.archived !== true)
-    if (!available) throw new HttpsError('failed-precondition', 'لا توجد باقات متاحة حالياً')
-    planSnap = available
-  }
-  const plan = planSnap.data() as any
-  resolvedPlanId = planSnap.id
-  const planName = plan?.name || resolvedPlanId
-
-  // Store registration starts a subscription/trial only. A lifetime offer is
-  // intentionally a separate server-approved purchase flow, never a client
-  // selectable free activation at signup.
-  if (plan?.billingModel === 'one_time') {
+  const requestedPlanId = planId && planId !== 'pending' ? String(planId) : ''
+  if (requestedPlanId === 'plan-lifetime') {
     throw new HttpsError('failed-precondition', 'شراء المتجر يتم من خلال طلب دفع معتمد بعد إنشاء المتجر')
   }
+  const postTrialPlanId = PUBLIC_PAID_PLAN_IDS.has(requestedPlanId) ? requestedPlanId : null
+  let postTrialPlanName: string | null = null
+  if (postTrialPlanId) {
+    const desired = await db.doc(`plans/${postTrialPlanId}`).get()
+    if (desired.exists && desired.data()?.active !== false && desired.data()?.isPurchasable !== false && desired.data()?.archived !== true) {
+      postTrialPlanName = String(desired.data()?.name || postTrialPlanId)
+    }
+  }
 
-  const cycle = billingCycle === 'yearly' ? 'yearly' : 'monthly'
-  const selectedPrice = cycle === 'yearly' ? Number(plan?.priceYearly || 0) : Number(plan?.priceMonthly || 0)
-  const isFreePlan = selectedPrice <= 0
-  const trialDays = isFreePlan ? 0 : paidTrialDays(plan)
+  const freePlanSnap = await db.doc('plans/plan-free').get()
+  if (!freePlanSnap.exists || freePlanSnap.data()?.active === false || freePlanSnap.data()?.archived === true) {
+    throw new HttpsError('failed-precondition', 'فترة البداية المجانية غير متاحة حالياً')
+  }
+  const canonicalFree = CANONICAL_PLANS.find((candidate) => candidate.id === 'plan-free')!
+  // Canonical launch policy overrides a stale live Free document. Existing
+  // subscriptions remain untouched because their snapshots are immutable.
+  const plan = { ...freePlanSnap.data(), ...canonicalFree } as any
+  const resolvedPlanId = 'plan-free'
+  const planName = plan.name || 'FREE'
+  const cycle = 'monthly'
+  const trialDays = FREE_TRIAL_DAYS
   const registrationAt = new Date()
-  const trialEndsAt = isFreePlan ? null : new Date(registrationAt.getTime() + trialDays * DAY_MS)
+  const trialEndsAt = new Date(registrationAt.getTime() + trialDays * DAY_MS)
   const normalPriceSnapshot = Number(plan?.priceMonthly || 0)
   const launchEnabled = !!plan?.launchEnabled
   const launchPriceSnapshot = launchEnabled && Number(plan?.launchPrice) > 0 ? Number(plan.launchPrice) : normalPriceSnapshot
@@ -2292,10 +2285,16 @@ export const registerMerchant = onCall(async (request: CallableRequest<any>) => 
     storeId,
     planId: resolvedPlanId,
     planName,
-    status: isFreePlan ? 'active' : 'trialing',
+    status: 'trialing',
     billingCycle: cycle,
     trialDays,
-    trialUsed: !isFreePlan,
+    trialUsed: true,
+    trialStatus: 'active',
+    trialPlanId: resolvedPlanId,
+    trialStartedAt: Timestamp.fromDate(registrationAt),
+    trialEndsAt: Timestamp.fromDate(trialEndsAt),
+    postTrialPlanId,
+    postTrialPlanName,
     periodNumber: 0,
     normalPriceSnapshot,
     launchPriceSnapshot,
@@ -2320,12 +2319,6 @@ export const registerMerchant = onCall(async (request: CallableRequest<any>) => 
     featuresSnapshot: Array.isArray(plan?.features) ? plan.features : [],
     featureFlagsSnapshot: Object.fromEntries(PLAN_FEATURE_KEYS.map((key) => [key, plan?.[key] === true])),
   }
-  if (!isFreePlan && trialEndsAt) {
-    subDoc.trialStatus = 'active'
-    subDoc.trialPlanId = resolvedPlanId
-    subDoc.trialStartedAt = Timestamp.fromDate(registrationAt)
-    subDoc.trialEndsAt = Timestamp.fromDate(trialEndsAt)
-  }
   const subscriptionRef = db.collection('subscriptions').doc()
   await subscriptionRef.set(subDoc)
   await db.doc(`stores/${storeId}`).update({ activeSubscriptionId: subscriptionRef.id, updatedAt: now() })
@@ -2335,21 +2328,19 @@ export const registerMerchant = onCall(async (request: CallableRequest<any>) => 
   await createBillingNotification(
     storeId,
     uid,
-    isFreePlan ? 'اشتراك Free نشط' : 'بدأت تجربتك المجانية',
-    isFreePlan
-      ? 'تم تفعيل الباقة المجانية. يمكنك إعداد متجرك ثم نشره عند الجاهزية.'
-      : `بدأت تجربة ${planName} لمدة 3 أيام. يلزم اعتماد الدفع لاستمرار المزايا بعد انتهائها.`,
+    'بدأ شهرك المجاني',
+    'لديك 30 يومًا لتشغيل متجرك على Free. بعد انتهائها تبقى بياناتك محفوظة ويلزم اختيار Starter أو Growth أو Pro لاستكمال العمليات.',
   )
   await auditLog(
     storeId,
     uid,
-    isFreePlan ? 'free_subscription_activated_on_registration' : 'saas_trial_started_on_registration',
+    'free_trial_started_on_registration',
     'subscriptions',
     subscriptionRef.id,
     { planId: resolvedPlanId, trialDays, merchantStatus: 'active' },
   )
 
-  return { uid, storeId, status: isFreePlan ? 'active' : 'trialing' }
+  return { uid, storeId, status: 'trialing', planId: resolvedPlanId, trialDays, postTrialPlanId }
 })
 
 // ─────────────────────────────────────────────────────────────
@@ -2497,6 +2488,10 @@ export const changeSubscriptionPlan = onCall(async (request: CallableRequest<{ s
   const storeSnap = await db.doc(`stores/${storeId}`).get()
   if (!storeSnap.exists || !storeSnap.data()?.active) throw new HttpsError('not-found', 'المتجر غير موجود')
 
+  if (!PUBLIC_PAID_PLAN_IDS.has(planId)) {
+    throw new HttpsError('not-found', 'الباقة المطلوبة غير متاحة للإطلاق الحالي')
+  }
+
   const planSnap = await db.doc(`plans/${planId}`).get()
   if (!planSnap.exists || !planSnap.data()?.active || planSnap.data()?.isPurchasable === false || planSnap.data()?.archived === true) {
     throw new HttpsError('not-found', 'الباقة المطلوبة غير متاحة')
@@ -2505,11 +2500,20 @@ export const changeSubscriptionPlan = onCall(async (request: CallableRequest<{ s
     throw new HttpsError('failed-precondition', 'استخدم مسار شراء المتجر لمرة واحدة')
   }
 
-  const grant = await grantForStore(storeId, request.auth.uid)
-  if (!grant) throw new HttpsError('failed-precondition', 'لا يوجد اشتراك نشط — فعّل باقتك أولاً.')
-  if (grant.sub.planId === planId) return { ok: true, changed: false, planId }
+  // Billing remains available after a trial expires. Operational grants are
+  // intentionally stricter, but expiry must never dead-end the upgrade path.
+  const entry = await latestSubscriptionForStore(storeId)
+  if (!entry) throw new HttpsError('failed-precondition', 'لا يوجد اشتراك حالي لهذا المتجر.')
+  const currentStatus = resolveSubscriptionStatus(entry.data)
+  if (!['active', 'trialing', 'expired', 'suspended'].includes(currentStatus)) {
+    throw new HttpsError('failed-precondition', 'حالة الاشتراك الحالية لا تسمح بطلب الترقية')
+  }
+  if (entry.data.planId === planId) return { ok: true, changed: false, planId }
+  const currentPlanSnap = await db.doc(`plans/${entry.data.planId}`).get()
+  const currentPlan = currentPlanSnap.exists ? effectivePlanForSubscription(entry.data, currentPlanSnap.data()) : { name: entry.data.planName || entry.data.planId }
 
-  const newPlan = planSnap.data() as any
+  const canonicalPlan = CANONICAL_PLANS.find((candidate) => candidate.id === planId)
+  const newPlan = { ...planSnap.data(), ...(canonicalPlan || {}) } as any
   const cycle = billingCycle === 'yearly' ? 'yearly' : 'monthly'
   const quotedAmount = cycle === 'yearly'
     ? Number(newPlan?.priceYearly || newPlan?.priceMonthly || 0)
@@ -2558,8 +2562,8 @@ export const changeSubscriptionPlan = onCall(async (request: CallableRequest<{ s
   }
   let duplicate: any = null
   await db.runTransaction(async (tx) => {
-    const currentSub = await tx.get(db.doc(`subscriptions/${grant.subId}`))
-    if (!currentSub.exists || currentSub.data()?.planId !== grant.sub.planId) {
+    const currentSub = await tx.get(db.doc(`subscriptions/${entry.id}`))
+    if (!currentSub.exists || currentSub.data()?.planId !== entry.data.planId) {
       throw new HttpsError('aborted', 'تغير الاشتراك أثناء إنشاء الطلب، حاول مرة أخرى')
     }
     const currentRequestId = currentSub.data()?.activeChangeRequestId
@@ -2573,9 +2577,9 @@ export const changeSubscriptionPlan = onCall(async (request: CallableRequest<{ s
     tx.create(ref, {
       id: ref.id,
       storeId,
-      subscriptionId: grant.subId,
-      fromPlanId: grant.sub.planId,
-      fromPlanName: grant.plan?.name || grant.sub.planId,
+      subscriptionId: entry.id,
+      fromPlanId: entry.data.planId,
+      fromPlanName: currentPlan?.name || entry.data.planId,
       toPlanId: planId,
       toPlanName: newPlan?.name || planId,
       billingCycle: cycle,
@@ -2590,10 +2594,10 @@ export const changeSubscriptionPlan = onCall(async (request: CallableRequest<{ s
       createdAt: now(),
       updatedAt: now(),
     })
-    tx.update(db.doc(`subscriptions/${grant.subId}`), { activeChangeRequestId: ref.id, updatedAt: now() })
+    tx.update(db.doc(`subscriptions/${entry.id}`), { activeChangeRequestId: ref.id, updatedAt: now() })
   })
   if (duplicate) return { ok: true, changed: false, requestId: duplicate.id, status: duplicate.data?.status, quotedAmount: duplicate.data?.quotedAmount }
-  await auditLog(storeId, request.auth.uid, 'subscription_change_requested', 'subscriptionChangeRequests', ref.id, { fromPlanId: grant.sub.planId, toPlanId: planId, quotedAmount: finalAmount, regularPrice: quotedAmount, promotionId: promotionSnapshot?.promotionId || null })
+  await auditLog(storeId, request.auth.uid, 'subscription_change_requested', 'subscriptionChangeRequests', ref.id, { fromPlanId: entry.data.planId, toPlanId: planId, quotedAmount: finalAmount, regularPrice: quotedAmount, promotionId: promotionSnapshot?.promotionId || null })
   return { ok: true, changed: false, requestId: ref.id, status: 'pending_payment', quotedAmount: finalAmount, regularPrice: quotedAmount, promotion: promotionSnapshot }
 })
 
@@ -4067,9 +4071,9 @@ export const savePlan = onCall(async (request: CallableRequest<any>) => {
   if (billingModel === 'subscription' && !(Number(plan.priceMonthly) >= 0)) throw new HttpsError('invalid-argument', 'السعر الشهري غير صالح')
   if (billingModel === 'one_time' && !(Number(plan.oneTimePrice) > 0)) throw new HttpsError('invalid-argument', 'سعر الشراء لمرة واحدة غير صالح')
   const paidPlan = billingModel === 'subscription' && (Number(plan.priceMonthly) > 0 || Number(plan.priceYearly) > 0)
-  const configuredTrialDays = Number(plan.trialDays ?? 3)
-  if (paidPlan && (!Number.isFinite(configuredTrialDays) || configuredTrialDays < 1 || configuredTrialDays > 90)) {
-    throw new HttpsError('invalid-argument', 'مدة التجربة للباقة المدفوعة يجب أن تكون من يوم إلى 90 يوماً')
+  const configuredTrialDays = Number(plan.trialDays ?? 0)
+  if (paidPlan && (!Number.isFinite(configuredTrialDays) || configuredTrialDays < 0 || configuredTrialDays > 90)) {
+    throw new HttpsError('invalid-argument', 'مدة التجربة للباقة المدفوعة يجب أن تكون من صفر إلى 90 يوماً')
   }
 
   const payload: Record<string, any> = {

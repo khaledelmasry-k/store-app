@@ -144,3 +144,18 @@ html[data-theme='dark'] .landing-final-cta{background:linear-gradient(135deg,#11
 html[data-theme='dark'] .landing-final-cta p{color:#b3bdd3}
 html[data-theme='dark'] .landing-final-cta .btn-primary{background:#6366f1;color:#fff}
 html[data-theme='dark'] .landing-nav-btn-primary{background:#6366f1;color:#fff}
+
+/* Commerce OS flow and four-offer launch catalog. */
+.landing-operating-flow{background:linear-gradient(180deg,#fbfcff,#f3f5ff)}
+.landing-flow-track{position:relative;display:grid;grid-template-columns:repeat(6,minmax(0,1fr));gap:12px;margin:0;padding:0;list-style:none}
+.landing-flow-track::before{content:'';position:absolute;z-index:0;top:48px;inset-inline:7%;height:2px;background:linear-gradient(90deg,#c7d2fe,#6366f1,#67e8f9)}
+.landing-flow-track li{position:relative;z-index:1;display:flex;min-width:0;flex-direction:column;align-items:center;padding:16px 8px 18px;border:1px solid var(--line);border-radius:18px;background:rgba(255,255,255,.94);text-align:center;box-shadow:0 12px 32px rgba(39,49,109,.07)}
+.landing-flow-index{align-self:flex-start;color:#98a2b3;font-size:10px;font-weight:800;letter-spacing:.12em}
+.landing-flow-icon{display:grid;place-items:center;width:48px;height:48px;margin:5px 0 12px;border:1px solid #dfe3ff;border-radius:15px;background:#eef0ff;color:var(--brand)}
+.landing-flow-track strong{font-size:15px}.landing-flow-track small{margin-top:3px;color:var(--muted);font-size:11px}
+.landing-pricing-grid{grid-template-columns:repeat(4,minmax(0,1fr))}
+html[data-theme='dark'] .landing-operating-flow{background:linear-gradient(180deg,#0b1020,#11182b)}
+html[data-theme='dark'] .landing-flow-track li{background:#17213a;border-color:#293653}
+html[data-theme='dark'] .landing-flow-icon{background:#202b55;border-color:#34416a;color:#a5b4fc}
+@media (max-width:900px){.landing-flow-track{grid-template-columns:repeat(3,1fr)}.landing-flow-track::before{display:none}.landing-pricing-grid{grid-template-columns:repeat(2,minmax(0,1fr))}}
+@media (max-width:520px){.landing-flow-track{grid-template-columns:repeat(2,minmax(0,1fr));gap:10px}.landing-flow-track li{padding:12px 6px 14px}.landing-flow-icon{width:44px;height:44px}.landing-pricing-grid{grid-template-columns:1fr}.landing-nav-btn-primary{white-space:normal}.landing-hero-actions>*{width:100%}.landing-hero-actions>a{justify-content:center}.landing-dashboard-showcase{border-radius:18px}}

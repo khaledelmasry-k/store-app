@@ -77,7 +77,7 @@ async function pendingRequests(subId: string) {
   return snap.size
 }
 
-async function makeTrialStore(tag: string) {
+async function makeTrialStore(tag: string, planId = 'plan-starter', price = 399) {
   const u = uniq()
   const uid = `sub-owner-${tag}-${u}`
   const storeId = `sub-store-${tag}-${u}`
@@ -94,12 +94,12 @@ async function makeTrialStore(tag: string) {
     createdAt: ts(), updatedAt: ts(), createdBy: 'sub-spec',
   })
   await db.collection('subscriptions').add({
-    storeId, planId: 'plan-starter', planName: 'البداية', status: 'trialing',
+    storeId, planId, planName: planId === 'plan-free' ? 'FREE' : 'البداية', status: 'trialing',
     trialStartedAt: admin.firestore.Timestamp.fromDate(new Date(Date.now() - 86400000)),
     trialEndsAt: admin.firestore.Timestamp.fromDate(new Date(Date.now() + 2 * 86400000)),
     startedAt: admin.firestore.Timestamp.fromDate(new Date(Date.now() - 86400000)),
     expiresAt: admin.firestore.Timestamp.fromDate(new Date(Date.now() + 2 * 86400000)),
-    normalPriceSnapshot: 399, launchPriceSnapshot: 399, yearlyPriceSnapshot: 3990, ordersUsed: 0, periodNumber: 0,
+    normalPriceSnapshot: price, launchPriceSnapshot: price, yearlyPriceSnapshot: price * 10, ordersUsed: 0, periodNumber: 0,
     createdAt: ts(), updatedAt: ts(), createdBy: 'sub-spec',
   })
   return { uid, storeId, email, password }
@@ -143,8 +143,10 @@ test('merchant activates during trial: submit payment → platform approves → 
   await page.goto('/dashboard/subscription', { waitUntil: 'domcontentloaded' })
   await expect(page.getByRole('heading', { name: 'تفعيل الاشتراك' })).toBeVisible({ timeout: 45000 })
 
-  // The current catalog charges the canonical Starter monthly price.
-  await expect(page.getByText('399 ج.م')).toBeVisible()
+  // This fixture is a legacy Starter trial. Its immutable 399 EGP price
+  // snapshot must survive the launch-catalog change to 499 EGP.
+  const renewalRow = page.locator('.subscription-summary-rows > div', { hasText: 'تكلفة التجديد' })
+  await expect(renewalRow).toContainText(/(?:399|٣٩٩)/)
 
   // Submit a payment request.
   await page.locator('.field', { hasText: 'وسيلة الدفع' }).locator('input').fill('فودافون كاش')
@@ -153,7 +155,7 @@ test('merchant activates during trial: submit payment → platform approves → 
   await expect(page.getByText('طلبك قيد المراجعة')).toBeVisible({ timeout: 15000 })
 
   expect(await pendingRequests(sub.id)).toBe(1)
-  // Server computed the canonical Starter price for the first paid month.
+  // Server computed the grandfathered snapshot, not the new catalog price.
   const paySnap = await db.collection('subscriptionPayments').where('subscriptionId', '==', sub.id).get()
   expect(paySnap.docs[0].data().amount).toBe(399)
 
@@ -217,6 +219,37 @@ test('expired merchant cannot publish (server-enforced)', async ({ page }) => {
   await expect(page.getByText('فشل تحديث حالة النشر')).toBeVisible({ timeout: 15000 })
   const storeSnap = await db.collection('stores').doc(storeId).get()
   expect(storeSnap.data()!.published).toBe(false)
+})
+
+test('expired Free merchant is gated but can request a 499 EGP Starter upgrade', async ({ page }) => {
+  const { storeId, email, password } = await makeTrialStore('free-upgrade', 'plan-free', 0)
+  await db.collection('subscriptions').where('storeId', '==', storeId).get().then((snap) =>
+    snap.docs[0].ref.update({
+      trialEndsAt: admin.firestore.Timestamp.fromDate(new Date(Date.now() - 86400000)),
+      expiresAt: admin.firestore.Timestamp.fromDate(new Date(Date.now() - 86400000)),
+    }),
+  )
+
+  await login(page, 'merchant', email, password)
+  await page.goto('/dashboard/products', { waitUntil: 'domcontentloaded' })
+  await dismissMerchantTourIfVisible(page)
+  await expect(page.getByText('هذه الميزة غير متاحة في باقتك الحالية')).toBeVisible({ timeout: 15000 })
+  await page.goto('/dashboard/subscription', { waitUntil: 'domcontentloaded' })
+  await dismissMerchantTourIfVisible(page)
+  await expect(page.getByText('اختر Starter أو Growth أو Pro')).toBeVisible({ timeout: 15000 })
+  await dismissMerchantTourIfVisible(page)
+  await safeClickWithTourGuard(page, page.locator('.subscription-summary-actions').getByRole('button', { name: 'ترقية الخطة' }))
+  const starter = page.locator('.mk-pricing-card').filter({ has: page.locator('.mk-pricing-name', { hasText: 'STARTER' }) }).last()
+  await safeClickWithTourGuard(page, starter.getByRole('button', { name: 'اختيار' }))
+  await page.getByRole('button', { name: 'تأكيد التغيير' }).click()
+
+  const request = await expect.poll(async () => {
+    const snap = await db.collection('subscriptionChangeRequests').where('storeId', '==', storeId).get()
+    return snap.docs[0]?.data() || null
+  }, { timeout: 15000 }).not.toBeNull()
+  void request
+  const change = (await db.collection('subscriptionChangeRequests').where('storeId', '==', storeId).get()).docs[0].data()
+  expect(change).toMatchObject({ fromPlanId: 'plan-free', toPlanId: 'plan-starter', quotedAmount: 499, status: 'pending_payment' })
 })
 
 test('storefront is purchasable again after activation', async ({ page }) => {
