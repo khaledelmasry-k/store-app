@@ -11,10 +11,11 @@ import { useTheme } from '../../shared/hooks/useTheme'
 import { CANONICAL_PLANS } from '../../shared/plans/catalog'
 import type { SubscriptionPlan } from '../../shared/types'
 import { setSeo } from '../../shared/utils/seo'
-import { getPublicPromotionsCallable } from '../../shared/services/auth'
+import { getPublicPlatformConfigCallable, getPublicPromotionsCallable } from '../../shared/services/auth'
 import heroCommerceVisual from '../../assets/brand/matjari-hero-commerce-v2.webp'
 import dashboardShowcase from '../../assets/brand/matjari-dashboard-showcase-v1.png'
 import { OperatingJourney } from '../components/OperatingJourney'
+import { resolveEnterpriseContact } from '../utils/enterpriseContact'
 import './LandingPage.css'
 
 const NAV_LINKS = [
@@ -54,8 +55,16 @@ function HeroCommerceVisual() {
 }
 export const LandingPage: FunctionalComponent = () => {
   const [menuOpen, setMenuOpen] = useState(false)
+  const [enterpriseContact, setEnterpriseContact] = useState(() => resolveEnterpriseContact())
   const [promotions, setPromotions] = useState<any[]>([]); const theme = useTheme()
   useEffect(() => { setSeo({ title: 'Matjari | كل تجارتك من مكان واحد', description: 'متجر وطلبات وعملاء وشحن وCRM وروابط بيع وتقارير في دورة تشغيل واحدة.', type: 'website' }); getPublicPromotionsCallable().then((r: any) => setPromotions(r.data?.promotions || [])).catch(() => setPromotions([])) }, [])
+  useEffect(() => {
+    let mounted = true
+    void getPublicPlatformConfigCallable()
+      .then((result: any) => { if (mounted) setEnterpriseContact(resolveEnterpriseContact(result.data)) })
+      .catch(() => { if (mounted) setEnterpriseContact(resolveEnterpriseContact()) })
+    return () => { mounted = false }
+  }, [])
   const plansRes = useCollection<SubscriptionPlan>('plans', {}); const plans = useMemo(() => CANONICAL_PLANS.map((canonical) => { const live = plansRes.data.find((plan) => plan.id === canonical.id || plan.name?.toLowerCase() === canonical.name.toLowerCase()); if (!live) return canonical; if (canonical.id !== 'plan-lifetime') return { ...live, ...canonical }; return { ...canonical, ...live, id: canonical.id, sortOrder: canonical.sortOrder } }), [plansRes.data])
   const subscriptionPlans = plans.filter((plan) => ['plan-free', 'plan-starter', 'plan-growth', 'plan-pro'].includes(plan.id) && plan.billingModel !== 'one_time' && plan.active !== false && plan.isPurchasable !== false && plan.archived !== true); const lifetimeOffer = plans.find((plan) => plan.billingModel === 'one_time' && plan.isLaunchOffer !== false && plan.active !== false && plan.isPurchasable !== false && plan.archived !== true && offerIsPubliclyAvailable(plan)); const publicPromotion = promotions.find((p) => p.placement === 'pricing' && p.planId && p.promotionalPrice != null)
   const goTo = (href: string) => (event: MouseEvent) => { if (href.startsWith('#')) { event.preventDefault(); document.getElementById(href.slice(1))?.scrollIntoView({ behavior: 'smooth', block: 'start' }) }; setMenuOpen(false) }
@@ -72,12 +81,12 @@ export const LandingPage: FunctionalComponent = () => {
         const cta = plan.id === 'plan-free' ? 'ابدأ 30 يومًا مجانًا' : plan.id === 'plan-starter' ? 'جرّب Starter لمدة 3 أيام' : plan.id === 'plan-growth' ? 'جرّب Growth لمدة 3 أيام' : plan.id === 'plan-pro' ? 'جرّب Pro لمدة 3 أيام' : 'ابدأ تجربتك'
         return <div className="landing-plan-wrap stitch-plan-wrap" key={plan.id}><PricingCard plan={plan} featured={!!plan.isPopular} /><Link href={`/register?plan=${plan.id}`} className="landing-plan-link stitch-plan-link">{cta}</Link></div>
       })}</div>{lifetimeOffer && <section className="landing-special-offer stitch-lifetime-offer"><div><span>منتج منفصل عن الاشتراكات — بدون تجربة</span><h2>امتلك متجرك — Lifetime Access</h2><p>حق استخدام دائم لمتجر واحد وفق حدود العرض المحددة، عبر طلب شراء ومراجعة دفع منفصلين.</p><Link href="/register?offer=lifetime" className="landing-special-cta stitch-offer-cta">اعرف التفاصيل</Link></div><PricingCard plan={lifetimeOffer} displayName="Lifetime Access" /></section>}
-        <section className="landing-enterprise-offer" aria-labelledby="enterprise-title"><div><span>حلول مخصصة</span><h2 id="enterprise-title">محتاج متجر أو تشغيل بمواصفات خاصة؟</h2><p>لو حجم نشاطك أكبر من الباقات الحالية، أو تحتاج إعدادات أو تكاملات أو متطلبات خاصة، تواصل معنا لنجهز لك عرضًا يناسب طبيعة شغلك.</p><Link href="/contact" className="landing-enterprise-cta">اطلب عرضًا مخصصًا</Link></div></section>
+        <section className="landing-enterprise-offer" aria-labelledby="enterprise-title"><div><span>حلول مخصصة</span><h2 id="enterprise-title">محتاج متجر أو تشغيل بمواصفات خاصة؟</h2><p>لو حجم نشاطك أكبر من الباقات الحالية، أو تحتاج إعدادات أو تكاملات أو متطلبات خاصة، تواصل معنا لنجهز لك عرضًا يناسب طبيعة شغلك.</p><a href={enterpriseContact.href} className="landing-enterprise-cta" target={enterpriseContact.enabled ? '_blank' : undefined} rel={enterpriseContact.enabled ? 'noopener noreferrer' : undefined} onClick={enterpriseContact.enabled ? undefined : goTo('#contact')}><Icon name={enterpriseContact.enabled ? 'chat' : 'arrow_downward'} />{enterpriseContact.label}</a></div></section>
       </div></section>
       <section id="faq" className="landing-section landing-faq"><div className="landing-container"><div className="landing-section-heading"><span>الأسئلة الشائعة</span><h2>إجابات واضحة قبل أن تبدأ</h2></div><div className="landing-faq-list rich-faq-list">{FAQS.map(([question, answer]) => <details key={question}><summary>{question}<Icon name="keyboard_arrow_down" /></summary><p>{answer}</p></details>)}</div></div></section>
       <section className="landing-final-cta stitch-final-cta"><div className="landing-container"><span>ابدأ اليوم</span><h2>جاهز تجمع تجارتك في مكان واحد؟</h2><p>أنشئ متجرك وابدأ دورة تشغيل كاملة لمدة 30 يومًا.</p><Link href="/register"><Button icon="rocket_launch">ابدأ شهرك المجاني</Button></Link></div></section>
     </main>
-    <footer id="contact" className="landing-footer stitch-footer-band"><div className="landing-container landing-footer-grid"><div className="landing-footer-brand"><BrandLogo className="landing-footer-logo" /><p>Commerce Operating System يجمع المتجر والطلبات والعملاء والشحن وCRM وروابط البيع والتقارير.</p></div><div><h3>المنتج</h3><a href="#features" onClick={goTo('#features')}>المميزات</a><a href="#pricing" onClick={goTo('#pricing')}>الأسعار</a><a href="#how-it-works" onClick={goTo('#how-it-works')}>كيف تعمل</a></div><div><h3>ابدأ</h3><a href="/register">ابدأ شهرك المجاني</a><a href="/login">تسجيل الدخول</a></div><div><h3>الدعم</h3><a href="#faq" onClick={goTo('#faq')}>الأسئلة الشائعة</a></div><div><h3>قانوني</h3><a href="/terms">الشروط والأحكام</a><a href="/privacy">سياسة الخصوصية</a></div></div><div className="landing-container landing-footer-copy">© {new Date().getFullYear()} Matjari — متجري. جميع الحقوق محفوظة.</div></footer>
+    <footer id="contact" className="landing-footer stitch-footer-band"><div className="landing-container landing-footer-grid"><div className="landing-footer-brand"><BrandLogo className="landing-footer-logo" /><p>Commerce Operating System يجمع المتجر والطلبات والعملاء والشحن وCRM وروابط البيع والتقارير.</p></div><div><h3>المنتج</h3><a href="#features" onClick={goTo('#features')}>المميزات</a><a href="#pricing" onClick={goTo('#pricing')}>الأسعار</a><a href="#how-it-works" onClick={goTo('#how-it-works')}>كيف تعمل</a></div><div><h3>ابدأ</h3><a href="/register">ابدأ شهرك المجاني</a><a href="/login">تسجيل الدخول</a></div><div className="landing-footer-contact"><h3>تواصل معنا</h3>{enterpriseContact.enabled ? <a className="landing-footer-whatsapp" href={enterpriseContact.href} target="_blank" rel="noopener noreferrer"><Icon name="chat" /><span>تحدث معنا على واتساب</span></a> : <p className="landing-footer-contact-note">تظهر قناة المبيعات هنا عند تفعيلها من إعدادات المنصة.</p>}<a href="#faq" onClick={goTo('#faq')}>الأسئلة الشائعة</a></div><div><h3>قانوني</h3><a href="/terms">الشروط والأحكام</a><a href="/privacy">سياسة الخصوصية</a></div></div><div className="landing-container landing-footer-copy">© {new Date().getFullYear()} Matjari — متجري. جميع الحقوق محفوظة.</div></footer>
   </div>
 }
 export default LandingPage
