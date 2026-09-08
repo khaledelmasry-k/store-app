@@ -3,7 +3,7 @@ import { useEffect, useState } from 'preact/hooks'
 import { Link, useLocation } from 'wouter'
 import { Button } from '../ui/Button'
 import { AuthShell } from './AuthShell'
-import { login, registerMerchant, sendVerificationEmail } from '../../services/auth'
+import { login, registerMerchant, sendVerificationEmail, quoteSubscriptionCouponCallable } from '../../services/auth'
 import { useToast } from '../../hooks/useToast'
 import { useCollection } from '../../hooks/useCollection'
 import { formatCurrency } from '../../utils/format'
@@ -81,6 +81,8 @@ export const Register:FunctionalComponent = () => {
   const toast = useToast()
   const [step, setStep] = useState(0)
   const [form, setForm] = useState({ email: '', password: '', name: '', phone: '', storeName: '', storeRef: '' })
+  const [couponCode, setCouponCode] = useState((params.get('coupon') || '').toUpperCase())
+  const [couponState, setCouponState] = useState<{ status: 'idle' | 'loading' | 'success' | 'error'; message?: string }>({ status: 'idle' })
   const [termsAccepted, setTermsAccepted] = useState(false)
   const [showPassword, setShowPassword] = useState(false)
   const [error, setError] = useState('')
@@ -104,6 +106,18 @@ export const Register:FunctionalComponent = () => {
     if (step > 0) setStep(step - 1)
   }
 
+  const applyCoupon = async () => {
+    const code = couponCode.trim().toUpperCase()
+    if (!code || !selectedPlan) return
+    setCouponState({ status: 'loading' })
+    try {
+      const result: any = await quoteSubscriptionCouponCallable({ code, planId: selectedPlan.id, billingCycle: 'monthly', amount: Number(selectedPlan.priceMonthly || 0) })
+      setCouponState({ status: 'success', message: result.data?.finalPrice === 0 ? 'تم تطبيق العرض — أول شهر بعد التجربة مجانًا' : 'تم تطبيق كود الخصم' })
+    } catch (err: any) {
+      setCouponState({ status: 'error', message: err?.message || 'كود الخصم غير صالح' })
+    }
+  }
+
   const submit = async (e: Event) => {
     e.preventDefault()
     setError('')
@@ -121,6 +135,7 @@ export const Register:FunctionalComponent = () => {
         storeName: form.storeName.trim(),
         storeRef: form.storeRef.trim() || form.storeName.trim(),
         planId,
+        couponCode: couponCode.trim().toUpperCase() || undefined,
       })
       await login({ email: form.email.trim(), password: form.password })
       try { sessionStorage.setItem('matjari:email-verification-pending', '1') } catch { /* storage may be unavailable */ }
@@ -331,6 +346,7 @@ export const Register:FunctionalComponent = () => {
                 <button type="button" className="register-change-plan" onClick={() => setPlanSelectorOpen((open) => !open)}>{planSelectorOpen ? 'إغلاق الاختيار' : 'تغيير الباقة'}</button>
               </div>
             )}
+            {!lifetimeMode && selectedPlan && <div className="register-coupon-field"><label htmlFor="subscription-coupon">كود الخصم (اختياري)</label><div className="register-coupon-row"><input id="subscription-coupon" value={couponCode} onInput={(e) => { setCouponCode((e.currentTarget as HTMLInputElement).value.toUpperCase()); setCouponState({ status: 'idle' }) }} placeholder="مثال: WASLA100" /><Button type="button" variant="outline" loading={couponState.status === 'loading'} onClick={applyCoupon}>تطبيق</Button></div>{couponState.message && <small className={couponState.status === 'error' ? 'text-danger' : 'text-success'}>{couponState.message}</small>}</div>}
             {!lifetimeMode && planSelectorOpen && <div className="plan-cards plan-cards--pricing register-plan-selector">
               {plans.map((p) => (
                 <PricingCard

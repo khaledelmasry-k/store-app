@@ -13,7 +13,7 @@ import { SegmentedControl } from '../../shared/components/ui/SegmentedControl'
 import { Table } from '../../shared/components/ui/Table'
 import { useCollection } from '../../shared/hooks/useCollection'
 import { useToast } from '../../shared/hooks/useToast'
-import { savePlanCallable, syncCanonicalPlansCallable } from '../../shared/services/auth'
+import { savePlanCallable, syncCanonicalPlansCallable, manageSubscriptionCouponCallable } from '../../shared/services/auth'
 import { formatPriceEgp } from '../../shared/utils/format'
 import { PLAN_FEATURE_KEYS, PLAN_FEATURE_LABELS, type PlanFeatureKey } from '../../shared/services/subscription'
 import type { SubscriptionPlan } from '../../shared/types'
@@ -57,6 +57,8 @@ export const PlatformPlans: FunctionalComponent = () => {
   const [form, setForm] = useState<Partial<SubscriptionPlan>>({ features: [] as string[] })
   const [flags, setFlags] = useState<Record<PlanFeatureKey, boolean>>(emptyFlags())
   const [syncing, setSyncing] = useState(false)
+  const [couponForm, setCouponForm] = useState({ code: 'WASLA100', discountValue: 100, partner: 'wasla', active: true })
+  const [couponSaving, setCouponSaving] = useState(false)
 
   const recommendedId = [...subscriptionPlans].sort((a, b) => a.priceMonthly - b.priceMonthly)[Math.max(0, Math.floor((subscriptionPlans.length - 1) / 2))]?.id
 
@@ -151,6 +153,16 @@ export const PlatformPlans: FunctionalComponent = () => {
     } finally {
       setSyncing(false)
     }
+  }
+
+  const saveSubscriptionCoupon = async () => {
+    setCouponSaving(true)
+    try {
+      await manageSubscriptionCouponCallable({ operation: 'create', coupon: { ...couponForm, discountType: 'percentage', applicablePlanIds: ['plan-basic', 'plan-starter', 'plan-growth', 'plan-pro'], applicableBillingCycles: ['monthly'], firstCycleOnly: true, perMerchantLimit: 1 } })
+      toast.push('تم إنشاء كوبون اشتراكات المنصة', undefined, 'success')
+    } catch (err: any) {
+      toast.push('فشل حفظ كوبون الاشتراك', err?.message || 'تحقق من البيانات', 'error')
+    } finally { setCouponSaving(false) }
   }
 
   return (
@@ -306,6 +318,15 @@ export const PlatformPlans: FunctionalComponent = () => {
           </div>
         </Card>
       )}
+
+      <Card title="كوبونات اشتراكات المنصة" subtitle="منفصلة عن كوبونات طلبات المتاجر — تحقق الخادم هو المصدر النهائي." className="mt-2">
+        <div className="grid grid-2">
+          <Input label="الكود" value={couponForm.code} onChange={(v) => setCouponForm({ ...couponForm, code: v.toUpperCase() })} />
+          <Input label="الشريك" value={couponForm.partner} onChange={(v) => setCouponForm({ ...couponForm, partner: v })} />
+        </div>
+        <p className="muted small">WASLA100: خصم 100% لأول دورة شهرية فقط على Basic وStarter وGrowth وPro، بحد استخدام واحد لكل تاجر.</p>
+        <Button icon="save" loading={couponSaving} onClick={saveSubscriptionCoupon}>حفظ كوبون الاشتراك</Button>
+      </Card>
 
       <Modal
         open={open}

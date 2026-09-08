@@ -2182,7 +2182,7 @@ export const deleteProduct = onCall(async (request: CallableRequest<{ storeId?: 
 //     remains an independent, explicit merchant action.
 // ─────────────────────────────────────────────────────────────
 export const registerMerchant = onCall(async (request: CallableRequest<any>) => {
-  const { email, password, name, phone, storeName, storeRef, planId } = request.data || {}
+  const { email, password, name, phone, storeName, storeRef, planId, couponCode } = request.data || {}
   if (!email || !password || !name || !storeName) throw new HttpsError('invalid-argument', 'بيانات التسجيل غير مكتملة')
 
   const uid = db.collection('users').doc().id
@@ -2303,6 +2303,7 @@ export const registerMerchant = onCall(async (request: CallableRequest<any>) => 
     initialTrialStartedAt: Timestamp.fromDate(registrationAt),
     initialTrialEndsAt: Timestamp.fromDate(trialEndsAt),
     trialConsumed: false,
+    ...(couponCode ? { pendingSubscriptionCouponCode: String(couponCode).trim().toUpperCase() } : {}),
     periodNumber: 0,
     normalPriceSnapshot,
     launchPriceSnapshot,
@@ -3062,6 +3063,99 @@ export const requestStorePurchase = onCall(async (request: CallableRequest<{ sto
 //     first paid month = launch price, renewals = normal price. Never trust
 //     a client-supplied amount or plan.
 // ─────────────────────────────────────────────────────────────
+type SubscriptionCoupon = {
+  code: string
+  active?: boolean
+  discountType: 'percentage' | 'fixed'
+  discountValue: number
+  applicablePlanIds?: string[]
+  applicableBillingCycles?: string[]
+  firstCycleOnly?: boolean
+  startsAt?: any
+  expiresAt?: any
+  maxRedemptions?: number
+  redemptionCount?: number
+  perMerchantLimit?: number
+  partner?: string
+}
+
+function couponDateMillis(value: any): number | null {
+  if (!value) return null
+  if (typeof value.toMillis === 'function') return value.toMillis()
+  if (typeof value.toDate === 'function') return value.toDate().getTime()
+  if (typeof value.seconds === 'number') return value.seconds * 1000
+  const ms = new Date(value).getTime()
+  return Number.isFinite(ms) ? ms : null
+}
+
+function couponQuote(coupon: SubscriptionCoupon, planId: string, billingCycle: string, amount: number, periodNumber = 1) {
+  const nowMs = Date.now()
+  if (coupon.active === false) throw new HttpsError('failed-precondition', 'الكوبون غير مفعل')
+  const starts = couponDateMillis(coupon.startsAt)
+  const expires = couponDateMillis(coupon.expiresAt)
+  if (starts && starts > nowMs) throw new HttpsError('failed-precondition', 'الكوبون لم يبدأ بعد')
+  if (expires && expires <= nowMs) throw new HttpsError('failed-precondition', 'انتهت صلاحية الكوبون')
+  if (coupon.applicablePlanIds?.length && !coupon.applicablePlanIds.includes(planId)) throw new HttpsError('failed-precondition', 'الكوبون غير متاح لهذه الباقة')
+  if (coupon.applicableBillingCycles?.length && !coupon.applicableBillingCycles.includes(billingCycle)) throw new HttpsError('failed-precondition', 'الكوبون غير متاح لهذه الدورة')
+  if (coupon.firstCycleOnly && periodNumber > 1) throw new HttpsError('failed-precondition', 'الكوبون متاح للدورة الأولى فقط')
+  const value = Number(coupon.discountValue || 0)
+  const discount = coupon.discountType === 'percentage' ? amount * Math.min(100, Math.max(0, value)) / 100 : Math.max(0, value)
+  return { originalPrice: amount, discountAmount: Math.min(amount, discount), finalPrice: Math.max(0, amount - discount) }
+}
+
+export const quoteSubscriptionCoupon = onCall(async (request: CallableRequest<{ code?: string; planId?: string; billingCycle?: string; amount?: number }>) => {
+  const code = String(request.data?.code || '').trim().toUpperCase()
+  const planId = String(request.data?.planId || '')
+  const billingCycle = request.data?.billingCycle === 'yearly' ? 'yearly' : 'monthly'
+  const amount = Number(request.data?.amount || 0)
+  if (!code || !planId || !Number.isFinite(amount) || amount <= 0) throw new HttpsError('invalid-argument', 'بيانات الكوبون غير مكتملة')
+  const snap = await db.collection('subscriptionCoupons').where('code', '==', code).limit(1).get()
+  if (snap.empty) throw new HttpsError('not-found', 'كود الخصم غير صالح')
+  const quote = couponQuote(snap.docs[0].data() as SubscriptionCoupon, planId, billingCycle, amount, 1)
+  return { ...quote, code, partner: snap.docs[0].data()?.partner || null }
+})
+
+export const manageSubscriptionCoupon = onCall(async (request: CallableRequest<{ operation?: 'create' | 'update'; couponId?: string; coupon?: Record<string, unknown> }>) => {
+  if (!request.auth) throw new HttpsError('unauthenticated', 'يجب تسجيل الدخول')
+  await assertPlatformAdmin(request)
+  const operation = request.data?.operation
+  const input = request.data?.coupon || {}
+  if (operation !== 'create' && operation !== 'update') throw new HttpsError('invalid-argument', 'عملية الكوبون غير صالحة')
+  const code = String(input.code || '').trim().toUpperCase()
+  const ref = operation === 'update' && request.data?.couponId ? db.doc(`subscriptionCoupons/${request.data.couponId}`) : db.collection('subscriptionCoupons').doc()
+  if (operation === 'create' && !code) throw new HttpsError('invalid-argument', 'كود الكوبون مطلوب')
+  if (operation === 'create') {
+    const duplicate = await db.collection('subscriptionCoupons').where('code', '==', code).limit(1).get()
+    if (!duplicate.empty) throw new HttpsError('already-exists', 'كود الخصم مستخدم بالفعل')
+  }
+  const existing = operation === 'update' ? await ref.get() : null
+  if (operation === 'update' && !existing?.exists) throw new HttpsError('not-found', 'الكوبون غير موجود')
+  const current = existing?.data() || {}
+  const data = {
+    code: code || current.code,
+    active: input.active !== undefined ? input.active === true : current.active !== false,
+    discountType: input.discountType === 'fixed' ? 'fixed' : (current.discountType || 'percentage'),
+    discountValue: Number(input.discountValue ?? current.discountValue ?? 0),
+    applicablePlanIds: Array.isArray(input.applicablePlanIds) ? input.applicablePlanIds : (current.applicablePlanIds || ['plan-basic', 'plan-starter', 'plan-growth', 'plan-pro']),
+    applicableBillingCycles: Array.isArray(input.applicableBillingCycles) ? input.applicableBillingCycles : (current.applicableBillingCycles || ['monthly']),
+    firstCycleOnly: input.firstCycleOnly !== undefined ? input.firstCycleOnly === true : current.firstCycleOnly === true,
+    startsAt: input.startsAt || current.startsAt || null,
+    expiresAt: input.expiresAt || current.expiresAt || null,
+    maxRedemptions: input.maxRedemptions == null ? (current.maxRedemptions || null) : Math.max(0, Number(input.maxRedemptions)),
+    redemptionCount: Number(current.redemptionCount || 0),
+    perMerchantLimit: input.perMerchantLimit == null ? (current.perMerchantLimit || 1) : Math.max(1, Number(input.perMerchantLimit)),
+    partner: String(input.partner || current.partner || ''),
+    createdAt: current.createdAt || now(),
+    createdBy: current.createdBy || request.auth.uid,
+    updatedAt: now(),
+  }
+  if (!data.code || !Number.isFinite(data.discountValue) || data.discountValue <= 0 || (data.discountType === 'percentage' && data.discountValue > 100)) throw new HttpsError('invalid-argument', 'قيمة الخصم غير صالحة')
+  await ref.set(data, { merge: true })
+  return { ok: true, couponId: ref.id }
+})
+
+// Subscription activation requests remain server-priced. If a registration
+// carries a valid coupon, the first paid cycle is atomically reserved once.
 export const submitPaymentRequest = onCall(async (request: CallableRequest<{ subscriptionId?: string; changeRequestId?: string; purchaseRequestId?: string; paymentMethod?: string; reference?: string; note?: string; screenshotUrl?: string }>) => {
   if (!request.auth) throw new HttpsError('unauthenticated', 'يجب تسجيل الدخول')
   const { subscriptionId, changeRequestId, purchaseRequestId, paymentMethod, reference, note, screenshotUrl } = request.data || {}
@@ -3232,6 +3326,18 @@ export const submitPaymentRequest = onCall(async (request: CallableRequest<{ sub
   // Never trust client price — amount is server-derived canonical launch price.
   if (amount <= 0) throw new HttpsError('failed-precondition', 'تعذر تحديد مبلغ الاشتراك')
 
+  const pendingCouponCode = String(sub.pendingSubscriptionCouponCode || '').trim().toUpperCase()
+  let couponSnapshot: any = null
+  let couponFinancial = { originalPrice: amount, discountAmount: 0, finalPrice: amount }
+  if (pendingCouponCode && periodNumber === 1 && !isYearly) {
+    const couponQuery = await db.collection('subscriptionCoupons').where('code', '==', pendingCouponCode).limit(1).get()
+    if (!couponQuery.empty) {
+      couponSnapshot = { id: couponQuery.docs[0].id, ...couponQuery.docs[0].data() }
+      couponFinancial = couponQuote(couponSnapshot, sub.planId, sub.billingCycle || 'monthly', amount, periodNumber)
+    }
+  }
+  const finalAmount = couponFinancial.finalPrice
+
   const payRef = db.collection('subscriptionPayments').doc()
   await db.runTransaction(async (tx) => {
     const current = await tx.get(subRef)
@@ -3243,13 +3349,29 @@ export const submitPaymentRequest = onCall(async (request: CallableRequest<{ sub
         throw new HttpsError('already-exists', 'يوجد طلب تفعيل قيد المراجعة بالفعل')
       }
     }
+    if (couponSnapshot) {
+      const couponRef = db.doc(`subscriptionCoupons/${couponSnapshot.id}`)
+      const redemptionRef = db.doc(`subscriptionCouponRedemptions/${couponSnapshot.id}_${request.auth!.uid}`)
+      const couponCurrent = await tx.get(couponRef)
+      const redemption = await tx.get(redemptionRef)
+      const currentCoupon = couponCurrent.data() as SubscriptionCoupon | undefined
+      if (!couponCurrent.exists || !currentCoupon) throw new HttpsError('failed-precondition', 'الكوبون غير صالح')
+      if (redemption.exists) throw new HttpsError('already-exists', 'تم استخدام هذا الكوبون لهذا التاجر من قبل')
+      if (currentCoupon.maxRedemptions && Number(currentCoupon.redemptionCount || 0) >= Number(currentCoupon.maxRedemptions)) throw new HttpsError('resource-exhausted', 'اكتمل عدد استخدامات الكوبون')
+      tx.create(redemptionRef, { couponId: couponSnapshot.id, code: pendingCouponCode, merchantId: request.auth!.uid, storeId: sub.storeId, planId: sub.planId, billingCycle: sub.billingCycle || 'monthly', originalPrice: amount, discountAmount: couponFinancial.discountAmount, finalPrice: finalAmount, partner: currentCoupon.partner || null, redeemedAt: now(), createdAt: now() })
+      tx.update(couponRef, { redemptionCount: FieldValue.increment(1), updatedAt: now() })
+    }
     tx.create(payRef, {
       id: payRef.id,
       subscriptionId,
       storeId: sub.storeId,
       planId: sub.planId,
       planName: sub.planName || sub.planId,
-      amount,
+      amount: finalAmount,
+      originalPrice: amount,
+      discountAmount: couponFinancial.discountAmount,
+      finalPrice: finalAmount,
+      ...(couponSnapshot ? { couponCode: pendingCouponCode, partner: couponSnapshot.partner || null, couponRedemptionId: `${couponSnapshot.id}_${request.auth!.uid}` } : {}),
       paymentPurpose: periodNumber <= 1 ? 'subscription_activation' : 'subscription_renewal',
       paymentMethod: String(paymentMethod),
       reference: String(reference).trim(),
@@ -3262,13 +3384,13 @@ export const submitPaymentRequest = onCall(async (request: CallableRequest<{ sub
       updatedAt: now(),
       createdBy: request.auth!.uid,
     })
-    tx.update(subRef, { pendingPaymentId: payRef.id, updatedAt: now() })
+    tx.update(subRef, { pendingPaymentId: payRef.id, ...(couponSnapshot ? { acquisitionSource: couponSnapshot.partner || 'subscription_coupon', pendingSubscriptionCouponCode: FieldValue.delete() } : {}), updatedAt: now() })
   })
 
-  await createBillingNotification(sub.storeId, request.auth.uid, 'تم إرسال طلب التفعيل', `تم استلام طلب تفعيل اشتراكك بمبلغ ${amount} ج.م. وهو قيد المراجعة من إدارة المنصة.`)
-  await auditLog(sub.storeId, request.auth.uid, 'payment_submitted', 'subscriptionPayments', payRef.id, { amount, periodNumber })
+  await createBillingNotification(sub.storeId, request.auth.uid, 'تم إرسال طلب التفعيل', `تم استلام طلب تفعيل اشتراكك بمبلغ ${finalAmount} ج.م. وهو قيد المراجعة من إدارة المنصة.`)
+  await auditLog(sub.storeId, request.auth.uid, 'payment_submitted', 'subscriptionPayments', payRef.id, { amount: finalAmount, originalPrice: amount, discountAmount: couponFinancial.discountAmount, periodNumber, couponCode: pendingCouponCode || null })
 
-  return { id: payRef.id, amount, status: 'pending' }
+  return { id: payRef.id, amount: finalAmount, originalPrice: amount, discountAmount: couponFinancial.discountAmount, status: 'pending' }
 })
 
 // ─────────────────────────────────────────────────────────────
