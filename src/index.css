@@ -3375,7 +3375,7 @@ textarea.input {
   color: var(--text-muted);
   font-size: var(--font-sm);
 }
-.store-footer-link:hover { color: var(--primary); }
+.store-footer-link:hover { color: var(--primary); text-decoration: underline; text-underline-offset: 3px; }
 .store-footer-bottom {
   max-width: var(--container-2xl);
   margin-block-start: var(--space-6);

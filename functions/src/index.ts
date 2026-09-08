@@ -6521,7 +6521,6 @@ export const exitImpersonation = onCall(async (request: CallableRequest) => {
   })
   // Record the exit in the admin's audit trail
   await db.collection('auditLogs').add({
-    storeId: null,
     userId: adminUid,
     action: 'impersonation_exited',
     resource: 'users',
