@@ -11127,6 +11127,7 @@ textarea.input:focus {
       background: var(--surface-container-lowest);
       border-top: 1px solid var(--border);
       padding-bottom: env(safe-area-inset-bottom);
+      min-height: calc(68px + env(safe-area-inset-bottom));
     }
   .shell-content {
     padding-bottom: 72px;

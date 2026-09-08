@@ -2485,4 +2485,13 @@
     max-width: 100% !important;
     margin-inline-start: 0 !important;
   }
+  html body .app-shell,
+  html body .app-shell .app-shell-body,
+  html body .app-shell .shell-main,
+  html body .app-shell .shell-content,
+  html body .app-shell .route-surface { width: 100% !important; max-width: 100% !important; min-width: 0 !important; margin-inline: 0 !important; overflow-x: clip; }
+  html body .app-shell--dashboard .shell-content { padding-inline: 12px !important; padding-bottom: calc(92px + env(safe-area-inset-bottom)) !important; }
+  html body .app-shell--dashboard .topbar-actions { max-width: 45vw; overflow: hidden; }
+  html body .app-shell--dashboard .topbar-brand { max-width: 42vw; }
+  html body .app-shell--dashboard .topbar-search { display: none !important; }
 }
