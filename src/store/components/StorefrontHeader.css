@@ -21,9 +21,6 @@
 .storefront-theme-strip--market { background: color-mix(in srgb, var(--primary) 88%, #111); }
 .theme-header-minimal .storefront-nav { gap: 6px; }
 .theme-header-elegant .storefront-header-inner { max-width: 1180px; }
-.theme-header-elegant .storefront-brand { margin-inline: auto; order: 2; }
-.theme-header-elegant .storefront-nav { order: 1; }
-.theme-header-elegant .storefront-controls { order: 3; }
 .theme-header-showcase .storefront-header { background: transparent; border-bottom-color: transparent; }
 .theme-header-showcase .storefront-header--scrolled { background: var(--surface); border-bottom-color: var(--border); }
 .theme-header-showcase .storefront-header-inner { position: relative; z-index: 1; }
@@ -35,7 +32,7 @@
 .storefront-header-inner {
   display: flex;
   align-items: center;
-  justify-content: space-between;
+  justify-content: flex-start;
   gap: 24px;
   max-width: 1440px;
   margin-inline: auto;
@@ -50,6 +47,7 @@
 .storefront-brand {
   display: inline-flex;
   align-items: center;
+  flex: none;
   gap: 8px;
   min-width: 0;
   color: var(--foreground);
@@ -67,10 +65,12 @@
   max-width: 40vw;
 }
 .storefront-brand img.store-logo {
-  width: 132px;
-  height: 48px;
-  max-width: 160px;
+  display: block;
+  width: auto;
+  height: 52px;
+  max-width: 180px;
   max-height: 56px;
+  object-fit: contain;
 }
 .storefront-brand .store-logo--preset {
   font-size: 36px;
@@ -110,6 +110,8 @@
 .storefront-controls {
   display: flex;
   align-items: center;
+  min-width: 0;
+  margin-inline-start: auto;
   gap: 16px;
 }
 
@@ -308,13 +310,33 @@
     display: none;
   }
   .storefront-header-inner {
-    height: 64px;
+    display: grid;
+    grid-template-columns: 44px minmax(0, 1fr) auto;
+    min-height: 64px;
     padding: 0 16px;
     gap: 8px;
   }
+  .storefront-menu-btn {
+    grid-column: 1;
+  }
   .storefront-brand {
-    flex: 1;
+    grid-column: 2;
+    width: 100%;
     justify-content: center;
+    overflow: hidden;
+  }
+  .storefront-brand img.store-logo {
+    width: auto;
+    height: 48px;
+    max-width: min(132px, 100%);
+  }
+  .storefront-brand .store-logo--preset {
+    height: 44px;
+    max-width: 100%;
+  }
+  .storefront-controls {
+    grid-column: 3;
+    margin-inline-start: 0;
   }
   .storefront-brand .store-brand-name {
     max-width: 46vw;

@@ -5993,12 +5993,12 @@ textarea.input {
 .store-shell.theme-minimal .storefront-nav { gap: 14px; }
 .store-shell.theme-minimal .spc-card { border: 1px solid var(--store-border, #e5e7eb); box-shadow: none; }
 .store-shell.theme-minimal .store-grid { grid-template-columns: repeat(4, minmax(0, 1fr)); }
-.store-shell.theme-minimal .sf-hero { height: 340px; border-radius: 8px; }
+.store-shell.theme-minimal .sf-hero { height: auto; min-height: 340px; border-radius: 8px; }
 .store-shell.theme-minimal .sf-cat-circle { width: 58px; height: 58px; }
 
 .store-shell.theme-bold .storefront-header { border-bottom-width: 3px; }
 .store-shell.theme-bold .storefront-search { max-width: 360px; }
-.store-shell.theme-bold .sf-hero { height: 480px; border-radius: 20px; }
+.store-shell.theme-bold .sf-hero { height: auto; min-height: 480px; border-radius: 20px; }
 .store-shell.theme-bold .sf-hero-title { font-size: clamp(32px, 4vw, 56px); }
 .store-shell.theme-bold .spc-card { border-radius: 16px; border-width: 2px; }
 .store-shell.theme-bold .spc-media { aspect-ratio: 1 / 1; }
@@ -6006,9 +6006,9 @@ textarea.input {
 .store-shell.theme-bold .store-grid { grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 22px; }
 
 .store-shell.theme-elegant { --store-card-radius: 20px; }
-.store-shell.theme-elegant .storefront-header-inner { justify-content: center; }
+.store-shell.theme-elegant .storefront-header-inner { justify-content: flex-start; }
 .store-shell.theme-elegant .storefront-nav { gap: 24px; }
-.store-shell.theme-elegant .sf-hero { height: 400px; border-radius: 26px; }
+.store-shell.theme-elegant .sf-hero { height: auto; min-height: 480px; border-radius: 26px; }
 .store-shell.theme-elegant .spc-card { border-radius: 20px; box-shadow: 0 12px 32px rgba(79, 70, 229, .08); }
 .store-shell.theme-elegant .spc-body { padding: 20px; text-align: center; }
 .store-shell.theme-elegant .spc-media { aspect-ratio: 4 / 5; }
@@ -6016,14 +6016,14 @@ textarea.input {
 
 .store-shell.theme-market .storefront-header-inner { flex-wrap: wrap; }
 .store-shell.theme-market .storefront-nav { order: 3; flex-basis: 100%; justify-content: flex-start; gap: 10px; }
-.store-shell.theme-market .sf-hero { height: 300px; border-radius: 10px; }
+.store-shell.theme-market .sf-hero { height: auto; min-height: 360px; border-radius: 10px; }
 .store-shell.theme-market .spc-card { border-radius: 8px; }
 .store-shell.theme-market .spc-media { aspect-ratio: 1 / 1; }
 .store-shell.theme-market .spc-body { padding: 10px; }
 .store-shell.theme-market .spc-price { font-size: 19px; font-weight: 800; }
 .store-shell.theme-market .store-grid { grid-template-columns: repeat(5, minmax(0, 1fr)); gap: 12px; }
 
-.store-shell.theme-showcase .sf-hero { height: 520px; border-radius: 24px; }
+.store-shell.theme-showcase .sf-hero { height: auto; min-height: 520px; border-radius: 24px; }
 .store-shell.theme-showcase .sf-featured-grid { grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 26px; }
 .store-shell.theme-showcase .spc-card { border-radius: 24px; }
 .store-shell.theme-showcase .spc-media { aspect-ratio: 3 / 4; }
@@ -6034,7 +6034,7 @@ textarea.input {
 .theme-legacy-group > summary { cursor: pointer; color: var(--muted, #64748b); font-weight: 700; margin-block-end: 14px; }
 @media (max-width: 760px) {
   .store-shell.theme-bold .sf-hero,
-  .store-shell.theme-showcase .sf-hero { height: 360px; }
+  .store-shell.theme-showcase .sf-hero { height: auto; min-height: 360px; }
   .store-shell.theme-market .storefront-nav { order: initial; flex-basis: auto; }
   .store-shell.theme-minimal .store-grid,
   .store-shell.theme-bold .store-grid,
@@ -12023,7 +12023,7 @@ html:not([data-theme='dark']) .loading-screen {
 .store-shell .spc-body { padding: 15px; }
 .store-shell .spc-media { aspect-ratio: 4 / 5; }
 .store-shell .storefront-header-inner { max-width: 1240px; padding-block: 11px; }
-.store-shell .sf-hero { height: 420px; margin-block-start: 12px; }
+.store-shell .sf-hero { height: auto; min-height: 420px; margin-block-start: 12px; }
 .store-shell .sf-trust { margin-block-start: 22px; }
 .store-shell .sf-categories { margin-block-start: 40px; }
 .store-shell .sf-featured { margin-block-start: 48px; }
@@ -12049,7 +12049,7 @@ html:not([data-theme='dark']) .loading-screen {
   .store-shell .storefront-page,
   .store-shell .storefront-home { width: calc(100% - 32px); }
   .store-shell .storefront-page { padding-block: 24px 40px; }
-  .store-shell .sf-hero { height: 340px; border-radius: 16px; }
+  .store-shell .sf-hero { height: auto; min-height: 340px; border-radius: 16px; }
   .store-shell .sf-trust-grid { padding: 12px; gap: 4px; }
   .store-shell .sf-trust-item { padding: 10px 5px; }
   .store-shell .sf-categories { margin-block-start: 28px; }
