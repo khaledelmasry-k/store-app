@@ -143,8 +143,8 @@ test('merchant activates during trial: submit payment → platform approves → 
   await page.goto('/dashboard/subscription', { waitUntil: 'domcontentloaded' })
   await expect(page.getByRole('heading', { name: 'تفعيل الاشتراك' })).toBeVisible({ timeout: 45000 })
 
-  // This fixture is a legacy Starter trial. Its immutable 399 EGP price
-  // snapshot must survive the launch-catalog change to 499 EGP.
+  // This fixture is a legacy Starter trial with 399 EGP snapshot (pre-launch).
+  // Historical snapshot must stay 399, but new activation must use launch price 249 EGP (lower wins).
   const renewalRow = page.locator('.subscription-summary-rows > div', { hasText: 'تكلفة التجديد' })
   await expect(renewalRow).toContainText(/(?:399|٣٩٩)/)
 
@@ -155,9 +155,9 @@ test('merchant activates during trial: submit payment → platform approves → 
   await expect(page.getByText('طلبك قيد المراجعة')).toBeVisible({ timeout: 15000 })
 
   expect(await pendingRequests(sub.id)).toBe(1)
-  // Server computed the grandfathered snapshot, not the new catalog price.
+  // New activation uses canonical launch price 249 EGP (min of snapshot 399 vs live 249).
   const paySnap = await db.collection('subscriptionPayments').where('subscriptionId', '==', sub.id).get()
-  expect(paySnap.docs[0].data().amount).toBe(399)
+  expect(paySnap.docs[0].data().amount).toBe(249)
 
   // Duplicate submission is blocked while a request is pending (still on the
   // same merchant session — no need to log in again).
@@ -221,7 +221,7 @@ test('expired merchant cannot publish (server-enforced)', async ({ page }) => {
   expect(storeSnap.data()!.published).toBe(false)
 })
 
-test('expired Free merchant is gated but can request a 499 EGP Starter upgrade', async ({ page }) => {
+test('expired Free merchant is gated but can request a 249 EGP Starter upgrade', async ({ page }) => {
   const { storeId, email, password } = await makeTrialStore('free-upgrade', 'plan-free', 0)
   await db.collection('subscriptions').where('storeId', '==', storeId).get().then((snap) =>
     snap.docs[0].ref.update({
@@ -249,7 +249,7 @@ test('expired Free merchant is gated but can request a 499 EGP Starter upgrade',
   }, { timeout: 15000 }).not.toBeNull()
   void request
   const change = (await db.collection('subscriptionChangeRequests').where('storeId', '==', storeId).get()).docs[0].data()
-  expect(change).toMatchObject({ fromPlanId: 'plan-free', toPlanId: 'plan-starter', quotedAmount: 499, status: 'pending_payment' })
+  expect(change).toMatchObject({ fromPlanId: 'plan-free', toPlanId: 'plan-starter', quotedAmount: 249, status: 'pending_payment' })
 })
 
 test('storefront is purchasable again after activation', async ({ page }) => {

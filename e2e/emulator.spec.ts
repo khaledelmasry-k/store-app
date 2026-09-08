@@ -366,7 +366,7 @@ test('pricing intent registration starts one server-controlled trial of the sele
   expect(sub!.trialEndsAt).toBeTruthy()
   const trialDuration = sub!.trialEndsAt.toMillis() - sub!.trialStartedAt.toMillis()
   expect(trialDuration).toBe(3 * 86400000)
-  expect(sub!.normalPriceSnapshot).toBe(499)
+  expect(sub!.normalPriceSnapshot).toBe(249)
   expect(sub!.launchUsed).toBeFalsy()
 })
 
@@ -398,7 +398,7 @@ test('Free registration starts the single 30-day trial and keeps store draft', a
 
 test('Starter, Growth, and Pro pricing intents start their own 3-day trial', async ({ page }) => {
   const { uniq } = ctx()
-  const expected = { STARTER: { id: 'plan-starter', price: 499 }, GROWTH: { id: 'plan-growth', price: 799 }, PRO: { id: 'plan-pro', price: 1299 } } as const
+  const expected = { STARTER: { id: 'plan-starter', price: 249 }, GROWTH: { id: 'plan-growth', price: 399 }, PRO: { id: 'plan-pro', price: 649 } } as const
   for (const planName of ['STARTER', 'GROWTH', 'PRO'] as const) {
     const suffix = `${planName.toLowerCase()}-${uniq}-${Date.now()}`
     const ref = `auto-trial-${suffix}`

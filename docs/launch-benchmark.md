@@ -32,12 +32,14 @@ Reviewed: 2026-09-08. Sources below are public, official product or pricing page
 
 ## Launch packaging
 
-- Free is one onboarding window of 30 days, not a free-forever plan.
-- Starter: 499 EGP/month.
-- Growth: 799 EGP/month and the only “Most Popular / الأكثر طلبًا” plan.
-- Pro: 1,299 EGP/month.
-- Lifetime Access is a separate one-time product and approval flow.
-- Business remains an archived legacy plan for historical subscriptions and is not offered to new merchants.
+- أسعار الإطلاق — Free is one onboarding window of 30 days, not a free-forever plan.
+- Starter: 249 EGP/month (2,490 EGP/year = monthly × 10).
+- Growth: 399 EGP/month (3,990 EGP/year = monthly × 10) and the only “Most Popular / الأكثر طلبًا” plan (`isPopular=true`).
+- Pro: 649 EGP/month (6,490 EGP/year = monthly × 10).
+- Lifetime Access: 4,999 EGP one-time, no trial, separate product/approval flow.
+- Enterprise: custom quote, no fixed price, not a Subscription Plan.
+- Business remains an archived legacy plan (`active=false`, `archived=true`, `isPurchasable=false`) for historical subscriptions — hidden from Landing, never purchasable.
+- No fake crossed-out prices.
 
 ## Claim guardrail
 

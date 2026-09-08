@@ -3208,14 +3208,29 @@ export const submitPaymentRequest = onCall(async (request: CallableRequest<{ sub
   const launchPriceSnapshot = Number(sub.launchPriceSnapshot || normalPriceSnapshot)
   const yearlyPriceSnapshot = Number(sub.yearlyPriceSnapshot || 0)
   const isYearly = sub.billingCycle === 'yearly'
-  // Monthly billing: first paid month uses the launch price, renewals use normal.
-  // Yearly billing: always charges the yearly snapshot (no prorated first-year
-  // launch — the plan's yearly price is authoritative). Never trust client price.
-  const amount = isYearly
+  // Fetch live canonical price for renewal/activation to honor Launch Pricing
+  // (249/399/649). Historical snapshots stay as audit history, but new
+  // transactions must use the current canonical price (lower = discount,
+  // higher never raises an existing customer).
+  let livePlan: any = null
+  try {
+    const liveSnap = await db.doc(`plans/${sub.planId}`).get()
+    livePlan = liveSnap.exists ? liveSnap.data() : null
+    const canonical = CANONICAL_PLANS.find((c) => c.id === sub.planId)
+    if (canonical) livePlan = { ...livePlan, ...canonical }
+  } catch { livePlan = null }
+  const liveMonthly = Number(livePlan?.priceMonthly || 0)
+  const liveYearly = Number(livePlan?.priceYearly || liveMonthly * 10 || 0)
+  const snapAmount = isYearly
     ? yearlyPriceSnapshot || normalPriceSnapshot
     : periodNumber <= 1
       ? launchPriceSnapshot
       : normalPriceSnapshot
+  const liveAmount = isYearly ? (liveYearly || liveMonthly) : liveMonthly
+  let amount = snapAmount
+  if (liveAmount > 0 && snapAmount > 0) amount = Math.min(snapAmount, liveAmount)
+  else if (liveAmount > 0) amount = liveAmount
+  // Never trust client price — amount is server-derived canonical launch price.
   if (amount <= 0) throw new HttpsError('failed-precondition', 'تعذر تحديد مبلغ الاشتراك')
 
   const payRef = db.collection('subscriptionPayments').doc()
@@ -3383,13 +3398,24 @@ export const approvePaymentRequest = onCall(async (request: CallableRequest<{ pa
       : livePlan
     const cycle = String(pay.billingCycle || changeSnap?.data()?.billingCycle || sub.billingCycle || 'monthly') === 'yearly' ? 'yearly' : 'monthly'
     const periodNumber = Number(pay.periodNumber || Number(sub.periodNumber || 0) + 1)
-    const expectedAmount = changeSnap?.exists
-      ? (cycle === 'yearly' ? Number(plan.priceYearly || plan.priceMonthly || 0) : Number(plan.priceMonthly || 0))
-      : (cycle === 'yearly'
-        ? Number(sub.yearlyPriceSnapshot || sub.normalPriceSnapshot || plan.priceYearly || plan.priceMonthly || 0)
-        : periodNumber <= 1
-          ? Number(sub.launchPriceSnapshot || sub.normalPriceSnapshot || plan.priceMonthly || 0)
-          : Number(sub.normalPriceSnapshot || plan.priceMonthly || 0))
+    // Resolve canonical launch pricing (249/399/649) for renewals/activations.
+    // Historical snapshots are kept as audit history, but new transactions use
+    // the live canonical price (lower wins to never raise price).
+    const canonicalLive = CANONICAL_PLANS.find((c: any) => c.id === targetPlanId) as any
+    const liveMonthlyCan = Number(canonicalLive?.priceMonthly ?? plan.priceMonthly ?? 0)
+    const liveYearlyCan = Number(canonicalLive?.priceYearly ?? plan.priceYearly ?? (liveMonthlyCan * 10)) || 0
+    let expectedAmount: number
+    if (changeSnap?.exists) {
+      expectedAmount = cycle === 'yearly' ? (liveYearlyCan || liveMonthlyCan) : liveMonthlyCan
+    } else {
+      const snapMonthly = periodNumber <= 1 ? Number(sub.launchPriceSnapshot || sub.normalPriceSnapshot || 0) : Number(sub.normalPriceSnapshot || 0)
+      const snapYearly = Number(sub.yearlyPriceSnapshot || 0)
+      const snapAmount = cycle === 'yearly' ? (snapYearly || snapMonthly) : snapMonthly
+      const liveAmount = cycle === 'yearly' ? (liveYearlyCan || liveMonthlyCan) : liveMonthlyCan
+      if (liveAmount > 0 && snapAmount > 0) expectedAmount = Math.min(snapAmount, liveAmount)
+      else expectedAmount = liveAmount || snapAmount
+      if (!expectedAmount || !Number.isFinite(expectedAmount) || expectedAmount <= 0) expectedAmount = liveAmount || snapAmount || Number(plan.priceMonthly || 0)
+    }
     if (!Number.isFinite(expectedAmount) || expectedAmount <= 0 || Number(pay.amount) !== expectedAmount) {
       throw new HttpsError('failed-precondition', 'مبلغ الدفع لا يطابق السعر المحسوب من الخادم')
     }
@@ -3416,9 +3442,26 @@ export const approvePaymentRequest = onCall(async (request: CallableRequest<{ pa
       ordersUsed: changeSnap?.exists ? Number(sub.ordersUsed || 0) : 0,
       periodNumber,
       billingCycle: cycle,
-      normalPriceSnapshot: changeSnap?.exists ? Number(plan.priceMonthly || 0) : Number(sub.normalPriceSnapshot || plan.priceMonthly || 0),
-      launchPriceSnapshot: changeSnap?.exists ? Number(plan.priceMonthly || 0) : Number(sub.launchPriceSnapshot || sub.normalPriceSnapshot || plan.priceMonthly || 0),
-      yearlyPriceSnapshot: changeSnap?.exists ? Number(plan.priceYearly || 0) : Number(sub.yearlyPriceSnapshot || plan.priceYearly || 0),
+      // New snapshots use canonical launch pricing (249/399/649, yearly ×10).
+      // Never raise price — lower of live vs snapshot wins; historical billingSnapshots keep old audit trail.
+      normalPriceSnapshot: (() => {
+        if (changeSnap?.exists) return liveMonthlyCan
+        const snap = Number(sub.normalPriceSnapshot || 0)
+        if (snap > 0 && liveMonthlyCan > 0) return Math.min(snap, liveMonthlyCan)
+        return liveMonthlyCan || snap || Number(plan.priceMonthly || 0)
+      })(),
+      launchPriceSnapshot: (() => {
+        if (changeSnap?.exists) return liveMonthlyCan
+        const snap = Number(sub.launchPriceSnapshot || sub.normalPriceSnapshot || 0)
+        if (snap > 0 && liveMonthlyCan > 0) return Math.min(snap, liveMonthlyCan)
+        return liveMonthlyCan || snap || Number(plan.priceMonthly || 0)
+      })(),
+      yearlyPriceSnapshot: (() => {
+        if (changeSnap?.exists) return liveYearlyCan
+        const snap = Number(sub.yearlyPriceSnapshot || 0)
+        if (snap > 0 && liveYearlyCan > 0) return Math.min(snap, liveYearlyCan)
+        return liveYearlyCan || snap || Number(plan.priceYearly || 0)
+      })(),
       limitsSnapshot: {
         orderLimitPerMonth: Number(plan.orderLimitPerMonth || 0),
         productLimit: Number(plan.productLimit || 0),

@@ -85,8 +85,8 @@ test('pricing shows real seeded plans with limits and plan-scoped CTAs', async (
   await expect(colByName('FREE').locator('.stitch-plan-link')).toHaveAttribute('href', '/register?plan=plan-free')
   await expect(colByName('FREE').locator('.stitch-plan-link')).toContainText('ابدأ 30 يومًا مجانًا')
 
-  // STARTER: 499 EGP, 500 products, 300 orders/month — 3-day trial.
-  await expect(cardByName('STARTER')).toContainText('499 ج.م')
+  // STARTER: 249 EGP, 500 products, 300 orders/month — 3-day trial. أسعار الإطلاق.
+  await expect(cardByName('STARTER')).toContainText('249 ج.م')
   await expect(cardByName('STARTER')).toContainText('/ شهريًا')
   await expect(cardByName('STARTER')).toContainText('حتى 500 منتج')
   await expect(cardByName('STARTER')).toContainText('حتى 300 طلب شهرياً')
@@ -95,9 +95,9 @@ test('pricing shows real seeded plans with limits and plan-scoped CTAs', async (
   await expect(colByName('STARTER').locator('.stitch-plan-link')).toHaveAttribute('href', '/register?plan=plan-starter')
   await expect(colByName('STARTER').locator('.stitch-plan-link')).toContainText('جرّب Starter لمدة 3 أيام')
 
-  // GROWTH (recommended): 799 EGP, 2000 products, 1500 orders/month — 3-day trial.
+  // GROWTH (recommended): 399 EGP, 2000 products, 1500 orders/month — 3-day trial. أسعار الإطلاق.
   const growth = cardByName('GROWTH')
-  await expect(growth).toContainText('799 ج.م')
+  await expect(growth).toContainText('399 ج.م')
   await expect(growth).toContainText('حتى 2000 منتج')
   await expect(growth).toContainText('حتى 1500 طلب شهرياً')
   await expect(growth).toContainText('5 GB تخزين')
@@ -107,8 +107,8 @@ test('pricing shows real seeded plans with limits and plan-scoped CTAs', async (
 
   await expect(cardByName('BUSINESS')).toHaveCount(0)
 
-  // PRO: 1299 EGP, unlimited products, 10000 orders/month, 20 GB storage — 3-day trial.
-  await expect(cardByName('PRO')).toContainText('1,299 ج.م')
+  // PRO: 649 EGP, unlimited products, 10000 orders/month, 20 GB storage — 3-day trial. أسعار الإطلاق.
+  await expect(cardByName('PRO')).toContainText('649 ج.م')
   await expect(cardByName('PRO')).toContainText('منتجات غير محدودة')
   await expect(cardByName('PRO')).toContainText('حتى 10000 طلب شهرياً')
   await expect(cardByName('PRO')).toContainText('20 GB تخزين')
