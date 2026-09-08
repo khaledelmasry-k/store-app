@@ -60,8 +60,9 @@ async function productCount(storeId: string) {
   return snap.size
 }
 
-// Seeds an ACTIVE Free-plan tenant (mirrors registerMerchant for a free plan:
-// status active, no trial window, lives forever, hard limits from plan-free).
+// Seeds an ACTIVE legacy Free-plan tenant with no trial window. This is the
+// grandfathering contract: existing Free subscriptions remain operational,
+// while registerMerchant gives new accounts a 30-day trial.
 async function makeFreeStore(tag: string, extraProducts = 0) {
   const u = uniq()
   const uid = `saas-free-owner-${tag}-${u}`

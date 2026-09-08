@@ -1,7 +1,7 @@
 import { test, expect, type Page } from '@playwright/test'
 
 // Read-only landing page checks. Runs on every project (1440/1024/390/360/430)
-// against the seeded emulator data (6 canonical offers) served by vite preview on :4173.
+// against the seeded emulator data served by vite preview on :4173.
 
 async function noHScroll(page: Page) {
   return page.evaluate(() => document.documentElement.scrollWidth - document.documentElement.clientWidth)
@@ -20,8 +20,8 @@ test('renders the reference-inspired Matjari landing structure', async ({ page }
   await page.goto('/', { waitUntil: 'commit' })
 
   // Hero
-  await expect(page.getByRole('heading', { level: 1 })).toContainText('تجارتك الإلكترونية')
-  await expect(page.locator('.stitch-release-pill')).toContainText('منصة متكاملة')
+  await expect(page.getByRole('heading', { level: 1 })).toContainText('كل تجارتك')
+  await expect(page.locator('.stitch-release-pill')).toContainText('Commerce Operating System')
   await expect(page.locator('.landing-brand .landing-primary-logo')).toHaveCount(1)
   await expect(page.locator('.stitch-footer-band .landing-footer-logo')).toHaveCount(1)
 
@@ -29,13 +29,16 @@ test('renders the reference-inspired Matjari landing structure', async ({ page }
   for (const label of ['المميزات', 'الحلول', 'الأسعار', 'كيف تعمل', 'الأسئلة الشائعة', 'تواصل معنا']) {
     await expect(page.locator('.landing-nav-link', { hasText: label })).toHaveCount(1)
   }
-  await expect(page.locator('.landing-nav-btn-primary', { hasText: 'ابدأ مجانًا' })).toHaveCount(1)
+  await expect(page.locator('.landing-nav-btn-primary', { hasText: 'ابدأ شهرك المجاني' })).toHaveCount(1)
   await expect(page.locator('.landing-nav-btn-ghost', { hasText: 'تسجيل الدخول' })).toHaveCount(1)
 
   // Sections
   await expect(page.locator('.stitch-capability-card')).toHaveCount(6)
   await expect(page.locator('.landing-stats .landing-stat')).toHaveCount(4)
   await expect(page.locator('.landing-steps-grid .landing-step')).toHaveCount(3)
+  await expect(page.locator('.landing-flow-track li')).toHaveCount(6)
+  await expect(page.locator('.landing-flow-track')).toContainText('Store')
+  await expect(page.locator('.landing-flow-track')).toContainText('Reports')
   // The hero now uses the dedicated commerce illustration; the live dashboard
   // mockup remains in the solutions section below.
   await expect(page.locator('.landing-hero-visual')).toHaveCount(1)
@@ -46,9 +49,9 @@ test('renders the reference-inspired Matjari landing structure', async ({ page }
 test('pricing shows real seeded plans with limits and plan-scoped CTAs', async ({ page }) => {
   await page.goto('/', { waitUntil: 'commit' })
   await expect(page.locator('#pricing')).toBeVisible({ timeout: 15000 })
-  // Five recurring subscription cards are the primary grid. Lifetime is a
-  // separate launch-offer section and is intentionally not a sixth plan card.
-  await expect(page.locator('.stitch-pricing-grid .mk-pricing-card')).toHaveCount(5, { timeout: 15000 })
+  // Free + three paid subscriptions are the primary grid. Business stays
+  // archived for legacy records and Lifetime remains a separate product.
+  await expect(page.locator('.stitch-pricing-grid .mk-pricing-card')).toHaveCount(4, { timeout: 15000 })
 
   // Each plan renders as a `.stitch-plan-wrap` wrapping the PricingCard plus a
   // single plan-scoped link.
@@ -57,38 +60,35 @@ test('pricing shows real seeded plans with limits and plan-scoped CTAs', async (
   const colByName = (name: string) =>
     page.locator('.stitch-plan-wrap').filter({ has: page.locator('.mk-pricing-name', { hasText: name }) })
 
-  // FREE: 50 products and 50 orders/month, free forever.
+  // FREE: one 30-day onboarding window, never free forever.
   await expect(cardByName('FREE')).toContainText('مجاناً')
-  await expect(cardByName('FREE')).toContainText('للأبد')
+  await expect(cardByName('FREE')).toContainText('لمدة 30 يومًا')
+  await expect(cardByName('FREE')).toContainText('أول شهر فقط')
+  await expect(cardByName('FREE')).not.toContainText('للأبد')
   await expect(cardByName('FREE')).toContainText('حتى 50 منتج')
   await expect(cardByName('FREE')).toContainText('حتى 50 طلب شهرياً')
   await expect(colByName('FREE').locator('.stitch-plan-link')).toHaveAttribute('href', '/register?plan=plan-free')
 
-  // STARTER: 399 EGP, 500 products, 300 orders/month.
-  await expect(cardByName('STARTER')).toContainText('399 ج.م')
+  // STARTER: 499 EGP, 500 products, 300 orders/month.
+  await expect(cardByName('STARTER')).toContainText('499 ج.م')
   await expect(cardByName('STARTER')).toContainText('/ شهريًا')
   await expect(cardByName('STARTER')).toContainText('حتى 500 منتج')
   await expect(cardByName('STARTER')).toContainText('حتى 300 طلب شهرياً')
   await expect(cardByName('STARTER')).toContainText('1 GB تخزين')
   await expect(colByName('STARTER').locator('.stitch-plan-link')).toHaveAttribute('href', '/register?plan=plan-starter')
 
-  // GROWTH (recommended): 749 EGP, 2000 products, 1500 orders/month.
+  // GROWTH (recommended): 799 EGP, 2000 products, 1500 orders/month.
   const growth = cardByName('GROWTH')
-  await expect(growth).toContainText('749 ج.م')
+  await expect(growth).toContainText('799 ج.م')
   await expect(growth).toContainText('حتى 2000 منتج')
   await expect(growth).toContainText('حتى 1500 طلب شهرياً')
   await expect(growth).toContainText('5 GB تخزين')
   await expect(colByName('GROWTH').locator('.stitch-plan-link')).toHaveAttribute('href', '/register?plan=plan-growth')
 
-  // BUSINESS: 1099 EGP, 5000 products, 3500 orders/month.
-  await expect(cardByName('BUSINESS')).toContainText('1,099 ج.م')
-  await expect(cardByName('BUSINESS')).toContainText('حتى 5000 منتج')
-  await expect(cardByName('BUSINESS')).toContainText('حتى 3500 طلب شهرياً')
-  await expect(cardByName('BUSINESS')).toContainText('10 GB تخزين')
-  await expect(colByName('BUSINESS').locator('.stitch-plan-link')).toHaveAttribute('href', '/register?plan=plan-business')
+  await expect(cardByName('BUSINESS')).toHaveCount(0)
 
-  // PRO: 1499 EGP, unlimited products, 10000 orders/month, 20 GB storage.
-  await expect(cardByName('PRO')).toContainText('1,499 ج.م')
+  // PRO: 1299 EGP, unlimited products, 10000 orders/month, 20 GB storage.
+  await expect(cardByName('PRO')).toContainText('1,299 ج.م')
   await expect(cardByName('PRO')).toContainText('منتجات غير محدودة')
   await expect(cardByName('PRO')).toContainText('حتى 10000 طلب شهرياً')
   await expect(cardByName('PRO')).toContainText('20 GB تخزين')
@@ -102,17 +102,16 @@ test('pricing shows real seeded plans with limits and plan-scoped CTAs', async (
   await expect(lifetime.locator('a.stitch-offer-cta')).toHaveAttribute('href', '/register?offer=lifetime')
 
   // Each card has exactly ONE primary CTA (no duplicate "ابدأ الآن" buttons).
-  await expect(page.locator('.stitch-plan-wrap .stitch-plan-link')).toHaveCount(5)
-  await expect(page.locator('.stitch-enterprise-offer')).toContainText('Enterprise')
+  await expect(page.locator('.stitch-plan-wrap .stitch-plan-link')).toHaveCount(4)
 
   // Featured plan is النمو (isPopular), rendered as a single badge.
   await expect(page.locator('.mk-pricing-badge')).toHaveCount(1)
-  await expect(growth.locator('.mk-pricing-badge')).toContainText('الأكثر شعبية')
+  await expect(growth.locator('.mk-pricing-badge')).toContainText('الأكثر طلبًا')
 })
 
 test('registration keeps Lifetime as a dedicated handoff', async ({ page }) => {
   await page.goto('/register', { waitUntil: 'domcontentloaded' })
-  await expect(page.locator('.register-plan-strip .register-plan-pill')).toHaveCount(5, { timeout: 15000 })
+  await expect(page.locator('.register-plan-strip .register-plan-pill')).toHaveCount(4, { timeout: 15000 })
 
   await page.goto('/register?offer=lifetime', { waitUntil: 'domcontentloaded' })
   const lifetime = page.getByTestId('lifetime-registration-offer')
@@ -128,12 +127,12 @@ test('mobile registration plan selection uses full-width cards without adjacent 
   test.skip((page.viewportSize()?.width || 0) > 640, 'phone layout only')
   const viewportWidth = page.viewportSize()!.width
   await page.goto('/register', { waitUntil: 'domcontentloaded' })
-  await expect(page.locator('.register-plan-pill')).toHaveCount(5, { timeout: 15000 })
+  await expect(page.locator('.register-plan-pill')).toHaveCount(4, { timeout: 15000 })
 
-  for (const planName of ['FREE', 'STARTER', 'GROWTH', 'BUSINESS', 'PRO']) {
+  for (const planName of ['FREE', 'STARTER', 'GROWTH', 'PRO']) {
     if (planName !== 'FREE') {
       await page.goto('/register', { waitUntil: 'domcontentloaded' })
-      await expect(page.locator('.register-plan-pill')).toHaveCount(5, { timeout: 15000 })
+      await expect(page.locator('.register-plan-pill')).toHaveCount(4, { timeout: 15000 })
     }
     await page.locator('.register-plan-pill').filter({ hasText: planName }).click()
     const selectedSummary = page.locator('.register-selected-plan-summary')

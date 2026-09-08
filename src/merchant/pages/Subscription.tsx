@@ -26,6 +26,7 @@ import { Progress } from '../../shared/components/ui/Progress'
 import { formatCurrency, formatDate, formatDateTime, formatNumber } from '../../shared/utils/format'
 import { SUBSCRIPTION_STATUS_LABELS, SUBSCRIPTION_STATUS_TONES, usageLevelFor } from '../../shared/utils/constants'
 import { usageFrom, PLAN_FEATURE_KEYS, PLAN_FEATURE_LABELS, canUseFeature, isPlanLimitUnlimited } from '../../shared/services/subscription'
+import { CANONICAL_PLANS } from '../../shared/plans/catalog'
 import { useToast } from '../../shared/hooks/useToast'
 import type { PlatformSettings, SubscriptionPayment, SubscriptionPlan } from '../../shared/types'
 
@@ -38,6 +39,7 @@ interface StorageQuota {
 }
 
 const MB = 1024 * 1024
+const PUBLIC_PAID_PLAN_IDS = new Set(['plan-starter', 'plan-growth', 'plan-pro'])
 
 function offerIsPubliclyAvailable(plan: SubscriptionPlan) {
   if (plan.isPubliclyAvailable === false) return false
@@ -65,7 +67,11 @@ export const MerchantSubscription: FunctionalComponent = () => {
   const { subscription, plan, paymentRequests, changeRequests, purchaseRequests, status, nextAmount, launchOffer, loading, error: subscriptionError, refresh, resourceUsage } = useSubscription(storeId)
 
   const plansRes = useCollectionOnce<SubscriptionPlan>('plans', { orderBy: { field: 'priceMonthly' } })
-  const allPlans = [...plansRes.data]
+  const allPlans = CANONICAL_PLANS.map((canonical) => {
+    const live = plansRes.data.find((candidate) => candidate.id === canonical.id)
+    if (!live) return canonical
+    return canonical.id === 'plan-lifetime' ? { ...canonical, ...live, id: canonical.id } : { ...live, ...canonical }
+  })
     .filter((p: any) => p.active !== false && p.isPurchasable !== false && p.archived !== true)
     .sort((a, b) => (a.sortOrder ?? 0) - (b.sortOrder ?? 0))
 
@@ -157,7 +163,8 @@ export const MerchantSubscription: FunctionalComponent = () => {
   const pendingPurchaseRequest = purchaseRequests.find((r) => r.status === 'pending_payment' || r.status === 'pending_approval')
   const paymentHistory = [...paymentRequests].sort((a, b) => (b.createdAt?.seconds || 0) - (a.createdAt?.seconds || 0))
 
-  const canSubmit = Boolean(pendingChangeRequest && pendingChangeRequest.status === 'pending_payment') || Boolean(pendingPurchaseRequest && pendingPurchaseRequest.status === 'pending_payment') || status === 'trialing' || status === 'expired' || status === 'suspended'
+  const directPaidActivation = Number(subscription.normalPriceSnapshot || 0) > 0 && (status === 'trialing' || status === 'expired' || status === 'suspended')
+  const canSubmit = Boolean(pendingChangeRequest && pendingChangeRequest.status === 'pending_payment') || Boolean(pendingPurchaseRequest && pendingPurchaseRequest.status === 'pending_payment') || directPaidActivation
   const needsPayment = !pendingRequest && (Boolean(pendingChangeRequest) || Boolean(pendingPurchaseRequest) || status === 'trialing' || status === 'expired' || status === 'suspended')
 
   const handleProof = (file: File | null) => {
@@ -252,11 +259,14 @@ export const MerchantSubscription: FunctionalComponent = () => {
   const statusLabel = SUBSCRIPTION_STATUS_LABELS[status as keyof typeof SUBSCRIPTION_STATUS_LABELS] || status
   const isLifetime = subscription.billingModel === 'one_time' && subscription.ownershipType === 'lifetime' && subscription.lifetimeAccess === true
   const lifetimeOffers = allPlans.filter((p: any) => p.billingModel === 'one_time' && p.isLaunchOffer !== false && Number(p.oneTimePrice || 0) > 0 && offerIsPubliclyAvailable(p))
-  const subscriptionOffers = allPlans.filter((p: any) => p.billingModel !== 'one_time')
+  const subscriptionOffers = allPlans.filter((p: any) => p.billingModel !== 'one_time' && PUBLIC_PAID_PLAN_IDS.has(p.id))
 
-  const isFreePlan = Number(plan?.priceMonthly || 0) <= 0
+  // Keep the merchant's immutable commercial snapshot visible for the current
+  // subscription. The canonical catalog is only for new upgrades/offers.
+  const currentMonthlyPrice = Number(subscription.normalPriceSnapshot ?? plan?.priceMonthly ?? 0)
+  const isFreePlan = subscription.planId === 'plan-free' || currentMonthlyPrice <= 0
   const paidPeriodEnd = subscription.currentPeriodEnd || subscription.expiresAt
-  const renewalLabel = status === 'active' && !isFreePlan && paidPeriodEnd ? formatDate(paidPeriodEnd) : isFreePlan ? 'لا يوجد تجديد مدفوع' : '—'
+  const renewalLabel = status === 'active' && !isFreePlan && paidPeriodEnd ? formatDate(paidPeriodEnd) : isFreePlan && subscription.trialEndsAt ? `يلزم الترقية قبل ${formatDate(subscription.trialEndsAt)}` : '—'
   const currency = 'EGP'
 
   const orderUsage = usageFrom(subscription, plan)
@@ -353,7 +363,7 @@ export const MerchantSubscription: FunctionalComponent = () => {
             <div><span>حالة الملكية</span><b>{isLifetime ? 'المتجر مملوك' : 'اشتراك دوري'}</b></div>
             <div><span>تاريخ التجديد القادم</span><b>{isLifetime ? 'لا يوجد تجديد لملكية المتجر الأساسية' : renewalLabel}</b></div>
             <div><span>نهاية الدورة الحالية</span><b>{paidPeriodEnd ? formatDate(paidPeriodEnd) : isLifetime ? 'لا تنتهي ملكية المتجر' : 'يُحدَّد عند تفعيل الدورة'}</b></div>
-            <div><span>تكلفة التجديد</span><b>{isLifetime ? 'لا توجد رسوم شهرية للملكية الأساسية' : plan ? `${formatCurrency(plan.priceMonthly, currency)} / شهرياً` : '—'}</b></div>
+            <div><span>تكلفة التجديد</span><b>{isLifetime ? 'لا توجد رسوم شهرية للملكية الأساسية' : isFreePlan ? 'اختر Starter أو Growth أو Pro' : `${formatCurrency(currentMonthlyPrice, currency)} / شهرياً`}</b></div>
             {launchOffer && <div><span>خصم الإطلاق</span><b>أول شهر {formatCurrency(nextAmount, currency)}</b></div>}
           </div>
         </div>
@@ -411,7 +421,7 @@ export const MerchantSubscription: FunctionalComponent = () => {
             <Icon name="hourglass_top" />
             <div>
               {subscription?.trialEndsAt ? <CountdownTimer endsAt={subscription.trialEndsAt} label="متبقي من الفترة التجريبية" /> : <strong className="trial-missing-end">تعذر تحديد موعد انتهاء التجربة</strong>}
-              <p className="muted small">باقتك النشطة تعمل بكامل المزايا خلال الفترة التجريبية.</p>
+              <p className="muted small">Free متاحة لمدة 30 يومًا فقط. بياناتك تبقى محفوظة بعد الانتهاء، ويلزم اختيار باقة مدفوعة لمواصلة العمليات.</p>
             </div>
           </div>
         </Card>

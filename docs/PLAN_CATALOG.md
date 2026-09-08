@@ -8,16 +8,16 @@ for every paid request; the browser never supplies an authoritative amount.
 
 | Offer | Model | Monthly | Yearly | One-time | Products | Orders/month | Team | Storage | Intended customer |
 | --- | --- | ---: | ---: | ---: | ---: | ---: | ---: | ---: | --- |
-| Free | subscription | 0 | 0 | — | 50 | 50 | 1 | 200 MB | trial/basic entry |
-| Starter | subscription | 399 | 3,990 | — | 500 | 300 | 3 | 1 GB | small active seller |
-| Growth | subscription | 749 | 7,490 | — | 2,000 | 1,500 | 10 | 5 GB | growing business |
-| Business | subscription | 1,099 | 10,990 | — | 5,000 | 3,500 | 20 | 10 GB | operational team |
-| Pro | subscription | 1,499 | 14,990 | — | unlimited | 10,000 | 50 | 20 GB | high-volume merchant |
+| Free | 30-day trial | 0 | 0 | — | 50 | 50 | 1 | 200 MB | one onboarding month only |
+| Starter | subscription | 499 | 4,990 | — | 500 | 300 | 3 | 1 GB | small active seller |
+| Growth | subscription | 799 | 7,990 | — | 2,000 | 1,500 | 10 | 5 GB | growing business; Most Popular |
+| Pro | subscription | 1,299 | 12,990 | — | unlimited | 10,000 | 50 | 20 GB | high-volume merchant |
+| Business (legacy) | archived subscription | 1,099 | 10,990 | — | 5,000 | 3,500 | 20 | 10 GB | historical subscriptions only; not purchasable |
 | Lifetime | one-time | — | — | 4,999 | 1,000 | 5,000 | 5 | 5 GB | base-store ownership without recurring base fee |
 
-Yearly prices are intentionally ten monthly payments, leaving two months of
-effective annual discount without pretending that a one-time purchase is Pro or
-unlimited.
+The public launch page presents the requested monthly prices. Yearly catalog
+snapshots remain available to the billing backend and equal ten monthly
+payments. Lifetime is a separate product and approval flow.
 
 ## Canonical feature keys
 
@@ -58,4 +58,8 @@ server-managed. `grantForStore()` resolves the active snapshot; product,
 order, landing-page, sales-link, coupon, staff, and storage mutations enforce
 limits or feature keys server-side. Product content edits use `updateProduct`;
 direct client writes cannot add variants or quantity tiers. Existing paid
-periods keep their snapshots when the live catalog changes.
+periods keep their snapshots when the live catalog changes. Legacy active Free
+subscriptions without an expiry remain grandfathered; new registrations always
+receive a server-timed 30-day `plan-free` trial. When it expires, merchant data
+and billing access remain available, while operational mutations and storefront
+checkout require an approved paid upgrade.

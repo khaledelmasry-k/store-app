@@ -27,6 +27,7 @@ const PASSWORD_RULES = [
 ]
 
 const STRENGTH_SEGMENTS = [0, 1, 2, 3, 4]
+const PUBLIC_SUBSCRIPTION_PLAN_IDS = new Set(['plan-free', 'plan-starter', 'plan-growth', 'plan-pro'])
 
 export const Register:FunctionalComponent = () => {
   useEffect(() => {
@@ -35,7 +36,11 @@ export const Register:FunctionalComponent = () => {
   const [loc, navigate] = useLocation()
   const params = new URLSearchParams(loc.split('?')[1] || window.location.search)
   const plansRes = useCollection<SubscriptionPlan>('plans', {})
-  const availablePlans = [...(plansRes.data.length ? plansRes.data : CANONICAL_PLANS)]
+  const availablePlans = CANONICAL_PLANS.map((canonical) => {
+    const live = plansRes.data.find((plan) => plan.id === canonical.id)
+    if (!live) return canonical
+    return canonical.id === 'plan-lifetime' ? { ...canonical, ...live, id: canonical.id } : { ...live, ...canonical }
+  })
   const lifetimeOffer = availablePlans.find((plan: any) => plan.id === 'plan-lifetime' || (plan.billingModel === 'one_time' && (plan.slug === 'lifetime' || plan.name === 'LIFETIME')))
   const lifetimeOfferAvailable = Boolean(
     lifetimeOffer
@@ -47,7 +52,7 @@ export const Register:FunctionalComponent = () => {
     && lifetimeOffer.isLaunchOffer !== false
     && Number(lifetimeOffer.oneTimePrice || 0) > 0,
   )
-  const plans = availablePlans.filter((plan: any) => plan.billingModel !== 'one_time')
+  const plans = availablePlans.filter((plan: any) => plan.billingModel !== 'one_time' && PUBLIC_SUBSCRIPTION_PLAN_IDS.has(plan.id))
     .filter((p) => p.active !== false)
     .sort((a, b) => (a.sortOrder ?? 0) - (b.sortOrder ?? 0))
   const requestedLifetime = params.get('offer') === 'lifetime' || params.get('plan') === 'plan-lifetime'
@@ -190,7 +195,7 @@ export const Register:FunctionalComponent = () => {
               >
                 <span>{p.name}</span>
                 <strong>{formatCurrency(p.priceMonthly)}</strong>
-                {p.isPopular && <em>الأكثر شعبية</em>}
+                {p.isPopular && <em>الأكثر طلبًا</em>}
               </button>
             ))}
           </div>
@@ -305,9 +310,7 @@ export const Register:FunctionalComponent = () => {
             <h1 className="auth-title">اختيار الباقة</h1>
             <p className="auth-subtitle">{lifetimeMode
               ? 'أنشئ متجرك أولاً، ثم أرسل طلب امتلاك المتجر من لوحة الاشتراك بعد تسجيل الدخول.'
-              : Number(selectedPlan?.priceMonthly || 0) <= 0
-                ? 'باقة Free مجانية بدون فترة تجريبية.'
-                : 'اختر باقتك — تبدأ التجربة المجانية لمدة 3 أيام فور إنشاء الحساب.'}</p>
+              : 'كل تسجيل جديد يبدأ بشهر Free واحد. اختيارك هنا يحدد الباقة التي تريد الترقية إليها بعد التجربة ولا يفعّلها قبل الدفع.'}</p>
             {lifetimeMode && <div className="register-lifetime-step-note"><Icon name="lock" ariaHidden /> سيظل الطلب قيد المراجعة ولن تتفعّل الملكية إلا بعد اعتماد الدفع.</div>}
             {!lifetimeMode && selectedPlan && (
               <div className="plan-selected register-selected-plan-summary">
@@ -319,8 +322,8 @@ export const Register:FunctionalComponent = () => {
                       ? `أول شهر ${formatCurrency(selectedPlan.launchPrice)} ثم ${formatCurrency(selectedPlan.priceMonthly)} شهرياً`
                       : `${formatCurrency(selectedPlan.priceMonthly)} / شهرياً`}
                   </span>
-                  {Number(selectedPlan.priceMonthly || 0) > 0 && <span className="register-selected-plan-trial">تجربة مجانية لمدة 3 أيام</span>}
-                  {Number(selectedPlan.priceMonthly || 0) <= 0 && <span className="register-selected-plan-trial">مجاني بدون فترة تجريبية</span>}
+                  {Number(selectedPlan.priceMonthly || 0) > 0 && <span className="register-selected-plan-trial">تبدأ أولًا بـ Free لمدة 30 يومًا، ثم ترقي إلى هذه الباقة</span>}
+                  {Number(selectedPlan.priceMonthly || 0) <= 0 && <span className="register-selected-plan-trial">شهر مجاني واحد لمدة 30 يومًا</span>}
                 </div>
                 <button type="button" className="register-change-plan" onClick={() => setPlanSelectorOpen((open) => !open)}>{planSelectorOpen ? 'إغلاق الاختيار' : 'تغيير الباقة'}</button>
               </div>
