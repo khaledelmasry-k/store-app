@@ -976,7 +976,7 @@ const DAY_MS = 86400000
 const PERIOD_DAYS = 30
 const YEAR_DAYS = 365
 const FREE_TRIAL_DAYS = 30
-const PUBLIC_PAID_PLAN_IDS = new Set(['plan-starter', 'plan-growth', 'plan-pro'])
+const PUBLIC_PAID_PLAN_IDS = new Set(['plan-basic', 'plan-starter', 'plan-growth', 'plan-pro'])
 const PLAN_FEATURE_KEYS = [
   'quantityPricing', 'variantInventory', 'coupons', 'analytics', 'whatsappAutomation',
 ]
@@ -2228,11 +2228,10 @@ export const registerMerchant = onCall(async (request: CallableRequest<any>) => 
   let targetPlanId: string
   if (PUBLIC_PAID_PLAN_IDS.has(requestedPlanId)) {
     targetPlanId = requestedPlanId
-  } else if (requestedPlanId === 'plan-free' || requestedPlanId === '' || requestedPlanId === 'pending') {
-    targetPlanId = 'plan-free'
+  } else if (requestedPlanId === '' || requestedPlanId === 'pending') {
+    targetPlanId = 'plan-basic'
   } else {
-    // Unknown planId — fallback to Free for safety, preserving legacy grandfathering.
-    targetPlanId = 'plan-free'
+    throw new HttpsError('failed-precondition', 'الباقة المطلوبة غير متاحة للتسجيل الجديد')
   }
 
   const targetPlanSnap = await db.doc(`plans/${targetPlanId}`).get()
@@ -2244,7 +2243,7 @@ export const registerMerchant = onCall(async (request: CallableRequest<any>) => 
   const resolvedPlanId = targetPlanId
   const planName = plan.name || targetPlanId
   const cycle = 'monthly'
-  const trialDays = Number(plan.trialDays) > 0 ? Number(plan.trialDays) : (targetPlanId === 'plan-free' ? 30 : 3)
+  const trialDays = Number(plan.trialDays) > 0 ? Number(plan.trialDays) : 3
   const registrationAt = new Date()
   const trialEndsAt = new Date(registrationAt.getTime() + trialDays * DAY_MS)
   const normalPriceSnapshot = Number(plan?.priceMonthly || 0)

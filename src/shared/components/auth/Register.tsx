@@ -27,7 +27,7 @@ const PASSWORD_RULES = [
 ]
 
 const STRENGTH_SEGMENTS = [0, 1, 2, 3, 4]
-const PUBLIC_SUBSCRIPTION_PLAN_IDS = new Set(['plan-free', 'plan-starter', 'plan-growth', 'plan-pro'])
+const PUBLIC_SUBSCRIPTION_PLAN_IDS = new Set(['plan-basic', 'plan-starter', 'plan-growth', 'plan-pro'])
 
 export const Register:FunctionalComponent = () => {
   useEffect(() => {
@@ -61,7 +61,8 @@ export const Register:FunctionalComponent = () => {
   // purchase intent merely because it was present in the URL.
   const lifetimeMode = requestedLifetime && (plansRes.loading || lifetimeOfferAvailable)
   const lifetimeUnavailable = requestedLifetime && !plansRes.loading && !lifetimeOfferAvailable
-  const [planId, setPlanId] = useState(lifetimeMode ? undefined : (params.get('plan') || undefined))
+  const requestedPlan = params.get('plan') || ''
+  const [planId, setPlanId] = useState(lifetimeMode ? undefined : (['plan-basic', 'plan-starter', 'plan-growth', 'plan-pro'].includes(requestedPlan) ? requestedPlan : 'plan-basic'))
   const selectedPlan = planId ? plans.find((p) => p.id === planId) : undefined
   const [planSelectorOpen, setPlanSelectorOpen] = useState(!planId && !lifetimeMode)
 
@@ -310,7 +311,7 @@ export const Register:FunctionalComponent = () => {
             <h1 className="auth-title">اختيار الباقة</h1>
             <p className="auth-subtitle">{lifetimeMode
               ? 'أنشئ متجرك أولاً، ثم أرسل طلب امتلاك المتجر من لوحة الاشتراك بعد تسجيل الدخول.'
-              : 'اختر الباقة التي ستبدأ بها تجربتك المجانية. Free 30 يومًا، و Starter/Growth/Pro 3 أيام بمزايا الباقة نفسها.'}</p>
+              : 'اختر الباقة التي ستبدأ بها تجربتك المجانية لمدة 3 أيام بمزايا الباقة نفسها.'}</p>
             {lifetimeMode && <div className="register-lifetime-step-note"><Icon name="lock" ariaHidden /> سيظل الطلب قيد المراجعة ولن تتفعّل الملكية إلا بعد اعتماد الدفع.</div>}
             {!lifetimeMode && selectedPlan && (
               <div className="plan-selected register-selected-plan-summary">
@@ -322,7 +323,7 @@ export const Register:FunctionalComponent = () => {
                       ? `أول شهر ${formatCurrency(selectedPlan.launchPrice)} ثم ${formatCurrency(selectedPlan.priceMonthly)} شهرياً`
                       : `${formatCurrency(selectedPlan.priceMonthly)} / شهرياً`}
                   </span>
-                  {selectedPlan.id === 'plan-free' && <span className="register-selected-plan-trial">تجربة مجانية لمدة 30 يومًا بمزايا Free</span>}
+                  {selectedPlan.id === 'plan-basic' && <span className="register-selected-plan-trial">تجربة Basic مجانًا لمدة 3 أيام — بكامل مزايا Basic</span>}
                   {selectedPlan.id === 'plan-starter' && <span className="register-selected-plan-trial">تجربة Starter مجانًا لمدة 3 أيام — بكامل مزايا Starter</span>}
                   {selectedPlan.id === 'plan-growth' && <span className="register-selected-plan-trial">تجربة Growth مجانًا لمدة 3 أيام — بكامل مزايا Growth</span>}
                   {selectedPlan.id === 'plan-pro' && <span className="register-selected-plan-trial">تجربة Pro مجانًا لمدة 3 أيام — بكامل مزايا Pro</span>}

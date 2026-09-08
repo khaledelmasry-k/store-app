@@ -39,7 +39,7 @@ interface StorageQuota {
 }
 
 const MB = 1024 * 1024
-const PUBLIC_PAID_PLAN_IDS = new Set(['plan-starter', 'plan-growth', 'plan-pro'])
+const PUBLIC_PAID_PLAN_IDS = new Set(['plan-basic', 'plan-starter', 'plan-growth', 'plan-pro'])
 
 function offerIsPubliclyAvailable(plan: SubscriptionPlan) {
   if (plan.isPubliclyAvailable === false) return false
