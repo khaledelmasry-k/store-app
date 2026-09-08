@@ -98,6 +98,29 @@
   .shipping-editor-summary-actions { width:100%; }
   .shipping-editor-summary-actions .btn { flex:1; }
 }
+@media (max-width: 430px) {
+  .shipping-provider-workspace .page-header h1 { font-size: 20px; line-height: 1.3; word-break: break-word; }
+  .shipping-provider-workspace .page-header p { font-size: 12px; line-height: 1.6; }
+  .shipping-editor-header { flex-direction: column; align-items: stretch; gap: 12px; }
+  .shipping-editor-actions { flex-direction: column; width: 100%; }
+  .shipping-editor-actions .btn { width: 100%; justify-content: center; }
+  .shipping-provider-workspace .filter-bar { flex-direction: column; gap: 10px; }
+  .shipping-provider-workspace .filter-bar .topbar-search,
+  .shipping-provider-workspace .filter-bar .input { width: 100% !important; max-width: 100% !important; }
+  .shipping-provider-workspace .tabs { display: flex; overflow-x: auto; overflow-y: hidden; -webkit-overflow-scrolling: touch; scrollbar-width: none; gap: 6px; padding-bottom: 2px; }
+  .shipping-provider-workspace .tabs::-webkit-scrollbar { display: none; }
+  .shipping-provider-workspace .tabs .tab { white-space: nowrap; flex: 0 0 auto; }
+  .shipping-provider-workspace .tabs .tab.active { border-bottom: 2px solid var(--primary); }
+  .shipping-zone-table-wrap { overflow-x: auto; -webkit-overflow-scrolling: touch; max-width: 100vw; }
+  .shipping-zone-table { min-width: 900px; }
+  .shipping-provider-workspace .drawer { width: min(88vw, 320px) !important; max-width: 88vw !important; }
+  .shipping-provider-workspace .drawer .grid-2,
+  .shipping-provider-workspace .grid-2 { grid-template-columns: 1fr !important; gap: 12px; }
+  .shipping-provider-workspace .shipping-api-grid,
+  .shipping-provider-workspace .shipping-capability-grid { grid-template-columns: 1fr !important; }
+  .shipping-provider-workspace .card { padding: 16px !important; }
+  .shipping-provider-workspace .page-header { padding: 12px 0 !important; min-height: 0 !important; }
+}
 
 /* Drawers render inside this workspace, so keep their surfaces in the same
    light/dark token system instead of the legacy cream override. */
