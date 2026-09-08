@@ -120,8 +120,8 @@ html[data-theme='dark'] .oj-route path[stroke="#e7eaf1"] { stroke: #2a375a; }
   .oj-route--mobile { display: block; }
   .oj-nodes--desktop { display: none; }
   .oj-nodes--mobile { display: block; }
-  .oj-van--h { display: none !important; }
-  .oj-van--v { display: block !important; left: 50%; top: 0; margin-left: -36px; }
+  /* Quality over van on mobile: hide van, use progress + nodes only */
+  .oj-van--h, .oj-van--v { display: none !important; }
   .oj-stage { display: grid; grid-template-columns: 72px 1fr; gap: 14px; align-items: start; }
   .oj-cards { grid-template-columns: 1fr; gap: 10px; }
   .oj-card { flex-direction: row; align-items: center; text-align: right; gap: 12px; padding: 14px 12px; min-height: 64px; }

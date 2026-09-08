@@ -1298,6 +1298,24 @@
   .app-shell .topbar-brand-sub {
     display: none;
   }
+
+  /* P0: ensure collapsed rail never appears over content on mobile */
+  .app-shell.sidebar-unpinned:not(.sidebar-hover-expanded) .sidebar,
+  .app-shell--platform.sidebar-unpinned:not(.sidebar-hover-expanded) .sidebar,
+  .app-shell--dashboard.sidebar-unpinned:not(.sidebar-hover-expanded) .sidebar,
+  .app-shell .sidebar,
+  .app-shell--platform .sidebar,
+  .app-shell--dashboard .sidebar {
+    display: none !important;
+    width: 0 !important;
+    max-width: 0 !important;
+    min-width: 0 !important;
+  }
+  .app-shell .shell-main {
+    width: 100% !important;
+    max-width: 100% !important;
+    margin-inline-start: 0 !important;
+  }
 }
 
 @media (max-width: 480px) {
@@ -2450,4 +2468,21 @@
   [data-theme='dark'] .app-shell .sidebar-drawer .sidebar-foot-user { background: #17213a !important; border-color: #2d3b53 !important; color: #f3f6fb !important; }
   [data-theme='dark'] .app-shell .sidebar-drawer .sidebar-foot-user strong { color: #f3f6fb !important; }
   [data-theme='dark'] .app-shell .sidebar-drawer .sidebar-foot-user small { color: #b3bdd3 !important; }
+}
+
+/* P0 FINAL: ensure no rail ever shows on mobile — highest specificity, last in cascade */
+@media (max-width: 768px) {
+  html body .app-shell .sidebar,
+  html body .app-shell--platform .sidebar,
+  html body .app-shell--dashboard .sidebar {
+    display: none !important;
+    width: 0 !important;
+    max-width: 0 !important;
+    min-width: 0 !important;
+  }
+  html body .app-shell .shell-main {
+    width: 100% !important;
+    max-width: 100% !important;
+    margin-inline-start: 0 !important;
+  }
 }
