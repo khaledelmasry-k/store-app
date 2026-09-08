@@ -342,7 +342,7 @@ function ctx() {
 }
 
 // ─────────────────────────────────────────────────────────────
-test('pricing intent registration starts one server-controlled 30-day Free trial', async ({ page }) => {
+test('pricing intent registration starts one server-controlled trial of the selected plan', async ({ page }) => {
   const { email, storeName, ref } = ctx()
   await registerStore(page, {
     email,
@@ -359,15 +359,14 @@ test('pricing intent registration starts one server-controlled 30-day Free trial
   const sub = await latestSub(store!.id)
   expect(sub).not.toBeNull()
   expect(sub!.status).toBe('trialing')
-  expect(sub!.planId).toBe('plan-free')
-  expect(sub!.postTrialPlanId).toBe('plan-starter')
+  expect(sub!.planId).toBe('plan-starter')
   expect(sub!.trialUsed).toBe(true)
+  expect(sub!.initialTrialPlanId).toBe('plan-starter')
   expect(sub!.trialStartedAt).toBeTruthy()
   expect(sub!.trialEndsAt).toBeTruthy()
   const trialDuration = sub!.trialEndsAt.toMillis() - sub!.trialStartedAt.toMillis()
-  expect(trialDuration).toBe(30 * 86400000)
-  expect(sub!.normalPriceSnapshot).toBe(0)
-  expect(sub!.launchPriceSnapshot).toBe(0)
+  expect(trialDuration).toBe(3 * 86400000)
+  expect(sub!.normalPriceSnapshot).toBe(499)
   expect(sub!.launchUsed).toBeFalsy()
 })
 
@@ -397,9 +396,10 @@ test('Free registration starts the single 30-day trial and keeps store draft', a
   await expect(page.getByRole('heading', { name: 'المنتجات والمخزون' })).toBeVisible({ timeout: 15000 })
 })
 
-test('Starter, Growth, and Pro pricing intents all start the same Free month', async ({ page }) => {
+test('Starter, Growth, and Pro pricing intents start their own 3-day trial', async ({ page }) => {
   const { uniq } = ctx()
-  for (const planName of ['STARTER', 'GROWTH', 'PRO']) {
+  const expected = { STARTER: { id: 'plan-starter', price: 499 }, GROWTH: { id: 'plan-growth', price: 799 }, PRO: { id: 'plan-pro', price: 1299 } } as const
+  for (const planName of ['STARTER', 'GROWTH', 'PRO'] as const) {
     const suffix = `${planName.toLowerCase()}-${uniq}-${Date.now()}`
     const ref = `auto-trial-${suffix}`
     await registerStore(page, {
@@ -413,10 +413,11 @@ test('Starter, Growth, and Pro pricing intents all start the same Free month', a
     const store = (await pollValue(() => storeBySlug(ref), (value) => value != null))!
     const sub = (await latestSub(store.id))!
     expect(sub.status).toBe('trialing')
-    expect(sub.planId).toBe('plan-free')
-    expect(sub.postTrialPlanId).toBe(`plan-${planName.toLowerCase()}`)
+    expect(sub.planId).toBe(expected[planName].id)
+    expect(sub.initialTrialPlanId).toBe(expected[planName].id)
     expect(sub.trialUsed).toBe(true)
-    expect(sub.trialEndsAt.toMillis() - sub.trialStartedAt.toMillis()).toBe(30 * 86400000)
+    expect(sub.trialEndsAt.toMillis() - sub.trialStartedAt.toMillis()).toBe(3 * 86400000)
+    expect(sub.normalPriceSnapshot).toBe(expected[planName].price)
     expect(store.data()?.storeStatus).toBe('draft')
     expect(store.data()?.published).toBe(false)
   }

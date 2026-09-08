@@ -36,9 +36,9 @@ test('renders the reference-inspired Matjari landing structure', async ({ page }
   await expect(page.locator('.stitch-capability-card')).toHaveCount(6)
   await expect(page.locator('.landing-stats .landing-stat')).toHaveCount(4)
   await expect(page.locator('.landing-steps-grid .landing-step')).toHaveCount(3)
-  await expect(page.locator('.landing-flow-track li')).toHaveCount(6)
-  await expect(page.locator('.landing-flow-track')).toContainText('Store')
-  await expect(page.locator('.landing-flow-track')).toContainText('Reports')
+  await expect(page.locator('#operating-flow .oj-cards .oj-card')).toHaveCount(6)
+  await expect(page.locator('#operating-flow')).toContainText('Store')
+  await expect(page.locator('#operating-flow')).toContainText('Reports')
   // The hero now uses the dedicated commerce illustration; the live dashboard
   // mockup remains in the solutions section below.
   await expect(page.locator('.landing-hero-visual')).toHaveCount(1)
@@ -63,36 +63,43 @@ test('pricing shows real seeded plans with limits and plan-scoped CTAs', async (
   // FREE: one 30-day onboarding window, never free forever.
   await expect(cardByName('FREE')).toContainText('مجاناً')
   await expect(cardByName('FREE')).toContainText('لمدة 30 يومًا')
-  await expect(cardByName('FREE')).toContainText('أول شهر فقط')
+  await expect(cardByName('FREE')).toContainText('مجانًا لمدة 30 يومًا — بعدها اختر باقة مدفوعة')
   await expect(cardByName('FREE')).not.toContainText('للأبد')
   await expect(cardByName('FREE')).toContainText('حتى 50 منتج')
   await expect(cardByName('FREE')).toContainText('حتى 50 طلب شهرياً')
   await expect(colByName('FREE').locator('.stitch-plan-link')).toHaveAttribute('href', '/register?plan=plan-free')
+  await expect(colByName('FREE').locator('.stitch-plan-link')).toContainText('ابدأ 30 يومًا مجانًا')
 
-  // STARTER: 499 EGP, 500 products, 300 orders/month.
+  // STARTER: 499 EGP, 500 products, 300 orders/month — 3-day trial.
   await expect(cardByName('STARTER')).toContainText('499 ج.م')
   await expect(cardByName('STARTER')).toContainText('/ شهريًا')
   await expect(cardByName('STARTER')).toContainText('حتى 500 منتج')
   await expect(cardByName('STARTER')).toContainText('حتى 300 طلب شهرياً')
   await expect(cardByName('STARTER')).toContainText('1 GB تخزين')
+  await expect(cardByName('STARTER')).toContainText('لمدة 3 أيام')
   await expect(colByName('STARTER').locator('.stitch-plan-link')).toHaveAttribute('href', '/register?plan=plan-starter')
+  await expect(colByName('STARTER').locator('.stitch-plan-link')).toContainText('جرّب Starter لمدة 3 أيام')
 
-  // GROWTH (recommended): 799 EGP, 2000 products, 1500 orders/month.
+  // GROWTH (recommended): 799 EGP, 2000 products, 1500 orders/month — 3-day trial.
   const growth = cardByName('GROWTH')
   await expect(growth).toContainText('799 ج.م')
   await expect(growth).toContainText('حتى 2000 منتج')
   await expect(growth).toContainText('حتى 1500 طلب شهرياً')
   await expect(growth).toContainText('5 GB تخزين')
+  await expect(growth).toContainText('لمدة 3 أيام')
   await expect(colByName('GROWTH').locator('.stitch-plan-link')).toHaveAttribute('href', '/register?plan=plan-growth')
+  await expect(colByName('GROWTH').locator('.stitch-plan-link')).toContainText('جرّب Growth لمدة 3 أيام')
 
   await expect(cardByName('BUSINESS')).toHaveCount(0)
 
-  // PRO: 1299 EGP, unlimited products, 10000 orders/month, 20 GB storage.
+  // PRO: 1299 EGP, unlimited products, 10000 orders/month, 20 GB storage — 3-day trial.
   await expect(cardByName('PRO')).toContainText('1,299 ج.م')
   await expect(cardByName('PRO')).toContainText('منتجات غير محدودة')
   await expect(cardByName('PRO')).toContainText('حتى 10000 طلب شهرياً')
   await expect(cardByName('PRO')).toContainText('20 GB تخزين')
+  await expect(cardByName('PRO')).toContainText('لمدة 3 أيام')
   await expect(colByName('PRO').locator('.stitch-plan-link')).toHaveAttribute('href', '/register?plan=plan-pro')
+  await expect(colByName('PRO').locator('.stitch-plan-link')).toContainText('جرّب Pro لمدة 3 أيام')
 
   const lifetime = page.locator('.stitch-lifetime-offer')
   await expect(lifetime).toContainText('امتلك متجرك')
@@ -100,6 +107,17 @@ test('pricing shows real seeded plans with limits and plan-scoped CTAs', async (
   await expect(lifetime).toContainText('دفعة واحدة')
   await expect(lifetime).toContainText('حق استخدام دائم')
   await expect(lifetime.locator('a.stitch-offer-cta')).toHaveAttribute('href', '/register?offer=lifetime')
+  await expect(lifetime).not.toContainText('لمدة 3 أيام')
+  await expect(lifetime).not.toContainText('30 يوم')
+
+  const enterprise = page.locator('.landing-enterprise-offer')
+  await expect(enterprise).toContainText('حلول مخصصة')
+  await expect(enterprise).toContainText('محتاج متجر أو تشغيل بمواصفات خاصة؟')
+  await expect(enterprise).toContainText('اطلب عرضًا مخصصًا')
+  await expect(enterprise).toHaveCount(1)
+  await expect(enterprise.locator('a.landing-enterprise-cta')).toHaveAttribute('href', '/contact')
+  await expect(enterprise).not.toContainText('ج.م')
+  await expect(page.locator('.stitch-pricing-grid')).not.toContainText('Enterprise')
 
   // Each card has exactly ONE primary CTA (no duplicate "ابدأ الآن" buttons).
   await expect(page.locator('.stitch-plan-wrap .stitch-plan-link')).toHaveCount(4)

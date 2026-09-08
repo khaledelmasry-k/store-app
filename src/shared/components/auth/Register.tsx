@@ -310,7 +310,7 @@ export const Register:FunctionalComponent = () => {
             <h1 className="auth-title">اختيار الباقة</h1>
             <p className="auth-subtitle">{lifetimeMode
               ? 'أنشئ متجرك أولاً، ثم أرسل طلب امتلاك المتجر من لوحة الاشتراك بعد تسجيل الدخول.'
-              : 'كل تسجيل جديد يبدأ بشهر Free واحد. اختيارك هنا يحدد الباقة التي تريد الترقية إليها بعد التجربة ولا يفعّلها قبل الدفع.'}</p>
+              : 'اختر الباقة التي ستبدأ بها تجربتك المجانية. Free 30 يومًا، و Starter/Growth/Pro 3 أيام بمزايا الباقة نفسها.'}</p>
             {lifetimeMode && <div className="register-lifetime-step-note"><Icon name="lock" ariaHidden /> سيظل الطلب قيد المراجعة ولن تتفعّل الملكية إلا بعد اعتماد الدفع.</div>}
             {!lifetimeMode && selectedPlan && (
               <div className="plan-selected register-selected-plan-summary">
@@ -322,8 +322,10 @@ export const Register:FunctionalComponent = () => {
                       ? `أول شهر ${formatCurrency(selectedPlan.launchPrice)} ثم ${formatCurrency(selectedPlan.priceMonthly)} شهرياً`
                       : `${formatCurrency(selectedPlan.priceMonthly)} / شهرياً`}
                   </span>
-                  {Number(selectedPlan.priceMonthly || 0) > 0 && <span className="register-selected-plan-trial">تبدأ أولًا بـ Free لمدة 30 يومًا، ثم ترقي إلى هذه الباقة</span>}
-                  {Number(selectedPlan.priceMonthly || 0) <= 0 && <span className="register-selected-plan-trial">شهر مجاني واحد لمدة 30 يومًا</span>}
+                  {selectedPlan.id === 'plan-free' && <span className="register-selected-plan-trial">تجربة مجانية لمدة 30 يومًا بمزايا Free</span>}
+                  {selectedPlan.id === 'plan-starter' && <span className="register-selected-plan-trial">تجربة Starter مجانًا لمدة 3 أيام — بكامل مزايا Starter</span>}
+                  {selectedPlan.id === 'plan-growth' && <span className="register-selected-plan-trial">تجربة Growth مجانًا لمدة 3 أيام — بكامل مزايا Growth</span>}
+                  {selectedPlan.id === 'plan-pro' && <span className="register-selected-plan-trial">تجربة Pro مجانًا لمدة 3 أيام — بكامل مزايا Pro</span>}
                 </div>
                 <button type="button" className="register-change-plan" onClick={() => setPlanSelectorOpen((open) => !open)}>{planSelectorOpen ? 'إغلاق الاختيار' : 'تغيير الباقة'}</button>
               </div>

@@ -421,7 +421,22 @@ export const MerchantSubscription: FunctionalComponent = () => {
             <Icon name="hourglass_top" />
             <div>
               {subscription?.trialEndsAt ? <CountdownTimer endsAt={subscription.trialEndsAt} label="متبقي من الفترة التجريبية" /> : <strong className="trial-missing-end">تعذر تحديد موعد انتهاء التجربة</strong>}
-              <p className="muted small">Free متاحة لمدة 30 يومًا فقط. بياناتك تبقى محفوظة بعد الانتهاء، ويلزم اختيار باقة مدفوعة لمواصلة العمليات.</p>
+              {subscription.planId === 'plan-free' ? (
+                <p className="muted small">Free متاحة لمدة 30 يومًا فقط. بياناتك تبقى محفوظة بعد الانتهاء، ويلزم اختيار Starter أو Growth أو Pro لمواصلة العمليات.</p>
+              ) : (
+                <p className="muted small">تجربتك الحالية لـ {plan?.name || subscription.planName} لمدة 3 أيام. عند انتهائها، يمكنك تفعيل نفس الباقة أو اختيار باقة أخرى مدفوعة — لا تعود تلقائيًا إلى Free.</p>
+              )}
+            </div>
+          </div>
+        </Card>
+      )}
+      {status === 'expired' && (
+        <Card title="انتهت تجربتك المجانية" className="mt-2">
+          <div className="trial-countdown">
+            <Icon name="warning" />
+            <div>
+              <strong>انتهت تجربتك المجانية</strong>
+              <p className="muted small">فعّل باقتك للاستمرار. بياناتك محفوظة بالكامل. يمكنك تفعيل نفس الباقة ({plan?.name || subscription.planName}) أو اختيار Starter/Growth/Pro أخرى.</p>
             </div>
           </div>
         </Card>
