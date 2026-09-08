@@ -408,6 +408,14 @@ async function main() {
   const staffUid = await ensureIdentity(DEV_ACCOUNTS.staff, 'staff', ['store-a'])
   await db.collection('users').doc(staffUid).set({ permissions: ['products:view', 'orders:view', 'customers:view'], updatedAt: ts() }, { merge: true })
   await ensureIdentity(DEV_ACCOUNTS.customer, 'customer', [])
+  // Public contact QA fixture. Production continues to use the same
+  // admin-managed settings/platform fields through the public callable.
+  await db.doc('settings/platform').set({
+    enterpriseWhatsAppNumber: '201000000000',
+    enterpriseWhatsAppEnabled: true,
+    enterpriseWhatsAppMessage: 'مرحبًا، أريد عرضًا مخصصًا من متجري',
+    updatedAt: ts(),
+  }, { merge: true })
 
   // Store A — TEST active growth plan, published, moderate usage
   const aUid = 'seed-owner-a'

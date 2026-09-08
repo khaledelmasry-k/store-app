@@ -7,6 +7,21 @@ async function noHScroll(page: Page) {
   return page.evaluate(() => document.documentElement.scrollWidth - document.documentElement.clientWidth)
 }
 
+async function mockPublicPlatformConfig(page: Page, config: Record<string, unknown>) {
+  let calls = 0
+  await page.route('**/getPublicPlatformConfig', async (route) => {
+    if (route.request().method() !== 'POST') return route.continue()
+    calls += 1
+    await route.fulfill({
+      status: 200,
+      contentType: 'application/json',
+      headers: { 'access-control-allow-origin': '*' },
+      body: JSON.stringify({ data: config }),
+    })
+  })
+  return () => calls
+}
+
 // Keep screenshot assertions deterministic if a future landing variant reintroduces
 // deferred section motion. The current approved composition renders sections directly.
 async function forceReveal(page: Page) {
@@ -115,7 +130,8 @@ test('pricing shows real seeded plans with limits and plan-scoped CTAs', async (
   await expect(enterprise).toContainText('محتاج متجر أو تشغيل بمواصفات خاصة؟')
   await expect(enterprise).toContainText('اطلب عرضًا مخصصًا')
   await expect(enterprise).toHaveCount(1)
-  await expect(enterprise.locator('a.landing-enterprise-cta')).toHaveAttribute('href', '/contact')
+  await expect(enterprise.locator('a.landing-enterprise-cta')).toHaveAttribute('href', /^https:\/\/wa\.me\//)
+  await expect(enterprise.locator('a.landing-enterprise-cta')).toHaveAttribute('target', '_blank')
   await expect(enterprise).not.toContainText('ج.م')
   await expect(page.locator('.stitch-pricing-grid')).not.toContainText('Enterprise')
 
@@ -125,6 +141,42 @@ test('pricing shows real seeded plans with limits and plan-scoped CTAs', async (
   // Featured plan is النمو (isPopular), rendered as a single badge.
   await expect(page.locator('.mk-pricing-badge')).toHaveCount(1)
   await expect(growth.locator('.mk-pricing-badge')).toContainText('الأكثر طلبًا')
+})
+
+test('public config enabled renders one encoded WhatsApp contact flow', async ({ page }) => {
+  const message = 'مرحبًا، أريد عرضًا مخصصًا لمتجري'
+  const getCalls = await mockPublicPlatformConfig(page, {
+    enterpriseWhatsAppNumber: '201001234567',
+    enterpriseWhatsAppEnabled: true,
+    enterpriseWhatsAppMessage: message,
+  })
+  await page.goto('/', { waitUntil: 'commit' })
+
+  const expectedHref = `https://wa.me/201001234567?text=${encodeURIComponent(message)}`
+  const enterpriseCta = page.locator('.landing-enterprise-offer .landing-enterprise-cta')
+  await expect(enterpriseCta).toContainText('اطلب عرضًا مخصصًا')
+  await expect(enterpriseCta).toHaveAttribute('href', expectedHref)
+  await expect(enterpriseCta).toHaveAttribute('target', '_blank')
+  await expect(enterpriseCta).toHaveAttribute('rel', 'noopener noreferrer')
+  await expect(page.locator('.landing-footer-whatsapp')).toHaveAttribute('href', expectedHref)
+  expect(getCalls()).toBe(1)
+})
+
+test('public config disabled falls back to the contact footer without a fake number', async ({ page }) => {
+  const getCalls = await mockPublicPlatformConfig(page, {
+    enterpriseWhatsAppNumber: '',
+    enterpriseWhatsAppEnabled: false,
+    enterpriseWhatsAppMessage: 'غير مستخدمة',
+  })
+  await page.goto('/', { waitUntil: 'commit' })
+
+  const enterpriseCta = page.locator('.landing-enterprise-offer .landing-enterprise-cta')
+  await expect(enterpriseCta).toContainText('تواصل معنا')
+  await expect(enterpriseCta).toHaveAttribute('href', '#contact')
+  await expect(enterpriseCta).not.toHaveAttribute('target', '_blank')
+  await expect(page.locator('.landing-footer-whatsapp')).toHaveCount(0)
+  await expect(page.locator('.landing-footer-contact-note')).toBeVisible()
+  expect(getCalls()).toBe(1)
 })
 
 test('registration keeps Lifetime as a dedicated handoff', async ({ page }) => {
