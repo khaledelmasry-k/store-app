@@ -1036,7 +1036,7 @@ async function latestSubscriptionForStore(storeId: string): Promise<{ id: string
 // No background jobs on the Spark plan, so expiry is enforced on access.
 async function expireSubscriptionLazily(storeId: string, subId: string, sub: any, userId?: string | null) {
   if (sub?.status === 'expired') return
-  await db.doc(`subscriptions/${subId}`).update({ status: 'expired', updatedAt: now() })
+  await db.doc(`subscriptions/${subId}`).update({ status: 'expired', trialStatus: 'expired', trialConsumed: true, updatedAt: now() })
   await db.collection('notifications').add({
     storeId,
     userId: null,
@@ -2218,27 +2218,33 @@ export const registerMerchant = onCall(async (request: CallableRequest<any>) => 
   if (requestedPlanId === 'plan-lifetime') {
     throw new HttpsError('failed-precondition', 'شراء المتجر يتم من خلال طلب دفع معتمد بعد إنشاء المتجر')
   }
-  const postTrialPlanId = PUBLIC_PAID_PLAN_IDS.has(requestedPlanId) ? requestedPlanId : null
-  let postTrialPlanName: string | null = null
-  if (postTrialPlanId) {
-    const desired = await db.doc(`plans/${postTrialPlanId}`).get()
-    if (desired.exists && desired.data()?.active !== false && desired.data()?.isPurchasable !== false && desired.data()?.archived !== true) {
-      postTrialPlanName = String(desired.data()?.name || postTrialPlanId)
-    }
+  // Enterprise is not a subscription plan — it is a contact flow only.
+  if (requestedPlanId === 'enterprise' || requestedPlanId === 'plan-enterprise') {
+    throw new HttpsError('failed-precondition', 'عروض Enterprise تتم عبر طلب عرض مخصص وليست اشتراكًا مباشرًا')
   }
 
-  const freePlanSnap = await db.doc('plans/plan-free').get()
-  if (!freePlanSnap.exists || freePlanSnap.data()?.active === false || freePlanSnap.data()?.archived === true) {
-    throw new HttpsError('failed-precondition', 'فترة البداية المجانية غير متاحة حالياً')
+  // Determine effective plan for the intro trial.
+  // Free → 30 days, Starter/Growth/Pro → 3 days of that same plan's entitlements.
+  let targetPlanId: string
+  if (PUBLIC_PAID_PLAN_IDS.has(requestedPlanId)) {
+    targetPlanId = requestedPlanId
+  } else if (requestedPlanId === 'plan-free' || requestedPlanId === '' || requestedPlanId === 'pending') {
+    targetPlanId = 'plan-free'
+  } else {
+    // Unknown planId — fallback to Free for safety, preserving legacy grandfathering.
+    targetPlanId = 'plan-free'
   }
-  const canonicalFree = CANONICAL_PLANS.find((candidate) => candidate.id === 'plan-free')!
-  // Canonical launch policy overrides a stale live Free document. Existing
-  // subscriptions remain untouched because their snapshots are immutable.
-  const plan = { ...freePlanSnap.data(), ...canonicalFree } as any
-  const resolvedPlanId = 'plan-free'
-  const planName = plan.name || 'FREE'
+
+  const targetPlanSnap = await db.doc(`plans/${targetPlanId}`).get()
+  if (!targetPlanSnap.exists || targetPlanSnap.data()?.active === false || targetPlanSnap.data()?.archived === true) {
+    throw new HttpsError('failed-precondition', 'الباقة المطلوبة غير متاحة حالياً')
+  }
+  const canonicalTarget = CANONICAL_PLANS.find((candidate) => candidate.id === targetPlanId)!
+  const plan = { ...targetPlanSnap.data(), ...canonicalTarget } as any
+  const resolvedPlanId = targetPlanId
+  const planName = plan.name || targetPlanId
   const cycle = 'monthly'
-  const trialDays = FREE_TRIAL_DAYS
+  const trialDays = Number(plan.trialDays) > 0 ? Number(plan.trialDays) : (targetPlanId === 'plan-free' ? 30 : 3)
   const registrationAt = new Date()
   const trialEndsAt = new Date(registrationAt.getTime() + trialDays * DAY_MS)
   const normalPriceSnapshot = Number(plan?.priceMonthly || 0)
@@ -2293,8 +2299,11 @@ export const registerMerchant = onCall(async (request: CallableRequest<any>) => 
     trialPlanId: resolvedPlanId,
     trialStartedAt: Timestamp.fromDate(registrationAt),
     trialEndsAt: Timestamp.fromDate(trialEndsAt),
-    postTrialPlanId,
-    postTrialPlanName,
+    // Intro trial tracking — one trial per merchant/store only.
+    initialTrialPlanId: resolvedPlanId,
+    initialTrialStartedAt: Timestamp.fromDate(registrationAt),
+    initialTrialEndsAt: Timestamp.fromDate(trialEndsAt),
+    trialConsumed: false,
     periodNumber: 0,
     normalPriceSnapshot,
     launchPriceSnapshot,
@@ -2325,22 +2334,25 @@ export const registerMerchant = onCall(async (request: CallableRequest<any>) => 
 
   await auth.createUser({ uid, email: normalizedEmail, password, displayName: name, disabled: false })
 
+  const isFreeTrial = resolvedPlanId === 'plan-free'
   await createBillingNotification(
     storeId,
     uid,
-    'بدأ شهرك المجاني',
-    'لديك 30 يومًا لتشغيل متجرك على Free. بعد انتهائها تبقى بياناتك محفوظة ويلزم اختيار Starter أو Growth أو Pro لاستكمال العمليات.',
+    isFreeTrial ? 'بدأ شهرك المجاني' : `بدأت تجربة ${planName} المجانية`,
+    isFreeTrial
+      ? 'لديك 30 يومًا لتشغيل متجرك على Free. بعد انتهائها تبقى بياناتك محفوظة ويلزم اختيار Starter أو Growth أو Pro لاستكمال العمليات.'
+      : `لديك 3 أيام لتجربة ${planName} بكامل مزاياها. بعد انتهائها تحتاج إلى تفعيل نفس الباقة أو اختيار باقة أخرى مدفوعة للاستمرار.`,
   )
   await auditLog(
     storeId,
     uid,
-    'free_trial_started_on_registration',
+    isFreeTrial ? 'free_trial_started_on_registration' : 'paid_trial_started_on_registration',
     'subscriptions',
     subscriptionRef.id,
-    { planId: resolvedPlanId, trialDays, merchantStatus: 'active' },
+    { planId: resolvedPlanId, trialDays, merchantStatus: 'active', initialTrialPlanId: resolvedPlanId },
   )
 
-  return { uid, storeId, status: 'trialing', planId: resolvedPlanId, trialDays, postTrialPlanId }
+  return { uid, storeId, status: 'trialing', planId: resolvedPlanId, trialDays }
 })
 
 // ─────────────────────────────────────────────────────────────

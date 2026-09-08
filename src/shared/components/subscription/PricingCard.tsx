@@ -100,7 +100,13 @@ export const PricingCard: FunctionalComponent<Props> = ({ plan, selected, featur
       {isFree && !isOneTime && (
         <div className="mk-pricing-trial">
           <Icon name="schedule" />
-          أول شهر فقط — بعدها اختر باقة مدفوعة
+          مجانًا لمدة 30 يومًا — بعدها اختر باقة مدفوعة
+        </div>
+      )}
+      {!isFree && !isOneTime && trialDays > 0 && (
+        <div className="mk-pricing-trial">
+          <Icon name="schedule" />
+          جرّب {plan.name} مجانًا لمدة {trialDays} أيام — بكامل المزايا
         </div>
       )}
 
