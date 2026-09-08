@@ -14,6 +14,7 @@ import { setSeo } from '../../shared/utils/seo'
 import { getPublicPromotionsCallable } from '../../shared/services/auth'
 import heroCommerceVisual from '../../assets/brand/matjari-hero-commerce-v2.webp'
 import dashboardShowcase from '../../assets/brand/matjari-dashboard-showcase-v1.png'
+import { OperatingJourney } from '../components/OperatingJourney'
 import './LandingPage.css'
 
 const NAV_LINKS = [
@@ -29,14 +30,7 @@ const FEATURES = [
   ['link', 'روابط البيع وصفحات الهبوط', 'شارك عروضك بصفحات وروابط قابلة للتتبع من داخل Matjari.'],
   ['analytics', 'التقارير والربحية', 'اقرأ المبيعات والتكلفة والأرباح من بيانات التشغيل المسجلة لديك.'],
 ] as const
-const OPERATING_FLOW = [
-  ['storefront', 'المتجر', 'Store'],
-  ['shopping_bag', 'الطلب', 'Order'],
-  ['local_shipping', 'الشحن', 'Shipping'],
-  ['person', 'العميل', 'Customer'],
-  ['hub', 'CRM', 'CRM'],
-  ['bar_chart', 'التقارير', 'Reports'],
-] as const
+
 const FAQS = [
   ['هل أحتاج إلى خبرة تقنية؟', 'لا. تبدأ بخطوات بسيطة، وتدير المنتجات والطلبات من لوحة واضحة دون إعدادات معقدة.'],
   ['هل Free مجانية للأبد؟', 'لا. Free هي أول 30 يومًا فقط. بعدها تبقى بياناتك محفوظة ويلزم اختيار Starter أو Growth أو Pro لمواصلة العمليات.'],
@@ -70,7 +64,7 @@ export const LandingPage: FunctionalComponent = () => {
     <main>
       <section className="landing-hero stitch-hero" aria-labelledby="landing-title"><div className="landing-container landing-hero-inner"><div className="landing-hero-copy"><span className="landing-eyebrow stitch-release-pill">Commerce Operating System للتاجر العربي</span><h1 id="landing-title">كل تجارتك<br /><em>من مكان واحد</em></h1><p>متجرك، طلباتك، عملاؤك، الشحن وCRM وروابط البيع — دورة تشغيل واحدة بدل التنقل بين أدوات متفرقة.</p><div className="landing-hero-actions"><Link href="/register"><Button icon="arrow_back">ابدأ شهرك المجاني</Button></Link><a href="#operating-flow" onClick={goTo('#operating-flow')}>شاهد دورة التشغيل <Icon name="arrow_downward" /></a></div></div><HeroCommerceVisual /></div></section>
       <section className="landing-stats" aria-label="حقائق عن متجري"><div className="landing-container landing-stats-grid">{[['30 يومًا', 'Free لأول شهر فقط'], ['3', 'باقات شهرية بعد التجربة'], ['6', 'مراحل في دورة التشغيل'], ['1', 'لوحة تحكم موحدة']].map(([value, label]) => <div className="landing-stat" key={label}><strong>{value}</strong><span>{label}</span></div>)}</div></section>
-      <section id="operating-flow" className="landing-section landing-operating-flow"><div className="landing-container"><div className="landing-section-heading"><span>دورة التشغيل</span><h2>من المتجر إلى القرار، بلا فجوات</h2><p>كل مرحلة تبني على التي قبلها داخل Matjari.</p></div><ol className="landing-flow-track">{OPERATING_FLOW.map(([icon, label, english], index) => <li key={english}><span className="landing-flow-index">{String(index + 1).padStart(2, '0')}</span><span className="landing-flow-icon"><Icon name={icon} /></span><strong>{label}</strong><small>{english}</small></li>)}</ol></div></section>
+      <OperatingJourney />
       <section id="features" className="landing-section landing-features"><div className="landing-container"><div className="landing-section-heading"><span>المميزات</span><h2>كل ما تحتاجه لإدارة متجرك</h2><p>منصة متكاملة تجمع عمليات البيع والإدارة في مكان واحد.</p></div><div className="landing-feature-grid">{FEATURES.map(([icon, title, description]) => <article className="landing-feature-card stitch-capability-card" key={title}><span className="landing-feature-icon stitch-capability-icon"><Icon name={icon} /></span><h3>{title}</h3><p>{description}</p></article>)}</div></div></section>
       <section id="how-it-works" className="landing-section landing-steps"><div className="landing-container"><div className="landing-section-heading"><span>كيف تعمل</span><h2>كيف تعمل متجري؟</h2><p>ثلاث خطوات بسيطة لبدء البيع.</p></div><div className="landing-steps-grid">{[['01', 'أنشئ متجرك', 'سجّل حسابك واختر الهوية المناسبة لمتجرك.'], ['02', 'أضف منتجاتك واضبط إعداداتك', 'أدخل منتجاتك وأسعارك ومخزونك في دقائق.'], ['03', 'انشر وابدأ استقبال الطلبات', 'انشر واجهتك وابدأ استقبال الطلبات من عملائك.']].map(([number, title, text]) => <article className="landing-step" key={number}><strong>{number}</strong><h3>{title}</h3><p>{text}</p></article>)}</div></div></section>
       <section id="solutions" className="landing-section landing-value"><div className="landing-container landing-value-grid"><div className="landing-value-copy"><span>مساحة التشغيل الحقيقية</span><h2>لوحتك تعكس ما يحدث في تجارتك</h2><p>تابع المنتجات والطلبات والعملاء والشحن والربحية من واجهات Matjari الفعلية، مع فصل بيانات التكلفة الداخلية عن تجربة العميل.</p><ul><li><Icon name="check_circle" />Storefront وCheckout وإدارة طلبات في نفس النظام</li><li><Icon name="check_circle" />CRM ومتابعات مرتبطة بسجل العميل</li><li><Icon name="check_circle" />روابط بيع وتقارير مبنية على بيانات التشغيل</li></ul><Link href="/register" className="landing-inline-cta">ابدأ شهرك المجاني <Icon name="arrow_back" /></Link></div><DashboardShowcase /></div></section>
