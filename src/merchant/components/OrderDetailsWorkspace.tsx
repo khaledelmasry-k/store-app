@@ -7,10 +7,10 @@ import { useCollection } from '../../shared/hooks/useCollection'
 import { useStore } from '../../shared/hooks/useStore'
 import { useAuth } from '../../shared/hooks/useAuth'
 import { useToast } from '../../shared/hooks/useToast'
-import { createOrderShipmentCallable, downloadShipmentDocumentCallable, getMerchantShippingProvidersCallable, receiveOrderReturnCallable, refreshShipmentTrackingCallable, requestOrderReturnCallable, updateOrderStatusCallable, updateShipmentStatusCallable } from '../../shared/services/auth'
+import { cancelExternalShipmentCallable, createOrderShipmentCallable, downloadShipmentDocumentCallable, getMerchantShippingProvidersCallable, receiveOrderReturnCallable, refreshShipmentTrackingCallable, requestOrderReturnCallable, updateOrderStatusCallable, updateShipmentStatusCallable } from '../../shared/services/auth'
 import { Button } from '../../shared/components/ui/Button'
 import { formatCurrency, formatDateTime } from '../../shared/utils/format'
-import { STATUS_LABELS, STATUS_COLORS } from '../../shared/utils/constants'
+import { STATUS_LABELS } from '../../shared/utils/constants'
 import { orderItemRevenue } from '../../shared/utils/pricing'
 import { publicShipmentTrackingCode } from '../../shared/utils/shipping'
 import type { Order, OrderCost, ProductCost, Shipment } from '../../shared/types'
@@ -69,7 +69,7 @@ export const OrderDetailsWorkspace: FunctionalComponent<Props> = ({ id }) => {
   const [sheetOpen, setSheetOpen] = useState(false)
   const [pendingStatus, setPendingStatus] = useState<Order['status'] | null>(null)
   const [saving, setSaving] = useState(false)
-  const [shippingChoices, setShippingChoices] = useState<Array<{ provider: { id: string; name: string }; config: { enabled?: boolean } | null }>>([])
+  const [shippingChoices, setShippingChoices] = useState<Array<{ provider: { id: string; name: string; slug?: string; canCreateShipment?: boolean; canTrackShipment?: boolean; canCancelShipment?: boolean }; config: { enabled?: boolean } | null }>>([])
   const [shippingProviderId, setShippingProviderId] = useState('')
   const [shipmentAction, setShipmentAction] = useState<string | null>(null)
   const [nextManualShipmentStatus, setNextManualShipmentStatus] = useState('')
@@ -77,10 +77,10 @@ export const OrderDetailsWorkspace: FunctionalComponent<Props> = ({ id }) => {
   useEffect(() => {
     if (!tenantId) return
     void getMerchantShippingProvidersCallable({ storeId: tenantId }).then((result) => {
-      const rows = ((result.data as any)?.providers || []) as Array<{ provider: { id: string; name: string }; config: { enabled?: boolean; isDefault?: boolean } | null }>
+      const rows = ((result.data as any)?.providers || []) as Array<{ provider: { id: string; name: string; slug?: string; canCreateShipment?: boolean; canTrackShipment?: boolean; canCancelShipment?: boolean }; config: { enabled?: boolean; isDefault?: boolean } | null }>
       setShippingChoices(rows.filter((row) => row.config?.enabled))
       const preferred = rows.find((row) => row.config?.enabled && row.config?.isDefault) || rows.find((row) => row.config?.enabled)
-      if (!shippingProviderId && preferred) setShippingProviderId(preferred.provider.id)
+      if (preferred) setShippingProviderId((current) => current || preferred.provider.id)
     }).catch(() => setShippingChoices([]))
   }, [tenantId])
 
@@ -111,6 +111,13 @@ export const OrderDetailsWorkspace: FunctionalComponent<Props> = ({ id }) => {
     || publicShipmentTrackingCode(shipment.provider || shipment.providerId, shipment.providerShipmentId)
     || shipment.trackingNumber || shipment.providerShipmentId || null) : null
   const currentShipmentStatus = String(shipment?.currentStatus || shipment?.status || 'CREATED')
+  const shipmentProvider = shippingChoices.find((row) => row.provider.id === shipment?.providerId)?.provider
+  const selectedProvider = shippingChoices.find((row) => row.provider.id === shippingProviderId)?.provider
+  const hasExternalShipment = Boolean(isApiShipment && (shipment?.externalShipmentId || shipment?.providerShipmentId))
+  const canTrackShipment = Boolean(shipmentProvider?.canTrackShipment)
+  const canCancelShipment = Boolean(shipmentProvider?.canCancelShipment)
+  const shipmentCancellationEligible = ['CREATED', 'READY_FOR_PICKUP', 'FAILED'].includes(currentShipmentStatus)
+  const orderCancellationEligible = ['NEW', 'CONTACTED', 'PROCESSING'].includes(order.status)
   const visibleStatusLabel = currentShipmentStatus === 'FAILED' ? 'تعذر التسليم — يحتاج متابعة' : statusLabel
   const manualShipmentChoices = shipment && !isApiShipment ? (MANUAL_SHIPMENT_TRANSITIONS[currentShipmentStatus] || []) : []
   const orderTransitions = (ALLOWED_TRANSITIONS[order.status] || []).filter((status) => !shipment || !['SHIPPED', 'DELIVERED', 'RETURNED', 'CANCELLED'].includes(status))
@@ -168,6 +175,26 @@ export const OrderDetailsWorkspace: FunctionalComponent<Props> = ({ id }) => {
     try { await refreshShipmentTrackingCallable({ shipmentId: shipment.id }); toast.push('تم تحديث حالة الشحنة') }
     catch (err: any) { toast.push('تعذر تحديث التتبع', err?.message || 'حاول مرة أخرى', 'error') }
     finally { setShipmentAction(null) }
+  }
+
+  const cancelOrder = async () => {
+    if (!orderCancellationEligible) return
+    if (hasExternalShipment && !canCancelShipment) {
+      toast.push('شركة الشحن الحالية لا تتيح الإلغاء التلقائي عبر API.', 'ألغِ الشحنة من لوحة الشركة أولًا، ثم حدّث الحالة من متجري بعد أن تؤكد الشركة الإلغاء.', 'error')
+      return
+    }
+    const message = hasExternalShipment
+      ? 'سيتم محاولة إلغاء الشحنة لدى شركة الشحن أولًا، وبعد تأكيد الإلغاء سيتم إلغاء الطلب وإعادة المخزون.'
+      : 'سيتم إلغاء الطلب وإعادة المخزون الذي خُصم عند إنشائه. هل تريد المتابعة؟'
+    if (!window.confirm(message)) return
+    setShipmentAction('cancel')
+    try {
+      if (hasExternalShipment && shipment?.id) await cancelExternalShipmentCallable({ shipmentId: shipment.id })
+      else await updateOrderStatusCallable({ orderId: order.id, status: 'CANCELLED' })
+      toast.push(hasExternalShipment ? 'تم إلغاء الطلب والشحنة وإعادة المخزون' : 'تم إلغاء الطلب وإعادة المخزون')
+    } catch (err: any) {
+      toast.push('تعذر إتمام الإلغاء', err?.message || 'لم يتغير الطلب ولم تتم إعادة المخزون.', 'error')
+    } finally { setShipmentAction(null) }
   }
 
   const updateManualShipment = async () => {
@@ -385,14 +412,16 @@ export const OrderDetailsWorkspace: FunctionalComponent<Props> = ({ id }) => {
               <div className="shipping-secure-note"><Icon name={isApiShipment ? 'cloud_sync' : 'edit_note'} ariaHidden /><span>{isApiShipment ? `شحنة API متصلة بـ${shipment.providerName || 'شركة الشحن'}؛ الشركة هي مصدر الحالة، لذلك لا تعديل يدوي هنا.` : 'شحنة يدوية: حدّث مرحلتها هنا فقط وسيتم تحديث حالة الطلب تلقائيًا.'}</span></div>
               <div className="ods-kv">
                 <div><p className="ods-kv-label">شركة الشحن</p><p className="ods-kv-value">{shipment.providerName || '—'}</p></div>
-                <div><p className="ods-kv-label">{String(shipment.provider||'').toLowerCase()==='wasla' ? 'كود الشحنة في وصلة' : 'كود متابعة المتجر'}</p><p className="ods-kv-value ltr-text">{shipmentTrackingCode || 'بانتظار كود المتابعة'}</p></div>
-                <div><p className="ods-kv-label">حالة الشحن</p><p className="ods-kv-value">{SHIPMENT_STATUS_LABELS[currentShipmentStatus] || currentShipmentStatus}</p></div>
-                <div><p className="ods-kv-label">آخر تحديث</p><p className="ods-kv-value">{shipment.lastSyncedAt ? formatDateTime(shipment.lastSyncedAt) : '—'}</p></div>
+                <div><p className="ods-kv-label">كود الشحنة الخارجي</p><p className="ods-kv-value ltr-text">{shipment.externalShipmentId || shipment.providerShipmentId || '—'}</p></div>
+                <div><p className="ods-kv-label">كود التتبع</p><p className="ods-kv-value ltr-text">{shipmentTrackingCode || 'بانتظار كود المتابعة'}</p></div>
+                <div><p className="ods-kv-label">الحالة المحلية</p><p className="ods-kv-value">{SHIPMENT_STATUS_LABELS[currentShipmentStatus] || currentShipmentStatus}</p></div>
+                <div><p className="ods-kv-label">آخر حالة من الشركة</p><p className="ods-kv-value">{shipment.remoteStatus == null ? '—' : String(shipment.remoteStatus)}</p></div>
+                <div><p className="ods-kv-label">آخر مزامنة</p><p className="ods-kv-value">{shipment.lastSyncedAt ? formatDateTime(shipment.lastSyncedAt) : '—'}</p></div>
                 {currentShipmentStatus === 'FAILED' && shipment.failureReason && <div><p className="ods-kv-label">سبب تعذر التسليم</p><p className="ods-kv-value">{shipment.failureReason}</p></div>}
               </div>
               <div className="flex" style={{ gap: 8 }}>
                 {shipment.trackingUrl && <a className="btn btn-outline btn-sm" href={shipment.trackingUrl} target="_blank" rel="noreferrer">تتبع</a>}
-                {isApiShipment && <Button size="sm" variant="outline" loading={shipmentAction === 'refresh'} disabled={shipmentAction !== null} onClick={refreshShipment}>تحديث من الشركة</Button>}
+                {isApiShipment && canTrackShipment && <Button size="sm" variant="outline" loading={shipmentAction === 'refresh'} disabled={shipmentAction !== null} onClick={refreshShipment}>تحديث الحالة</Button>}
                 {shipment.documentAvailable && <Button size="sm" variant="outline" loading={shipmentAction === 'document'} disabled={shipmentAction !== null} onClick={downloadShipmentDocument}>مستند الشحنة</Button>}
               </div>
               {!isApiShipment && manualShipmentChoices.length > 0 && <div className="stack-list">
@@ -400,11 +429,20 @@ export const OrderDetailsWorkspace: FunctionalComponent<Props> = ({ id }) => {
                 <Button size="sm" loading={shipmentAction === 'manual-status'} disabled={!nextManualShipmentStatus || shipmentAction !== null} onClick={updateManualShipment}>حفظ حالة الشحنة</Button>
               </div>}
             </div> : shippingChoices.length === 0 ? <p className="muted small">لا توجد شركة شحن مفعلة لهذا المتجر.</p> : <div className="stack-list">
-              {order.shippingCreationStatus === 'FAILED' && <div className="alert alert-error"><strong>فشل إنشاء الشحنة</strong><span>{order.shippingCreationErrorMessage || 'تحقق من إعدادات شركة الشحن ثم أعد المحاولة.'}</span></div>}
+              {order.shippingCreationStatus === 'FAILED' && <div className="alert alert-error"><strong>تعذر إنشاء الشحنة</strong><span>{order.shippingCreationErrorMessage || 'تحقق من إعدادات شركة الشحن ثم أعد المحاولة.'}</span></div>}
               <select className="input" value={shippingProviderId} onChange={(e) => setShippingProviderId((e.target as HTMLSelectElement).value)}>{shippingChoices.map((row) => <option value={row.provider.id} key={row.provider.id}>{row.provider.name}</option>)}</select>
-              <Button size="sm" loading={shipmentAction === 'create'} disabled={shipmentAction !== null} onClick={createShipment}>{order.shippingCreationStatus === 'FAILED' ? 'إعادة محاولة إرسال الشحنة' : 'إرسال شحنة للعميل'}</Button>
+              <Button size="sm" loading={shipmentAction === 'create'} disabled={shipmentAction !== null || selectedProvider?.canCreateShipment !== true} onClick={createShipment}>{order.shippingCreationStatus === 'FAILED' ? 'إعادة محاولة الإنشاء' : 'إنشاء الشحنة'}</Button>
+            </div>}
+            {orderCancellationEligible && <div className="stack-list mt-2">
+              {hasExternalShipment && !canCancelShipment && <div className="alert alert-error"><strong>شركة الشحن الحالية لا تتيح الإلغاء التلقائي عبر API.</strong><span>ألغِ الشحنة من لوحة الشركة أولًا، ثم حدّث حالتها من متجري بعد التأكيد. لن نعرض نجاحًا محليًا قبل تأكيد الشركة.</span></div>}
+              {(!hasExternalShipment || (canCancelShipment && shipmentCancellationEligible)) && <Button size="sm" variant="outline" loading={shipmentAction === 'cancel'} disabled={shipmentAction !== null} onClick={cancelOrder}>{hasExternalShipment ? 'إلغاء الطلب والشحنة' : 'إلغاء الطلب'}</Button>}
             </div>}
           </div>
+
+          {Array.isArray(order.statusHistory) && order.statusHistory.some((event) => event.title) && <div className="ods-card">
+            <h3 className="ods-sidebar-title"><Icon name="history" ariaHidden /> سجل دورة الطلب</h3>
+            <div className="stack-list">{order.statusHistory.filter((event) => event.title).slice(-10).reverse().map((event, index) => <div key={event.eventId || `${event.status}-${index}`} className="ods-kv"><div><p className="ods-kv-value">{event.title}</p><p className="ods-kv-label">{formatDateTime(event.at)}{event.source ? ` — ${event.source}` : ''}{event.provider ? ` — ${event.provider}` : ''}</p></div></div>)}</div>
+          </div>}
 
           {order.status === 'DELIVERED' && <div className="ods-card">
             <h3 className="ods-sidebar-title"><Icon name="assignment_return" ariaHidden /> مرتجع العميل</h3>

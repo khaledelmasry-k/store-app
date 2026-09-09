@@ -49,6 +49,18 @@ export async function createShipmentForOrder(
   const order = orderSnap.data() || {}
   const storeId = String(order.storeId || '')
   if (!storeId) throw new ShippingProviderError('CONFIGURATION_ERROR', 'Order store is missing', false)
+  if (['CANCELLED', 'RETURNED'].includes(String(order.status || ''))) {
+    throw new ShippingProviderError('CONFIGURATION_ERROR', 'Cannot create a shipment for a terminal order', false)
+  }
+  if (!String(order.customerName || '').trim() || !String(order.phone || '').trim() || !String(order.address || '').trim()) {
+    throw new ShippingProviderError('CONFIGURATION_ERROR', 'Order customer name, phone, and address are required', false)
+  }
+  if (!Array.isArray(order.items) || order.items.length === 0) {
+    throw new ShippingProviderError('CONFIGURATION_ERROR', 'Order items are required', false)
+  }
+  if (order.paymentMethod === 'cod' && (!Number.isFinite(Number(order.totalPrice)) || Number(order.totalPrice) < 0)) {
+    throw new ShippingProviderError('CONFIGURATION_ERROR', 'A valid COD amount is required', false)
+  }
 
   let providerId = String(input.providerId || order.shippingProviderId || '').trim()
   if (!providerId) {
@@ -122,12 +134,16 @@ export async function createShipmentForOrder(
     const provider: Record<string, any> = { id: providerSnap.id, ...(providerSnap.data() || {}) }
     const config = configSnap.data() || {}
     const adapter = getShippingAdapter(String(provider.slug || ''), provider.integrationType)
-    if (!adapter?.createShipment) throw new ShippingProviderError('CONFIGURATION_ERROR', 'Shipping provider adapter is not configured', false)
+    const createShipment = adapter?.createShipment
+    if (!adapter || !createShipment || !adapter.capabilities.includes('createShipment')) throw new ShippingProviderError('CONFIGURATION_ERROR', 'Shipping provider cannot create shipments', false)
+    if (!['MANUAL', 'RETRY'].includes(input.trigger) && provider.integrationType !== 'api') {
+      throw new ShippingProviderError('CONFIGURATION_ERROR', 'Automatic shipment creation requires an API provider', false)
+    }
     const vault = provider.integrationType === 'manual'
       ? null
       : await loadIntegrationCredentials(db, storeId, 'shipping', String(provider.slug || ''))
     if (provider.integrationType !== 'manual' && !vault) throw new ShippingProviderError('CONFIGURATION_ERROR', 'Shipping credentials are not configured', false)
-    const result = await adapter.createShipment(
+    const result = await createShipment(
       { provider, config, credentials: vault?.credentials || null },
       { orderId: input.orderId, order, idempotencyKey: guardId, webhookUrl: publicWebhookUrl(String(provider.slug || '')) },
     )
@@ -153,6 +169,7 @@ export async function createShipmentForOrder(
       codAmount: order.paymentMethod === 'cod' ? Number(order.totalPrice || 0) : 0,
       currentStatus: status,
       status,
+      remoteStatus: result.rawStatus ?? result.status ?? null,
       active: !['DELIVERED', 'RETURNED', 'CANCELLED'].includes(status),
       creationTrigger: input.trigger,
       idempotencyKey: guardId,
@@ -174,6 +191,16 @@ export async function createShipmentForOrder(
         shippingCreationErrorCode: null,
         shippingCreationErrorMessage: null,
         trackingNumber: result.trackingNumber || (String(provider.slug || '') === 'wasla' ? waslaPublicTrackingCode(result.providerShipmentId) : result.providerShipmentId || null),
+        statusHistory: FieldValue.arrayUnion({
+          status: freshOrder.data()?.status || 'NEW',
+          shipmentStatus: status,
+          at: Timestamp.now(),
+          by: input.actorId,
+          source: 'SYSTEM',
+          provider: String(provider.slug || ''),
+          eventId: `shipment-created-${shipmentRef.id}`,
+          title: input.trigger === 'MANUAL' ? 'تم إنشاء الشحنة' : 'تم إنشاء الشحنة تلقائيًا',
+        }),
         updatedAt: FieldValue.serverTimestamp(),
       })
       tx.update(guardRef, { processingStatus: 'PROCESSED', shipmentId: shipmentRef.id, processedAt: FieldValue.serverTimestamp(), updatedAt: FieldValue.serverTimestamp() })
@@ -195,7 +222,21 @@ export async function createShipmentForOrder(
     const details = errorDetails(error)
     await Promise.all([
       guardRef.set({ processingStatus: 'FAILED', errorCode: details.code, errorMessage: details.message.slice(0, 500), retryable: details.retryable, updatedAt: FieldValue.serverTimestamp() }, { merge: true }),
-      orderRef.set({ shippingCreationStatus: 'FAILED', shippingCreationErrorCode: details.code, shippingCreationErrorMessage: details.message.slice(0, 500), shippingLastAttemptAt: FieldValue.serverTimestamp(), updatedAt: FieldValue.serverTimestamp() }, { merge: true }),
+      orderRef.set({
+        shippingCreationStatus: 'FAILED',
+        shippingCreationErrorCode: details.code,
+        shippingCreationErrorMessage: details.message.slice(0, 500),
+        shippingLastAttemptAt: FieldValue.serverTimestamp(),
+        statusHistory: FieldValue.arrayUnion({
+          status: order.status || 'NEW',
+          at: Timestamp.now(),
+          by: input.actorId,
+          source: 'SYSTEM',
+          eventId: `shipment-create-failed-${guardId}-${Date.now()}`,
+          title: 'تعذر إنشاء الشحنة',
+        }),
+        updatedAt: FieldValue.serverTimestamp(),
+      }, { merge: true }),
     ])
     throw error
   }
