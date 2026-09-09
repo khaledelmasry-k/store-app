@@ -80,14 +80,6 @@ if (import.meta.env.VITE_FIREBASE_USE_EMULATOR === 'true') {
   connectFirestoreEmulator(db, 'localhost', 8080)
   connectStorageEmulator(storage, 'localhost', 9199)
   connectFunctionsEmulator(functions, 'localhost', 5001)
-  // Expose auth for deterministic emulator browser auth (test harness only)
-  try {
-    (window as any).__FIREBASE_AUTH__ = auth
-    ;(window as any).__FIREBASE_APP__ = app
-    import('firebase/auth').then((mod) => {
-      try { (window as any).__FIREBASE_SIGNIN__ = mod.signInWithCustomToken } catch {}
-    }).catch(() => {})
-  } catch {}
 
   // Development-only connection proof. Never include secrets, tokens, or
   // credentials in diagnostics; this makes stale Vite builds obvious.
