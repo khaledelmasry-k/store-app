@@ -102,13 +102,7 @@
   position: absolute;
   inset: 0;
   z-index: 1;
-  background: linear-gradient(
-    to left,
-    color-mix(in srgb, #111827 82%, transparent) 0%,
-    color-mix(in srgb, #111827 62%, transparent) 34%,
-    color-mix(in srgb, #111827 20%, transparent) 56%,
-    transparent 74%
-  );
+  background: linear-gradient(to left, color-mix(in srgb, #111827 76%, transparent) 0%, color-mix(in srgb, #111827 48%, transparent) 34%, color-mix(in srgb, #111827 12%, transparent) 60%, transparent 78%);
 }
 .sf-hero-content {
   position: absolute;
@@ -121,6 +115,7 @@
   box-sizing: border-box;
   width: min(56%, 680px);
   padding: clamp(48px, 5vw, 72px) clamp(48px, 6.7vw, 96px);
+  padding-block-end: clamp(64px, 7vw, 96px);
 }
 .sf-hero-eyebrow {
   margin-bottom: 16px;
@@ -415,7 +410,8 @@
   /* Hero — Stitch mobile: full-width aspect-square, bottom-aligned content. */
   .sf-hero {
     height: auto;
-    aspect-ratio: 1 / 1;
+    min-height: clamp(520px, 118vw, 680px);
+    aspect-ratio: auto;
     margin-block-start: 0;
     border-radius: 0;
   }
@@ -433,7 +429,7 @@
     justify-content: flex-end;
     align-items: flex-start;
     padding: 24px;
-    padding-bottom: max(32px, env(safe-area-inset-bottom));
+    padding-bottom: max(48px, calc(32px + env(safe-area-inset-bottom)));
   }
   .sf-hero-eyebrow {
     display: none;
@@ -576,7 +572,10 @@
 .store-dark .sf-trust-item {
   background: var(--surface-hover);
   border-color: var(--border);
+  color: var(--foreground);
 }
+.store-dark .sf-trust-label { color: var(--foreground); }
+.store-dark .sf-trust-icon { color: var(--primary); }
 .store-dark .sf-cat-circle {
   background: var(--surface-hover);
 }

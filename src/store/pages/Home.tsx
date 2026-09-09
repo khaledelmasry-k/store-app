@@ -38,6 +38,7 @@ export const StoreHome: FunctionalComponent = () => {
 
   const featured = products.filter((p) => p.isFeatured === true || p.featured === true).slice(0, 8)
   const hasHeroImage = Boolean(heroImage) && !heroFailed
+  const heroCtaEnabled = (store as any)?.heroCtaEnabled !== false && (store as any)?.theme?.heroCtaEnabled !== false
   const categoryNameOf = (id?: string) => categories.find((c) => c.id === id)?.name
   const base = `/store/${store?.slug}`
   const homeLayout = getTemplate(store?.theme?.template).layout.homeSections
@@ -70,7 +71,7 @@ export const StoreHome: FunctionalComponent = () => {
           <p className="sf-hero-subtitle">
             اكتشف تشكيلتنا الجديدة المصممة بعناية لتمنحك الإطلالة التي تستحقها. جودة عالية وتصاميم عصرية تناسب كل الأوقات.
           </p>
-          {products.length > 0 && (
+          {heroCtaEnabled && (
             <Link href={`${base}/catalog`} className="sf-hero-cta">
               تسوق الآن
               <Icon name="arrow_back" ariaHidden />

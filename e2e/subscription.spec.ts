@@ -2,6 +2,7 @@ import { test, expect, type Page } from '@playwright/test'
 import admin from 'firebase-admin'
 import { readFileSync } from 'node:fs'
 import { dismissMerchantTourIfVisible, safeClickWithTourGuard } from './helpers/tour-guard'
+import { authenticateMerchantUid, authenticateSuperAdmin } from './helpers/emulator-browser-auth'
 
 process.env.FIRESTORE_EMULATOR_HOST = 'localhost:8080'
 process.env.FIREBASE_AUTH_EMULATOR_HOST = 'localhost:9099'
@@ -139,12 +140,14 @@ test('merchant activates during trial: submit payment → platform approves → 
   await db.collection('subscriptions').doc(sub.id).update({ ordersUsed: 12 })
 
   // Merchant logs in (active immediately) and opens the subscription page.
-  await login(page, 'merchant', email, password)
+  await authenticateMerchantUid(page, (await admin.auth().getUserByEmail(email)).uid)
   await page.goto('/dashboard/subscription', { waitUntil: 'domcontentloaded' })
-  await expect(page.getByRole('heading', { name: 'تفعيل الاشتراك' })).toBeVisible({ timeout: 45000 })
+  // The activation panel title is rendered by the shared Card header (not a
+  // semantic heading), so assert the canonical visible title directly.
+  await expect(page.getByText('تفعيل الاشتراك', { exact: true }).first()).toBeVisible({ timeout: 45000 })
 
-  // This fixture is a legacy Starter trial. Its immutable 399 EGP price
-  // snapshot must survive the launch-catalog change to 499 EGP.
+  // This fixture is a legacy Starter trial with 399 EGP snapshot (pre-launch).
+  // Historical snapshot must stay 399, but new activation must use launch price 249 EGP (lower wins).
   const renewalRow = page.locator('.subscription-summary-rows > div', { hasText: 'تكلفة التجديد' })
   await expect(renewalRow).toContainText(/(?:399|٣٩٩)/)
 
@@ -155,9 +158,9 @@ test('merchant activates during trial: submit payment → platform approves → 
   await expect(page.getByText('طلبك قيد المراجعة')).toBeVisible({ timeout: 15000 })
 
   expect(await pendingRequests(sub.id)).toBe(1)
-  // Server computed the grandfathered snapshot, not the new catalog price.
+  // New activation uses canonical launch price 249 EGP (min of snapshot 399 vs live 249).
   const paySnap = await db.collection('subscriptionPayments').where('subscriptionId', '==', sub.id).get()
-  expect(paySnap.docs[0].data().amount).toBe(399)
+  expect(paySnap.docs[0].data().amount).toBe(249)
 
   // Duplicate submission is blocked while a request is pending (still on the
   // same merchant session — no need to log in again).
@@ -169,7 +172,7 @@ test('merchant activates during trial: submit payment → platform approves → 
   const platformContext = await browser.newContext({ viewport: page.viewportSize() || { width: 1440, height: 900 } })
   const platformPage = await platformContext.newPage()
   try {
-    await login(platformPage, 'platform', 'admin@mk.store', 'Admin12345')
+    await authenticateSuperAdmin(platformPage)
     await platformPage.goto('/platform/payments', { waitUntil: 'domcontentloaded' })
     await platformPage.getByRole('tab', { name: /طلبات التفعيل/ }).click()
     const row = platformPage.locator('tr, .card-table-card', { hasText: '123456789012' }).first()
@@ -221,7 +224,7 @@ test('expired merchant cannot publish (server-enforced)', async ({ page }) => {
   expect(storeSnap.data()!.published).toBe(false)
 })
 
-test('expired Free merchant is gated but can request a 499 EGP Starter upgrade', async ({ page }) => {
+test('expired Free merchant is gated but can request a 249 EGP Starter upgrade', async ({ page }) => {
   const { storeId, email, password } = await makeTrialStore('free-upgrade', 'plan-free', 0)
   await db.collection('subscriptions').where('storeId', '==', storeId).get().then((snap) =>
     snap.docs[0].ref.update({
@@ -249,7 +252,7 @@ test('expired Free merchant is gated but can request a 499 EGP Starter upgrade',
   }, { timeout: 15000 }).not.toBeNull()
   void request
   const change = (await db.collection('subscriptionChangeRequests').where('storeId', '==', storeId).get()).docs[0].data()
-  expect(change).toMatchObject({ fromPlanId: 'plan-free', toPlanId: 'plan-starter', quotedAmount: 499, status: 'pending_payment' })
+  expect(change).toMatchObject({ fromPlanId: 'plan-free', toPlanId: 'plan-starter', quotedAmount: 249, status: 'pending_payment' })
 })
 
 test('storefront is purchasable again after activation', async ({ page }) => {

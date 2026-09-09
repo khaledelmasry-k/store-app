@@ -17,7 +17,7 @@ import { orderItemRevenue } from '../../shared/utils/pricing'
 import { storePublicUrl } from '../../shared/utils/store-url'
 import { STATUS_LABELS } from '../../shared/utils/constants'
 import { visibleOrderStatus, visibleOrderStatusLabel } from '../../shared/utils/order-status'
-import { setStorePublishedCallable, getEligiblePromotionsCallable } from '../../shared/services/auth'
+import { setStorePublishedCallable, getEligiblePromotionsCallable, getMerchantShippingProvidersCallable } from '../../shared/services/auth'
 import type { Order, Product, ProductCost, Shipment } from '../../shared/types'
 import { Icon } from '../../shared/components/ui/Icon'
 import { CountdownTimer } from '../../shared/components/subscription/CountdownTimer'
@@ -51,6 +51,7 @@ export const MerchantDashboard: FunctionalComponent = () => {
   const [promotions, setPromotions] = useState<any[]>([])
   const [promotionNow, setPromotionNow] = useState(Date.now())
   const [secondaryReady, setSecondaryReady] = useState(false)
+  const [shippingSetup, setShippingSetup] = useState<{ done: boolean; reason: string }>({ done: false, reason: 'جارٍ التحقق من إعدادات الشحن' })
   useEffect(() => {
     let cancelled = false
     const schedule = window.setTimeout(() => { if (!cancelled) setSecondaryReady(true) }, 0)
@@ -62,6 +63,24 @@ export const MerchantDashboard: FunctionalComponent = () => {
   useEffect(() => {
     if (!secondaryReady || !storeId || !isOwner) return
     getEligiblePromotionsCallable({ storeId }).then((r: any) => setPromotions(r.data?.promotions || [])).catch(() => setPromotions([]))
+  }, [secondaryReady, storeId, isOwner])
+  useEffect(() => {
+    if (!secondaryReady || !storeId || !isOwner) return
+    getMerchantShippingProvidersCallable({ storeId }).then((result: any) => {
+      const entries = (result.data?.providers || []) as Array<{ provider?: any; config?: any }>
+      const ready = entries.find(({ provider, config }) => {
+        if (!provider || config?.enabled !== true) return false
+        if (provider.integrationType === 'manual') return true
+        if (config.configurationStatus !== 'CONNECTED') return false
+        if (provider.slug !== 'wasla') return true
+        return Boolean(config.waslaPickupLocationName && config.waslaPickupAddressLine1 && Number(config.waslaPickupGovernorateId) > 0 && Number(config.waslaPickupCityId) > 0)
+      })
+      if (ready) setShippingSetup({ done: true, reason: '' })
+      else {
+        const enabled = entries.find((entry) => entry.config?.enabled)
+        setShippingSetup({ done: false, reason: enabled?.provider?.slug === 'wasla' ? 'أكمل عنوان الاستلام والمحافظة والمدينة في إعدادات وصلة' : 'فعّل شركة شحن واحفظ إعداداتها قبل النشر' })
+      }
+    }).catch(() => setShippingSetup({ done: false, reason: 'تعذر التحقق من إعدادات الشحن' }))
   }, [secondaryReady, storeId, isOwner])
   useEffect(() => { const id = window.setInterval(() => setPromotionNow(Date.now()), 60000); return () => window.clearInterval(id) }, [])
 
@@ -346,7 +365,7 @@ export const MerchantDashboard: FunctionalComponent = () => {
   const checklist = [
     { label: 'أضف أول منتج', done: products.length > 0, href: '/dashboard/products' },
     { label: 'اختر ثيم المتجر', done: Boolean(store?.theme?.template), href: '/dashboard/themes' },
-    { label: 'أضف وسيلة شحن', done: Boolean(store?.shipping?.enabled), href: '/dashboard/shipping' },
+    { label: 'أضف وسيلة شحن', done: shippingSetup.done, reason: shippingSetup.reason, href: '/dashboard/shipping' },
     { label: 'راجع إعدادات المتجر', done: Boolean(store?.name && store?.phone), href: '/dashboard/settings' },
     { label: 'انشر المتجر', done: store?.storeStatus === 'published' || store?.published === true, href: '/dashboard/settings' },
   ]
@@ -491,7 +510,7 @@ export const MerchantDashboard: FunctionalComponent = () => {
       {primaryPromotion && promotionMinutes > 0 && <div className="dashboard-promotion-banner"><strong>{primaryPromotion.title}</strong><span>{primaryPromotion.message}</span><CountdownTimer endsAt={primaryPromotion.endsAt} label="ينتهي خلال" />{primaryPromotion.ctaTarget && <a href={primaryPromotion.ctaTarget}>{primaryPromotion.ctaLabel || 'استفد من العرض'}</a>}</div>}
       {checklistDone < checklist.length && <section data-tour="onboarding-checklist" className="dashboard-onboarding-checklist" aria-label="خطوات بدء المتجر">
         <div className="dashboard-checklist-head"><div><h3>ابدأ متجرك خطوة بخطوة</h3><span>{checklistDone} من {checklist.length} مكتملة</span></div><div className="dashboard-checklist-progress"><i style={{ width: `${(checklistDone / checklist.length) * 100}%` }} /></div></div>
-        <div className="dashboard-checklist-items">{checklist.map((item) => <Link key={item.label} href={item.href} className={`dashboard-checklist-item${item.done ? ' is-done' : ''}`}><span className="dashboard-checklist-box">{item.done ? '✓' : ''}</span><span>{item.label}</span></Link>)}</div>
+        <div className="dashboard-checklist-items">{checklist.map((item) => <Link key={item.label} href={item.href} className={`dashboard-checklist-item${item.done ? ' is-done' : ''}`}><span className="dashboard-checklist-box">{item.done ? '✓' : ''}</span><span><span>{item.label}</span>{!item.done && item.reason && <small className="muted">{item.reason}</small>}</span></Link>)}</div>
       </section>}
       {/* ─────────── Desktop composition (Stitch 5ecc1fa6e7f5) ─────────── */}
       <div className="dashboard-desktop">

@@ -96,7 +96,8 @@
 }
 .storefront-nav-link:hover {
   color: var(--primary);
-  background: var(--surface-hover);
+  background: color-mix(in srgb, var(--primary) 10%, transparent);
+  border-bottom-color: color-mix(in srgb, var(--primary) 45%, transparent);
 }
 .storefront-nav-link--active,
 .storefront-nav-link--active:hover {
@@ -369,7 +370,12 @@
 .store-dark .storefront-icon-btn:hover,
 .store-dark .storefront-nav-link:hover {
   color: var(--primary);
+  background: color-mix(in srgb, var(--primary) 16%, transparent);
+  border-bottom-color: color-mix(in srgb, var(--primary) 62%, transparent);
 }
+.storefront-nav-link:focus-visible,
+.storefront-icon-btn:focus-visible,
+.storefront-category-link:focus-visible { outline: 2px solid var(--primary); outline-offset: 3px; }
 .store-dark .storefront-drawer {
   background: var(--surface-elevated);
 }

@@ -4,6 +4,7 @@ import {
   sendEmailVerification,
   sendPasswordResetEmail,
   signInWithEmailAndPassword,
+  signInWithCustomToken,
   signOut,
 } from 'firebase/auth'
 import { doc, serverTimestamp, setDoc } from 'firebase/firestore'
@@ -26,6 +27,7 @@ export interface RegisterInput {
   planId?: string
   /** 'monthly' (default) or 'yearly' — charged for the subscription period. */
   billingCycle?: 'monthly' | 'yearly'
+  couponCode?: string
 }
 
 export function login(creds: Credentials) {
@@ -249,6 +251,13 @@ export function impersonateCallable(input: Record<string, unknown>) {
   return fn(input)
 }
 
+export async function startImpersonation(storeId: string) {
+  const result: any = await impersonateCallable({ storeId })
+  if (!result.data?.customToken) throw new Error('لم يتم إنشاء جلسة الدعم')
+  await signInWithCustomToken(auth, result.data.customToken)
+  return result.data
+}
+
 export function exitImpersonationCallable() {
   const functions = getFunctions()
   const fn = httpsCallable(functions, 'exitImpersonation')
@@ -300,6 +309,14 @@ export function quoteCouponCallable(input: { storeId: string; code: string; subt
   const functions = getFunctions()
   const fn = httpsCallable(functions, 'quoteCoupon')
   return fn(input)
+}
+
+export function quoteSubscriptionCouponCallable(input: { code: string; planId: string; billingCycle?: 'monthly' | 'yearly'; amount: number }) {
+  return httpsCallable(getFunctions(), 'quoteSubscriptionCoupon')(input)
+}
+
+export function manageSubscriptionCouponCallable(input: { operation: 'create' | 'update'; couponId?: string; coupon?: Record<string, unknown> }) {
+  return httpsCallable(getFunctions(), 'manageSubscriptionCoupon')(input)
 }
 
 export function getPublicStoreCouponsCallable(input: { storeId: string }) {

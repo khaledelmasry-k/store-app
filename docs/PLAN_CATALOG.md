@@ -8,17 +8,17 @@ for every paid request; the browser never supplies an authoritative amount.
 
 | Offer | Model | Monthly | Yearly | One-time | Products | Orders/month | Team | Storage | Intended customer |
 | --- | --- | ---: | ---: | ---: | ---: | ---: | ---: | ---: | --- |
-| Free | 30-day trial | 0 | 0 | — | 50 | 50 | 1 | 200 MB | one onboarding month only — 30 days trial of Free entitlements |
-| Starter | subscription | 499 | 4,990 | — | 500 | 300 | 3 | 1 GB | small active seller — 3 days trial of Starter entitlements |
-| Growth | subscription | 799 | 7,990 | — | 2,000 | 1,500 | 10 | 5 GB | growing business; Most Popular — 3 days trial of Growth entitlements |
-| Pro | subscription | 1,299 | 12,990 | — | unlimited | 10,000 | 50 | 20 GB | high-volume merchant — 3 days trial of Pro entitlements |
+| Free (legacy) | archived subscription | 0 | 0 | — | 50 | 50 | 1 | 200 MB | grandfathered subscriptions only; no new registrations |
+| Basic | subscription | 149 | 1,490 | — | 100 | 100 | 2 | 512 MB | new entry plan — 3 days trial |
+| Starter | subscription | 249 | 2,490 | — | 500 | 300 | 3 | 1 GB | small active seller — 3 days trial of Starter entitlements |
+| Growth | subscription | 399 | 3,990 | — | 2,000 | 1,500 | 10 | 5 GB | growing business; Most Popular — 3 days trial of Growth entitlements |
+| Pro | subscription | 649 | 6,490 | — | unlimited | 10,000 | 50 | 20 GB | high-volume merchant — 3 days trial of Pro entitlements |
 | Business (legacy) | archived subscription | 1,099 | 10,990 | — | 5,000 | 3,500 | 20 | 10 GB | historical subscriptions only; not purchasable — hidden from Landing |
 | Lifetime | one-time | — | — | 4,999 | 1,000 | 5,000 | 5 | 5 GB | base-store ownership without recurring base fee — no trial, separate product |
 | Enterprise / Custom | contact-only | — | — | — | — | — | — | — | custom scope, no fixed price, no trial, not a plan |
 
-The public launch page presents the requested monthly prices. Yearly catalog
-snapshots remain available to the billing backend and equal ten monthly
-payments. Lifetime is a separate product and approval flow.
+The public launch page presents **أسعار الإطلاق** monthly prices (149 / 249 / 399 / 649). Yearly catalog snapshots remain available to the billing backend and equal ten monthly payments (1,490 / 2,490 / 3,990 / 6,490). Lifetime is a separate product and approval flow.
+No fake crossed-out prices are shown.
 
 ## Canonical feature keys
 
@@ -38,7 +38,7 @@ The legacy flags `abandonedCart`, `advancedReports`, `customDomain`, `apiAccess`
 compatibility and are forced to `false` by canonical sync/save paths. They are
 not marketed or granted as current features.
 
-| Feature | Free | Starter | Growth | Business | Pro | Lifetime |
+| Feature | Free legacy | Basic | Starter | Growth | Business | Pro | Lifetime |
 | --- | --- | --- | --- | --- | --- | --- |
 | Core storefront/products/orders/customers | YES (limited) | YES | YES | YES | YES | YES |
 | Basic analytics | YES | YES | YES | YES | YES | YES |
@@ -60,8 +60,7 @@ order, landing-page, sales-link, coupon, staff, and storage mutations enforce
 limits or feature keys server-side. Product content edits use `updateProduct`;
 direct client writes cannot add variants or quantity tiers. Existing paid
 periods keep their snapshots when the live catalog changes. Legacy active Free
-subscriptions without an expiry remain grandfathered; new registrations receive
-a server-timed trial of the selected plan itself — Free 30 days, Starter/Growth/Pro 3 days
+subscriptions without an expiry remain grandfathered; existing Free trials preserve their stored `trialEndsAt`; new registrations receive a server-timed three-day trial of Basic/Starter/Growth/Pro
 with that plan's entitlements (Lifetime and Enterprise have no trial). Intro trial is one per store
 (`initialTrialPlanId`/`trialConsumed`); after it is consumed, switching plans never grants a new trial —
 it creates a pending payment/activation request and expired trials require activation of the same or another paid plan
