@@ -211,10 +211,10 @@ async function registerStore(
   opts: { email: string; password: string; name: string; storeName: string; storeRef: string; planName: string },
 ) {
   await page.goto('/register', { waitUntil: 'domcontentloaded' })
-  await page.locator('.auth-card input[type="email"]').fill(opts.email)
-  await page.locator('.auth-card input[type="password"]').fill(opts.password)
-  await page.locator('.auth-card input').nth(0).fill(opts.name)
-  await page.locator('.auth-card input').nth(1).fill(phoneFromEmail(opts.email))
+  await page.locator('#reg-email').fill(opts.email)
+  await page.locator('#reg-password').fill(opts.password)
+  await page.locator('#reg-name').fill(opts.name)
+  await page.locator('#reg-phone').fill(phoneFromEmail(opts.email))
   await page.locator('.auth-terms input[type="checkbox"]').check()
   await page.getByRole('button', { name: 'التالي' }).click()
   // Merchant registration offers recurring plans only; the Lifetime offer is
@@ -222,17 +222,12 @@ async function registerStore(
   // The responsive registration UI uses the compact pill selector at every
   // breakpoint; desktop cards are a presentation layer, not the selection
   // contract. Assert the stable control instead of a desktop-only class.
-  await expect(page.locator('.register-plan-pill')).toHaveCount(4)
-  for (const planName of ['FREE', 'STARTER', 'GROWTH', 'PRO']) {
-    await expect(page.getByRole('button', { name: new RegExp(`^${planName}\\b`) })).toHaveCount(1)
-  }
-  // The compact plan strip is the canonical selection control. Using it
-  // avoids the featured-card badge overlapping adjacent cards on mobile and
-  // guarantees that the selected plan id matches the requested fixture.
-  await page.locator('.register-plan-pill').filter({ hasText: opts.planName }).click()
+  await page.getByRole('button', { name: 'تغيير الباقة' }).click()
+  await expect(page.locator('.register-plan-selector .mk-pricing-card')).toHaveCount(4)
+  await page.locator('.register-plan-selector .mk-pricing-card').filter({ has: page.locator('.mk-pricing-name', { hasText: opts.planName }) }).locator('.mk-pricing-cta').first().click()
   await page.getByRole('button', { name: 'التالي' }).click()
-  await page.locator('.auth-card input').nth(0).fill(opts.storeName)
-  await page.locator('.auth-card input').nth(1).fill(opts.storeRef)
+  await page.locator('#store-name').fill(opts.storeName)
+  await page.locator('#store-ref').fill(opts.storeRef)
   await page.getByRole('button', { name: 'إنشاء الحساب' }).click()
   await expect(page).toHaveURL(/\/verify-email/, { timeout: 30000 })
   await expect(page.getByRole('heading', { name: 'تحقق من بريدك الإلكتروني' })).toBeVisible({ timeout: 15000 })
@@ -370,30 +365,21 @@ test('pricing intent registration starts one server-controlled trial of the sele
   expect(sub!.launchUsed).toBeFalsy()
 })
 
-test('Free registration starts the single 30-day trial and keeps store draft', async ({ page }) => {
+test('Legacy Free is unavailable to new registration', async ({ page }) => {
   const { uniq } = ctx()
   const suffix = `${uniq}-${Date.now()}`
   const email = `approval-${suffix}@mk.test`
   const ref = `approval-${suffix}`
   const storeName = `متجر اعتماد ${uniq}`
-  await registerStore(page, { email, password: PASSWORD, name: 'تاجر اعتماد', storeName, storeRef: ref, planName: 'FREE' })
-
-  const freeStore = (await pollValue(() => storeBySlug(ref), (s) => s != null))!
-  const freeSub = (await latestSub(freeStore.id))!
-  expect(freeSub.status).toBe('trialing')
-  expect(freeSub.planId).toBe('plan-free')
-  expect(freeSub.trialUsed).toBe(true)
-  expect(freeSub.trialStartedAt).toBeTruthy()
-  expect(freeSub.trialEndsAt).toBeTruthy()
-  expect(freeSub.trialEndsAt.toMillis() - freeSub.trialStartedAt.toMillis()).toBe(30 * 86400000)
-  expect(freeStore.data()?.published).toBe(false)
-  expect(freeStore.data()?.storeStatus).toBe('draft')
-
-  // Free is usable immediately, but store publication remains an explicit
-  // independent merchant action.
-  await login(page, 'merchant', email, PASSWORD)
-  await page.goto('/dashboard/products', { waitUntil: 'domcontentloaded' })
-  await expect(page.getByRole('heading', { name: 'المنتجات والمخزون' })).toBeVisible({ timeout: 15000 })
+  await page.goto('/register', { waitUntil: 'domcontentloaded' })
+  await page.locator('#reg-email').fill(email)
+  await page.locator('#reg-password').fill(PASSWORD)
+  await page.locator('#reg-name').fill('تاجر اعتماد')
+  await page.locator('#reg-phone').fill(phoneFromEmail(email))
+  await page.locator('.auth-terms input[type="checkbox"]').check()
+  await page.getByRole('button', { name: 'التالي' }).click()
+  await expect(page.locator('.register-plan-pill')).toHaveCount(4)
+  await expect(page.getByRole('button', { name: /^FREE\b/ })).toHaveCount(0)
 })
 
 test('Starter, Growth, and Pro pricing intents start their own 3-day trial', async ({ page }) => {

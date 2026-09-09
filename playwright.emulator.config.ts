@@ -14,27 +14,27 @@ export default defineConfig({
   workers: 1,
   reporter: 'list',
   use: {
-    baseURL: 'http://localhost:4173',
+    baseURL: process.env.PW_BASE_URL ?? 'http://localhost:4173',
   },
   projects: [
     {
       name: 'desktop',
-      testMatch: /emulator\.spec\.ts|email-verification\.spec\.ts|subscription\.spec\.ts|landing\.spec\.ts|products\.spec\.ts|customer-flow\.spec\.ts|branding\.spec\.ts|saas\.spec\.ts|variant-logic\.spec\.ts|variant-flow\.spec\.ts|storage-limit\.spec\.ts|seo\.spec\.ts|platform-subscriptions\.spec\.ts|merchant-lifecycle\.spec\.ts|payment-proof\.spec\.ts|system-audit\.spec\.ts|integration-foundation\.spec\.ts|platform-crm\.spec\.ts/,
+      testMatch: /auth-harness\.spec\.ts|emulator\.spec\.ts|email-verification\.spec\.ts|subscription\.spec\.ts|landing\.spec\.ts|launch-ops-verification\.spec\.ts|launch-coupons\.spec\.ts|launch-impersonation\.spec\.ts|launch-shipping-onboarding\.spec\.ts|launch-tour-suppression\.spec\.ts|products\.spec\.ts|customer-flow\.spec\.ts|branding\.spec\.ts|saas\.spec\.ts|variant-logic\.spec\.ts|variant-flow\.spec\.ts|storage-limit\.spec\.ts|seo\.spec\.ts|platform-subscriptions\.spec\.ts|merchant-lifecycle\.spec\.ts|payment-proof\.spec\.ts|system-audit\.spec\.ts|integration-foundation\.spec\.ts|platform-crm\.spec\.ts/,
       use: { viewport: { width: 1440, height: 900 } },
     },
     {
       name: 'mobile-390',
-      testMatch: /emulator\.spec\.ts|subscription\.spec\.ts|landing\.spec\.ts|products\.spec\.ts|customer-flow\.spec\.ts|branding\.spec\.ts|saas\.spec\.ts|variant-logic\.spec\.ts|variant-flow\.spec\.ts|storage-limit\.spec\.ts|seo\.spec\.ts|platform-subscriptions\.spec\.ts/,
+      testMatch: /emulator\.spec\.ts|subscription\.spec\.ts|landing\.spec\.ts|launch-ops-verification\.spec\.ts|products\.spec\.ts|customer-flow\.spec\.ts|branding\.spec\.ts|saas\.spec\.ts|variant-logic\.spec\.ts|variant-flow\.spec\.ts|storage-limit\.spec\.ts|seo\.spec\.ts|platform-subscriptions\.spec\.ts/,
       use: { viewport: { width: 390, height: 844 } },
     },
     {
       name: 'mobile-360',
-      testMatch: /responsive\.spec\.ts|landing\.spec\.ts/,
+      testMatch: /responsive\.spec\.ts|landing\.spec\.ts|launch-ops-verification\.spec\.ts/,
       use: { viewport: { width: 360, height: 800 } },
     },
     {
       name: 'mobile-430',
-      testMatch: /responsive\.spec\.ts|landing\.spec\.ts/,
+      testMatch: /responsive\.spec\.ts|landing\.spec\.ts|launch-ops-verification\.spec\.ts/,
       use: { viewport: { width: 430, height: 932 } },
     },
   ],

@@ -2,6 +2,7 @@ import { test, expect, type Page } from '@playwright/test'
 import admin from 'firebase-admin'
 import { readFileSync } from 'node:fs'
 import { dismissMerchantTourIfVisible, safeClickWithTourGuard } from './helpers/tour-guard'
+import { authenticateMerchantUid, authenticateSuperAdmin } from './helpers/emulator-browser-auth'
 
 process.env.FIRESTORE_EMULATOR_HOST = 'localhost:8080'
 process.env.FIREBASE_AUTH_EMULATOR_HOST = 'localhost:9099'
@@ -139,9 +140,11 @@ test('merchant activates during trial: submit payment → platform approves → 
   await db.collection('subscriptions').doc(sub.id).update({ ordersUsed: 12 })
 
   // Merchant logs in (active immediately) and opens the subscription page.
-  await login(page, 'merchant', email, password)
+  await authenticateMerchantUid(page, (await admin.auth().getUserByEmail(email)).uid)
   await page.goto('/dashboard/subscription', { waitUntil: 'domcontentloaded' })
-  await expect(page.getByRole('heading', { name: 'تفعيل الاشتراك' })).toBeVisible({ timeout: 45000 })
+  // The activation panel title is rendered by the shared Card header (not a
+  // semantic heading), so assert the canonical visible title directly.
+  await expect(page.getByText('تفعيل الاشتراك', { exact: true }).first()).toBeVisible({ timeout: 45000 })
 
   // This fixture is a legacy Starter trial with 399 EGP snapshot (pre-launch).
   // Historical snapshot must stay 399, but new activation must use launch price 249 EGP (lower wins).
@@ -169,7 +172,7 @@ test('merchant activates during trial: submit payment → platform approves → 
   const platformContext = await browser.newContext({ viewport: page.viewportSize() || { width: 1440, height: 900 } })
   const platformPage = await platformContext.newPage()
   try {
-    await login(platformPage, 'platform', 'admin@mk.store', 'Admin12345')
+    await authenticateSuperAdmin(platformPage)
     await platformPage.goto('/platform/payments', { waitUntil: 'domcontentloaded' })
     await platformPage.getByRole('tab', { name: /طلبات التفعيل/ }).click()
     const row = platformPage.locator('tr, .card-table-card', { hasText: '123456789012' }).first()
