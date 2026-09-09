@@ -108,6 +108,7 @@ async function createUser(uid, email, password, name, role, storeIds = [], activ
   await auth.updateUser(uid, { email, displayName: name, disabled: !active, emailVerified: true }).catch(() => {})
   await db.collection('users').doc(uid).set({
     uid, email, name, role, storeIds, active,
+    ...(role === 'merchant' ? { onboardingTourCompleted: false, onboardingTourSkipped: false, onboardingTourVersion: 0 } : {}),
     createdAt: ts(), updatedAt: ts(), createdBy: 'seed',
   }, { merge: true })
   return uid

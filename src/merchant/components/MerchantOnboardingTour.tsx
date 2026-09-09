@@ -63,7 +63,7 @@ export const MerchantOnboardingTour: FunctionalComponent = () => {
   const miniKey = `matjari:mini-tour:${mode}:v${VERSION}`
 
   useEffect(() => { if (!mainEligible || !storeId || subscription.loading || !subscription.plan || ready) return; const saved = sessionStorage.getItem(RESUME_KEY); const index = saved ? mainSteps.findIndex((item) => item.id === saved) : -1; setMode('main'); setStep(index >= 0 ? index : -1); setReady(true) }, [mainEligible, storeId, subscription.loading, subscription.plan, mainSteps, ready])
-  useEffect(() => { if (user?.role !== 'merchant' || subscription.loading || welcomeChecked) return; setWelcomeVisible(localStorage.getItem(WELCOME_DISMISS_KEY) !== '1'); setWelcomeChecked(true) }, [user?.role, subscription.loading, welcomeChecked])
+  useEffect(() => { if (!eligible || subscription.loading || welcomeChecked) return; setWelcomeVisible(localStorage.getItem(WELCOME_DISMISS_KEY) !== '1'); setWelcomeChecked(true) }, [eligible, subscription.loading, welcomeChecked])
   useEffect(() => { if (eligible || !ready || mode !== 'main') return; const key = normalizedRoute(location).replace('/dashboard/', '').replace('/dashboard', ''); const mini = MINI_TOURS[key as keyof typeof MINI_TOURS]; if (!mini || localStorage.getItem(`matjari:mini-tour:${key}:v${VERSION}`)) return; setMode(key as keyof typeof MINI_TOURS); setStep(0) }, [eligible, ready, mode, location])
 
   const persistMain = async (field: 'onboardingTourCompleted' | 'onboardingTourSkipped') => { if (!user || saving) return; setSaving(true); try { await usersService.update(user.uid, { [field]: true, onboardingTourVersion: VERSION }) } finally { setSaving(false) } }
@@ -90,15 +90,17 @@ export const MerchantOnboardingTour: FunctionalComponent = () => {
     // press always owns one transition.
     if (transitionLock.current) return
     if (requestedIndex < 0) { setStep(-1); return }
+    const currentStep = step
+    const direction = requestedIndex < currentStep ? -1 : 1
     transitionLock.current = true; setTransitioning(true)
     try {
       let index = requestedIndex
       let currentRoute = normalizedRoute(window.location.pathname)
-      while (index < steps.length) {
+      while (index >= 0 && index < steps.length) {
         const next = steps[index]
         if (currentRoute !== normalizedRoute(next.route)) {
           navigate(next.route)
-          if (!await waitForRoute(next.route)) { index += 1; continue }
+          if (!await waitForRoute(next.route)) { index += direction; continue }
           currentRoute = normalizedRoute(next.route)
         }
         if (window.innerWidth <= 768 && !document.querySelector('[aria-label="إغلاق القائمة"]')) (document.querySelector('[aria-label="فتح القائمة"]') as HTMLButtonElement | null)?.click()
@@ -106,15 +108,18 @@ export const MerchantOnboardingTour: FunctionalComponent = () => {
           if (mode === 'main') sessionStorage.setItem(RESUME_KEY, next.id)
           setStep(index); highlight(next.target); return
         }
-        index += 1
+        index += direction
       }
-      await close('onboardingTourCompleted')
+      // If we walked off the end in the requested direction, complete or go to welcome
+      if (direction === 1) await close('onboardingTourCompleted')
+      else setStep(-1)
     } finally { transitionLock.current = false; setTransitioning(false) }
   }
   const dismissWelcome = () => { if (hideWelcome) localStorage.setItem(WELCOME_DISMISS_KEY, '1'); setWelcomeVisible(false) }
   const startFullGuide = () => { setWelcomeVisible(false); setForceMain(true); setMode('main'); setReady(true); void showStep(0) }
   useEffect(() => () => activeTarget.current?.classList.remove('tour-target-active'), [])
   if (user?.role !== 'merchant') return null
+  if (!eligible && !forceMain) return null
   if (welcomeVisible) return <div className="merchant-tour-overlay merchant-welcome-overlay" role="dialog" aria-modal="true" aria-label="دليل بداية المتجر"><section className="merchant-start-guide"><div className="merchant-start-guide__eyebrow">دليل التاجر</div><h2>أهلاً بك — خلّي شغلك واضح من أول طلب</h2><p className="merchant-start-guide__intro">هذه الخلاصة تظهر عند الدخول لتعرف وظيفة كل جزء، وما هو جاهز الآن، وما يحتاج تجهيزًا منك قبل الاعتماد عليه.</p><div className="merchant-start-guide__grid"><article><b>١. المتجر والمنتجات</b><span>أضف المنتج والسعر والمخزون والصور، ثم عاين المتجر قبل نشره. النشر هو الذي يسمح للعميل بالشراء.</span></article><article><b>٢. الطلبات والدفع</b><span>كل طلب له كود تتبع. الدفع عند الاستلام جاهز، والتحويل البنكي يحتاج من العميل إثبات التحويل للمراجعة.</span></article><article><b>٣. الشحن</b><span>الشحن اليدوي يعمل فورًا. أي شركة API لا يظهر بجانبها «متصلة» تكون قيد التطوير ولا تنشئ شحنات تلقائيًا بعد.</span></article><article><b>٤. واتساب</b><span>كتابة رقم أو رسالة لا يرسل شيئًا. الإرسال يبدأ فقط بعد ربط Meta واختبار الاتصال واعتماد قوالب الرسائل.</span></article><article><b>٥. التسويق والنمو</b><span>الروابط والكوبونات والصفحات والتحليلات تظهر بحسب باقتك؛ ستجد سبب الإتاحة أو الترقية داخل كل شاشة.</span></article><article><b>٦. قبل النشر</b><span>راجع المنتجات، طرق الدفع، سعر الشحن، رابط المتجر وسياسة الاسترجاع؛ بعدها نفّذ طلب اختبار مثل العميل.</span></article></div><div className="merchant-start-guide__foot"><label><input type="checkbox" checked={hideWelcome} onChange={(event) => setHideWelcome((event.target as HTMLInputElement).checked)} /> لا تعرض هذا الدليل مرة أخرى على هذا الجهاز</label><div><button type="button" className="btn btn-ghost" onClick={dismissWelcome}>فهمت، أكمل للوحة</button><button type="button" className="btn btn-primary" onClick={startFullGuide}>ابدأ الجولة التفصيلية</button></div></div></section></div>
   if ((!mainEligible && mode === 'main') || !ready || (step < 0 && step !== -1) || !steps[step]) return null
   const current = steps[step]
