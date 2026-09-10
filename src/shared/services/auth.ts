@@ -319,6 +319,14 @@ export function manageSubscriptionCouponCallable(input: { operation: 'create' | 
   return httpsCallable(getFunctions(), 'manageSubscriptionCoupon')(input)
 }
 
+export function listSubscriptionCouponsCallable() {
+  return httpsCallable(getFunctions(), 'listSubscriptionCoupons')({})
+}
+
+export function getSubscriptionCouponRedemptionsCallable(input: { couponId: string }) {
+  return httpsCallable(getFunctions(), 'getSubscriptionCouponRedemptions')(input)
+}
+
 export function getPublicStoreCouponsCallable(input: { storeId: string }) {
   return httpsCallable(getFunctions(), 'getPublicStoreCoupons')(input)
 }

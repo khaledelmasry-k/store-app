@@ -38,7 +38,7 @@ export const SubscriptionBanner: FunctionalComponent = () => {
         tone: urgent ? 'warn' : 'info',
         icon: urgent ? 'hourglass_top' : 'schedule',
         message: urgent ? 'تجربتك المجانية تنتهي قريبًا' : 'الفترة التجريبية نشطة',
-        sub: `باقة ${plan?.name || subscription.planName || ''} — شهر مجاني واحد، وبياناتك تظل محفوظة بعد الانتهاء.`,
+        sub: `باقة ${plan?.name || subscription.planName || ''} — تجربة مجانية 3 أيام، وبياناتك تظل محفوظة بعد الانتهاء.`,
         cta: { label: 'اختر باقتك', to: '/dashboard/subscription' },
       }
     }
