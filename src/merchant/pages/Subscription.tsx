@@ -543,7 +543,8 @@ export const MerchantSubscription: FunctionalComponent = () => {
                 <h3 className="mk-pricing-name">امتلك متجرك</h3>
                 {offer.description && <p className="mk-pricing-desc">{offer.description}</p>}
                 <div className="mk-pricing-price"><strong>{formatCurrency(Number(offer.oneTimePrice || 0), currency)}</strong><span>دفعة واحدة</span></div>
-                <p className="muted small">حق استخدام دائم لمتجر واحد داخل Matjari، ولا يشمل ملكية المنصة أو الكود المصدري أو المزايا Premium المستقبلية تلقائياً.</p>
+                <p className="muted small">حق استخدام دائم لمتجر واحد — 1000 منتج، 1500 طلب/شهر، 3 أعضاء، 2GB، 20 رابط، 2 صفحة.</p>
+                <p className="muted small">حق استخدام دائم لمتجر واحد داخل Matjari، ولا يشمل ملكية المنصة أو الكود المصدري أو المزايا Premium المستقبلية تلقائياً. رسوم الخدمات الخارجية غير مشمولة.</p>
                 {pendingPurchaseRequest ? (
                   <Badge tone="amber">طلب الشراء قيد المراجعة</Badge>
                 ) : (

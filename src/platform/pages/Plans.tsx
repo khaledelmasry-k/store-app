@@ -296,11 +296,14 @@ export const PlatformPlans: FunctionalComponent = () => {
                 <div className="plan-pricing-price"><strong>{formatPriceEgp(Number(p.oneTimePrice || 0))}</strong><span>دفعة واحدة</span></div>
                 <ul className="plan-pricing-features">
                   <li><Icon name="inventory_2" />حتى {p.productLimit} منتج</li>
-                  <li><Icon name="receipt_long" />حتى {p.orderLimitPerMonth} طلب</li>
+                  <li><Icon name="receipt_long" />حتى {p.orderLimitPerMonth} طلب شهريًا</li>
                   <li><Icon name="group_add" />حتى {p.staffLimit || 1} أعضاء فريق</li>
                   <li><Icon name="database" />{storageLabel(p.storageLimit)}</li>
+                  <li><Icon name="link" />حتى {p.salesLinksLimit} رابط بيع</li>
+                  <li><Icon name="web" />حتى {p.landingPagesLimit} صفحة هبوط</li>
                   <li><Icon name="verified" />لا يوجد انتهاء لملكية المتجر الأساسية</li>
                 </ul>
+                <p className="muted small">رسوم الخدمات الخارجية (الشحن وWhatsApp والبوابات) غير مشمولة.</p>
                 <p className="muted small">المقاعد المستخدمة: {Number(p.launchOfferSoldCount || 0)}{Number(p.launchOfferLimit || 0) > 0 ? ` / ${p.launchOfferLimit}` : ''}</p>
                 <div className="plan-pricing-actions">
                   <Button variant="soft" size="sm" icon="edit" onClick={() => openEdit(p)}>تعديل العرض</Button>
