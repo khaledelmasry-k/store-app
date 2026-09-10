@@ -635,7 +635,7 @@ export const NAV_GROUPS: Record<'platform' | 'dashboard', NavGroup[]> = {
         { to: '/platform/plans', label: 'الخطط والباقات', icon: 'workspace_premium' },
         { to: '/platform/promotions', label: 'العروض والإعلانات', icon: 'campaign' },
         { to: '/platform/payments', label: 'المدفوعات والمعاملات', icon: 'payments' },
-        { to: '/platform/coupons', label: 'الكوبونات', icon: 'sell' },
+        { to: '/platform/coupons', label: 'كوبونات الاشتراكات', icon: 'sell' },
       ],
     },
     {
