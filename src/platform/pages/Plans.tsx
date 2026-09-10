@@ -58,6 +58,11 @@ export const PlatformPlans: FunctionalComponent = () => {
   const [flags, setFlags] = useState<Record<PlanFeatureKey, boolean>>(emptyFlags())
   const [syncing, setSyncing] = useState(false)
 
+  const [showArchived, setShowArchived] = useState(false)
+  const archivedPlans = [...plansRes.data]
+    .filter((p) => (p as any).archived === true || ((p as any).active === false && (p as any).isPurchasable === false))
+    .sort((a, b) => (a.sortOrder ?? 0) - (b.sortOrder ?? 0))
+
   const recommendedId = [...subscriptionPlans].sort((a, b) => a.priceMonthly - b.priceMonthly)[Math.max(0, Math.floor((subscriptionPlans.length - 1) / 2))]?.id
 
   const priceOf = (p: SubscriptionPlan) => (billing === 'monthly' ? p.priceMonthly : p.priceYearly || p.priceMonthly * 10)
@@ -304,6 +309,39 @@ export const PlatformPlans: FunctionalComponent = () => {
               </div>
             ))}
           </div>
+        </Card>
+      )}
+
+      {archivedPlans.length > 0 && (
+        <Card title="باقات تاريخية / مؤرشفة" subtitle="للتوافق مع الاشتراكات القائمة فقط — غير متاحة للبيع أو التسجيل الجديد" className="mt-2">
+          <div className="flex-between mb-2">
+            <p className="muted small">FREE و BUSINESS محفوظة للاشتراكات التاريخية فقط. لا تظهر للعملاء الجدد.</p>
+            <Button variant="ghost" size="sm" icon={showArchived ? 'expand_less' : 'expand_more'} onClick={() => setShowArchived(!showArchived)}>{showArchived ? 'إخفاء' : `عرض (${archivedPlans.length})`}</Button>
+          </div>
+          {showArchived && (
+            <div className="plan-grid" style={{ opacity: 0.85 }}>
+              {archivedPlans.map((p) => (
+                <div key={p.id} className="plan-pricing-card plan-pricing-card--archived" style={{ border: '1px dashed #cbd5e1' }}>
+                  <div className="plan-pricing-head">
+                    <h3 className="plan-pricing-name">{p.name} <span className="muted small">({p.id})</span></h3>
+                    <Badge tone="slate">مؤرشفة</Badge>
+                  </div>
+                  {p.description && <p className="plan-pricing-desc">{p.description}</p>}
+                  <div className="plan-pricing-price">
+                    <strong>{p.billingModel === 'one_time' ? formatPriceEgp(Number(p.oneTimePrice || 0)) : p.priceMonthly != null ? formatPriceEgp(Number(p.priceMonthly)) : '—'}</strong>
+                    <span>{p.billingModel === 'one_time' ? 'دفعة واحدة' : ' / شهرياً'}</span>
+                  </div>
+                  <ul className="plan-pricing-features">
+                    <li><Icon name="inventory_2" />{p.productLimit != null ? `حتى ${p.productLimit} منتج` : '—'}</li>
+                    <li><Icon name="receipt_long" />{p.orderLimitPerMonth != null ? `حتى ${p.orderLimitPerMonth} طلب` : '—'}</li>
+                    <li><Icon name="group_add" />حتى {p.staffLimit || 1} عضو</li>
+                    <li><Icon name="database" />{storageLabel(p.storageLimit)}</li>
+                  </ul>
+                  <p className="muted small">غير متاحة للبيع — بيانات تاريخية فقط</p>
+                </div>
+              ))}
+            </div>
+          )}
         </Card>
       )}
 

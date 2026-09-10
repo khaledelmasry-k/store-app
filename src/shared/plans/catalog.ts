@@ -94,7 +94,7 @@ export const CANONICAL_PLANS: Array<SubscriptionPlan & { slug: CanonicalPlanSlug
     trialDays: 3,
     launchPrice: 0,
     launchEnabled: false,
-    features: ['كل مزايا Free', 'كوبونات', 'روابط بيع', 'صفحة هبوط واحدة', 'تخصيص المتجر', 'تنبيهات المخزون'],
+    features: ['كل مزايا Basic', 'كوبونات', 'روابط بيع', 'صفحة هبوط واحدة', 'تخصيص المتجر', 'تنبيهات المخزون'],
     active: true,
     sortOrder: 2,
     isPopular: false,
