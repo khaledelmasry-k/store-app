@@ -715,6 +715,13 @@ test('sales link: /s/:code redirects to the storefront and DELIVERED orders coun
   const { uniq, ref } = ctx()
   await ensureFlowStore(ref, `مقهى التدفق ${uniq}`)
   const store = (await storeBySlug(ref))!
+  // The public resolver reads the projection, which is populated
+  // asynchronously by the store trigger. Wait for that real prerequisite so
+  // this focused test never races its own fixture.
+  await expect.poll(
+    () => db.doc(`publicStores/${store.id}`).get().then((snap) => snap.exists && snap.data()?.published === true),
+    { timeout: 15000 },
+  ).toBe(true)
   // This scenario verifies sales-link attribution, not shipping. A preceding
   // shipping scenario may have enabled a provider on the shared serial store;
   // disable it here so this order keeps the direct order-status lifecycle.
