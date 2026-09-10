@@ -16,6 +16,7 @@
     "verify:run": "bash scripts/verify-emulator.sh",
     "verify:e2e": "firebase emulators:exec --project mk-store-app --only auth,firestore,functions,storage \"npm run verify:run\"",
     "verify:integration": "firebase emulators:exec --project mk-store-app --only auth,firestore,functions,storage \"bash scripts/verify-integration.sh\"",
+    "verify:wasla-rates": "npm --prefix functions run build && node scripts/verify-wasla-rates.mjs",
     "secrets:integration-vault:production": "node scripts/set-integration-vault-secret.mjs",
     "deploy": "node scripts/deploy-safe.mjs",
     "deploy:staging": "node scripts/deploy-safe.mjs staging",

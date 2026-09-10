@@ -6,7 +6,8 @@ const DEFAULT_BASE_URL = 'https://wasla.express'
 
 function baseUrl(context: ShippingAdapterContext) {
   const configured = String((context.provider as any)?.apiBaseUrl || '').trim()
-  if (configured && !/^https:\/\//i.test(configured)) throw new ShippingProviderError('CONFIGURATION_ERROR', 'Wasla base URL must use HTTPS', false)
+  const isEmulator = process.env.FUNCTIONS_EMULATOR === 'true' && /^https?:\/\/(127\.0\.0\.1|localhost)(:\d+)?/i.test(configured)
+  if (configured && !/^https:\/\//i.test(configured) && !isEmulator) throw new ShippingProviderError('CONFIGURATION_ERROR', 'Wasla base URL must use HTTPS', false)
   return (configured || DEFAULT_BASE_URL).replace(/\/$/, '')
 }
 
@@ -50,7 +51,7 @@ async function request(context: ShippingAdapterContext, path: string, init: Requ
 
 function normalized(value: unknown) {
   return String(value || '').trim().toLocaleLowerCase('ar-EG')
-    .replace(/[إأآ]/g, 'ا').replace(/ى/g, 'ي').replace(/[\s\-_/]+/g, '')
+    .replace(/[إأآ]/g, 'ا').replace(/ى/g, 'ي').replace(/ة/g, 'ه').replace(/[\s\-_/]+/g, '').replace(/^ال/, '')
 }
 
 const WASLA_ITEM_CATEGORIES = new Set(['clothing', 'electronics', 'books', 'accessories', 'toys', 'cosmetics', 'home_appliances', 'office_supplies', 'mobile_devices', 'spare_parts', 'medical_supplies', 'leather', 'shoes', 'perfumes', 'jewelry', 'building_materials', 'agricultural', 'chemicals', 'other'])
@@ -58,10 +59,29 @@ function waslaItemCategory(value: unknown) {
   const category = String(value || '').trim()
   return WASLA_ITEM_CATEGORIES.has(category) ? category : 'other'
 }
+const WASLA_GOVERNORATE_ALIASES: Record<string, string> = {
+  'اسكندريه': 'الاسكندريه',
+  'الاسكندريه': 'الاسكندريه',
+  'الدقهليه': 'الدقهليه',
+  'القليوبيه': 'القليوبيه',
+  'بنى سويف': 'بني سويف',
+  'مرسى مطروح': 'مطروح',
+  'مرسي مطروح': 'مطروح',
+}
+
+function resolveAlias(name: unknown): string {
+  const norm = normalized(name)
+  for (const [alias, canonical] of Object.entries(WASLA_GOVERNORATE_ALIASES)) {
+    if (normalized(alias) === norm) return canonical
+  }
+  return String(name || '')
+}
+
 function locationId(map: unknown, name: unknown) {
   const source = map && typeof map === 'object' ? map as Record<string, unknown> : {}
-  const direct = source[String(name || '')] ?? source[normalized(name)]
-  const result = Number(direct)
+  const direct = source[String(name || '')] ?? source[normalized(name)] ?? source[normalized(resolveAlias(name))]
+  const aliasResolved = direct ?? source[resolveAlias(String(name || ''))]
+  const result = Number(aliasResolved ?? direct)
   return Number.isInteger(result) && result > 0 ? result : null
 }
 
@@ -86,11 +106,15 @@ async function resolveDestination(context: ShippingAdapterContext, governorate: 
   const config = context.config || {}
   const rows = await locations(context)
   const mappedGovernorateId = locationId((config as any).waslaGovernorateIds, governorate)
-  const governorateRow = rows.find((row) => row.id === mappedGovernorateId) || rows.find((row) => normalized(row.name) === normalized(governorate))
-  if (!governorateRow) throw new ShippingProviderError('CONFIGURATION_ERROR', 'هذه المحافظة غير متاحة حالياً لدى وصلة', false)
+  let governorateRow = rows.find((row) => row.id === mappedGovernorateId)
+  if (!governorateRow) {
+    const aliasResolved = resolveAlias(governorate)
+    governorateRow = rows.find((row) => normalized(row.name) === normalized(aliasResolved)) || rows.find((row) => normalized(row.name) === normalized(governorate))
+  }
+  if (!governorateRow) throw new ShippingProviderError('MAPPING_MISSING', 'تعذر مطابقة منطقة التوصيل مع شركة الشحن.', false)
   const mappedCityId = locationId((config as any).waslaCityIds, city)
-  const cityRow = governorateRow.cities.find((row) => row.id === mappedCityId) || governorateRow.cities.find((row) => normalized(row.name) === normalized(city))
-  if (!cityRow) throw new ShippingProviderError('CONFIGURATION_ERROR', 'هذه المدينة غير متاحة حالياً لدى وصلة', false)
+  const cityRow = governorateRow.cities.find((row) => row.id === mappedCityId) || governorateRow.cities.find((row) => normalized(row.name) === normalized(city)) || governorateRow.cities.find((row) => normalized(row.name) === normalized(resolveAlias(city)))
+  if (!cityRow) throw new ShippingProviderError('MAPPING_MISSING', 'تعذر مطابقة المدينة مع شركة الشحن.', false)
   return { governorateId: governorateRow.id, cityId: cityRow.id }
 }
 
@@ -104,8 +128,13 @@ async function resolveQuoteDestination(context: ShippingAdapterContext, governor
   const config = context.config || {}
   const rows = await locations(context)
   const mappedGovernorateId = locationId((config as any).waslaGovernorateIds, governorate)
-  const governorateRow = rows.find((row) => row.id === mappedGovernorateId) || rows.find((row) => normalized(row.name) === normalized(governorate))
-  if (!governorateRow) throw new ShippingProviderError('CONFIGURATION_ERROR', 'هذه المحافظة غير متاحة حالياً لدى وصلة', false)
+  // Priority: 1. waslaGovernorateIds, 2. documented aliases, 3. normalized exact match
+  let governorateRow = rows.find((row) => row.id === mappedGovernorateId)
+  if (!governorateRow) {
+    const aliasResolved = resolveAlias(governorate)
+    governorateRow = rows.find((row) => normalized(row.name) === normalized(aliasResolved)) || rows.find((row) => normalized(row.name) === normalized(governorate))
+  }
+  if (!governorateRow) throw new ShippingProviderError('MAPPING_MISSING', 'تعذر مطابقة منطقة التوصيل مع شركة الشحن.', false)
   const mappedCityId = locationId((config as any).waslaCityIds, city)
   const cityRow = governorateRow.cities.find((row) => row.id === mappedCityId) || governorateRow.cities.find((row) => normalized(row.name) === normalized(city))
   return { governorateId: governorateRow.id, cityId: cityRow?.id || null }
@@ -266,7 +295,7 @@ export const waslaAdapter: ShippingProviderAdapter = {
     const config = context.config || {}
     const pickupGovernorateId = Number((config as any).waslaPickupGovernorateId || 0)
     const pickupCityId = Number((config as any).waslaPickupCityId || 0)
-    if (!Number.isInteger(pickupGovernorateId) || pickupGovernorateId <= 0 || !Number.isInteger(pickupCityId) || pickupCityId <= 0) return []
+    if (!Number.isInteger(pickupGovernorateId) || pickupGovernorateId <= 0 || !Number.isInteger(pickupCityId) || pickupCityId <= 0) throw new ShippingProviderError('CONFIGURATION_ERROR', 'تعذر مطابقة منطقة التوصيل مع شركة الشحن.', false)
     const destination = await resolveQuoteDestination(context, input.governorate, input.city)
     // Wasla's rate rules are normally governorate-level. City IDs are optional
     // and some merchants have narrower city records that would hide an active
@@ -277,8 +306,18 @@ export const waslaAdapter: ShippingProviderAdapter = {
       delivery_governorate_id: String(destination.governorateId),
     })
     const quote = unwrap(await request(context, `/api/v1/merchant/shipping-quote?${query.toString()}`))
-    if (quote?.covered !== true) return []
-    const amount = Math.max(0, Number(quote?.shipping_fee_amount || 0))
+    const coveredRaw = quote?.covered
+    const isCovered = coveredRaw === true || coveredRaw === 1 || coveredRaw === '1' || String(coveredRaw).toLowerCase() === 'true'
+    // Also handle Wasla's alternative shape where covered may be nested or as string
+    const coveredVal = isCovered || String(quote?.is_covered ?? '').toLowerCase() === 'true' || Number(quote?.is_covered) === 1
+    if (!isCovered && !coveredVal) {
+      throw new ShippingProviderError('NOT_COVERED', 'شركة الشحن لا تغطي هذه الوجهة.', false)
+    }
+    const rawAmount = quote?.shipping_fee_amount
+    const amount = Number(rawAmount)
+    if (rawAmount === null || rawAmount === undefined || rawAmount === '' || !Number.isFinite(amount) || amount < 0) {
+      throw new ShippingProviderError('PROVIDER_REJECTED', 'Wasla quote did not include a valid shipping fee', false)
+    }
     // `standard` is the public service code configured for Wasla in the
     // platform.  Returning a different internal identifier here made a
     // correctly selected Wasla service disappear during checkout filtering.

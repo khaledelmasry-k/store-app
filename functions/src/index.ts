@@ -5589,13 +5589,29 @@ export const getShippingOptions = onCall({ region: SHIPPING_FUNCTION_REGION, sec
         weightKg: Math.max(0, Number(request.data?.packageWeightKg || 0)),
       }) as Array<Record<string, any>>
     } catch (error) {
-      const detail = sanitizeSensitiveText(error instanceof Error ? error.message : '')
-      unavailableReasons.push(detail
-        ? `تعذر تسعير شركة ${String(provider.name || 'الشحن')}: ${detail}`
-        : `تعذر الحصول على سعر شركة ${String(provider.name || 'الشحن')} الآن`)
+      const err: any = error as any
+      const code = err?.code
+      const detail = sanitizeSensitiveText(err?.message || (error instanceof Error ? error.message : ''))
+      if (code === 'MAPPING_MISSING') {
+        unavailableReasons.push('تعذر مطابقة منطقة التوصيل مع شركة الشحن.')
+      } else if (code === 'NOT_COVERED') {
+        unavailableReasons.push('شركة الشحن لا تغطي هذه الوجهة.')
+      } else if (code === 'PROVIDER_UNAVAILABLE' || err?.retryable) {
+        unavailableReasons.push('تعذر الحصول على سعر الشحن حاليًا.')
+      } else if (code === 'NO_PROVIDER') {
+        unavailableReasons.push('لا توجد شركة شحن مفعّلة.')
+      } else {
+        unavailableReasons.push(detail
+          ? `تعذر تسعير شركة ${String(provider.name || 'الشحن')}: ${detail}`
+          : `تعذر الحصول على سعر شركة ${String(provider.name || 'الشحن')} الآن`)
+      }
       continue
     }
-    if (!rates.length) unavailableReasons.push(`شركة ${String(provider.name || 'الشحن')} لا تغطي هذه الوجهة بالخدمة المختارة`)
+    if (!rates.length) {
+      // Distinguish between genuinely not covered vs other cases
+      // For wasla, NOT_COVERED is already thrown, so this is for other providers or empty rates
+      unavailableReasons.push('شركة الشحن لا تغطي هذه الوجهة.')
+    }
     const enabledCodes = Array.isArray(config.enabledServiceCodes) ? config.enabledServiceCodes.map(String) : []
     options.push(...rates
       .filter((rate) => !enabledCodes.length || enabledCodes.includes(String(rate.serviceCode || '')))
