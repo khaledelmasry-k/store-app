@@ -44,7 +44,7 @@ async function orderFixture(id: string, status = 'NEW') {
     id, storeId: 'store-a', orderNumber: `INT-${id}`, customerName: 'عميل اختبار', phone: '01000000000', secondaryPhone: '01100000000',
     governorate: 'القاهرة', city: 'مدينة نصر', area: 'الحي السابع', address: '١ شارع الاختبار', notes: 'اتصل قبل الوصول',
     items: [{ productId, name: 'Integration product', quantity: 2, price: 100 }], subtotal: 200, shippingFee: 40, totalPrice: 240,
-    paymentMethod: 'cod', status, statusHistory: [{ status, at: admin.firestore.Timestamp.now() }], stockRestored: false,
+    paymentMethod: 'cod', status, statusHistory: [{ status, at: admin.firestore.Timestamp.now() }], inventoryDeducted: true, stockRestored: false,
     createdAt: admin.firestore.FieldValue.serverTimestamp(), updatedAt: admin.firestore.FieldValue.serverTimestamp(),
   })
   return { orderId: id, productId }
@@ -76,10 +76,13 @@ test.beforeAll(async () => {
     }
     if (request.method === 'GET' && request.url?.includes('/businesses/deliveries/')) {
       const tracking = decodeURIComponent(request.url.split('/').pop() || '')
-      response.end(JSON.stringify({ data: { _id: tracking.replace('TRK-', 'ext-'), trackingNumber: tracking, state: 30 } }))
+      response.end(JSON.stringify({ data: { _id: tracking.replace('TRK-', 'ext-'), trackingNumber: tracking, state: tracking.includes('cancel-') ? 10 : 30 } }))
       return
     }
-    if (request.method === 'DELETE') { response.end(JSON.stringify({ success: true })); return }
+    if (request.method === 'DELETE') {
+      if (request.url?.includes('reject-cancel')) { response.statusCode = 409; response.end(JSON.stringify({ message: 'carrier rejected cancellation' })); return }
+      response.end(JSON.stringify({ success: true })); return
+    }
     response.end(JSON.stringify({ data: { deliveries: [] } }))
   })
   await new Promise<void>((resolve) => carrier.listen(4789, '127.0.0.1', resolve))
@@ -109,11 +112,11 @@ test('credential vault encrypts, redacts, validates, and blocks cross-tenant acc
   } finally { await deleteApp(client) }
 })
 
-test('manual mode consumes order event without creating a shipment', async () => {
+test('MANUAL + first PROCESSING transition does not create a shipment', async () => {
   await callAs('seed-owner-a', 'saveShippingAutomationSettings', { storeId: 'store-a', automaticShipmentCreation: 'MANUAL' })
-  const { orderId } = await orderFixture(`manual-${Date.now()}`)
-  const eventId = `manual-event-${Date.now()}`
-  await db.doc(`integrationEvents/${eventId}`).set({ eventId, storeId: 'store-a', eventType: 'order.created', entityType: 'order', entityId: orderId, payload: { orderId }, processingStatus: 'PENDING', attempts: 0, createdAt: admin.firestore.FieldValue.serverTimestamp() })
+  const { orderId } = await orderFixture(`manual-${Date.now()}`, 'CONTACTED')
+  await callAs('seed-owner-a', 'updateOrderStatus', { orderId, status: 'PROCESSING' })
+  const eventId = `order-${orderId}-PROCESSING`
   const event = await eventually(async () => (await db.doc(`integrationEvents/${eventId}`).get()).data(), (value: any) => value?.processingStatus === 'PROCESSED')
   expect((event as any).outcome).toBe('MANUAL_MODE')
   expect((await db.doc(`orders/${orderId}`).get()).data()?.activeShipmentId).toBeUndefined()
@@ -141,6 +144,10 @@ test('immediately-after-checkout mode creates from order.created, while missing 
   const eventId = `immediate-event-${Date.now()}`
   await db.doc(`integrationEvents/${eventId}`).set({ eventId, storeId: 'store-a', eventType: 'order.created', entityType: 'order', entityId: immediate.orderId, payload: { orderId: immediate.orderId }, processingStatus: 'PENDING', attempts: 0, createdAt: admin.firestore.FieldValue.serverTimestamp() })
   await eventually(async () => (await db.doc(`orders/${immediate.orderId}`).get()).data(), (value: any) => Boolean(value?.activeShipmentId))
+  const retryEventId = `immediate-retry-${Date.now()}`
+  await db.doc(`integrationEvents/${retryEventId}`).set({ eventId: retryEventId, storeId: 'store-a', eventType: 'order.created', entityType: 'order', entityId: immediate.orderId, payload: { orderId: immediate.orderId }, processingStatus: 'PENDING', attempts: 0, createdAt: admin.firestore.FieldValue.serverTimestamp() })
+  await eventually(async () => (await db.doc(`integrationEvents/${retryEventId}`).get()).data(), (value: any) => value?.processingStatus === 'PROCESSED')
+  expect(carrierCalls.filter((call) => call.method === 'POST' && call.body?.businessReference === `INT-${immediate.orderId}`)).toHaveLength(1)
 
   await callAs('seed-owner-a', 'saveStoreShippingProvider', { storeId: 'store-a', providerId: 'provider-bosta', config: { enabled: true, isDefault: false } })
   const noDefault = await orderFixture(`no-default-${Date.now()}`)
@@ -180,6 +187,12 @@ test('tracking, cancel, webhook authorization, duplicate delivery, and returned 
   const cancellation = await callAs('seed-owner-a', 'createOrderShipment', { orderId: cancellable.orderId, providerId: 'provider-bosta' })
   await callAs('seed-owner-a', 'cancelExternalShipment', { shipmentId: (cancellation.data as any).shipment.id })
   expect((await db.doc(`shipments/${(cancellation.data as any).shipment.id}`).get()).data()?.status).toBe('CANCELLED')
+  expect((await db.doc(`orders/${cancellable.orderId}`).get()).data()).toMatchObject({ status: 'CANCELLED', stockRestored: true, inventoryRestoredQuantity: 2 })
+  expect((await db.doc(`products/${cancellable.productId}`).get()).data()?.stock).toBe(5)
+  await callAs('seed-owner-a', 'cancelExternalShipment', { shipmentId: (cancellation.data as any).shipment.id })
+  expect((await db.doc(`products/${cancellable.productId}`).get()).data()?.stock).toBe(5)
+  expect((await db.doc(`orders/${cancellable.orderId}`).get()).data()?.status).toBe('CANCELLED')
+  expect(carrierCalls.filter((call) => call.method === 'DELETE' && call.url.includes(`TRK-INT-${cancellable.orderId}`))).toHaveLength(1)
 
   const returned = await orderFixture(`returned-${Date.now()}`, 'SHIPPED')
   const returnedCreation = await callAs('seed-owner-a', 'createOrderShipment', { orderId: returned.orderId, providerId: 'provider-bosta' })
@@ -189,10 +202,11 @@ test('tracking, cancel, webhook authorization, duplicate delivery, and returned 
   expect((await fetch(url, { method: 'POST', headers: { 'content-type': 'application/json', authorization: 'wrong' }, body: JSON.stringify(payload) })).status).toBe(401)
   const accepted = await fetch(url, { method: 'POST', headers: { 'content-type': 'application/json', authorization: 'webhook-secret' }, body: JSON.stringify(payload) })
   expect(accepted.status).toBe(200)
-  expect((await db.doc(`products/${returned.productId}`).get()).data()?.stock).toBe(5)
+  expect((await db.doc(`products/${returned.productId}`).get()).data()?.stock).toBe(3)
+  expect((await db.doc(`orders/${returned.orderId}`).get()).data()?.stockRestored).toBe(false)
   const duplicate = await fetch(url, { method: 'POST', headers: { 'content-type': 'application/json', authorization: 'webhook-secret' }, body: JSON.stringify(payload) })
   expect(duplicate.status).toBe(200)
-  expect((await db.doc(`products/${returned.productId}`).get()).data()?.stock).toBe(5)
+  expect((await db.doc(`products/${returned.productId}`).get()).data()?.stock).toBe(3)
   const unknown = await fetch(url, { method: 'POST', headers: { 'content-type': 'application/json', authorization: 'webhook-secret' }, body: JSON.stringify({ ...payload, _id: 'unknown', trackingNumber: 'unknown' }) })
   expect(unknown.status).toBe(404)
 
@@ -202,4 +216,72 @@ test('tracking, cancel, webhook authorization, duplicate delivery, and returned 
   const deliveredResponse = await fetch(url, { method: 'POST', headers: { 'content-type': 'application/json', authorization: 'webhook-secret' }, body: JSON.stringify({ _id: deliveredShipment.externalShipmentId, trackingNumber: deliveredShipment.trackingNumber, state: 45, timeStamp: 223456789 }) })
   expect(deliveredResponse.status).toBe(200)
   expect((await db.doc(`orders/${delivered.orderId}`).get()).data()?.status).toBe('DELIVERED')
+})
+
+test('provider cancellation rejection leaves order and inventory untouched', async () => {
+  await saveCredentials()
+  const rejected = await orderFixture(`reject-cancel-${Date.now()}`)
+  const created = await callAs('seed-owner-a', 'createOrderShipment', { orderId: rejected.orderId, providerId: 'provider-bosta' })
+  await expect(callAs('seed-owner-a', 'cancelExternalShipment', { shipmentId: (created.data as any).shipment.id })).rejects.toThrow()
+  expect((await db.doc(`orders/${rejected.orderId}`).get()).data()?.status).not.toBe('CANCELLED')
+  expect((await db.doc(`orders/${rejected.orderId}`).get()).data()?.stockRestored).toBe(false)
+  expect((await db.doc(`products/${rejected.productId}`).get()).data()?.stock).toBe(3)
+})
+
+test('duplicate provider CANCELLED webhook restores inventory once', async () => {
+  await saveCredentials()
+  const cancelled = await orderFixture(`provider-cancel-${Date.now()}`)
+  const created = await callAs('seed-owner-a', 'createOrderShipment', { orderId: cancelled.orderId, providerId: 'provider-bosta' })
+  const shipment = (created.data as any).shipment
+  const url = 'http://127.0.0.1:5001/mk-store-app/us-central1/shippingWebhook/bosta'
+  const payload = { _id: shipment.externalShipmentId, trackingNumber: shipment.trackingNumber, state: 48, timeStamp: 323456789 }
+  const first = await fetch(url, { method: 'POST', headers: { 'content-type': 'application/json', authorization: 'webhook-secret' }, body: JSON.stringify(payload) })
+  const second = await fetch(url, { method: 'POST', headers: { 'content-type': 'application/json', authorization: 'webhook-secret' }, body: JSON.stringify(payload) })
+  expect(first.status).toBe(200)
+  expect(second.status).toBe(200)
+  expect((await db.doc(`orders/${cancelled.orderId}`).get()).data()).toMatchObject({ status: 'CANCELLED', stockRestored: true, inventoryRestoredQuantity: 2 })
+  expect((await db.doc(`products/${cancelled.productId}`).get()).data()?.stock).toBe(5)
+})
+
+test('local cancellation restores exact variants and plain stock once', async () => {
+  const suffix = Date.now()
+  const productA = `variant-a-${suffix}`
+  const productB = `plain-b-${suffix}`
+  const orderId = `variant-cancel-${suffix}`
+  await db.doc(`products/${productA}`).set({
+    storeId: 'store-a', name: 'A', active: true, stock: 16,
+    variants: [{ id: 'm-black', color: 'Black', size: 'M', stock: 3 }, { id: 'l-black', color: 'Black', size: 'L', stock: 4 }, { id: 'xl-black', color: 'Black', size: 'XL', stock: 9 }],
+  })
+  await db.doc(`products/${productB}`).set({ storeId: 'store-a', name: 'B', active: true, stock: 7, variants: [] })
+  await db.doc(`orders/${orderId}`).set({
+    storeId: 'store-a', orderNumber: `VAR-${suffix}`, status: 'NEW', inventoryDeducted: true, stockRestored: false, totalPrice: 60,
+    items: [
+      { id: 'a-m', productId: productA, variantId: 'm-black', color: 'Black', size: 'M', quantity: 2, name: 'A M', price: 10 },
+      { id: 'a-l', productId: productA, variantId: 'l-black', color: 'Black', size: 'L', quantity: 1, name: 'A L', price: 10 },
+      { id: 'b', productId: productB, quantity: 3, name: 'B', price: 10 },
+    ],
+  })
+  // Product names and option labels may change after checkout. The persisted
+  // productId/variantId snapshot must remain authoritative for restoration.
+  await db.doc(`products/${productA}`).update({
+    name: 'A renamed after checkout',
+    variants: [{ id: 'm-black', color: 'Midnight', size: 'Medium', stock: 3 }, { id: 'l-black', color: 'Midnight', size: 'Large', stock: 4 }, { id: 'xl-black', color: 'Midnight', size: 'XL', stock: 9 }],
+  })
+  await db.doc(`products/${productB}`).update({ name: 'B renamed after checkout' })
+  await callAs('seed-owner-a', 'updateOrderStatus', { orderId, status: 'CANCELLED' })
+  await callAs('seed-owner-a', 'updateOrderStatus', { orderId, status: 'CANCELLED' })
+  const a = (await db.doc(`products/${productA}`).get()).data()!
+  const b = (await db.doc(`products/${productB}`).get()).data()!
+  expect(a.variants).toMatchObject([{ id: 'm-black', stock: 5 }, { id: 'l-black', stock: 5 }, { id: 'xl-black', stock: 9 }])
+  expect(a.stock).toBe(19)
+  expect(b.stock).toBe(10)
+  expect((await db.doc(`orders/${orderId}`).get()).data()).toMatchObject({ stockRestored: true, inventoryRestoredQuantity: 6 })
+})
+
+test('Wasla adapter exposes no automatic cancellation capability', async () => {
+  const providers = await callAs('seed-owner-a', 'getMerchantShippingProviders', { storeId: 'store-a' })
+  const wasla = ((providers.data as any).adapters || []).find((adapter: any) => adapter.slug === 'wasla')
+  expect(wasla.capabilities).toContain('createShipment')
+  expect(wasla.capabilities).toContain('tracking')
+  expect(wasla.capabilities).not.toContain('cancel')
 })

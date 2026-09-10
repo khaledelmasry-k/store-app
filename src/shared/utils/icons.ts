@@ -185,6 +185,7 @@ export const ICONS = {
   groups: Users,
   group: Users,
   groups_2: UsersRound,
+  history: Clock,
   hourglass: Hourglass,
   hourglass_top: Hourglass,
   help: Info,

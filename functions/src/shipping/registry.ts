@@ -4,7 +4,7 @@ import { waslaAdapter } from './wasla'
 
 const manualAdapter: ShippingProviderAdapter = {
   slug: 'manual',
-  capabilities: ['services', 'zones', 'rates', 'eta', 'manualTracking', 'manualStatus'],
+  capabilities: ['services', 'zones', 'rates', 'eta', 'createShipment', 'manualTracking', 'manualStatus'],
   async testConnection(_context: ShippingAdapterContext) {
     return { ok: true, message: 'التكامل اليدوي جاهز للاستخدام' }
   },

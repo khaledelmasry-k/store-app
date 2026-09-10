@@ -6,7 +6,7 @@ const DEFAULT_BASE_URL = 'https://app.bosta.co/api/v2'
 
 export class ShippingProviderError extends Error {
   constructor(
-    public readonly code: 'INVALID_CREDENTIALS' | 'PROVIDER_UNAVAILABLE' | 'CONFIGURATION_ERROR' | 'PROVIDER_REJECTED',
+    public readonly code: 'INVALID_CREDENTIALS' | 'PROVIDER_UNAVAILABLE' | 'CONFIGURATION_ERROR' | 'PROVIDER_REJECTED' | 'MAPPING_MISSING' | 'NOT_COVERED' | 'NO_PROVIDER',
     message: string,
     public readonly retryable: boolean,
     public readonly httpStatus?: number,

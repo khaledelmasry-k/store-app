@@ -402,6 +402,8 @@ function hasVerifiedWebhookContract(slug: unknown, integrationType: unknown): bo
 }
 
 function safeShippingProvider(id: string, data: any) {
+  const adapter = getShippingAdapter(data?.slug, data?.integrationType)
+  const capabilities = adapter?.capabilities || []
   const services = Array.isArray(data?.services) ? data.services.slice(0, 50).map((service: any) => ({
     code: String(service?.code || '').slice(0, 80),
     name: String(service?.name || '').slice(0, 120),
@@ -438,7 +440,11 @@ function safeShippingProvider(id: string, data: any) {
     defaultServiceCodes: Array.isArray(data?.defaultServiceCodes) ? data.defaultServiceCodes.slice(0, 100) : [],
     services,
     allowMerchantRateOverride: data?.allowMerchantRateOverride === true,
-    adapterConfigured: Boolean(getShippingAdapter(data?.slug, data?.integrationType)),
+    adapterConfigured: Boolean(adapter),
+    capabilities,
+    canCreateShipment: Boolean(adapter?.createShipment && capabilities.includes('createShipment')),
+    canTrackShipment: Boolean(adapter?.trackShipment && capabilities.includes('tracking')),
+    canCancelShipment: Boolean(adapter?.cancelShipment && capabilities.includes('cancel')),
     lastTestedAt: data?.lastTestedAt || null,
   }
 }
@@ -1937,6 +1943,10 @@ export const createOrder = onCall({ region: SHIPPING_FUNCTION_REGION, secrets: [
       totalPrice: subtotal + shipping.fee - discount,
       status: 'NEW',
       statusHistory: [{ status: 'NEW', at: Timestamp.now(), by: request.auth?.uid || 'guest' }],
+      // createOrder deducts every accepted line in this same transaction.
+      // Cancellation uses this durable marker and never guesses from status.
+      inventoryDeducted: true,
+      stockRestored: false,
       paymentMethod: paymentMethod || 'cod',
       paymentStatus: paymentMethod === 'bank' ? 'PENDING_REVIEW' : 'UNPAID',
       bankTransferProof: bankProofPath ? {
@@ -5579,13 +5589,29 @@ export const getShippingOptions = onCall({ region: SHIPPING_FUNCTION_REGION, sec
         weightKg: Math.max(0, Number(request.data?.packageWeightKg || 0)),
       }) as Array<Record<string, any>>
     } catch (error) {
-      const detail = sanitizeSensitiveText(error instanceof Error ? error.message : '')
-      unavailableReasons.push(detail
-        ? `تعذر تسعير شركة ${String(provider.name || 'الشحن')}: ${detail}`
-        : `تعذر الحصول على سعر شركة ${String(provider.name || 'الشحن')} الآن`)
+      const err: any = error as any
+      const code = err?.code
+      const detail = sanitizeSensitiveText(err?.message || (error instanceof Error ? error.message : ''))
+      if (code === 'MAPPING_MISSING') {
+        unavailableReasons.push('تعذر مطابقة منطقة التوصيل مع شركة الشحن.')
+      } else if (code === 'NOT_COVERED') {
+        unavailableReasons.push('شركة الشحن لا تغطي هذه الوجهة.')
+      } else if (code === 'PROVIDER_UNAVAILABLE' || err?.retryable) {
+        unavailableReasons.push('تعذر الحصول على سعر الشحن حاليًا.')
+      } else if (code === 'NO_PROVIDER') {
+        unavailableReasons.push('لا توجد شركة شحن مفعّلة.')
+      } else {
+        unavailableReasons.push(detail
+          ? `تعذر تسعير شركة ${String(provider.name || 'الشحن')}: ${detail}`
+          : `تعذر الحصول على سعر شركة ${String(provider.name || 'الشحن')} الآن`)
+      }
       continue
     }
-    if (!rates.length) unavailableReasons.push(`شركة ${String(provider.name || 'الشحن')} لا تغطي هذه الوجهة بالخدمة المختارة`)
+    if (!rates.length) {
+      // Distinguish between genuinely not covered vs other cases
+      // For wasla, NOT_COVERED is already thrown, so this is for other providers or empty rates
+      unavailableReasons.push('شركة الشحن لا تغطي هذه الوجهة.')
+    }
     const enabledCodes = Array.isArray(config.enabledServiceCodes) ? config.enabledServiceCodes.map(String) : []
     options.push(...rates
       .filter((rate) => !enabledCodes.length || enabledCodes.includes(String(rate.serviceCode || '')))
@@ -5756,6 +5782,7 @@ export const refreshShipmentTracking = onCall({ region: SHIPPING_FUNCTION_REGION
   await shipmentRef.set({
     trackingNumber,
     providerShipmentId: result.providerShipmentId || shipment.providerShipmentId || null,
+    remoteStatus: result.rawStatus ?? result.status ?? null,
     ...(typeof result.shippingCost === 'number' ? { shippingCost: result.shippingCost, carrierShippingCost: result.shippingCost } : {}),
     failureReason,
     lastSyncedAt: now(), updatedAt: now(),
@@ -5882,16 +5909,66 @@ export const cancelExternalShipment = onCall({ region: SHIPPING_FUNCTION_REGION,
   if (!shipmentSnap.exists) throw new HttpsError('not-found', 'الشحنة غير موجودة')
   const shipment = shipmentSnap.data() || {}
   await assertStoreAccess(request, String(shipment.storeId || ''), ['orders:edit', 'orders:cancel'])
-  if (['PICKED_UP', 'IN_TRANSIT', 'OUT_FOR_DELIVERY', 'DELIVERED', 'RETURNED'].includes(String(shipment.status))) throw new HttpsError('failed-precondition', 'لا يمكن إلغاء الشحنة بعد استلامها')
+  if (!shipment.externalShipmentId && !shipment.providerShipmentId) throw new HttpsError('failed-precondition', 'لا توجد شحنة خارجية لإلغائها')
+  if (shipment.status === 'CANCELLED' || shipment.cancellationState === 'CONFIRMED') {
+    await applySystemShipmentStatus(shipmentId, 'CANCELLED', `api-cancel-reconcile:${String(shipment.provider || 'carrier')}`)
+    return { ok: true, status: 'CANCELLED', duplicate: true }
+  }
   const [providerSnap, configSnap] = await Promise.all([db.doc(`shippingProviders/${shipment.providerId}`).get(), db.doc(`storeShippingProviders/${shipment.storeId}_${shipment.providerId}`).get()])
+  if (!providerSnap.exists) throw new HttpsError('failed-precondition', 'مزود الشحن غير موجود')
   const provider = { id: providerSnap.id, ...(providerSnap.data() || {}) } as Record<string, any>
   const adapter = getShippingAdapter(provider.slug, provider.integrationType)
-  if (!adapter?.cancelShipment) throw new HttpsError('failed-precondition', 'الإلغاء غير مدعوم لهذا المزود')
+  const canTrackShipment = Boolean(adapter?.trackShipment && adapter.capabilities.includes('tracking'))
+  const canCancelShipment = Boolean(adapter?.cancelShipment && adapter.capabilities.includes('cancel'))
+  if (!canCancelShipment) throw new HttpsError('failed-precondition', 'شركة الشحن الحالية لا تتيح الإلغاء التلقائي عبر API. ألغِ الشحنة من لوحة الشركة أولاً، ثم استخدم تحديث الحالة لتأكيدها في متجري.')
   const vault = await loadIntegrationCredentials(db, shipment.storeId, 'shipping', provider.slug)
   if (!vault) throw new HttpsError('failed-precondition', 'بيانات الاعتماد غير مهيأة')
-  await adapter.cancelShipment({ provider, config: configSnap.data() || {}, credentials: vault.credentials }, shipment)
+
+  // Refresh first when the adapter has a real tracking contract. A stale local
+  // CREATED state must never authorize cancelling an already-picked-up parcel.
+  if (canTrackShipment) {
+    const remote = await adapter!.trackShipment!({ provider, config: configSnap.data() || {}, credentials: vault.credentials }, shipment)
+    const remoteStatus = adapter!.mapStatus ? adapter!.mapStatus(String(remote.status || shipment.status)) : String(remote.status || shipment.status)
+    await applySystemShipmentStatus(shipmentId, String(remoteStatus), `poll:${String(provider.slug || 'carrier')}`)
+    if (remoteStatus === 'CANCELLED') return { ok: true, status: 'CANCELLED', duplicate: true }
+  }
+  const freshShipmentSnap = await shipmentRef.get()
+  const freshShipment = freshShipmentSnap.data() || {}
+  const orderSnap = await db.doc(`orders/${String(freshShipment.orderId || '')}`).get()
+  if (!orderSnap.exists || orderSnap.data()?.storeId !== freshShipment.storeId) throw new HttpsError('failed-precondition', 'الطلب المرتبط بالشحنة غير صالح')
+  if (['CANCELLED', 'RETURNED'].includes(String(orderSnap.data()?.status || ''))) return { ok: true, status: String(orderSnap.data()?.status), duplicate: true }
+  if (['PICKED_UP', 'IN_TRANSIT', 'OUT_FOR_DELIVERY', 'DELIVERED', 'RETURNING', 'RETURNED'].includes(String(freshShipment.status))) throw new HttpsError('failed-precondition', 'لا يمكن إلغاء الشحنة بعد استلامها من المتجر')
+
+  await db.runTransaction(async (tx) => {
+    const current = await tx.get(shipmentRef)
+    if (!current.exists) throw new HttpsError('not-found', 'الشحنة غير موجودة')
+    const currentData = current.data() || {}
+    if (currentData.status === 'CANCELLED' || currentData.cancellationState === 'CONFIRMED') return
+    const lastAttemptMs = currentData.cancellationLastAttemptAt?.toMillis?.() || 0
+    if (currentData.cancellationState === 'PROCESSING' && Date.now() - lastAttemptMs < 2 * 60_000) {
+      throw new HttpsError('aborted', 'إلغاء الشحنة قيد التنفيذ بالفعل')
+    }
+    const linkedOrderRef = db.doc(`orders/${current.data()?.orderId}`)
+    tx.update(shipmentRef, {
+      cancellationState: 'PROCESSING', cancellationLastAttemptAt: now(), cancellationAttempts: FieldValue.increment(1),
+      cancellationRequestedAt: currentData.cancellationRequestedAt || now(), cancellationRequestedBy: request.auth!.uid,
+      ...(!currentData.cancellationRequestedAt ? { events: FieldValue.arrayUnion({ status: currentData.status || 'CREATED', at: Timestamp.now(), source: 'merchant-cancel-request', note: 'طلب التاجر إلغاء الشحنة' }) } : {}),
+      updatedAt: now(),
+    })
+    if (!currentData.cancellationRequestedAt) tx.update(linkedOrderRef, { statusHistory: FieldValue.arrayUnion({ status: orderSnap.data()?.status || 'NEW', shipmentStatus: currentData.status || 'CREATED', at: Timestamp.now(), by: request.auth!.uid, source: 'MERCHANT', provider: provider.slug || null, eventId: `shipment-${shipmentId}-cancel-requested`, title: 'طلب التاجر إلغاء الشحنة' }), updatedAt: now() })
+  })
+
+  // A resolved provider cancellation call is the remote confirmation. Local
+  // cancellation and inventory restoration happen only after this succeeds.
+  try {
+    await adapter!.cancelShipment!({ provider, config: configSnap.data() || {}, credentials: vault.credentials }, freshShipment)
+  } catch (error) {
+    await shipmentRef.set({ cancellationState: 'FAILED', cancellationError: sanitizeSensitiveText(error instanceof Error ? error.message : 'تعذر إلغاء الشحنة').slice(0, 500), updatedAt: now() }, { merge: true })
+    if (error instanceof ShippingProviderError) throw new HttpsError(error.retryable ? 'unavailable' : 'failed-precondition', error.message, { code: error.code, retryable: error.retryable })
+    throw new HttpsError('unavailable', 'تعذر إلغاء الشحنة لدى شركة الشحن')
+  }
   await applySystemShipmentStatus(shipmentId, 'CANCELLED', `api-cancel:${String(provider.slug || 'carrier')}`)
-  await shipmentRef.set({ cancelledAt: now(), updatedAt: now() }, { merge: true })
+  await auditLog(String(freshShipment.storeId || ''), request.auth.uid, 'cancel_order_and_shipment', 'shipments', shipmentId, { orderId: freshShipment.orderId, provider: provider.slug })
   return { ok: true, status: 'CANCELLED' }
 })
 
@@ -5931,6 +6008,81 @@ export const processIntegrationEvent = onDocumentCreated({ document: 'integratio
   }
 })
 
+/** Restore the exact order-line stock mutation. All product reads happen before
+ * writes, products are de-duplicated, and a persisted order marker makes every
+ * caller retry-safe. Legacy orders are treated as deducted unless they carry an
+ * explicit `inventoryDeducted: false`, because createOrder has always deducted
+ * accepted lines atomically. */
+async function restoreOrderInventoryInTransaction(
+  tx: admin.firestore.Transaction,
+  order: Record<string, any>,
+  storeId: string,
+) {
+  if (order.stockRestored === true || order.inventoryRestockedAt || order.inventoryDeducted === false) {
+    return { restoredQuantity: 0, skippedLines: [] as string[], shouldMarkRestored: false }
+  }
+  const items = Array.isArray(order.items) ? order.items : []
+  const productIds = Array.from(new Set(items.map((item: any) => String(item.productId || '')).filter(Boolean)))
+  const snapshots = await Promise.all(productIds.map((productId) => tx.get(db.doc(`products/${productId}`))))
+  const products = new Map(snapshots.filter((snap) => snap.exists && snap.data()?.storeId === storeId).map((snap) => [snap.id, { ref: snap.ref, data: snap.data()! }]))
+  const plainDeltas = new Map<string, number>()
+  const skippedLines: string[] = []
+  let restoredQuantity = 0
+
+  for (const item of items) {
+    const quantity = Number(item.quantity || 0)
+    const product = products.get(String(item.productId || ''))
+    if (!product || !Number.isInteger(quantity) || quantity <= 0) {
+      skippedLines.push(String(item.id || item.productId || 'unknown'))
+      continue
+    }
+    const variants = Array.isArray(product.data.variants) ? product.data.variants : []
+    if (variants.length > 0) {
+      // A saved variant id is authoritative. Never fall through to a different
+      // option when that historical variant was edited or removed.
+      let variant = item.variantId
+        ? variants.find((value: any) => String(value.id || '') === String(item.variantId)) || null
+        : null
+      if (!item.variantId) {
+        const color = String(item.color || '')
+        const size = String(item.size || '')
+        variant = variants.find((value: any) => String(value.color || '') === color && String(value.size || '') === size)
+          || (color ? variants.find((value: any) => String(value.color || '') === color && !String(value.size || '')) : null)
+          || (size ? variants.find((value: any) => !String(value.color || '') && String(value.size || '') === size) : null)
+          || null
+      }
+      if (!variant) {
+        skippedLines.push(String(item.id || item.productId || 'unknown'))
+        continue
+      }
+      variant.stock = Number(variant.stock || 0) + quantity
+      restoredQuantity += quantity
+      continue
+    }
+    if (item.variantId) {
+      skippedLines.push(String(item.id || item.productId || 'unknown'))
+      continue
+    }
+    plainDeltas.set(product.ref.id, (plainDeltas.get(product.ref.id) || 0) + quantity)
+    restoredQuantity += quantity
+  }
+
+  for (const product of products.values()) {
+    const variants = Array.isArray(product.data.variants) ? product.data.variants : []
+    if (variants.length > 0) {
+      tx.update(product.ref, {
+        variants,
+        stock: variants.reduce((sum: number, value: any) => sum + Number(value.stock || 0), 0),
+        updatedAt: now(),
+      })
+    } else {
+      const delta = plainDeltas.get(product.ref.id) || 0
+      if (delta > 0) tx.update(product.ref, { stock: FieldValue.increment(delta), updatedAt: now() })
+    }
+  }
+  return { restoredQuantity, skippedLines, shouldMarkRestored: true }
+}
+
 async function applySystemShipmentStatus(shipmentId: string, normalizedStatus: string, source: string) {
   const shipmentRef = db.doc(`shipments/${shipmentId}`)
   return db.runTransaction(async (tx) => {
@@ -5941,81 +6093,81 @@ async function applySystemShipmentStatus(shipmentId: string, normalizedStatus: s
     const orderSnap = await tx.get(orderRef)
     if (!orderSnap.exists || orderSnap.data()?.storeId !== shipment.storeId) throw new Error('Shipment order is invalid')
     const order = orderSnap.data() || {}
+    // A confirmed carrier cancellation is terminal. Ignore stale polling
+    // responses that would otherwise resurrect the shipment and order.
+    if (shipment.status === 'CANCELLED' && normalizedStatus !== 'CANCELLED') {
+      return { duplicate: true, storeId: shipment.storeId, orderId: shipment.orderId, nextOrderStatus: order.status || 'CANCELLED', restoredQuantity: 0 }
+    }
     // The carrier is the single source of truth once a shipment exists.  In
     // particular, a newly-created label is still an order being prepared; it
     // must never leave a merchant-facing order marked as shipped.
+    const providerOrigin = source.startsWith('webhook:') || source.startsWith('poll:') || source.startsWith('provider:')
+    const cancellationCanCloseOrder = normalizedStatus === 'CANCELLED' && !['DELIVERED', 'RETURNED'].includes(String(order.status || ''))
     const nextOrderStatus = ['CREATED', 'READY_FOR_PICKUP'].includes(normalizedStatus) ? 'PROCESSING'
       : ['PICKED_UP', 'IN_TRANSIT', 'OUT_FOR_DELIVERY'].includes(normalizedStatus) ? 'SHIPPED'
         : normalizedStatus === 'DELIVERED' ? 'DELIVERED'
-          : normalizedStatus === 'RETURNED' ? 'RETURNED' : null
-    if (shipment.status === normalizedStatus) {
-      // Keep the carrier state on the order even when it has no direct order
-      // lifecycle equivalent (for example FAILED).  Merchant lists, details,
-      // public tracking, and reports all read this mirror and must never keep
-      // showing an older “shipped” state after the carrier has failed it.
-      if (order.shipmentStatus !== normalizedStatus || (nextOrderStatus && order.status !== nextOrderStatus)) {
-        tx.update(orderRef, {
-          ...(nextOrderStatus ? { status: nextOrderStatus } : {}),
-          shipmentStatus: normalizedStatus,
-          statusHistory: FieldValue.arrayUnion({ status: nextOrderStatus || order.status || 'NEW', shipmentStatus: normalizedStatus, at: Timestamp.now(), by: 'shipping-sync', source }),
-          updatedAt: now(),
-        })
-      }
-      return { duplicate: true, storeId: shipment.storeId, orderId: shipment.orderId, nextOrderStatus }
+          : cancellationCanCloseOrder ? 'CANCELLED' : null
+    const shipmentChanged = shipment.status !== normalizedStatus
+    const restock = cancellationCanCloseOrder
+      ? await restoreOrderInventoryInTransaction(tx, order, String(shipment.storeId || ''))
+      : { restoredQuantity: 0, skippedLines: [] as string[], shouldMarkRestored: false }
+    const cancellationEventId = `shipment-${shipmentId}-cancelled`
+    const orderEvents: Record<string, unknown>[] = []
+    if (shipmentChanged) {
+      orderEvents.push({
+        status: nextOrderStatus || order.status || 'NEW', shipmentStatus: normalizedStatus,
+        at: Timestamp.now(), by: providerOrigin ? 'shipping-provider' : 'shipping-sync',
+        source: providerOrigin ? 'PROVIDER' : 'MERCHANT', provider: shipment.provider || null,
+        eventId: `${shipmentId}-${normalizedStatus}`,
+        title: normalizedStatus === 'CANCELLED'
+          ? (providerOrigin ? 'تم إلغاء الشحنة من شركة الشحن' : 'أكدت شركة الشحن الإلغاء')
+          : `تم تحديث حالة الشحنة إلى ${normalizedStatus}`,
+      })
     }
-    const shouldRestore = normalizedStatus === 'RETURNED' && order.stockRestored !== true
-    const products: Array<{ ref: DocumentReference; data: any }> = []
-    if (shouldRestore) {
-      for (const item of order.items || []) {
-        const productRef = db.doc(`products/${item.productId}`)
-        const productSnap = await tx.get(productRef)
-        if (productSnap.exists && productSnap.data()?.storeId === shipment.storeId) products.push({ ref: productRef, data: productSnap.data() })
-      }
+    if (cancellationCanCloseOrder && order.status !== 'CANCELLED') {
+      orderEvents.push({ status: 'CANCELLED', at: Timestamp.now(), by: providerOrigin ? 'shipping-provider' : 'shipping-sync', source: providerOrigin ? 'PROVIDER' : 'MERCHANT', provider: shipment.provider || null, eventId: `${cancellationEventId}-order`, title: 'تم إلغاء الطلب' })
     }
-    if (shouldRestore) {
-      for (const item of order.items || []) {
-        const product = products.find((entry) => entry.ref.id === item.productId)
-        if (!product) continue
-        let variant: any = null
-        if (Array.isArray(product.data.variants)) {
-          variant = item.variantId ? product.data.variants.find((value: any) => value.id === item.variantId) : null
-          if (!variant) variant = product.data.variants.find((value: any) => (value.color || '') === (item.color || '') && (value.size || '') === (item.size || '')) || null
-        }
-        if (variant) {
-          variant.stock = Number(variant.stock || 0) + Number(item.quantity || 0)
-          tx.update(product.ref, { variants: product.data.variants, stock: product.data.variants.reduce((sum: number, value: any) => sum + Number(value.stock || 0), 0), updatedAt: now() })
-        } else if (!Array.isArray(product.data.variants) || product.data.variants.length === 0) {
-          tx.update(product.ref, { stock: FieldValue.increment(Number(item.quantity || 0)), updatedAt: now() })
-        }
-      }
+    if (restock.shouldMarkRestored) {
+      orderEvents.push({ status: 'CANCELLED', at: Timestamp.now(), by: 'inventory-lifecycle', source: 'SYSTEM', provider: shipment.provider || null, eventId: `${cancellationEventId}-inventory`, quantity: restock.restoredQuantity, title: `تمت إعادة ${restock.restoredQuantity} قطعة إلى المخزون` })
     }
-    tx.update(shipmentRef, {
-      status: normalizedStatus,
-      currentStatus: normalizedStatus,
-      active: !['DELIVERED', 'RETURNED', 'CANCELLED'].includes(normalizedStatus),
-      events: FieldValue.arrayUnion({ status: normalizedStatus, at: Timestamp.now(), source }),
-      lastSyncedAt: now(),
-      updatedAt: now(),
-      ...(['DELIVERED', 'RETURNED'].includes(normalizedStatus) ? { completedAt: now() } : {}),
-    })
+
+    if (shipmentChanged) {
+      tx.update(shipmentRef, {
+        status: normalizedStatus,
+        currentStatus: normalizedStatus,
+        active: !['DELIVERED', 'RETURNED', 'CANCELLED'].includes(normalizedStatus),
+        events: FieldValue.arrayUnion({ status: normalizedStatus, at: Timestamp.now(), source }),
+        lastSyncedAt: now(),
+        updatedAt: now(),
+        ...(['DELIVERED', 'RETURNED'].includes(normalizedStatus) ? { completedAt: now() } : {}),
+        ...(normalizedStatus === 'CANCELLED' ? { cancelledAt: now(), cancellationSource: providerOrigin ? 'PROVIDER' : 'MERCHANT', cancellationState: 'CONFIRMED', cancellationError: null } : {}),
+      })
+    }
     // Shipment status is always mirrored to the order. Some carrier statuses
     // (notably FAILED and CANCELLED) intentionally do not force an order
     // lifecycle transition, but they still have to be visible everywhere.
     tx.update(orderRef, {
       ...(nextOrderStatus ? { status: nextOrderStatus } : {}),
       shipmentStatus: normalizedStatus,
-      statusHistory: FieldValue.arrayUnion({ status: nextOrderStatus || order.status || 'NEW', shipmentStatus: normalizedStatus, at: Timestamp.now(), by: 'shipping-webhook', source }),
-      ...(shouldRestore ? { stockRestored: true } : {}),
+      ...(orderEvents.length ? { statusHistory: FieldValue.arrayUnion(...orderEvents) } : {}),
+      ...(restock.shouldMarkRestored ? {
+        stockRestored: true,
+        inventoryRestockedAt: now(),
+        inventoryRestockReason: providerOrigin ? 'PROVIDER_SHIPMENT_CANCELLED' : 'MERCHANT_SHIPMENT_CANCELLED',
+        inventoryRestockEventId: `${cancellationEventId}-inventory`,
+        inventoryRestoredQuantity: restock.restoredQuantity,
+        inventoryRestockSkippedLines: restock.skippedLines,
+      } : {}),
       updatedAt: now(),
     })
-    emitIntegrationEvent(db, tx, {
+    if (shipmentChanged) emitIntegrationEvent(db, tx, {
       storeId: shipment.storeId,
-      eventType: normalizedStatus === 'DELIVERED' ? 'shipment.delivered' : normalizedStatus === 'RETURNED' ? 'shipment.returned' : 'shipment.status_changed',
+      eventType: normalizedStatus === 'DELIVERED' ? 'shipment.delivered' : normalizedStatus === 'RETURNED' ? 'shipment.returned' : normalizedStatus === 'CANCELLED' ? 'shipment.cancelled' : 'shipment.status_changed',
       entityType: 'shipment',
       entityId: shipmentId,
       payload: { shipmentId, orderId: shipment.orderId, previousStatus: shipment.status, status: normalizedStatus, source },
     })
-    return { duplicate: false, storeId: shipment.storeId, orderId: shipment.orderId, nextOrderStatus }
+    return { duplicate: !shipmentChanged && !restock.shouldMarkRestored && order.status === nextOrderStatus, storeId: shipment.storeId, orderId: shipment.orderId, nextOrderStatus, restoredQuantity: restock.restoredQuantity }
   })
 }
 
@@ -6137,6 +6289,11 @@ export const updateShipmentStatus = onCall(async (request: CallableRequest<{ shi
   }
   if (!transitionGraph[String(currentShipment.status || 'CREATED')]?.includes(normalizedStatus)) {
     throw new HttpsError('failed-precondition', 'هذا الانتقال غير متاح لحالة الشحنة الحالية')
+  }
+
+  if (normalizedStatus === 'CANCELLED') {
+    await applySystemShipmentStatus(shipmentId, 'CANCELLED', 'merchant-manual')
+    return { ok: true, status: normalizedStatus }
   }
 
   const transition = await db.runTransaction(async (tx) => {
@@ -6279,8 +6436,14 @@ export const updateOrderStatus = onCall(async (request: CallableRequest<{ orderI
   // Once a shipment exists, its lifecycle is the only source of truth for
   // dispatch, delivery, return and cancellation. This prevents the order UI
   // from claiming "shipped" while an API carrier still reports "created".
-  if (order.activeShipmentId && ['SHIPPED', 'DELIVERED', 'RETURNED', 'CANCELLED'].includes(String(status))) {
-    throw new HttpsError('failed-precondition', 'حدّث حالة الشحنة من بطاقة الشحن؛ حالة الطلب ستتزامن تلقائياً.')
+  const activeShipmentSnap = order.activeShipmentId ? await db.doc(`shipments/${order.activeShipmentId}`).get() : null
+  const hasExternalApiShipment = Boolean(activeShipmentSnap?.exists
+    && activeShipmentSnap.data()?.integrationType === 'api'
+    && (activeShipmentSnap.data()?.externalShipmentId || activeShipmentSnap.data()?.providerShipmentId))
+  if (order.activeShipmentId && (['SHIPPED', 'DELIVERED', 'RETURNED'].includes(String(status)) || (status === 'CANCELLED' && hasExternalApiShipment))) {
+    throw new HttpsError('failed-precondition', status === 'CANCELLED'
+      ? 'استخدم «إلغاء الطلب والشحنة» حتى تُلغى الشحنة لدى الشركة أولاً.'
+      : 'حدّث حالة الشحنة من بطاقة الشحن؛ حالة الطلب ستتزامن تلقائياً.')
   }
 
   assertOrderTransition(String(order.status || 'NEW'), status)
@@ -6292,54 +6455,44 @@ export const updateOrderStatus = onCall(async (request: CallableRequest<{ orderI
   // status), so sequences like NEW -> CANCELLED -> DELIVERED -> CANCELLED, or
   // NEW -> CANCELLED -> CANCELLED, restore only on the first cancellation and
   // never again. The flag is written inside the same transaction that restores.
-  const becomesCancelled = ['CANCELLED', 'RETURNED'].includes(status)
-  const statusEventId = `order-${orderId}-${status}-${Date.now()}`
+  const statusEventId = `order-${orderId}-${status}`
 
-  await db.runTransaction(async (tx) => {
-    if (becomesCancelled && !(order.stockRestored || false)) {
-      for (const item of order.items || []) {
-        const productRef = db.doc(`products/${item.productId}`)
-        const productSnap = await tx.get(productRef)
-        if (!productSnap.exists) continue
-        const product = productSnap.data()!
-        // Match the exact variant: prefer variantId, then color+size, then
-        // color-only / size-only for legacy items. (Same resolution order as
-        // createOrder so a cancel/restore always targets the same stock unit.)
-        let variant: any = null
-        if (Array.isArray(product.variants)) {
-          if (item.variantId) {
-            variant = product.variants.find((v: any) => v.id === item.variantId) || null
-          }
-          if (!variant) {
-            const normColor = item.color || ''
-            const normSize = item.size || ''
-            variant =
-              product.variants.find((v: any) => (v.color || '') === normColor && (v.size || '') === normSize) ||
-              (normColor ? product.variants.find((v: any) => (v.color || '') === normColor && !(v.size || '')) || null : null) ||
-              (normSize ? product.variants.find((v: any) => !(v.color || '') && (v.size || '') === normSize) || null : null) ||
-              null
-          }
-        }
-        // Restore ONLY the matched variant and recompute the derived aggregate;
-        // never increment the flat `stock` independently (would double-count
-        // the same units that were already rolled into the per-variant stock).
-        if (variant) {
-          variant.stock = (variant.stock || 0) + item.quantity
-          const aggStock = product.variants.reduce((s: number, v: any) => s + (v.stock || 0), 0)
-          tx.update(productRef, { variants: product.variants, stock: aggStock })
-        } else {
-          tx.update(productRef, { stock: FieldValue.increment(item.quantity) })
-        }
-      }
+  const transition = await db.runTransaction(async (tx) => {
+    const freshOrderSnap = await tx.get(orderRef)
+    if (!freshOrderSnap.exists) throw new HttpsError('not-found', 'الطلب غير موجود')
+    const freshOrder = freshOrderSnap.data() || {}
+    const linkedShipmentRef = freshOrder.activeShipmentId ? db.doc(`shipments/${freshOrder.activeShipmentId}`) : null
+    const linkedShipmentSnap = linkedShipmentRef ? await tx.get(linkedShipmentRef) : null
+    assertOrderTransition(String(freshOrder.status || 'NEW'), status)
+    if (String(freshOrder.status || 'NEW') === status) return { changed: false, previousStatus: status, restoredQuantity: 0 }
+    if (status === 'RETURNED' && freshOrder.returnStatus !== 'RECEIVED') {
+      throw new HttpsError('failed-precondition', 'لا يُعاد المخزون قبل تأكيد وصول المرتجع إلى المتجر')
     }
+    const shouldRestore = status === 'CANCELLED' || status === 'RETURNED'
+    const restock = shouldRestore
+      ? await restoreOrderInventoryInTransaction(tx, freshOrder, String(freshOrder.storeId || ''))
+      : { restoredQuantity: 0, skippedLines: [] as string[], shouldMarkRestored: false }
+    const events: Record<string, unknown>[] = [{
+      status, at: Timestamp.now(), by: request.auth!.uid, source: 'MERCHANT', eventId: statusEventId,
+      title: status === 'PROCESSING' ? 'تم نقل الطلب إلى قيد التجهيز' : status === 'CANCELLED' ? 'تم إلغاء الطلب' : status === 'RETURNED' ? 'تم تأكيد استلام المرتجع' : `تم تحديث حالة الطلب إلى ${status}`,
+    }]
+    if (restock.shouldMarkRestored) events.push({ status, at: Timestamp.now(), by: 'inventory-lifecycle', source: 'SYSTEM', eventId: `${statusEventId}-inventory`, quantity: restock.restoredQuantity, title: `تمت إعادة ${restock.restoredQuantity} قطعة إلى المخزون` })
     tx.update(orderRef, {
       status,
-      statusHistory: FieldValue.arrayUnion({ status, at: Timestamp.now(), by: request.auth!.uid }),
-      // Persist the restoration marker so subsequent cancelled-state transitions
-      // cannot restore the same stock again.
-      ...(becomesCancelled ? { stockRestored: true } : {}),
+      statusHistory: FieldValue.arrayUnion(...events),
+      ...(restock.shouldMarkRestored ? {
+        stockRestored: true,
+        inventoryRestockedAt: now(),
+        inventoryRestockReason: status === 'CANCELLED' ? 'ORDER_CANCELLED' : 'RETURN_RECEIVED',
+        inventoryRestockEventId: `${statusEventId}-inventory`,
+        inventoryRestoredQuantity: restock.restoredQuantity,
+        inventoryRestockSkippedLines: restock.skippedLines,
+      } : {}),
       updatedAt: now(),
     })
+    if (status === 'CANCELLED' && linkedShipmentRef && linkedShipmentSnap?.exists && linkedShipmentSnap.data()?.integrationType !== 'api') {
+      tx.update(linkedShipmentRef, { status: 'CANCELLED', currentStatus: 'CANCELLED', active: false, cancelledAt: now(), cancellationSource: 'MERCHANT', events: FieldValue.arrayUnion({ status: 'CANCELLED', at: Timestamp.now(), source: 'merchant-order-cancel' }), updatedAt: now() })
+    }
     const eventType = status === 'PROCESSING'
       ? 'order.confirmed'
       : status === 'CANCELLED' || status === 'RETURNED'
@@ -6348,14 +6501,16 @@ export const updateOrderStatus = onCall(async (request: CallableRequest<{ orderI
     if (eventType) {
       emitIntegrationEvent(db, tx, {
         eventId: statusEventId,
-        storeId: order.storeId,
+        storeId: freshOrder.storeId,
         eventType,
         entityType: 'order',
         entityId: orderId,
-        payload: { orderId, previousStatus: order.status, status },
+        payload: { orderId, previousStatus: freshOrder.status, status },
       })
     }
+    return { changed: true, previousStatus: String(freshOrder.status || 'NEW'), restoredQuantity: restock.restoredQuantity }
   })
+  if (!transition.changed) return { ok: true, changed: false, status }
 
   // Revenue is counted only for DELIVERED orders (canonical rule). Entering
   // DELIVERED adds the order value; leaving DELIVERED subtracts it. The order

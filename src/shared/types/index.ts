@@ -146,6 +146,10 @@ export interface ShippingProviderDefinition extends Partial<FirestoreMeta> {
   services?: ShippingProviderService[]
   allowMerchantRateOverride?: boolean
   adapterConfigured?: boolean
+  capabilities?: string[]
+  canCreateShipment?: boolean
+  canTrackShipment?: boolean
+  canCancelShipment?: boolean
   lastTestedAt?: { seconds: number; nanoseconds: number } | null
 }
 
@@ -227,6 +231,8 @@ export interface Shipment extends Partial<FirestoreMeta> {
   shippingCost?: number | null
   codAmount?: number
   currentStatus?: string
+  /** Latest raw status returned by the carrier, kept separate from canonical local status. */
+  remoteStatus?: string | number | null
   lastSyncedAt?: { seconds: number; nanoseconds: number } | null
   customerShippingFee?: number
   carrierShippingCost?: number
@@ -547,7 +553,17 @@ export interface Order extends Partial<FirestoreMeta> {
   /** Firestore id of the linked customers/{id} doc (upserted by storeId+phone). */
   customerDocId?: string | null
   /** Ordered list of status transitions captured from the backend. */
-  statusHistory?: { status: OrderStatus; at: { seconds: number; nanoseconds: number }; by?: string }[]
+  statusHistory?: Array<{
+    status: OrderStatus
+    at: { seconds: number; nanoseconds: number }
+    by?: string
+    source?: string
+    title?: string
+    provider?: string | null
+    eventId?: string
+    quantity?: number
+    shipmentStatus?: string
+  }>
   items: OrderItem[]
   subtotal: number
   shippingFee: number
@@ -587,6 +603,12 @@ export interface Order extends Partial<FirestoreMeta> {
   utmCampaign?: string | null
    /** True once stock has been restored for a cancelled/returned order (idempotency). */
    stockRestored?: boolean
+   /** Explicit write-path marker: accepted checkout lines were deducted atomically. */
+   inventoryDeducted?: boolean
+   inventoryRestockedAt?: { seconds: number; nanoseconds: number } | null
+   inventoryRestockReason?: string | null
+   inventoryRestockEventId?: string | null
+   inventoryRestoredQuantity?: number
 }
 
 export interface Customer extends Partial<FirestoreMeta> {

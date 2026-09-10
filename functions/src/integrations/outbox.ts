@@ -10,6 +10,7 @@ export type IntegrationEventType =
   | 'shipment.status_changed'
   | 'shipment.delivered'
   | 'shipment.returned'
+  | 'shipment.cancelled'
   | 'customer.created'
   | 'store.published'
 
