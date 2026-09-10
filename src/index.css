@@ -12411,3 +12411,99 @@ html:not([data-theme='dark']) .loading-screen {
     padding-inline: 20px;
   }
 }
+
+/* Merchant phone shell contract. These selectors target only the desktop rail
+   directly inside the workspace body. The drawer remains a separate surface
+   opened from the bottom navigation. Keeping this at the final cascade
+   boundary neutralizes legacy sidebar geometry from route CSS. */
+@media (max-width: 768px) {
+  html,
+  body,
+  #root,
+  html body .app-shell--dashboard {
+    width: 100%;
+    max-width: 100%;
+    min-width: 0;
+    margin: 0;
+  }
+
+  html body .app-shell--dashboard > .app-shell-body,
+  html body .app-shell--dashboard .shell-main,
+  html body .app-shell--dashboard .shell-content,
+  html body .app-shell--dashboard .route-surface {
+    width: 100% !important;
+    max-width: 100% !important;
+    min-width: 0 !important;
+    margin-inline: 0 !important;
+    box-sizing: border-box;
+  }
+
+  /* The collapsed-rail rule in AppShell.css uses four class selectors and
+     !important. Match its state specificity here so that a desktop rail can
+     never re-enter the mobile layout after its lazy stylesheet loads. */
+  html body .app-shell--dashboard > .app-shell-body > .sidebar,
+  html body .app-shell.app-shell--dashboard.sidebar-unpinned:not(.sidebar-hover-expanded) > .app-shell-body > .sidebar,
+  html body .app-shell.app-shell--dashboard.sidebar-unpinned.sidebar-hover-expanded > .app-shell-body > .sidebar {
+    display: none !important;
+    width: 0 !important;
+    max-width: 0 !important;
+    min-width: 0 !important;
+    margin: 0 !important;
+    padding: 0 !important;
+  }
+
+  html body .app-shell--dashboard .shell-main {
+    margin-inline-start: 0 !important;
+    margin-inline-end: 0 !important;
+  }
+
+  html body .app-shell--dashboard .shell-content {
+    padding-inline: 12px !important;
+    padding-bottom: calc(92px + env(safe-area-inset-bottom)) !important;
+  }
+
+  html body .app-shell--dashboard .topbar {
+    width: 100% !important;
+    max-width: 100% !important;
+    margin: 0 !important;
+    inset-inline: 0 !important;
+    box-sizing: border-box;
+  }
+
+  html body .app-shell--dashboard .support-mode-bar {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr);
+    width: 100%;
+    max-width: 100%;
+    padding: 12px 16px;
+    box-sizing: border-box;
+  }
+
+  html body .app-shell--dashboard .support-mode-bar__identity {
+    min-width: 0;
+    align-items: flex-start;
+  }
+
+  html body .app-shell--dashboard .support-mode-bar__return {
+    width: 100%;
+    justify-content: center;
+  }
+
+  html body .app-shell--dashboard .mobile-bottom-nav {
+    display: grid;
+    position: fixed;
+    inset-inline: 0;
+    bottom: 0;
+    width: 100%;
+    max-width: 100%;
+    box-sizing: border-box;
+  }
+
+  /* This is the drawer's navigation, not the hidden desktop rail. */
+  html body .app-shell--dashboard .sidebar-drawer .sidebar {
+    display: flex !important;
+    width: 100% !important;
+    max-width: 100% !important;
+    min-width: 0 !important;
+  }
+}

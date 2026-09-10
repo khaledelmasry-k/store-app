@@ -1895,6 +1895,15 @@
   box-sizing: border-box;
 }
 
+/* The desktop rail is fixed over the workspace at inline-start. Reserve that
+   exact column for the support notice so its identity never renders beneath
+   navigation; the mobile rule below intentionally resets this reservation. */
+@media (min-width: 769px) {
+  .app-shell--dashboard .support-mode-bar {
+    padding-inline-start: calc(24px + var(--merchant-sidebar-width));
+  }
+}
+
 .support-mode-bar__identity {
   display: flex;
   align-items: center;

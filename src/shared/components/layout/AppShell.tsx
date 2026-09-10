@@ -240,6 +240,7 @@ export const AppShell: FunctionalComponent<Props> = ({ navKey, brand, brandLogo,
         throw new Error('تعذر التحقق من جلسة إدارة المنصة')
       }
       await refreshUser()
+      window.scrollTo({ top: 0, behavior: 'auto' })
       window.location.href = '/platform/merchants'
     } catch (error) {
       toast.push(
