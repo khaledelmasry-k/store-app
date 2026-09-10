@@ -13,7 +13,7 @@ import { SegmentedControl } from '../../shared/components/ui/SegmentedControl'
 import { Table } from '../../shared/components/ui/Table'
 import { useCollection } from '../../shared/hooks/useCollection'
 import { useToast } from '../../shared/hooks/useToast'
-import { savePlanCallable, syncCanonicalPlansCallable, manageSubscriptionCouponCallable } from '../../shared/services/auth'
+import { savePlanCallable, syncCanonicalPlansCallable } from '../../shared/services/auth'
 import { formatPriceEgp } from '../../shared/utils/format'
 import { PLAN_FEATURE_KEYS, PLAN_FEATURE_LABELS, type PlanFeatureKey } from '../../shared/services/subscription'
 import type { SubscriptionPlan } from '../../shared/types'
@@ -57,8 +57,11 @@ export const PlatformPlans: FunctionalComponent = () => {
   const [form, setForm] = useState<Partial<SubscriptionPlan>>({ features: [] as string[] })
   const [flags, setFlags] = useState<Record<PlanFeatureKey, boolean>>(emptyFlags())
   const [syncing, setSyncing] = useState(false)
-  const [couponForm, setCouponForm] = useState({ code: 'WASLA100', discountValue: 100, partner: 'wasla', active: true })
-  const [couponSaving, setCouponSaving] = useState(false)
+
+  const [showArchived, setShowArchived] = useState(false)
+  const archivedPlans = [...plansRes.data]
+    .filter((p) => (p as any).archived === true || ((p as any).active === false && (p as any).isPurchasable === false))
+    .sort((a, b) => (a.sortOrder ?? 0) - (b.sortOrder ?? 0))
 
   const recommendedId = [...subscriptionPlans].sort((a, b) => a.priceMonthly - b.priceMonthly)[Math.max(0, Math.floor((subscriptionPlans.length - 1) / 2))]?.id
 
@@ -153,16 +156,6 @@ export const PlatformPlans: FunctionalComponent = () => {
     } finally {
       setSyncing(false)
     }
-  }
-
-  const saveSubscriptionCoupon = async () => {
-    setCouponSaving(true)
-    try {
-      await manageSubscriptionCouponCallable({ operation: 'create', coupon: { ...couponForm, discountType: 'percentage', applicablePlanIds: ['plan-basic', 'plan-starter', 'plan-growth', 'plan-pro'], applicableBillingCycles: ['monthly'], firstCycleOnly: true, perMerchantLimit: 1 } })
-      toast.push('تم إنشاء كوبون اشتراكات المنصة', undefined, 'success')
-    } catch (err: any) {
-      toast.push('فشل حفظ كوبون الاشتراك', err?.message || 'تحقق من البيانات', 'error')
-    } finally { setCouponSaving(false) }
   }
 
   return (
@@ -303,11 +296,14 @@ export const PlatformPlans: FunctionalComponent = () => {
                 <div className="plan-pricing-price"><strong>{formatPriceEgp(Number(p.oneTimePrice || 0))}</strong><span>دفعة واحدة</span></div>
                 <ul className="plan-pricing-features">
                   <li><Icon name="inventory_2" />حتى {p.productLimit} منتج</li>
-                  <li><Icon name="receipt_long" />حتى {p.orderLimitPerMonth} طلب</li>
+                  <li><Icon name="receipt_long" />حتى {p.orderLimitPerMonth} طلب شهريًا</li>
                   <li><Icon name="group_add" />حتى {p.staffLimit || 1} أعضاء فريق</li>
                   <li><Icon name="database" />{storageLabel(p.storageLimit)}</li>
+                  <li><Icon name="link" />حتى {p.salesLinksLimit} رابط بيع</li>
+                  <li><Icon name="web" />حتى {p.landingPagesLimit} صفحة هبوط</li>
                   <li><Icon name="verified" />لا يوجد انتهاء لملكية المتجر الأساسية</li>
                 </ul>
+                <p className="muted small">رسوم الخدمات الخارجية (الشحن وWhatsApp والبوابات) غير مشمولة.</p>
                 <p className="muted small">المقاعد المستخدمة: {Number(p.launchOfferSoldCount || 0)}{Number(p.launchOfferLimit || 0) > 0 ? ` / ${p.launchOfferLimit}` : ''}</p>
                 <div className="plan-pricing-actions">
                   <Button variant="soft" size="sm" icon="edit" onClick={() => openEdit(p)}>تعديل العرض</Button>
@@ -319,13 +315,44 @@ export const PlatformPlans: FunctionalComponent = () => {
         </Card>
       )}
 
-      <Card title="كوبونات اشتراكات المنصة" subtitle="منفصلة عن كوبونات طلبات المتاجر — تحقق الخادم هو المصدر النهائي." className="mt-2">
-        <div className="grid grid-2">
-          <Input label="الكود" value={couponForm.code} onChange={(v) => setCouponForm({ ...couponForm, code: v.toUpperCase() })} />
-          <Input label="الشريك" value={couponForm.partner} onChange={(v) => setCouponForm({ ...couponForm, partner: v })} />
+      {archivedPlans.length > 0 && (
+        <Card title="باقات تاريخية / مؤرشفة" subtitle="للتوافق مع الاشتراكات القائمة فقط — غير متاحة للبيع أو التسجيل الجديد" className="mt-2">
+          <div className="flex-between mb-2">
+            <p className="muted small">FREE و BUSINESS محفوظة للاشتراكات التاريخية فقط. لا تظهر للعملاء الجدد.</p>
+            <Button variant="ghost" size="sm" icon={showArchived ? 'expand_less' : 'expand_more'} onClick={() => setShowArchived(!showArchived)}>{showArchived ? 'إخفاء' : `عرض (${archivedPlans.length})`}</Button>
+          </div>
+          {showArchived && (
+            <div className="plan-grid" style={{ opacity: 0.85 }}>
+              {archivedPlans.map((p) => (
+                <div key={p.id} className="plan-pricing-card plan-pricing-card--archived" style={{ border: '1px dashed #cbd5e1' }}>
+                  <div className="plan-pricing-head">
+                    <h3 className="plan-pricing-name">{p.name} <span className="muted small">({p.id})</span></h3>
+                    <Badge tone="slate">مؤرشفة</Badge>
+                  </div>
+                  {p.description && <p className="plan-pricing-desc">{p.description}</p>}
+                  <div className="plan-pricing-price">
+                    <strong>{p.billingModel === 'one_time' ? formatPriceEgp(Number(p.oneTimePrice || 0)) : p.priceMonthly != null ? formatPriceEgp(Number(p.priceMonthly)) : '—'}</strong>
+                    <span>{p.billingModel === 'one_time' ? 'دفعة واحدة' : ' / شهرياً'}</span>
+                  </div>
+                  <ul className="plan-pricing-features">
+                    <li><Icon name="inventory_2" />{p.productLimit != null ? `حتى ${p.productLimit} منتج` : '—'}</li>
+                    <li><Icon name="receipt_long" />{p.orderLimitPerMonth != null ? `حتى ${p.orderLimitPerMonth} طلب` : '—'}</li>
+                    <li><Icon name="group_add" />حتى {p.staffLimit || 1} عضو</li>
+                    <li><Icon name="database" />{storageLabel(p.storageLimit)}</li>
+                  </ul>
+                  <p className="muted small">غير متاحة للبيع — بيانات تاريخية فقط</p>
+                </div>
+              ))}
+            </div>
+          )}
+        </Card>
+      )}
+
+      <Card title="كوبونات الاشتراكات" subtitle="إدارة أكواد خصم اشتراكات التجار" className="mt-2">
+        <div className="flex-between">
+          <p className="muted small">أنشئ وتابع أكواد خصم اشتراكات Matjari من صفحة مخصصة. كل تاجر يستخدم الكود مرة واحدة فقط.</p>
+          <a href="/platform/coupons"><Button icon="sell">إدارة كوبونات الاشتراكات</Button></a>
         </div>
-        <p className="muted small">WASLA100: خصم 100% لأول دورة شهرية فقط على Basic وStarter وGrowth وPro، بحد استخدام واحد لكل تاجر.</p>
-        <Button icon="save" loading={couponSaving} onClick={saveSubscriptionCoupon}>حفظ كوبون الاشتراك</Button>
       </Card>
 
       <Modal

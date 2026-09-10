@@ -44,7 +44,7 @@ test('renders the reference-inspired Matjari landing structure', async ({ page }
   for (const label of ['المميزات', 'الحلول', 'الأسعار', 'كيف تعمل', 'الأسئلة الشائعة', 'تواصل معنا']) {
     await expect(page.locator('.landing-nav-link', { hasText: label })).toHaveCount(1)
   }
-  await expect(page.locator('.landing-nav-btn-primary', { hasText: 'ابدأ شهرك المجاني' })).toHaveCount(1)
+  await expect(page.locator('.landing-nav-btn-primary', { hasText: 'ابدأ تجربة 3 أيام مجانًا' })).toHaveCount(1)
   await expect(page.locator('.landing-nav-btn-ghost', { hasText: 'تسجيل الدخول' })).toHaveCount(1)
 
   // Sections

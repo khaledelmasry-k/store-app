@@ -357,6 +357,21 @@ match /orders/{id} {
       allow write: if false;
     }
 
+    // ─────────────────────────────────────────────────────────────
+    // subscriptionCoupons / subscriptionCouponRedemptions — SuperAdmin promo codes for Matjari subscriptions
+    // Distinct from per-store customer coupons. All reads/writes are callable-only or superAdmin-only.
+    // ─────────────────────────────────────────────────────────────
+    match /subscriptionCoupons/{id} {
+      allow read: if isPlatformAdmin();
+      allow write: if false; // managed via manageSubscriptionCoupon callable (superAdmin only)
+    }
+
+    match /subscriptionCouponRedemptions/{id} {
+      // Merchant can read own redemption (for UI), superAdmin can read all for reporting
+      allow read: if isPlatformAdmin() || (isSignedIn() && resource.data.merchantId == request.auth.uid);
+      allow write: if false; // created/released atomically via submitPaymentRequest/rejectPaymentRequest callables
+    }
+
     match /shipping/{id} {
       // Shipping zones/rates are tenant configuration, not public documents.
       // Public checkout uses the authorized createOrder callable, which reads

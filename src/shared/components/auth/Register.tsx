@@ -112,9 +112,24 @@ export const Register:FunctionalComponent = () => {
     setCouponState({ status: 'loading' })
     try {
       const result: any = await quoteSubscriptionCouponCallable({ code, planId: selectedPlan.id, billingCycle: 'monthly', amount: Number(selectedPlan.priceMonthly || 0) })
-      setCouponState({ status: 'success', message: result.data?.finalPrice === 0 ? 'تم تطبيق العرض — أول شهر بعد التجربة مجانًا' : 'تم تطبيق كود الخصم' })
+      const data = result.data as { finalPrice?: number; originalPrice?: number; discountAmount?: number } | undefined
+      if (data && typeof data.finalPrice === 'number' && typeof data.originalPrice === 'number' && typeof data.discountAmount === 'number') {
+        setCouponState({ status: 'success', message: `تم تطبيق الكود — الخصم ${data.discountAmount} ج.م، المبلغ المطلوب ${data.finalPrice} ج.م` })
+      } else {
+        setCouponState({ status: 'success', message: 'تم تطبيق كود الخصم' })
+      }
     } catch (err: any) {
-      setCouponState({ status: 'error', message: err?.message || 'كود الخصم غير صالح' })
+      const msg = String(err?.message || '')
+      // Map server validation to user-friendly Arabic messages
+      let friendly = msg || 'كود الخصم غير صالح'
+      if (msg.includes('غير صحيح')) friendly = 'كود الخصم غير صحيح'
+      else if (msg.includes('انتهت صلاحية')) friendly = 'انتهت صلاحية كود الخصم'
+      else if (msg.includes('غير مفعل')) friendly = 'كود الخصم غير مفعل حالياً'
+      else if (msg.includes('غير متاح لهذه الباقة')) friendly = 'كود الخصم غير متاح لهذه الباقة'
+      else if (msg.includes('غير متاح لهذه الدورة')) friendly = 'كود الخصم غير متاح لطريقة الدفع المختارة'
+      else if (msg.includes('الحد الأقصى')) friendly = 'تم الوصول للحد الأقصى لاستخدام الكود'
+      else if (msg.includes('لا يمكن أن يتجاوز') || msg.includes('لا يمكن أن تجعل') || msg.includes('يجب ألا يقل')) friendly = 'هذا الكود لا يمكن أن يجعل الاشتراك مجانياً — الحد الأقصى للخصم 99%'
+      setCouponState({ status: 'error', message: friendly })
     }
   }
 
@@ -181,10 +196,11 @@ export const Register:FunctionalComponent = () => {
                 <span>دفعة واحدة</span>
               </div>
               <p>حق استخدام دائم لمتجر واحد داخل Matjari وفق المزايا والحدود المحددة.</p>
-              <ul className="register-lifetime-limits">
-                <li>1,000 منتج</li><li>5,000 طلب</li><li>5 أعضاء فريق</li><li>5 GB تخزين</li><li>3 صفحات هبوط</li><li>50 رابط بيع</li>
-              </ul>
+               <ul className="register-lifetime-limits">
+                 <li>1,000 منتج</li><li>1,500 طلب شهريًا</li><li>3 أعضاء فريق</li><li>2 GB تخزين</li><li>2 صفحة هبوط</li><li>20 رابط بيع</li>
+               </ul>
               <small>لا يشمل ملكية المنصة أو الكود المصدري أو المزايا Premium المستقبلية تلقائياً.</small>
+              <small className="muted" style={{ display: 'block', marginTop: '4px' }}>رسوم الخدمات الخارجية مثل الشحن وWhatsApp والبوابات غير مشمولة.</small>
             </div>
           </section>
         )}
@@ -346,7 +362,7 @@ export const Register:FunctionalComponent = () => {
                 <button type="button" className="register-change-plan" onClick={() => setPlanSelectorOpen((open) => !open)}>{planSelectorOpen ? 'إغلاق الاختيار' : 'تغيير الباقة'}</button>
               </div>
             )}
-            {!lifetimeMode && selectedPlan && <div className="register-coupon-field"><label htmlFor="subscription-coupon">كود الخصم (اختياري)</label><div className="register-coupon-row"><input id="subscription-coupon" value={couponCode} onInput={(e) => { setCouponCode((e.currentTarget as HTMLInputElement).value.toUpperCase()); setCouponState({ status: 'idle' }) }} placeholder="مثال: WASLA100" /><Button type="button" variant="outline" loading={couponState.status === 'loading'} onClick={applyCoupon}>تطبيق</Button></div>{couponState.message && <small className={couponState.status === 'error' ? 'text-danger' : 'text-success'}>{couponState.message}</small>}</div>}
+            {!lifetimeMode && selectedPlan && <div className="register-coupon-field"><label htmlFor="subscription-coupon">كود الخصم (اختياري)</label><div className="register-coupon-row"><input id="subscription-coupon" value={couponCode} onInput={(e) => { setCouponCode((e.currentTarget as HTMLInputElement).value.toUpperCase()); setCouponState({ status: 'idle' }) }} placeholder="مثال: WELCOME30" /><Button type="button" variant="outline" loading={couponState.status === 'loading'} onClick={applyCoupon}>تطبيق</Button></div>{couponState.message && <small className={couponState.status === 'error' ? 'text-danger' : 'text-success'}>{couponState.message}</small>}</div>}
             {!lifetimeMode && planSelectorOpen && <div className="plan-cards plan-cards--pricing register-plan-selector">
               {plans.map((p) => (
                 <PricingCard

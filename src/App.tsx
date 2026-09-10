@@ -43,7 +43,7 @@ const PlatformSubscriptionDetail = lazy(() => import('./platform/pages/Subscript
 const PlatformPlans = lazy(() => import('./platform/pages/Plans'))
 const PlatformPromotions = lazy(() => import('./platform/pages/Promotions'))
 const PlatformPayments = lazy(() => import('./platform/pages/Payments'))
-const PlatformCoupons = lazy(() => import('./platform/pages/Coupons'))
+const PlatformSubscriptionCoupons = lazy(() => import('./platform/pages/SubscriptionCoupons'))
 const PlatformReports = lazy(() => import('./platform/pages/Reports'))
 const PlatformTickets = lazy(() => import('./platform/pages/Tickets'))
 const PlatformAudit = lazy(() => import('./platform/pages/Audit'))
@@ -157,7 +157,7 @@ function PlatformRoutes() {
       <Route path="/promotions" component={() => <PlatformPromotions />} />
       <Route path="/payments" component={() => <PlatformPayments />} />
       <Route path="/transactions" component={() => <Redirect to="/platform/payments" replace />} />
-      <Route path="/coupons" component={() => <PlatformCoupons />} />
+      <Route path="/coupons" component={() => <PlatformSubscriptionCoupons />} />
       <Route path="/reports" component={() => <PlatformReports />} />
       <Route path="/tickets" component={() => <PlatformTickets />} />
       <Route path="/audit" component={() => <PlatformAudit />} />

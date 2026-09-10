@@ -29,7 +29,7 @@ export const InfoPage: FunctionalComponent<Props> = ({ title, body }) => {
               <Icon name={theme.theme === 'dark' ? 'light_mode' : 'dark_mode'} />
             </button>
             <Link href="/login" className="landing-nav-btn landing-nav-btn-ghost">تسجيل الدخول</Link>
-            <Link href="/register" className="landing-nav-btn landing-nav-btn-primary">ابدأ الآن مجاناً</Link>
+            <Link href="/register" className="landing-nav-btn landing-nav-btn-primary">ابدأ الآن</Link>
           </nav>
         </div>
       </header>

@@ -4,7 +4,7 @@ import { useLocation } from 'wouter'
 import { useStore } from '../../shared/hooks/useStore'
 import { useSubscription } from '../../shared/hooks/useSubscription'
 import { useCollectionOnce } from '../../shared/hooks/useCollectionOnce'
-import { getMerchantPaymentInfoCallable, submitPaymentRequestCallable, changeSubscriptionPlanCallable, requestStorePurchaseCallable, getBillingSnapshotsCallable, getEligiblePromotionsCallable } from '../../shared/services/auth'
+import { getMerchantPaymentInfoCallable, submitPaymentRequestCallable, changeSubscriptionPlanCallable, requestStorePurchaseCallable, getBillingSnapshotsCallable, getEligiblePromotionsCallable, quoteSubscriptionCouponCallable } from '../../shared/services/auth'
 import { uploadPaymentProof, validatePaymentProofFile, uploadErrorMessage } from '../../shared/services/uploads'
 import { PageHeader } from '../../shared/components/ui/PageHeader'
 import { Loading } from '../../shared/components/ui/Loading'
@@ -113,6 +113,10 @@ export const MerchantSubscription: FunctionalComponent = () => {
   const [targetPlanId, setTargetPlanId] = useState<string>('')
   const [changing, setChanging] = useState(false)
   const [purchasingOfferId, setPurchasingOfferId] = useState<string | null>(null)
+  const [promoCode, setPromoCode] = useState('')
+  const [promoQuote, setPromoQuote] = useState<{ originalPrice: number; discountAmount: number; finalPrice: number } | null>(null)
+  const [promoError, setPromoError] = useState('')
+  const [promoApplying, setPromoApplying] = useState(false)
 
   useEffect(() => {
     if (!storeId) return
@@ -214,6 +218,44 @@ export const MerchantSubscription: FunctionalComponent = () => {
     }
   }
 
+  const applyPromoCode = async () => {
+    const code = promoCode.trim().toUpperCase()
+    if (!code || !subscription) return
+    setPromoError('')
+    setPromoApplying(true)
+    try {
+      const amount = Number(currentMonthlyPrice || nextAmount || plan?.priceMonthly || 0)
+      const billingCycle = (subscription.billingCycle as 'monthly' | 'yearly') || 'monthly'
+      const result: any = await quoteSubscriptionCouponCallable({ code, planId: subscription.planId, billingCycle, amount })
+      const data = result.data as { originalPrice: number; discountAmount: number; finalPrice: number }
+      if (data.finalPrice < 1) throw new Error('لا يمكن أن يجعل الاشتراك مجانياً')
+      setPromoQuote(data)
+      setPromoError('')
+      toast.push('تم تطبيق كود الخصم', `الخصم ${formatCurrency(data.discountAmount, currency)} — الإجمالي ${formatCurrency(data.finalPrice, currency)}`, 'success')
+    } catch (err: any) {
+      setPromoQuote(null)
+      const msg = String(err?.message || '')
+      let friendly = msg
+      if (msg.includes('غير صحيح')) friendly = 'كود الخصم غير صحيح'
+      else if (msg.includes('انتهت صلاحية')) friendly = 'انتهت صلاحية كود الخصم'
+      else if (msg.includes('تم استخدام هذا الكوبون')) friendly = 'تم استخدام هذا الكود مسبقًا على حسابك'
+      else if (msg.includes('غير متاح لهذه الباقة')) friendly = 'هذا الكود غير متاح لهذه الباقة'
+      else if (msg.includes('غير متاح لهذه الدورة')) friendly = 'هذا الكود غير متاح لطريقة الدفع المختارة'
+      else if (msg.includes('الحد الأقصى')) friendly = 'تم الوصول للحد الأقصى لاستخدام الكود'
+      else if (msg.includes('لم يبدأ بعد')) friendly = 'الكود لم يبدأ بعد'
+      else if (msg.includes('غير مفعل')) friendly = 'الكود غير مفعل'
+      else if (msg.includes('لا يمكن أن يتجاوز') || msg.includes('لا يمكن أن تجعل') || msg.includes('يجب ألا يقل')) friendly = 'هذا الكود لا يمكن أن يجعل الاشتراك مجانياً'
+      else if (!friendly) friendly = 'كود الخصم غير صالح'
+      setPromoError(friendly)
+    } finally { setPromoApplying(false) }
+  }
+
+  const clearPromoCode = () => {
+    setPromoCode('')
+    setPromoQuote(null)
+    setPromoError('')
+  }
+
   const submitPayment = async (e: Event) => {
     e.preventDefault()
     setError('')
@@ -239,6 +281,7 @@ export const MerchantSubscription: FunctionalComponent = () => {
         reference: reference.trim(),
         note: note.trim(),
         screenshotUrl,
+        ...(promoQuote && promoCode.trim() && !pendingPurchaseRequest && !pendingChangeRequest ? { couponCode: promoCode.trim().toUpperCase() } : {}),
       })
       toast.push('تم إرسال طلب التفعيل بنجاح', undefined, 'success')
       setMethod('')
@@ -500,7 +543,8 @@ export const MerchantSubscription: FunctionalComponent = () => {
                 <h3 className="mk-pricing-name">امتلك متجرك</h3>
                 {offer.description && <p className="mk-pricing-desc">{offer.description}</p>}
                 <div className="mk-pricing-price"><strong>{formatCurrency(Number(offer.oneTimePrice || 0), currency)}</strong><span>دفعة واحدة</span></div>
-                <p className="muted small">حق استخدام دائم لمتجر واحد داخل Matjari، ولا يشمل ملكية المنصة أو الكود المصدري أو المزايا Premium المستقبلية تلقائياً.</p>
+                <p className="muted small">حق استخدام دائم لمتجر واحد — 1000 منتج، 1500 طلب/شهر، 3 أعضاء، 2GB، 20 رابط، 2 صفحة.</p>
+                <p className="muted small">حق استخدام دائم لمتجر واحد داخل Matjari، ولا يشمل ملكية المنصة أو الكود المصدري أو المزايا Premium المستقبلية تلقائياً. رسوم الخدمات الخارجية غير مشمولة.</p>
                 {pendingPurchaseRequest ? (
                   <Badge tone="amber">طلب الشراء قيد المراجعة</Badge>
                 ) : (
@@ -619,6 +663,28 @@ export const MerchantSubscription: FunctionalComponent = () => {
                   <div className="payment-instructions-head"><Icon name="info" /> تعليمات الدفع</div>
                   <p>{settings.paymentInstructions}</p>
                   {settings.paymentContact && <p className="muted small">للاستفسار: {settings.paymentContact}</p>}
+                </div>
+              )}
+
+              {!pendingPurchaseRequest && !pendingChangeRequest && (
+                <div className="promo-code-section mb-3" style={{ border: '1px solid #e2e8f0', borderRadius: 8, padding: 12 }}>
+                  <label className="field-label">لديك كود خصم؟</label>
+                  <div className="flex" style={{ gap: 8, alignItems: 'flex-end' }}>
+                    <div style={{ flex: 1 }}>
+                      <Input placeholder="كود الخصم" value={promoCode} onChange={(v) => { setPromoCode(v.toUpperCase()); setPromoError('') }} />
+                    </div>
+                    <Button type="button" variant="outline" loading={promoApplying} onClick={applyPromoCode} disabled={!promoCode.trim()}>تطبيق</Button>
+                    {promoQuote && <Button type="button" variant="ghost" onClick={clearPromoCode}>إزالة</Button>}
+                  </div>
+                  {promoError && <p className="field-error" style={{ marginTop: 8 }}>{promoError}</p>}
+                  {promoQuote && (
+                    <div className="promo-quote-breakdown mt-2" style={{ background: '#f8fafc', padding: 12, borderRadius: 8, marginTop: 12 }}>
+                      <div className="flex-between"><span>سعر الباقة:</span><strong>{formatCurrency(promoQuote.originalPrice, currency)}</strong></div>
+                      <div className="flex-between" style={{ color: '#16a34a' }}><span>الخصم:</span><strong>-{formatCurrency(promoQuote.discountAmount, currency)}</strong></div>
+                      <div className="flex-between" style={{ fontWeight: 700, borderTop: '1px solid #e2e8f0', paddingTop: 8, marginTop: 8 }}><span>المبلغ المطلوب:</span><strong>{formatCurrency(promoQuote.finalPrice, currency)}</strong></div>
+                    </div>
+                  )}
+                  {!promoQuote && !promoError && <p className="muted small" style={{ marginTop: 6 }}>كود واحد فقط في عملية الدفع — لا يطبق على التجديد أو تغيير الباقة تلقائياً.</p>}
                 </div>
               )}
 
