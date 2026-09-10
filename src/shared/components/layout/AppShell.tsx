@@ -5,9 +5,10 @@ import { doc, getDoc } from 'firebase/firestore'
 import { useAuth } from '../../hooks/useAuth'
 import { useTheme } from '../../hooks/useTheme'
 import { logout, exitImpersonationCallable } from '../../services/auth'
+import { signInWithCustomToken } from 'firebase/auth'
 import { Avatar } from '../ui/Avatar'
 import { Dropdown } from '../ui/Dropdown'
-import { db } from '../../firebase'
+import { auth, db } from '../../firebase'
 import { NAV_GROUPS, ROLE_LABELS, type NavGroup, type NavItem } from '../../utils/constants'
 import { Icon } from '../ui/Icon'
 import './AppShell.css'
@@ -21,6 +22,7 @@ import { useSubscription } from '../../hooks/useSubscription'
 import { canUseFeature, getPlanLimit, isPlanLimitUnlimited } from '../../services/subscription'
 import { NotificationPopover } from '../notification/NotificationPopover'
 import { useToast } from '../../hooks/useToast'
+import { Button } from '../ui/Button'
 
 interface Props {
   navKey: 'platform' | 'dashboard'
@@ -109,7 +111,7 @@ const CollapsedSidebarRail: FunctionalComponent<CollapsedSidebarRailProps> = ({
 
 export const AppShell: FunctionalComponent<Props> = ({ navKey, brand, brandLogo, storeSwitcher, storefrontHref, children }) => {
   const storefrontLabel = storefrontHref?.includes('preview=1') ? 'معاينة المتجر' : 'فتح المتجر المنشور'
-  const { user } = useAuth()
+  const { user, refreshUser } = useAuth()
   const toast = useToast()
   const theme = useTheme()
   const isDarkTheme = theme.theme === 'dark'
@@ -228,9 +230,23 @@ export const AppShell: FunctionalComponent<Props> = ({ navKey, brand, brandLogo,
   const handleExitImpersonation = async () => {
     setExiting(true)
     try {
-      await exitImpersonationCallable()
-      await logout()
-      window.location.href = '/login?role=platform'
+      const result: any = await exitImpersonationCallable()
+      const adminToken = result.data?.customToken
+      if (!adminToken) throw new Error('لم يتم استعادة جلسة إدارة المنصة')
+
+      const credential = await signInWithCustomToken(auth, adminToken)
+      const adminProfile = await getDoc(doc(db, 'users', credential.user.uid))
+      if (!adminProfile.exists() || adminProfile.data()?.role !== 'superAdmin') {
+        throw new Error('تعذر التحقق من جلسة إدارة المنصة')
+      }
+      await refreshUser()
+      window.location.href = '/platform/merchants'
+    } catch (error) {
+      toast.push(
+        'تعذر العودة إلى إدارة المنصة',
+        error instanceof Error ? error.message : 'حاول مرة أخرى.',
+        'error',
+      )
     } finally {
       setExiting(false)
     }
@@ -319,15 +335,6 @@ export const AppShell: FunctionalComponent<Props> = ({ navKey, brand, brandLogo,
 
   const sidebarContent = (
     <Fragment>
-      {impersonating && (
-        <div className="impersonation-banner">
-          <Icon name="admin_panel_settings" />
-          <span>أنت الآن داخل حساب {user?.name || 'التاجر'} بوضع الدعم</span>
-          <button type="button" className="btn btn-primary btn-sm" onClick={handleExitImpersonation} disabled={exiting}>
-            {exiting ? 'جاري الخروج...' : 'العودة إلى إدارة المنصة'}
-          </button>
-        </div>
-      )}
       <div className="sidebar-top">
         <Link
           href={navKey === 'platform' ? '/platform' : '/dashboard'}
@@ -539,6 +546,28 @@ export const AppShell: FunctionalComponent<Props> = ({ navKey, brand, brandLogo,
               </span>
             </div>
           </AdminTopbar>
+          {navKey === 'dashboard' && impersonating && (
+            <section className="support-mode-bar" role="status" aria-label="وضع الدعم نشط">
+              <div className="support-mode-bar__identity">
+                <span className="support-mode-bar__icon" aria-hidden="true"><Icon name="admin_panel_settings" /></span>
+                <div>
+                  <strong>وضع الدعم نشط</strong>
+                  <p>أنت الآن تعرض حساب {user?.name || 'التاجر'} — متجر {brand}</p>
+                </div>
+              </div>
+              <Button
+                variant="outline"
+                size="sm"
+                icon="keyboard_return"
+                loading={exiting}
+                disabled={exiting}
+                onClick={handleExitImpersonation}
+                className="support-mode-bar__return"
+              >
+                {exiting ? 'جارٍ العودة...' : 'العودة إلى إدارة المنصة'}
+              </Button>
+            </section>
+          )}
           <div className="app-shell-body">
             <AdminSidebar
               onMouseEnter={handleSidebarEnter}

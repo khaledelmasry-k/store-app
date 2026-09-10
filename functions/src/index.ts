@@ -6908,33 +6908,53 @@ export const impersonate = onCall(async (request: CallableRequest<{ storeId?: st
 // ─────────────────────────────────────────────────────────────
 export const exitImpersonation = onCall(async (request: CallableRequest) => {
   if (!request.auth) throw new HttpsError('unauthenticated', 'يجب تسجيل الدخول')
-  const snap = await db.doc(`users/${request.auth.uid}`).get()
-  const user = snap.data()
-  if (!user) throw new HttpsError('not-found', 'الحساب غير موجود')
-  if (!user.impersonatedBy) {
-    // nothing to exit — not an impersonated session
-    return { ok: true }
+  const merchantUid = request.auth.uid
+  const merchantRef = db.doc(`users/${merchantUid}`)
+  const merchantSnap = await merchantRef.get()
+  const merchant = merchantSnap.data()
+  if (!merchant) throw new HttpsError('not-found', 'الحساب غير موجود')
+  if (merchant.role !== 'merchant') throw new HttpsError('permission-denied', 'وضع الدعم متاح لحسابات التجار فقط')
+  if (!merchant.impersonatedBy) throw new HttpsError('failed-precondition', 'جلسة الدعم غير نشطة')
+
+  const expiresAt = merchant.impersonatedUntil
+  const expiryMs = typeof expiresAt?.toMillis === 'function'
+    ? expiresAt.toMillis()
+    : typeof expiresAt?.seconds === 'number'
+      ? expiresAt.seconds * 1000
+      : null
+  if (expiryMs !== null && expiryMs <= Date.now()) {
+    throw new HttpsError('failed-precondition', 'انتهت صلاحية جلسة الدعم')
   }
-  const adminUid = user.impersonatedBy
-  await db.doc(`users/${request.auth.uid}`).update({
-    impersonatedBy: FieldValue.delete(),
-    impersonatedUntil: FieldValue.delete(),
-    impersonatedStoreId: FieldValue.delete(),
-    impersonatedMerchantId: FieldValue.delete(),
+
+  const adminUid = merchant.impersonatedBy
+  const adminSnap = await db.doc(`users/${adminUid}`).get()
+  const admin = adminSnap.data()
+  if (!adminSnap.exists || admin?.role !== 'superAdmin') {
+    throw new HttpsError('permission-denied', 'حساب إدارة المنصة غير صالح')
+  }
+
+  const customToken = await auth.createCustomToken(adminUid)
+  const auditRef = db.collection('auditLogs').doc()
+  await db.runTransaction(async (transaction) => {
+    transaction.update(merchantRef, {
+      impersonatedBy: FieldValue.delete(),
+      impersonatedUntil: FieldValue.delete(),
+      impersonatedStoreId: FieldValue.delete(),
+      impersonatedMerchantId: FieldValue.delete(),
+    })
+    transaction.set(auditRef, {
+      userId: adminUid,
+      action: 'impersonation_ended',
+      resource: 'users',
+      resourceId: merchantUid,
+      actorSuperAdminId: adminUid,
+      merchantId: merchantUid,
+      storeId: merchant.impersonatedStoreId || null,
+      createdAt: now(),
+      createdBy: adminUid,
+    })
   })
-  // Record the exit in the admin's audit trail
-  await db.collection('auditLogs').add({
-    userId: adminUid,
-    action: 'impersonation_exited',
-    resource: 'users',
-    resourceId: request.auth.uid,
-    actorSuperAdminId: adminUid,
-    merchantId: request.auth.uid,
-    storeId: user.impersonatedStoreId || null,
-    createdAt: now(),
-    createdBy: adminUid,
-  })
-  return { ok: true }
+  return { ok: true, customToken }
 })
 
 // ─────────────────────────────────────────────────────────────
