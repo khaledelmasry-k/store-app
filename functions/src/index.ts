@@ -3082,6 +3082,9 @@ export const requestStorePurchase = onCall(async (request: CallableRequest<{ sto
 // ─────────────────────────────────────────────────────────────
 type SubscriptionCoupon = {
   code: string
+  name?: string
+  description?: string
+  internalNotes?: string
   active?: boolean
   discountType: 'percentage' | 'fixed'
   discountValue: number
@@ -3091,9 +3094,24 @@ type SubscriptionCoupon = {
   startsAt?: any
   expiresAt?: any
   maxRedemptions?: number
+  globalMaxRedemptions?: number
   redemptionCount?: number
   perMerchantLimit?: number
   partner?: string
+  source?: string
+  createdAt?: any
+  createdBy?: string
+  updatedAt?: any
+}
+
+const MIN_PAYABLE_AMOUNT_EGP = 1
+const MAX_PERCENT_DISCOUNT = 99
+
+function normalizeDiscountType(raw: unknown, fallback: string = 'percentage'): 'percentage' | 'fixed' {
+  const normalized = String(raw || fallback).trim().toUpperCase()
+  if (normalized === 'FIXED' || normalized === 'fixed') return 'fixed'
+  if (normalized === 'PERCENT' || normalized === 'PERCENTAGE' || normalized === 'percentage') return 'percentage'
+  return fallback === 'fixed' ? 'fixed' : 'percentage'
 }
 
 function couponDateMillis(value: any): number | null {
@@ -3115,21 +3133,45 @@ function couponQuote(coupon: SubscriptionCoupon, planId: string, billingCycle: s
   if (coupon.applicablePlanIds?.length && !coupon.applicablePlanIds.includes(planId)) throw new HttpsError('failed-precondition', 'الكوبون غير متاح لهذه الباقة')
   if (coupon.applicableBillingCycles?.length && !coupon.applicableBillingCycles.includes(billingCycle)) throw new HttpsError('failed-precondition', 'الكوبون غير متاح لهذه الدورة')
   if (coupon.firstCycleOnly && periodNumber > 1) throw new HttpsError('failed-precondition', 'الكوبون متاح للدورة الأولى فقط')
+  // Global limit enforcement at quote time as well (soft check — transactional check is authoritative)
+  const globalLimit = coupon.globalMaxRedemptions ?? coupon.maxRedemptions
+  if (globalLimit != null && Number(globalLimit) > 0 && Number(coupon.redemptionCount || 0) >= Number(globalLimit)) throw new HttpsError('resource-exhausted', 'تم الوصول للحد الأقصى لاستخدام الكود')
   const value = Number(coupon.discountValue || 0)
-  const discount = coupon.discountType === 'percentage' ? amount * Math.min(100, Math.max(0, value)) / 100 : Math.max(0, value)
-  return { originalPrice: amount, discountAmount: Math.min(amount, discount), finalPrice: Math.max(0, amount - discount) }
+  if (!Number.isFinite(value) || value <= 0) throw new HttpsError('failed-precondition', 'قيمة الكوبون غير صالحة')
+  // Enforce business policy: no 100% free month — percentage max 99%, fixed must leave MIN_PAYABLE
+  const normalizedType = normalizeDiscountType(coupon.discountType, 'percentage')
+  if (normalizedType === 'percentage' && value > MAX_PERCENT_DISCOUNT) throw new HttpsError('failed-precondition', `الخصم بالنسبة المئوية لا يمكن أن يتجاوز ${MAX_PERCENT_DISCOUNT}%`)
+  const discount = normalizedType === 'percentage' ? amount * Math.min(MAX_PERCENT_DISCOUNT, Math.max(0, value)) / 100 : Math.max(0, value)
+  if (discount <= 0) throw new HttpsError('failed-precondition', 'قيمة الخصم غير صالحة')
+  if (discount >= amount) throw new HttpsError('failed-precondition', 'قيمة الخصم لا يمكن أن تجعل المبلغ صفراً')
+  const finalPrice = amount - discount
+  if (finalPrice < MIN_PAYABLE_AMOUNT_EGP) throw new HttpsError('failed-precondition', `المبلغ النهائي يجب ألا يقل عن ${MIN_PAYABLE_AMOUNT_EGP} ج.م`)
+  return { originalPrice: amount, discountAmount: discount, finalPrice }
 }
 
-export const quoteSubscriptionCoupon = onCall(async (request: CallableRequest<{ code?: string; planId?: string; billingCycle?: string; amount?: number }>) => {
+export const quoteSubscriptionCoupon = onCall(async (request: CallableRequest<{ code?: string; planId?: string; billingCycle?: string; amount?: number; storeId?: string }>) => {
   const code = String(request.data?.code || '').trim().toUpperCase()
   const planId = String(request.data?.planId || '')
   const billingCycle = request.data?.billingCycle === 'yearly' ? 'yearly' : 'monthly'
-  const amount = Number(request.data?.amount || 0)
-  if (!code || !planId || !Number.isFinite(amount) || amount <= 0) throw new HttpsError('invalid-argument', 'بيانات الكوبون غير مكتملة')
+  const clientAmount = Number(request.data?.amount || 0)
+  if (!code || !planId) throw new HttpsError('invalid-argument', 'بيانات الكوبون غير مكتملة')
   const snap = await db.collection('subscriptionCoupons').where('code', '==', code).limit(1).get()
-  if (snap.empty) throw new HttpsError('not-found', 'كود الخصم غير صالح')
-  const quote = couponQuote(snap.docs[0].data() as SubscriptionCoupon, planId, billingCycle, amount, 1)
-  return { ...quote, code, partner: snap.docs[0].data()?.partner || null }
+  if (snap.empty) throw new HttpsError('not-found', 'كود الخصم غير صحيح')
+  const coupon = snap.docs[0].data() as SubscriptionCoupon
+  // Server is source of truth for price — fetch canonical plan price
+  let canonicalAmount = clientAmount
+  try {
+    const planSnap = await db.doc(`plans/${planId}`).get()
+    const planData = planSnap.exists ? planSnap.data() : null
+    const canonical = CANONICAL_PLANS.find((c) => c.id === planId) as any
+    const merged = canonical ? { ...planData, ...canonical } : planData
+    const monthly = Number(merged?.priceMonthly || 0)
+    const yearly = Number(merged?.priceYearly || 0)
+    canonicalAmount = billingCycle === 'yearly' ? (yearly || monthly * 10 || clientAmount) : monthly || clientAmount
+  } catch { canonicalAmount = clientAmount }
+  if (!Number.isFinite(canonicalAmount) || canonicalAmount <= 0) throw new HttpsError('failed-precondition', 'تعذر تحديد سعر الباقة')
+  const quote = couponQuote(coupon, planId, billingCycle, canonicalAmount, 1)
+  return { ...quote, code, partner: (coupon as any)?.partner || null }
 })
 
 export const manageSubscriptionCoupon = onCall(async (request: CallableRequest<{ operation?: 'create' | 'update'; couponId?: string; coupon?: Record<string, unknown> }>) => {
@@ -3138,37 +3180,94 @@ export const manageSubscriptionCoupon = onCall(async (request: CallableRequest<{
   const operation = request.data?.operation
   const input = request.data?.coupon || {}
   if (operation !== 'create' && operation !== 'update') throw new HttpsError('invalid-argument', 'عملية الكوبون غير صالحة')
-  const code = String(input.code || '').trim().toUpperCase()
-  const ref = operation === 'update' && request.data?.couponId ? db.doc(`subscriptionCoupons/${request.data.couponId}`) : db.collection('subscriptionCoupons').doc()
+  const codeRaw = String(input.code || '').trim().toUpperCase()
+  const code = codeRaw ? codeRaw : ''
   if (operation === 'create' && !code) throw new HttpsError('invalid-argument', 'كود الكوبون مطلوب')
-  if (operation === 'create') {
+  if (code && !/^[A-Z0-9_-]{3,20}$/.test(code)) throw new HttpsError('invalid-argument', 'كود الخصم يجب أن يكون 3-20 حرف إنجليزي/أرقام/-/_')
+  const ref = operation === 'update' && request.data?.couponId ? db.doc(`subscriptionCoupons/${request.data.couponId}`) : db.collection('subscriptionCoupons').doc()
+  if (operation === 'create' && code) {
     const duplicate = await db.collection('subscriptionCoupons').where('code', '==', code).limit(1).get()
     if (!duplicate.empty) throw new HttpsError('already-exists', 'كود الخصم مستخدم بالفعل')
   }
   const existing = operation === 'update' ? await ref.get() : null
   if (operation === 'update' && !existing?.exists) throw new HttpsError('not-found', 'الكوبون غير موجود')
   const current = existing?.data() || {}
-  const data = {
+  const discountType = normalizeDiscountType((input as any).discountType ?? (input as any).discount_type ?? current.discountType ?? 'percentage', 'percentage')
+  const rawDiscountValue = Number((input as any).discountValue ?? (input as any).discount_value ?? current.discountValue ?? 0)
+  // Validate discount value per business policy at creation/update time (fixed amount checked against min plan price for safety)
+  if (!Number.isFinite(rawDiscountValue) || rawDiscountValue <= 0) throw new HttpsError('invalid-argument', 'قيمة الخصم غير صالحة')
+  if (discountType === 'percentage' && (rawDiscountValue > MAX_PERCENT_DISCOUNT || rawDiscountValue < 1)) throw new HttpsError('invalid-argument', `نسبة الخصم يجب أن تكون بين 1 و ${MAX_PERCENT_DISCOUNT}`)
+  if (discountType === 'fixed' && rawDiscountValue < MIN_PAYABLE_AMOUNT_EGP) throw new HttpsError('invalid-argument', 'قيمة الخصم الثابت يجب أن تكون 1 ج.م على الأقل')
+  // For fixed, ensure it doesn't exceed cheapest paid plan minus MIN_PAYABLE (149 -1 =148) to avoid zero in any plan
+  if (discountType === 'fixed') {
+    const cheapestPlan = Math.min(...CANONICAL_PLANS.filter((p) => (p as any).billingModel !== 'one_time' && (p as any).active !== false && !(p as any).archived).map((p) => Number((p as any).priceMonthly || 0)).filter((v) => v > 0))
+    if (Number.isFinite(cheapestPlan) && rawDiscountValue >= cheapestPlan) throw new HttpsError('invalid-argument', `الخصم الثابت يجب أن يكون أقل من سعر أرخص باقة (${cheapestPlan} ج.م)`)
+  }
+  const applicablePlanIds = Array.isArray((input as any).applicablePlanIds)
+    ? (input as any).applicablePlanIds.map((v: unknown) => String(v)).filter(Boolean)
+    : Array.isArray((input as any).applicable_plan_ids)
+      ? (input as any).applicable_plan_ids.map((v: unknown) => String(v)).filter(Boolean)
+      : (current.applicablePlanIds || ['plan-basic', 'plan-starter', 'plan-growth', 'plan-pro'])
+  const applicableBillingCycles = Array.isArray((input as any).applicableBillingCycles)
+    ? (input as any).applicableBillingCycles.map((v: unknown) => String(v) === 'yearly' ? 'yearly' : 'monthly')
+    : Array.isArray((input as any).applicable_billing_cycles)
+      ? (input as any).applicable_billing_cycles.map((v: unknown) => String(v) === 'yearly' ? 'yearly' : 'monthly')
+      : (current.applicableBillingCycles || ['monthly'])
+  if (applicablePlanIds.length === 0) throw new HttpsError('invalid-argument', 'يجب اختيار باقة واحدة على الأقل')
+  if (applicableBillingCycles.length === 0) throw new HttpsError('invalid-argument', 'يجب اختيار دورة فوترة واحدة على الأقل')
+  const startsAtRaw = (input as any).startsAt ?? (input as any).starts_at ?? current.startsAt ?? null
+  const expiresAtRaw = (input as any).expiresAt ?? (input as any).expires_at ?? current.expiresAt ?? null
+  const startsMs = startsAtRaw ? couponDateMillis(startsAtRaw) ?? (startsAtRaw ? new Date(startsAtRaw).getTime() : null) : null
+  const expiresMs = expiresAtRaw ? couponDateMillis(expiresAtRaw) ?? (expiresAtRaw ? new Date(expiresAtRaw).getTime() : null) : null
+  if (startsMs != null && expiresMs != null && expiresMs <= startsMs) throw new HttpsError('invalid-argument', 'تاريخ الانتهاء يجب أن يكون بعد تاريخ البداية')
+  const globalMaxRaw = (input as any).globalMaxRedemptions ?? (input as any).global_max_redemptions ?? (input as any).maxRedemptions ?? current.globalMaxRedemptions ?? current.maxRedemptions ?? null
+  const globalMax = globalMaxRaw == null || globalMaxRaw === '' ? null : Math.max(0, Number(globalMaxRaw))
+  if (globalMax != null && (!Number.isFinite(globalMax) || globalMax < 0)) throw new HttpsError('invalid-argument', 'الحد الأقصى للاستخدام غير صالح')
+  const name = String((input as any).name || (input as any).internalName || current.name || '').slice(0, 120)
+  const description = String((input as any).description || (input as any).internalDescription || current.description || '').slice(0, 500)
+  const internalNotes = String((input as any).internalNotes || (input as any).notes || current.internalNotes || '').slice(0, 1000)
+  const data: Record<string, unknown> = {
     code: code || current.code,
+    name: name || code || current.code,
+    description,
+    internalNotes,
     active: input.active !== undefined ? input.active === true : current.active !== false,
-    discountType: input.discountType === 'fixed' ? 'fixed' : (current.discountType || 'percentage'),
-    discountValue: Number(input.discountValue ?? current.discountValue ?? 0),
-    applicablePlanIds: Array.isArray(input.applicablePlanIds) ? input.applicablePlanIds : (current.applicablePlanIds || ['plan-basic', 'plan-starter', 'plan-growth', 'plan-pro']),
-    applicableBillingCycles: Array.isArray(input.applicableBillingCycles) ? input.applicableBillingCycles : (current.applicableBillingCycles || ['monthly']),
-    firstCycleOnly: input.firstCycleOnly !== undefined ? input.firstCycleOnly === true : current.firstCycleOnly === true,
-    startsAt: input.startsAt || current.startsAt || null,
-    expiresAt: input.expiresAt || current.expiresAt || null,
-    maxRedemptions: input.maxRedemptions == null ? (current.maxRedemptions || null) : Math.max(0, Number(input.maxRedemptions)),
+    discountType,
+    discountValue: rawDiscountValue,
+    applicablePlanIds,
+    applicableBillingCycles,
+    firstCycleOnly: (input as any).firstCycleOnly !== undefined ? (input as any).firstCycleOnly === true : current.firstCycleOnly !== false,
+    startsAt: startsAtRaw || null,
+    expiresAt: expiresAtRaw || null,
+    globalMaxRedemptions: globalMax,
+    maxRedemptions: globalMax,
     redemptionCount: Number(current.redemptionCount || 0),
-    perMerchantLimit: input.perMerchantLimit == null ? (current.perMerchantLimit || 1) : Math.max(1, Number(input.perMerchantLimit)),
-    partner: String(input.partner || current.partner || ''),
+    perMerchantLimit: 1,
+    partner: String((input as any).partner || (input as any).source || current.partner || '').slice(0, 80),
+    source: String((input as any).source || (input as any).partner || current.source || current.partner || '').slice(0, 80),
     createdAt: current.createdAt || now(),
     createdBy: current.createdBy || request.auth.uid,
     updatedAt: now(),
   }
-  if (!data.code || !Number.isFinite(data.discountValue) || data.discountValue <= 0 || (data.discountType === 'percentage' && data.discountValue > 100)) throw new HttpsError('invalid-argument', 'قيمة الخصم غير صالحة')
+  if (!data.code || !Number.isFinite(data.discountValue as number) || (data.discountValue as number) <= 0) throw new HttpsError('invalid-argument', 'قيمة الخصم غير صالحة')
   await ref.set(data, { merge: true })
   return { ok: true, couponId: ref.id }
+})
+
+export const listSubscriptionCoupons = onCall(async (request: CallableRequest) => {
+  await assertPlatformAdmin(request)
+  const snap = await db.collection('subscriptionCoupons').orderBy('createdAt', 'desc').limit(100).get()
+  const coupons = snap.docs.map((d) => ({ id: d.id, ...d.data() }))
+  return { coupons }
+})
+
+export const getSubscriptionCouponRedemptions = onCall(async (request: CallableRequest<{ couponId?: string }>) => {
+  await assertPlatformAdmin(request)
+  const couponId = String(request.data?.couponId || '').trim()
+  if (!couponId) throw new HttpsError('invalid-argument', 'couponId مطلوب')
+  const snap = await db.collection('subscriptionCouponRedemptions').where('couponId', '==', couponId).orderBy('redeemedAt', 'desc').limit(100).get()
+  const redemptions = snap.docs.map((d) => ({ id: d.id, ...d.data() }))
+  return { redemptions }
 })
 
 // Subscription activation requests remain server-priced. If a registration
@@ -3344,16 +3443,30 @@ export const submitPaymentRequest = onCall(async (request: CallableRequest<{ sub
   if (amount <= 0) throw new HttpsError('failed-precondition', 'تعذر تحديد مبلغ الاشتراك')
 
   const pendingCouponCode = String(sub.pendingSubscriptionCouponCode || '').trim().toUpperCase()
+  const requestedCouponCode = String((request.data as any)?.couponCode || (request.data as any)?.promoCode || '').trim().toUpperCase()
+  // Prefer explicitly requested coupon at payment time; fallback to pending code stored at registration
+  const effectiveCouponCode = requestedCouponCode || pendingCouponCode
   let couponSnapshot: any = null
   let couponFinancial = { originalPrice: amount, discountAmount: 0, finalPrice: amount }
-  if (pendingCouponCode && periodNumber === 1 && !isYearly) {
-    const couponQuery = await db.collection('subscriptionCoupons').where('code', '==', pendingCouponCode).limit(1).get()
+  if (effectiveCouponCode) {
+    // Coupon only applies to first paid cycle monthly — yearly and renewals are ineligible; single promo per payment
+    if (periodNumber !== 1 || isYearly) {
+      throw new HttpsError('failed-precondition', 'كود الخصم متاح للدورة الأولى الشهرية فقط')
+    }
+    // Ensure only one coupon per subscription payment — ignore any additional codes
+    const couponQuery = await db.collection('subscriptionCoupons').where('code', '==', effectiveCouponCode).limit(1).get()
     if (!couponQuery.empty) {
       couponSnapshot = { id: couponQuery.docs[0].id, ...couponQuery.docs[0].data() }
+      // Server canonical price only — client cannot influence amount; ignore client-supplied price/discount
       couponFinancial = couponQuote(couponSnapshot, sub.planId, sub.billingCycle || 'monthly', amount, periodNumber)
+      if (couponFinancial.finalPrice < MIN_PAYABLE_AMOUNT_EGP) throw new HttpsError('failed-precondition', `المبلغ النهائي يجب ألا يقل عن ${MIN_PAYABLE_AMOUNT_EGP} ج.م`)
+    } else {
+      throw new HttpsError('not-found', 'كود الخصم غير صحيح')
     }
   }
   const finalAmount = couponFinancial.finalPrice
+  if (finalAmount < MIN_PAYABLE_AMOUNT_EGP) throw new HttpsError('failed-precondition', `المبلغ النهائي يجب ألا يقل عن ${MIN_PAYABLE_AMOUNT_EGP} ج.م`)
+  const effectiveCouponForPayment = effectiveCouponCode || ''
 
   const payRef = db.collection('subscriptionPayments').doc()
   await db.runTransaction(async (tx) => {
@@ -3373,9 +3486,40 @@ export const submitPaymentRequest = onCall(async (request: CallableRequest<{ sub
       const redemption = await tx.get(redemptionRef)
       const currentCoupon = couponCurrent.data() as SubscriptionCoupon | undefined
       if (!couponCurrent.exists || !currentCoupon) throw new HttpsError('failed-precondition', 'الكوبون غير صالح')
+      // Atomic one-use-per-merchant check
       if (redemption.exists) throw new HttpsError('already-exists', 'تم استخدام هذا الكوبون لهذا التاجر من قبل')
-      if (currentCoupon.maxRedemptions && Number(currentCoupon.redemptionCount || 0) >= Number(currentCoupon.maxRedemptions)) throw new HttpsError('resource-exhausted', 'اكتمل عدد استخدامات الكوبون')
-      tx.create(redemptionRef, { couponId: couponSnapshot.id, code: pendingCouponCode, merchantId: request.auth!.uid, storeId: sub.storeId, planId: sub.planId, billingCycle: sub.billingCycle || 'monthly', originalPrice: amount, discountAmount: couponFinancial.discountAmount, finalPrice: finalAmount, partner: currentCoupon.partner || null, redeemedAt: now(), createdAt: now() })
+      const globalLimit = (currentCoupon as any).globalMaxRedemptions ?? currentCoupon.maxRedemptions
+      if (globalLimit != null && Number(globalLimit) > 0 && Number(currentCoupon.redemptionCount || 0) >= Number(globalLimit)) throw new HttpsError('resource-exhausted', 'تم الوصول للحد الأقصى لاستخدام الكود')
+      // Re-validate quote inside transaction with fresh coupon data to prevent race where coupon was changed to 100% after initial quote
+      const freshQuote = couponQuote(currentCoupon as SubscriptionCoupon, sub.planId, sub.billingCycle || 'monthly', amount, periodNumber)
+      if (freshQuote.finalPrice !== finalAmount || freshQuote.discountAmount !== couponFinancial.discountAmount) throw new HttpsError('failed-precondition', 'تغيرت بيانات الكوبون — حاول مرة أخرى')
+      if (freshQuote.finalPrice < MIN_PAYABLE_AMOUNT_EGP) throw new HttpsError('failed-precondition', `المبلغ النهائي يجب ألا يقل عن ${MIN_PAYABLE_AMOUNT_EGP} ج.م`)
+      // Store canonical snapshot for audit — immutable even if coupon later edited
+      tx.create(redemptionRef, {
+        couponId: couponSnapshot.id,
+        code: effectiveCouponForPayment,
+        merchantId: request.auth!.uid,
+        storeId: sub.storeId,
+        planId: sub.planId,
+        billingCycle: sub.billingCycle || 'monthly',
+        originalPrice: amount,
+        discountAmount: freshQuote.discountAmount,
+        finalPrice: freshQuote.finalPrice,
+        discountType: (currentCoupon as any).discountType,
+        discountValue: (currentCoupon as any).discountValue,
+        couponSnapshot: {
+          code: (currentCoupon as any).code,
+          discountType: (currentCoupon as any).discountType,
+          discountValue: (currentCoupon as any).discountValue,
+          applicablePlanIds: (currentCoupon as any).applicablePlanIds,
+          applicableBillingCycles: (currentCoupon as any).applicableBillingCycles,
+        },
+        partner: (currentCoupon as any).partner || null,
+        source: (currentCoupon as any).source || (currentCoupon as any).partner || null,
+        status: 'RESERVED',
+        redeemedAt: now(),
+        createdAt: now(),
+      })
       tx.update(couponRef, { redemptionCount: FieldValue.increment(1), updatedAt: now() })
     }
     tx.create(payRef, {
@@ -3388,7 +3532,7 @@ export const submitPaymentRequest = onCall(async (request: CallableRequest<{ sub
       originalPrice: amount,
       discountAmount: couponFinancial.discountAmount,
       finalPrice: finalAmount,
-      ...(couponSnapshot ? { couponCode: pendingCouponCode, partner: couponSnapshot.partner || null, couponRedemptionId: `${couponSnapshot.id}_${request.auth!.uid}` } : {}),
+      ...(couponSnapshot ? { couponCode: effectiveCouponForPayment, partner: couponSnapshot.partner || null, couponRedemptionId: `${couponSnapshot.id}_${request.auth!.uid}` } : {}),
       paymentPurpose: periodNumber <= 1 ? 'subscription_activation' : 'subscription_renewal',
       paymentMethod: String(paymentMethod),
       reference: String(reference).trim(),
@@ -3405,7 +3549,7 @@ export const submitPaymentRequest = onCall(async (request: CallableRequest<{ sub
   })
 
   await createBillingNotification(sub.storeId, request.auth.uid, 'تم إرسال طلب التفعيل', `تم استلام طلب تفعيل اشتراكك بمبلغ ${finalAmount} ج.م. وهو قيد المراجعة من إدارة المنصة.`)
-  await auditLog(sub.storeId, request.auth.uid, 'payment_submitted', 'subscriptionPayments', payRef.id, { amount: finalAmount, originalPrice: amount, discountAmount: couponFinancial.discountAmount, periodNumber, couponCode: pendingCouponCode || null })
+  await auditLog(sub.storeId, request.auth.uid, 'payment_submitted', 'subscriptionPayments', payRef.id, { amount: finalAmount, originalPrice: amount, discountAmount: couponFinancial.discountAmount, periodNumber, couponCode: effectiveCouponForPayment || null })
 
   return { id: payRef.id, amount: finalAmount, originalPrice: amount, discountAmount: couponFinancial.discountAmount, status: 'pending' }
 })
@@ -3554,8 +3698,25 @@ export const approvePaymentRequest = onCall(async (request: CallableRequest<{ pa
       else expectedAmount = liveAmount || snapAmount
       if (!expectedAmount || !Number.isFinite(expectedAmount) || expectedAmount <= 0) expectedAmount = liveAmount || snapAmount || Number(plan.priceMonthly || 0)
     }
-    if (!Number.isFinite(expectedAmount) || expectedAmount <= 0 || Number(pay.amount) !== expectedAmount) {
-      throw new HttpsError('failed-precondition', 'مبلغ الدفع لا يطابق السعر المحسوب من الخادم')
+    // Canonical pricing enforcement — coupon-discounted payments are allowed only when the snapshot matches
+    const hasCouponDiscount = !!(pay as any).couponCode || (pay as any).couponRedemptionId
+    if (hasCouponDiscount) {
+      if (changeSnap?.exists) throw new HttpsError('failed-precondition', 'كوبون الاشتراك لا ينطبق على تغيير الباقة')
+      if (cycle === 'yearly') throw new HttpsError('failed-precondition', 'كوبون الاشتراك متاح للدورة الشهرية فقط')
+      if (periodNumber !== 1) throw new HttpsError('failed-precondition', 'كوبون الاشتراك متاح للدورة الأولى فقط')
+      const original = Number((pay as any).originalPrice ?? (pay as any).original_price ?? expectedAmount)
+      const discount = Number((pay as any).discountAmount ?? (pay as any).discount_amount ?? 0)
+      const final = Number(pay.amount)
+      if (!Number.isFinite(original) || original !== expectedAmount) throw new HttpsError('failed-precondition', 'السعر الأصلي في طلب الدفع لا يطابق السعر الحقيقي')
+      if (!Number.isFinite(discount) || discount <= 0 || discount >= original) throw new HttpsError('failed-precondition', 'قيمة الخصم في طلب الدفع غير صالحة')
+      if (final !== original - discount) throw new HttpsError('failed-precondition', 'المبلغ النهائي لا يطابق الخصم المحسوب')
+      if (final < MIN_PAYABLE_AMOUNT_EGP) throw new HttpsError('failed-precondition', `المبلغ النهائي يجب ألا يقل عن ${MIN_PAYABLE_AMOUNT_EGP} ج.م`)
+      if (Number((pay as any).finalPrice ?? final) !== final) throw new HttpsError('failed-precondition', 'المبلغ النهائي غير متسق')
+      expectedAmount = final
+    } else {
+      if (!Number.isFinite(expectedAmount) || expectedAmount <= 0 || Number(pay.amount) !== expectedAmount) {
+        throw new HttpsError('failed-precondition', 'مبلغ الدفع لا يطابق السعر المحسوب من الخادم')
+      }
     }
     if (String(pay.planId || '') !== targetPlanId) {
       throw new HttpsError('failed-precondition', 'الباقة المرتبطة بالدفع غير متسقة')
@@ -3644,6 +3805,13 @@ export const approvePaymentRequest = onCall(async (request: CallableRequest<{ pa
   })
 
   if (result.alreadyApproved) return { ok: true, alreadyApproved: true }
+  // Mark coupon redemption as REDEEMED on successful activation (keep RESERVED->REDEEMED lifecycle)
+  if ((result.pay as any)?.couponRedemptionId) {
+    const redemptionId = String((result.pay as any).couponRedemptionId)
+    try {
+      await db.doc(`subscriptionCouponRedemptions/${redemptionId}`).set({ status: 'REDEEMED', redeemedAt: now(), updatedAt: now() }, { merge: true })
+    } catch {}
+  }
   if (result.purchase) {
     await recordBillingSnapshot(result.pay.storeId, {
       type: 'manual',
@@ -3676,7 +3844,7 @@ export const approvePaymentRequest = onCall(async (request: CallableRequest<{ pa
     note: result.changeRequestId ? 'اعتماد تغيير الباقة بعد موافقة الدفع' : 'تفعيل الاشتراك بعد موافقة الدفع',
   })
   await createBillingNotification(result.pay.storeId, result.store?.ownerId || null, 'تم تفعيل اشتراكك', `اشتراك ${result.plan?.name || result.pay.planName || ''} أصبح نشطاً. شكراً لثقتك — استمتع بالباقة!`)
-  await auditLog(result.pay.storeId, request.auth!.uid, result.changeRequestId ? 'subscription_change_approved' : 'payment_approved', 'subscriptionPayments', result.pay.id, { amount: result.expectedAmount, periodNumber: result.periodNumber, changeRequestId: result.changeRequestId })
+  await auditLog(result.pay.storeId, request.auth!.uid, result.changeRequestId ? 'subscription_change_approved' : 'payment_approved', 'subscriptionPayments', result.pay.id, { amount: result.expectedAmount, periodNumber: result.periodNumber, changeRequestId: result.changeRequestId, couponCode: (result.pay as any)?.couponCode || null, originalPrice: (result.pay as any)?.originalPrice || null, discountAmount: (result.pay as any)?.discountAmount || null })
   return { ok: true, alreadyApproved: false }
 })
 
@@ -3706,6 +3874,34 @@ export const rejectPaymentRequest = onCall(async (request: CallableRequest<{ pay
     const purchaseData = purchaseCurrent?.exists ? purchaseCurrent.data() : null
     const offerRef = purchaseData?.offerId ? db.doc(`plans/${purchaseData.offerId}`) : null
     const offerCurrent = offerRef ? await tx.get(offerRef) : null
+    // Prepare coupon redemption cleanup if this payment had a subscription coupon reserved
+    const couponRedemptionId = String(current.data()?.couponRedemptionId || (current.data() as any)?.couponCode ? `${current.data()?.couponCode}_${current.data()?.storeId}` : '')
+    const redemptionId = String((current.data() as any)?.couponRedemptionId || '')
+    let redemptionRef: DocumentReference | null = null
+    let redemptionSnap: FirebaseFirestore.DocumentSnapshot | null = null
+    let couponRef: DocumentReference | null = null
+    let couponSnap: FirebaseFirestore.DocumentSnapshot | null = null
+    if (redemptionId) {
+      redemptionRef = db.doc(`subscriptionCouponRedemptions/${redemptionId}`)
+      redemptionSnap = await tx.get(redemptionRef)
+      if (redemptionSnap.exists) {
+        const couponId = String((redemptionSnap.data() as any)?.couponId || redemptionId.split('_')[0] || '')
+        if (couponId) {
+          couponRef = db.doc(`subscriptionCoupons/${couponId}`)
+          couponSnap = await tx.get(couponRef)
+        }
+      } else {
+        // Fallback: try to derive couponId from pay.couponCode lookup (legacy)
+        const code = String(current.data()?.couponCode || '').trim().toUpperCase()
+        if (code) {
+          const q = await db.collection('subscriptionCoupons').where('code', '==', code).limit(1).get()
+          if (!q.empty) {
+            couponRef = db.doc(`subscriptionCoupons/${q.docs[0].id}`)
+            couponSnap = await tx.get(couponRef)
+          }
+        }
+      }
+    }
     tx.update(payRef, { status: 'rejected', reviewedBy: request.auth!.uid, reviewedAt: now(), reviewNote: reason || current.data()?.reviewNote || null, updatedAt: now() })
     if (changeRef) tx.update(changeRef, { status: 'rejected', processedAt: now(), updatedAt: now() })
     if (purchaseRef) tx.update(purchaseRef, { status: 'rejected', processedAt: now(), updatedAt: now() })
@@ -3714,6 +3910,14 @@ export const rejectPaymentRequest = onCall(async (request: CallableRequest<{ pay
       tx.update(offerRef, { launchOfferSoldCount: Math.max(0, sold - 1), updatedAt: now() })
     }
     if (!changeRef && pay.subscriptionId) tx.update(db.doc(`subscriptions/${pay.subscriptionId}`), { pendingPaymentId: FieldValue.delete(), updatedAt: now() })
+    // On rejection, release the coupon reservation so merchant can retry with same code (if still valid) — keep global count accurate
+    if (redemptionRef && redemptionSnap?.exists) {
+      tx.delete(redemptionRef)
+      if (couponRef && couponSnap?.exists) {
+        const currentCount = Number(couponSnap.data()?.redemptionCount || 0)
+        tx.update(couponRef, { redemptionCount: Math.max(0, currentCount - 1), updatedAt: now() })
+      }
+    }
   })
 
   await createBillingNotification(pay.storeId, null, 'تعذر تأكيد عملية الدفع', reason ? `لم يتم تأكيد عملية الدفع: ${reason}. يمكنك إرسال طلب آخر.` : 'تعذر تأكيد عملية الدفع. يمكنك إرسال طلب آخر بعد التحقق من البيانات.')
