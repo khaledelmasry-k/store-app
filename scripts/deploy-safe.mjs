@@ -26,9 +26,14 @@ if (target === 'production' && (project !== 'mk-store-app' || process.env.CONFIR
   process.exit(2)
 }
 
-const run = (command, args) => {
-  const result = spawnSync(command, args, { stdio: 'inherit' })
-  if (result.status !== 0) process.exit(result.status ?? 1)
+const run = (label, command, args, options = {}) => {
+  const result = spawnSync(command, args, { stdio: 'inherit', env: options.env ?? process.env })
+  if (result.status !== 0) {
+    console.error(`${label} FAIL`)
+    console.error(options.postDeploy ? 'PRODUCTION_RELEASE_FAILED' : 'RELEASE_BLOCKED')
+    process.exit(result.status ?? 1)
+  }
+  console.log(`${label} PASS`)
 }
 
 if (target === 'production') {
@@ -40,19 +45,28 @@ if (target === 'production') {
     process.exit(2)
   }
   // Metadata-only check. This command never reads the secret value.
-  run('firebase', ['functions:secrets:get', 'INTEGRATION_VAULT_KEY', '--project', project])
+  run('PRE_DEPLOY secret metadata', 'firebase', ['functions:secrets:get', 'INTEGRATION_VAULT_KEY', '--project', project])
 }
 
 // A deployment is impossible until every local safety gate is green.
-run('npm', ['run', 'typecheck'])
-run('npm', ['--prefix', 'functions', 'run', 'build'])
-run('npm', ['run', 'build', '--', '--mode', target])
-run('npm', ['run', 'verify:integration'])
-run('npm', ['run', 'verify:e2e'])
+run('PRE_DEPLOY typecheck', 'npm', ['run', 'typecheck'])
+run('PRE_DEPLOY functions build', 'npm', ['--prefix', 'functions', 'run', 'build'])
+run('PRE_DEPLOY production build', 'npm', ['run', 'build', '--', '--mode', target])
+run('PRE_DEPLOY integration', 'npm', ['run', 'verify:integration'])
+run('PRE_DEPLOY E2E', 'npm', ['run', 'verify:e2e'])
+run('PRE_DEPLOY production-runtime', 'npm', ['run', 'verify:production-runtime'])
 
 // Keep the release order explicit so a failure cannot skip prerequisite rules
 // or silently publish Hosting ahead of the backend it depends on.
-run('firebase', ['deploy', '--project', project, '--only', 'firestore:indexes'])
-run('firebase', ['deploy', '--project', project, '--only', 'firestore:rules,storage'])
-run('firebase', ['deploy', '--project', project, '--only', 'functions'])
-run('firebase', ['deploy', '--project', project, '--only', 'hosting'])
+run('DEPLOY firestore indexes', 'firebase', ['deploy', '--project', project, '--only', 'firestore:indexes'])
+run('DEPLOY firestore and storage rules', 'firebase', ['deploy', '--project', project, '--only', 'firestore:rules,storage'])
+run('DEPLOY functions', 'firebase', ['deploy', '--project', project, '--only', 'functions'])
+run('DEPLOY hosting', 'firebase', ['deploy', '--project', project, '--only', 'hosting'])
+
+// Firebase CLI exit 0 is not a successful production release until the real
+// built site renders in a browser without fatal runtime errors.
+if (target === 'production') {
+  run('POST_DEPLOY mtjari.shop browser smoke', 'npm', ['run', 'verify:production-live'], { postDeploy: true })
+}
+
+console.log('RELEASE_SUCCESS')
