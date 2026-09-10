@@ -18,7 +18,7 @@ import { storePublicUrl } from '../../shared/utils/store-url'
 import { STATUS_LABELS } from '../../shared/utils/constants'
 import { visibleOrderStatus, visibleOrderStatusLabel } from '../../shared/utils/order-status'
 import { setStorePublishedCallable, getEligiblePromotionsCallable, getMerchantShippingProvidersCallable } from '../../shared/services/auth'
-import type { Order, Product, ProductCost, Shipment } from '../../shared/types'
+import type { LandingPage, Order, Product, ProductCost, Shipment, StoreLink } from '../../shared/types'
 import { Icon } from '../../shared/components/ui/Icon'
 import { CountdownTimer } from '../../shared/components/subscription/CountdownTimer'
 
@@ -96,11 +96,15 @@ export const MerchantDashboard: FunctionalComponent = () => {
   const customersRes = useCollectionOnce('customers', { storeId }, secondaryReady && canCustomers)
   // Shipping is live so the dashboard reflects carrier updates without a reload.
   const shipmentsRes = useCollection<Shipment>('shipments', { storeId }, secondaryReady && canOrders)
+  const salesLinksRes = useCollectionOnce<StoreLink>('storeLinks', { storeId }, secondaryReady && canAnalytics)
+  const landingPagesRes = useCollectionOnce<LandingPage>('landingPages', { storeId }, secondaryReady && canAnalytics)
 
   const orders = ordersRes.data
   const products = productsRes.data
   const customers = customersRes.data
   const shipments = shipmentsRes.data
+  const salesLinks = salesLinksRes.data.filter((link) => !link.archived)
+  const landingPages = landingPagesRes.data
 
   const subState = useSubscription(isOwner ? storeId : '')
   const subscription = subState.subscription
@@ -189,6 +193,31 @@ export const MerchantDashboard: FunctionalComponent = () => {
   const promotionMinutes = promotionEnds ? Math.max(0, Math.floor((promotionEnds - promotionNow) / 60000)) : 0
 
   const latestOrders = orders.slice(0, 8)
+  const salesLinkVisits = salesLinks.reduce((sum, link) => sum + Number(link.visits || 0), 0)
+  const landingViews = landingPages.reduce((sum, page) => sum + Number(page.views || 0), 0)
+  const attributedOrders = orders.filter((order) => order.status === 'DELIVERED' && Boolean(order.salesLinkId || order.landingPageId)).length
+  const attributedRevenue = orders.filter((order) => order.status === 'DELIVERED' && Boolean(order.salesLinkId || order.landingPageId)).reduce((sum, order) => sum + Number(order.totalPrice || 0), 0)
+  const attributedVisits = salesLinkVisits + landingViews
+  const attributedConversion = attributedVisits > 0 ? Math.round((attributedOrders / attributedVisits) * 1000) / 10 : 0
+  const topLinks = [...salesLinks].sort((a, b) => Number(b.totalRevenue || 0) - Number(a.totalRevenue || 0)).slice(0, 3)
+  const topLandings = [...landingPages].sort((a, b) => Number(b.totalRevenue || 0) - Number(a.totalRevenue || 0)).slice(0, 3)
+  const channelPanel = canAnalytics && (
+    <section className="dashboard-panel" aria-label="أداء قنوات البيع">
+      <div className="dashboard-panel-head"><h3>أداء قنوات البيع</h3><Link href="/dashboard/store-links"><span className="dashboard-panel-link">إدارة القنوات</span></Link></div>
+      {attributedVisits === 0 && attributedOrders === 0 ? <EmptyState icon="monitoring" title="لا توجد بيانات أداء بعد" description="أنشئ رابط بيع أو صفحة هبوط لبدء القياس." action={<Link href="/dashboard/store-links"><Button size="sm" icon="add">إنشاء رابط بيع</Button></Link>} /> : <>
+        <div className="stat-grid">
+          <div className="stat-card"><span className="muted small">زيارات روابط البيع</span><strong>{formatNumber(salesLinkVisits)}</strong></div>
+          <div className="stat-card"><span className="muted small">زيارات صفحات الهبوط</span><strong>{formatNumber(landingViews)}</strong></div>
+          <div className="stat-card"><span className="muted small">طلبات منسوبة</span><strong>{formatNumber(attributedOrders)}</strong></div>
+          <div className="stat-card"><span className="muted small">مبيعات منسوبة</span><strong>{formatCurrency(attributedRevenue)}</strong><small>{attributedConversion}% تحويل</small></div>
+        </div>
+        <div className="grid grid-2 mt-2">
+          <div><h4 className="section-heading">أفضل روابط البيع</h4>{topLinks.map((link) => <div className="flex-between small" key={link.id}><span>{link.name}</span><span>{link.visits || 0} زيارة · {formatCurrency(link.totalRevenue || 0)}</span></div>)}</div>
+          <div><h4 className="section-heading">أفضل صفحات الهبوط</h4>{topLandings.map((page) => <div className="flex-between small" key={page.id}><span>{page.title}</span><span>{page.views || 0} زيارة · {formatCurrency(page.totalRevenue || 0)}</span></div>)}</div>
+        </div>
+      </>}
+    </section>
+  )
   const headerActions = (
     <div className="dashboard-header-actions">
       {canProducts && (
@@ -546,6 +575,7 @@ export const MerchantDashboard: FunctionalComponent = () => {
           <main className="dashboard-grid-main">
             {kpiCards}
             {shippingOverview}
+            {channelPanel}
             {profitPanel}
             {ordersPanel}
           </main>
@@ -649,6 +679,7 @@ export const MerchantDashboard: FunctionalComponent = () => {
               <p><Icon name="inventory_2" ariaHidden /> المرتجع يعيد الكمية للمخزون تلقائياً.</p>
             </section>
           )}
+          {channelPanel}
 
           <section className="dashboard-quick-actions" aria-label="إجراءات سريعة">
             {canProducts && (
