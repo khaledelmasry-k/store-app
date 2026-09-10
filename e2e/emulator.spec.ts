@@ -1038,6 +1038,25 @@ test('landing save with empty optional fields works; duplicate slug rejected; du
   // The undefined productId/hero fields must have been dropped without error.
   expect(saved.productId ?? null).toBeNull()
 
+  // Regression: the desktop row mirrors the header order exactly. This catches
+  // a visual shift where created/last activity were rendered under the slug.
+  const headers = await page.locator('.lp-list-table thead th').allTextContents()
+  const savedRow = page.locator('.lp-list-table tbody tr', { hasText: slug }).first()
+  await expect(savedRow.locator('td')).toHaveCount(headers.length)
+  const cells = await savedRow.locator('td').allTextContents()
+  expect(headers).toEqual(['العنوان', 'الرابط (Slug)', 'شراء سريع', 'الحالة', 'تاريخ الإنشاء', 'آخر نشاط', 'الزيارات', 'الطلبات', 'الإيرادات', 'الإجراءات'])
+  expect(cells[1]).toContain(`/${slug}`)
+  expect(cells[2]).toContain('غير محدد')
+  expect(cells[3]).toContain('مسودة')
+  expect(cells[4]).not.toBe('')
+  expect(cells[5]).toContain('لا يوجد')
+
+  // Filter is an intersection: an empty search may not bypass its status.
+  await page.getByLabel('الحالة').selectOption('draft')
+  await expect(savedRow).toBeVisible()
+  await page.getByLabel('الحالة').selectOption('published')
+  await expect(savedRow).toHaveCount(0)
+
   // Creating another page with the SAME slug must be rejected client-side.
   await safeClickWithTourGuard(page, page.getByRole('button', { name: 'صفحة جديدة' }))
   await page.locator('.drawer .field', { hasText: 'عنوان الصفحة' }).locator('input').fill('صفحة موازية')

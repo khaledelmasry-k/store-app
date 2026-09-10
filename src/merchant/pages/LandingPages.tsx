@@ -280,10 +280,12 @@ export const MerchantLandingPages: FunctionalComponent = () => {
   const conversionRate = (p: LandingPage) => p.views > 0 ? Math.round((p.ordersCount / p.views) * 1000) / 10 : 0
   const averageOrderValue = (p: LandingPage) => p.ordersCount > 0 ? p.totalRevenue / p.ordersCount : 0
 
-  const filteredPages = pages.filter(
-    (p) =>
-      (p.title || '').includes(query) || (p.slug || '').includes(query) || (!statusFilter || (statusFilter === 'published' ? p.status === 'published' && p.active : p.status !== 'published' || !p.active)),
-  )
+  const filteredPages = pages.filter((p) => {
+    const matchesQuery = !query || (p.title || '').includes(query) || (p.slug || '').includes(query)
+    const matchesStatus = !statusFilter
+      || (statusFilter === 'published' ? p.status === 'published' && p.active : p.status !== 'published' || !p.active)
+    return matchesQuery && matchesStatus
+  })
 
   return (
     <div className="merchant-operations merchant-landing-pages-page">
@@ -335,8 +337,6 @@ export const MerchantLandingPages: FunctionalComponent = () => {
                       <p className="lp-title">{p.title}</p>
                       <p className="lp-template">قالب: {templateName(p.template)}</p>
                     </td>
-                    <td>{formatDate(p.createdAt)}</td>
-                    <td>{p.lastViewAt ? timeAgo(p.lastViewAt) : 'لا يوجد'}</td>
                     <td><span className="lp-slug" dir="ltr">/{p.slug}</span></td>
                     <td>{productName(p.productId) || <span className="lp-muted">غير محدد</span>}</td>
                     <td>
@@ -345,6 +345,8 @@ export const MerchantLandingPages: FunctionalComponent = () => {
                         {isPublished ? 'منشور' : 'مسودة'}
                       </span>
                     </td>
+                    <td>{formatDate(p.createdAt)}</td>
+                    <td>{p.lastViewAt ? timeAgo(p.lastViewAt) : 'لا يوجد'}</td>
                     <td className="mono-num">{p.views || 0}</td>
                     <td className="mono-num">{p.ordersCount || 0}</td>
                     <td><span className="lp-revenue">{formatCurrency(p.totalRevenue || 0)}</span></td>
