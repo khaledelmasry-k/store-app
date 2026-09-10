@@ -12,6 +12,7 @@ import { Textarea } from '../../shared/components/ui/Textarea'
 import { SmartImage } from '../../shared/components/ui/SmartImage'
 import { createOrderCallable, getPublicStoreCouponsCallable, getShippingOptionsCallable, quoteCouponCallable } from '../../shared/services/auth'
 import { EGYPT_CITIES_BY_GOVERNORATE, GOVER_EG } from '../../shared/utils/constants'
+import { isWaslaUnsupportedCity, waslaAliasTarget } from '../../shared/utils/waslaCityMapping'
 import { formatCurrency, todayKey } from '../../shared/utils/format'
 import { cartSubtotal, lineSubtotal, piecesLabel } from '../../shared/utils/pricing'
 import { Icon } from '../../shared/components/ui/Icon'
@@ -111,6 +112,12 @@ export const StoreCheckout: FunctionalComponent = () => {
     }
     if (!quote.available) {
       toast.push('الشحن غير متوفر لهذه الوجهة', quote.unavailableReason || 'اختر محافظة مغطاة قبل المتابعة', 'error')
+      return
+    }
+    // Provider-specific city validation: if Wasla is selected and city is known unsupported, block early
+    const isWaslaSelected = String(providerQuote?.providerName || '').includes('وصلة') || String(providerQuote?.providerName || '').toLowerCase().includes('wasla')
+    if (isWaslaSelected && isWaslaUnsupportedCity(form.city)) {
+      toast.push('شركة الشحن لا تدعم هذه المدينة.', 'اختر مدينة بديلة ضمن نفس المحافظة', 'error')
       return
     }
     if (form.paymentMethod === 'bank') {
@@ -261,6 +268,8 @@ export const StoreCheckout: FunctionalComponent = () => {
             <div className="form-grid">
               <Select label="المحافظة" value={form.governorate} onChange={(v) => setForm({ ...form, governorate: v, city: '', area: '' })} placeholder="اختر المحافظة" options={GOVER_EG.map((g) => ({ value: g, label: g }))} />
               {form.governorate && EGYPT_CITIES_BY_GOVERNORATE[form.governorate]?.length ? <Select label="المدينة" value={form.city} onChange={(v) => setForm({ ...form, city: v, area: '' })} placeholder="اختر المدينة" options={EGYPT_CITIES_BY_GOVERNORATE[form.governorate].map((city) => ({ value: city, label: city }))} /> : <Input label="المدينة" value={form.city} onChange={(v) => setForm({ ...form, city: v })} required />}
+              {form.city && isWaslaUnsupportedCity(form.city) && shippingOptions.some((o) => String(o.providerName || '').includes('وصلة') || String(o.providerName || '').toLowerCase().includes('wasla')) && <p className="checkout-shipping-error" role="alert">شركة الشحن لا تدعم هذه المدينة مباشرة. اختر مدينة قريبة بديلة أو تواصل مع الدعم.</p>}
+              {form.city && waslaAliasTarget(form.city) && <p className="muted small">سيتم شحن طلبك إلى {waslaAliasTarget(form.city)} لدى شركة الشحن.</p>}
               <Input label="المنطقة / الحي (اختياري)" value={form.area} onChange={(v) => setForm({ ...form, area: v })} />
             </div>
             <Textarea label="العنوان بالتفصيل" value={form.address} onChange={(v) => setForm({ ...form, address: v })} rows={2} required />
