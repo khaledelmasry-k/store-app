@@ -315,7 +315,7 @@ export function quoteSubscriptionCouponCallable(input: { code: string; planId: s
   return httpsCallable(getFunctions(), 'quoteSubscriptionCoupon')(input)
 }
 
-export function manageSubscriptionCouponCallable(input: { operation: 'create' | 'update'; couponId?: string; coupon?: Record<string, unknown> }) {
+export function manageSubscriptionCouponCallable(input: { operation: 'create' | 'update' | 'delete' | 'archive'; couponId?: string; coupon?: Record<string, unknown> }) {
   return httpsCallable(getFunctions(), 'manageSubscriptionCoupon')(input)
 }
 

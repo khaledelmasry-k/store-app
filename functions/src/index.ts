@@ -3102,6 +3102,9 @@ type SubscriptionCoupon = {
   createdAt?: any
   createdBy?: string
   updatedAt?: any
+  archived?: boolean
+  archivedAt?: any
+  archivedBy?: string
 }
 
 const MIN_PAYABLE_AMOUNT_EGP = 1
@@ -3125,6 +3128,7 @@ function couponDateMillis(value: any): number | null {
 
 function couponQuote(coupon: SubscriptionCoupon, planId: string, billingCycle: string, amount: number, periodNumber = 1) {
   const nowMs = Date.now()
+  if ((coupon as any).archived === true) throw new HttpsError('failed-precondition', 'الكوبون مؤرشف')
   if (coupon.active === false) throw new HttpsError('failed-precondition', 'الكوبون غير مفعل')
   const starts = couponDateMillis(coupon.startsAt)
   const expires = couponDateMillis(coupon.expiresAt)
@@ -3174,12 +3178,36 @@ export const quoteSubscriptionCoupon = onCall(async (request: CallableRequest<{ 
   return { ...quote, code, partner: (coupon as any)?.partner || null }
 })
 
-export const manageSubscriptionCoupon = onCall(async (request: CallableRequest<{ operation?: 'create' | 'update'; couponId?: string; coupon?: Record<string, unknown> }>) => {
+export const manageSubscriptionCoupon = onCall(async (request: CallableRequest<{ operation?: 'create' | 'update' | 'delete' | 'archive'; couponId?: string; coupon?: Record<string, unknown> }>) => {
   if (!request.auth) throw new HttpsError('unauthenticated', 'يجب تسجيل الدخول')
   await assertPlatformAdmin(request)
   const operation = request.data?.operation
   const input = request.data?.coupon || {}
-  if (operation !== 'create' && operation !== 'update') throw new HttpsError('invalid-argument', 'عملية الكوبون غير صالحة')
+  if (operation !== 'create' && operation !== 'update' && operation !== 'delete' && operation !== 'archive') throw new HttpsError('invalid-argument', 'عملية الكوبون غير صالحة')
+  // DELETE / ARCHIVE — safe policy: unused => hard delete, used => archived (keeps historical redemptions)
+  if (operation === 'delete' || operation === 'archive') {
+    const couponId = String(request.data?.couponId || '').trim()
+    if (!couponId) throw new HttpsError('invalid-argument', 'couponId مطلوب للحذف')
+    const ref = db.doc(`subscriptionCoupons/${couponId}`)
+    const snap = await ref.get()
+    if (!snap.exists) throw new HttpsError('not-found', 'الكوبون غير موجود')
+    const data = snap.data() || {}
+    const used = Number((data as any).redemptionCount || 0) > 0
+    // Also check if any redemption docs exist (more accurate than counter)
+    if (used) {
+      // Archive instead of hard delete to preserve financial history
+      await ref.set({ archived: true, archivedAt: now(), archivedBy: request.auth.uid, active: false, updatedAt: now() }, { merge: true })
+      return { ok: true, couponId, archived: true }
+    }
+    // No usage — hard delete is safe; also check redemptions collection to be sure
+    const redemptions = await db.collection('subscriptionCouponRedemptions').where('couponId', '==', couponId).limit(1).get()
+    if (!redemptions.empty) {
+      await ref.set({ archived: true, archivedAt: now(), archivedBy: request.auth.uid, active: false, updatedAt: now() }, { merge: true })
+      return { ok: true, couponId, archived: true }
+    }
+    await ref.delete()
+    return { ok: true, couponId, deleted: true }
+  }
   const codeRaw = String(input.code || '').trim().toUpperCase()
   const code = codeRaw ? codeRaw : ''
   if (operation === 'create' && !code) throw new HttpsError('invalid-argument', 'كود الكوبون مطلوب')

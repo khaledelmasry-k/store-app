@@ -1,5 +1,5 @@
 import { FunctionalComponent, Fragment } from 'preact'
-import { useState, useEffect } from 'preact/hooks'
+import { useState } from 'preact/hooks'
 import { PageHeader } from '../../shared/components/ui/PageHeader'
 import { Card } from '../../shared/components/ui/Card'
 import { Badge } from '../../shared/components/ui/Badge'
@@ -13,7 +13,7 @@ import { SegmentedControl } from '../../shared/components/ui/SegmentedControl'
 import { Table } from '../../shared/components/ui/Table'
 import { useCollection } from '../../shared/hooks/useCollection'
 import { useToast } from '../../shared/hooks/useToast'
-import { savePlanCallable, syncCanonicalPlansCallable, manageSubscriptionCouponCallable, listSubscriptionCouponsCallable, getSubscriptionCouponRedemptionsCallable } from '../../shared/services/auth'
+import { savePlanCallable, syncCanonicalPlansCallable } from '../../shared/services/auth'
 import { formatPriceEgp } from '../../shared/utils/format'
 import { PLAN_FEATURE_KEYS, PLAN_FEATURE_LABELS, type PlanFeatureKey } from '../../shared/services/subscription'
 import type { SubscriptionPlan } from '../../shared/types'
@@ -57,27 +57,6 @@ export const PlatformPlans: FunctionalComponent = () => {
   const [form, setForm] = useState<Partial<SubscriptionPlan>>({ features: [] as string[] })
   const [flags, setFlags] = useState<Record<PlanFeatureKey, boolean>>(emptyFlags())
   const [syncing, setSyncing] = useState(false)
-  // Subscription promo codes — SuperAdmin only, distinct from store customer coupons
-  const [couponForm, setCouponForm] = useState({
-    code: '',
-    name: '',
-    description: '',
-    discountType: 'percentage' as 'percentage' | 'fixed',
-    discountValue: 30,
-    applicablePlanIds: ['plan-basic', 'plan-starter', 'plan-growth', 'plan-pro'] as string[],
-    applicableBillingCycles: ['monthly'] as string[],
-    startsAt: '',
-    expiresAt: '',
-    globalMaxRedemptions: '' as string,
-    active: true,
-    partner: '',
-    internalNotes: '',
-  })
-  const [couponSaving, setCouponSaving] = useState(false)
-  const [editingCouponId, setEditingCouponId] = useState<string | null>(null)
-  const [subscriptionCoupons, setSubscriptionCoupons] = useState<any[]>([])
-  const [couponsLoading, setCouponsLoading] = useState(false)
-  const [couponUsages, setCouponUsages] = useState<Record<string, any[]>>({})
 
   const recommendedId = [...subscriptionPlans].sort((a, b) => a.priceMonthly - b.priceMonthly)[Math.max(0, Math.floor((subscriptionPlans.length - 1) / 2))]?.id
 
@@ -172,115 +151,6 @@ export const PlatformPlans: FunctionalComponent = () => {
     } finally {
       setSyncing(false)
     }
-  }
-
-  const fetchSubscriptionCoupons = async () => {
-    setCouponsLoading(true)
-    try {
-      const res: any = await listSubscriptionCouponsCallable()
-      setSubscriptionCoupons(res.data?.coupons || [])
-    } catch {
-      setSubscriptionCoupons([])
-    } finally { setCouponsLoading(false) }
-  }
-  useEffect(() => { fetchSubscriptionCoupons() }, [])
-
-  const resetCouponForm = () => {
-    setCouponForm({
-      code: '',
-      name: '',
-      description: '',
-      discountType: 'percentage',
-      discountValue: 30,
-      applicablePlanIds: ['plan-basic', 'plan-starter', 'plan-growth', 'plan-pro'],
-      applicableBillingCycles: ['monthly'],
-      startsAt: '',
-      expiresAt: '',
-      globalMaxRedemptions: '',
-      active: true,
-      partner: '',
-      internalNotes: '',
-    })
-    setEditingCouponId(null)
-  }
-
-  const editCoupon = (c: any) => {
-    const fmt = (v: any) => {
-      if (!v) return ''
-      if (typeof v === 'string') return v.slice(0, 10)
-      try {
-        const ms = typeof (v as any).toMillis === 'function' ? (v as any).toMillis() : typeof (v as any).seconds === 'number' ? (v as any).seconds * 1000 : new Date(v).getTime()
-        if (!Number.isFinite(ms)) return ''
-        const d = new Date(ms)
-        return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`
-      } catch { return '' }
-    }
-    setCouponForm({
-      code: String(c.code || '').toUpperCase(),
-      name: String(c.name || ''),
-      description: String(c.description || ''),
-      discountType: c.discountType === 'fixed' ? 'fixed' : 'percentage',
-      discountValue: Number(c.discountValue || 0),
-      applicablePlanIds: Array.isArray(c.applicablePlanIds) && c.applicablePlanIds.length ? c.applicablePlanIds : ['plan-basic', 'plan-starter', 'plan-growth', 'plan-pro'],
-      applicableBillingCycles: Array.isArray(c.applicableBillingCycles) && c.applicableBillingCycles.length ? c.applicableBillingCycles : ['monthly'],
-      startsAt: fmt(c.startsAt),
-      expiresAt: fmt(c.expiresAt),
-      globalMaxRedemptions: c.globalMaxRedemptions != null ? String(c.globalMaxRedemptions) : c.maxRedemptions != null ? String(c.maxRedemptions) : '',
-      active: c.active !== false,
-      partner: String(c.partner || c.source || ''),
-      internalNotes: String(c.internalNotes || ''),
-    })
-    setEditingCouponId(String(c.id))
-  }
-
-  const saveSubscriptionCoupon = async () => {
-    setCouponSaving(true)
-    try {
-      const payload: Record<string, unknown> = {
-        code: couponForm.code.toUpperCase(),
-        name: couponForm.name,
-        description: couponForm.description,
-        internalNotes: couponForm.internalNotes,
-        discountType: couponForm.discountType,
-        discountValue: Number(couponForm.discountValue),
-        applicablePlanIds: couponForm.applicablePlanIds,
-        applicableBillingCycles: couponForm.applicableBillingCycles,
-        firstCycleOnly: true,
-        perMerchantLimit: 1,
-        active: couponForm.active,
-        partner: couponForm.partner,
-        source: couponForm.partner,
-        startsAt: couponForm.startsAt ? new Date(couponForm.startsAt).toISOString() : null,
-        expiresAt: couponForm.expiresAt ? new Date(couponForm.expiresAt).toISOString() : null,
-        globalMaxRedemptions: couponForm.globalMaxRedemptions ? Number(couponForm.globalMaxRedemptions) : null,
-      }
-      if (editingCouponId) {
-        await manageSubscriptionCouponCallable({ operation: 'update', couponId: editingCouponId, coupon: payload })
-        toast.push('تم تحديث كوبون الاشتراك', undefined, 'success')
-      } else {
-        await manageSubscriptionCouponCallable({ operation: 'create', coupon: payload })
-        toast.push('تم إنشاء كوبون اشتراكات المنصة', undefined, 'success')
-      }
-      resetCouponForm()
-      await fetchSubscriptionCoupons()
-    } catch (err: any) {
-      toast.push('فشل حفظ كوبون الاشتراك', err?.message || 'تحقق من البيانات', 'error')
-    } finally { setCouponSaving(false) }
-  }
-
-  const toggleCouponActive = async (c: any) => {
-    try {
-      await manageSubscriptionCouponCallable({ operation: 'update', couponId: c.id, coupon: { active: !c.active } })
-      toast.push(c.active ? 'تم تعطيل الكود' : 'تم تفعيل الكود')
-      await fetchSubscriptionCoupons()
-    } catch (err: any) { toast.push('فشل تحديث الحالة', err?.message, 'error') }
-  }
-
-  const viewCouponUsage = async (c: any) => {
-    try {
-      const res: any = await getSubscriptionCouponRedemptionsCallable({ couponId: c.id })
-      setCouponUsages((prev) => ({ ...prev, [c.id]: res.data?.redemptions || [] }))
-    } catch (err: any) { toast.push('تعذر تحميل الاستخدام', err?.message, 'error') }
   }
 
   return (
@@ -437,121 +307,11 @@ export const PlatformPlans: FunctionalComponent = () => {
         </Card>
       )}
 
-      <Card title="كوبونات الاشتراكات" subtitle="كوبونات اشتراكات Matjari التي يديرها SuperAdmin فقط — منفصلة تماماً عن كوبونات متاجر التجار. خصم واحد لكل تاجر لكل كود، الحد الأقصى 99% أو مبلغ ثابت يضمن دفع ≥1 ج.م." className="mt-2">
-        <div className="grid grid-2">
-          <Input label="الكود (3-20 حرف إنجليزي/أرقام)" value={couponForm.code} onChange={(v) => setCouponForm({ ...couponForm, code: v.toUpperCase() })} hint="مثال: WELCOME30" />
-          <Input label="الاسم الداخلي" value={couponForm.name} onChange={(v) => setCouponForm({ ...couponForm, name: v })} hint="مثال: خصم ترحيبي 30%" />
+      <Card title="كوبونات الاشتراكات" subtitle="إدارة أكواد خصم اشتراكات التجار" className="mt-2">
+        <div className="flex-between">
+          <p className="muted small">أنشئ وتابع أكواد خصم اشتراكات Matjari من صفحة مخصصة. كل تاجر يستخدم الكود مرة واحدة فقط.</p>
+          <a href="/platform/coupons"><Button icon="sell">إدارة كوبونات الاشتراكات</Button></a>
         </div>
-        <Textarea label="الوصف الداخلي" value={couponForm.description} onChange={(v) => setCouponForm({ ...couponForm, description: v })} rows={2} />
-        <div className="grid grid-2">
-          <label className="field">
-            <span className="field-label">نوع الخصم</span>
-            <select className="input" value={couponForm.discountType} onChange={(e) => setCouponForm({ ...couponForm, discountType: (e.target as HTMLSelectElement).value as 'percentage' | 'fixed' })}>
-              <option value="percentage">نسبة مئوية (PERCENT)</option>
-              <option value="fixed">مبلغ ثابت (FIXED)</option>
-            </select>
-          </label>
-          <Input label={couponForm.discountType === 'percentage' ? 'قيمة الخصم % (1-99)' : 'قيمة الخصم (ج.م)'} type="number" value={couponForm.discountValue} onChange={(v) => setCouponForm({ ...couponForm, discountValue: Number(v) })} hint={couponForm.discountType === 'percentage' ? 'الحد الأقصى 99%' : 'يجب أن يبقى المبلغ النهائي ≥1 ج.م'} />
-        </div>
-        <div className="field">
-          <span className="field-label">الباقات المطبقة</span>
-          <div className="flex" style={{ gap: 12, flexWrap: 'wrap' }}>
-            {['plan-basic', 'plan-starter', 'plan-growth', 'plan-pro'].map((pid) => (
-              <label key={pid} className="flex" style={{ gap: 6, alignItems: 'center' }}>
-                <input type="checkbox" checked={couponForm.applicablePlanIds.includes(pid)} onChange={(e) => {
-                  const checked = (e.target as HTMLInputElement).checked
-                  setCouponForm({ ...couponForm, applicablePlanIds: checked ? [...couponForm.applicablePlanIds, pid] : couponForm.applicablePlanIds.filter((id) => id !== pid) })
-                }} />
-                <span>{pid.replace('plan-', '').toUpperCase()}</span>
-              </label>
-            ))}
-          </div>
-        </div>
-        <div className="field">
-          <span className="field-label">دورة الفوترة</span>
-          <div className="flex" style={{ gap: 12 }}>
-            {(['monthly', 'yearly'] as const).map((bc) => (
-              <label key={bc} className="flex" style={{ gap: 6, alignItems: 'center' }}>
-                <input type="checkbox" checked={couponForm.applicableBillingCycles.includes(bc)} onChange={(e) => {
-                  const checked = (e.target as HTMLInputElement).checked
-                  setCouponForm({ ...couponForm, applicableBillingCycles: checked ? [...couponForm.applicableBillingCycles, bc] : couponForm.applicableBillingCycles.filter((x) => x !== bc) })
-                }} />
-                <span>{bc === 'monthly' ? 'شهري' : 'سنوي'}</span>
-              </label>
-            ))}
-          </div>
-          <p className="muted small">حسب القرار الحالي، الكوبون للدورة الأولى فقط — لا يتكرر شهرياً ولا عند التجديد أو تغيير الباقة.</p>
-        </div>
-        <div className="grid grid-2">
-          <Input type="date" label="تاريخ البداية (اختياري)" value={couponForm.startsAt} onChange={(v) => setCouponForm({ ...couponForm, startsAt: v })} />
-          <Input type="date" label="تاريخ الانتهاء (اختياري)" value={couponForm.expiresAt} onChange={(v) => setCouponForm({ ...couponForm, expiresAt: v })} />
-        </div>
-        <div className="grid grid-2">
-          <Input label="الحد الأقصى العام للاستخدام (اختياري)" type="number" value={couponForm.globalMaxRedemptions} onChange={(v) => setCouponForm({ ...couponForm, globalMaxRedemptions: v })} hint="فارغ = بلا حد" />
-          <Input label="الشريك/المصدر (اختياري)" value={couponForm.partner} onChange={(v) => setCouponForm({ ...couponForm, partner: v })} hint="مثال: wasla أو حملة تسويقية" />
-        </div>
-        <Textarea label="ملاحظات داخلية (اختياري)" value={couponForm.internalNotes} onChange={(v) => setCouponForm({ ...couponForm, internalNotes: v })} rows={2} />
-        <div className="field" style={{ display: 'flex', gap: 12, alignItems: 'center' }}>
-          <Toggle checked={couponForm.active} onChange={(v) => setCouponForm({ ...couponForm, active: v })} label="مفعل" />
-          <span className="muted small">لكل تاجر استخدام واحد فقط لنفس الكود (perMerchantLimit = 1)</span>
-        </div>
-        <div className="flex" style={{ gap: 8 }}>
-          <Button icon="save" loading={couponSaving} onClick={saveSubscriptionCoupon}>{editingCouponId ? 'تحديث الكود' : 'إنشاء كود خصم'}</Button>
-          {editingCouponId && <Button variant="ghost" onClick={resetCouponForm}>إلغاء التعديل</Button>}
-          <Button variant="outline" onClick={fetchSubscriptionCoupons} icon="sync">تحديث القائمة</Button>
-        </div>
-        <p className="muted small" style={{ marginTop: 8 }}>أمثلة خصم عادية يحددها SuperAdmin: ‎20% أو 30% أو 50% أو مبلغ ثابت — لا يُسمح بـ100% أو مبلغ يجعل الاشتراك مجانياً.</p>
-      </Card>
-
-      <Card title="قائمة كوبونات الاشتراكات" subtitle="Code · Discount · Plans · Billing · Status · Uses · Limit · Start · Expiry" className="mt-2">
-        {couponsLoading ? <p className="muted small">جاري التحميل...</p> : subscriptionCoupons.length === 0 ? <p className="muted small">لا توجد أكواد — أنشئ أول كود خصم.</p> : (
-          <Table
-            cardMode
-            rows={subscriptionCoupons}
-            columns={[
-              { key: 'code', header: 'الكود', render: (c: any) => <strong>{c.code}</strong> },
-              { key: 'discount', header: 'الخصم', render: (c: any) => c.discountType === 'percentage' ? `${c.discountValue}%` : `${formatPriceEgp(Number(c.discountValue))}` },
-              { key: 'plans', header: 'الباقات', render: (c: any) => (c.applicablePlanIds || []).map((id: string) => id.replace('plan-', '')).join(', ') },
-              { key: 'billing', header: 'الدورة', render: (c: any) => (c.applicableBillingCycles || []).join(', ') },
-              { key: 'status', header: 'الحالة', render: (c: any) => c.active === false ? <Badge tone="slate">معطل</Badge> : <Badge tone="green">مفعل</Badge> },
-              { key: 'uses', header: 'الاستخدام', render: (c: any) => `${c.redemptionCount || 0}` },
-              { key: 'limit', header: 'الحد العام', render: (c: any) => c.globalMaxRedemptions != null ? String(c.globalMaxRedemptions) : c.maxRedemptions != null ? String(c.maxRedemptions) : '—' },
-              { key: 'startsAt', header: 'البداية', render: (c: any) => c.startsAt ? new Date(typeof c.startsAt.toMillis === 'function' ? c.startsAt.toMillis() : c.startsAt.seconds ? c.startsAt.seconds * 1000 : c.startsAt).toLocaleDateString('ar-EG') : '—' },
-              { key: 'expiresAt', header: 'الانتهاء', render: (c: any) => c.expiresAt ? new Date(typeof c.expiresAt.toMillis === 'function' ? c.expiresAt.toMillis() : c.expiresAt.seconds ? c.expiresAt.seconds * 1000 : c.expiresAt).toLocaleDateString('ar-EG') : '—' },
-              { key: 'actions', header: 'إجراءات', render: (c: any) => (
-                <div className="flex" style={{ gap: 4 }}>
-                  <Button size="sm" variant="soft" onClick={() => editCoupon(c)}>تعديل</Button>
-                  <Button size="sm" variant={c.active === false ? 'outline' : 'ghost'} onClick={() => toggleCouponActive(c)}>{c.active === false ? 'تفعيل' : 'تعطيل'}</Button>
-                  <Button size="sm" variant="outline" onClick={() => viewCouponUsage(c)}>الاستخدام</Button>
-                </div>
-              ) },
-            ]}
-          />
-        )}
-        {Object.keys(couponUsages).length > 0 && (
-          <div className="mt-2">
-            {Object.entries(couponUsages).map(([couponId, usages]) => (
-              <Card key={couponId} title={`استخدام الكود ${subscriptionCoupons.find((c) => c.id === couponId)?.code || couponId}`} className="mt-2">
-                {(usages as any[]).length === 0 ? <p className="muted small">لا يوجد استخدام بعد.</p> : (
-                  <Table
-                    cardMode
-                    rows={usages as any[]}
-                    columns={[
-                      { key: 'merchantId', header: 'التاجر', render: (r: any) => r.merchantId?.slice(0, 8) || '—' },
-                      { key: 'planId', header: 'الباقة', render: (r: any) => r.planId || '—' },
-                      { key: 'billingCycle', header: 'الدورة', render: (r: any) => r.billingCycle || '—' },
-                      { key: 'originalPrice', header: 'السعر الأصلي', render: (r: any) => formatPriceEgp(Number(r.originalPrice || 0)) },
-                      { key: 'discountAmount', header: 'الخصم', render: (r: any) => formatPriceEgp(Number(r.discountAmount || 0)) },
-                      { key: 'finalPrice', header: 'النهائي', render: (r: any) => formatPriceEgp(Number(r.finalPrice || 0)) },
-                      { key: 'redeemedAt', header: 'تاريخ الاستخدام', render: (r: any) => r.redeemedAt ? new Date(typeof r.redeemedAt.toMillis === 'function' ? r.redeemedAt.toMillis() : r.redeemedAt.seconds ? r.redeemedAt.seconds * 1000 : r.redeemedAt).toLocaleDateString('ar-EG') : '—' },
-                      { key: 'status', header: 'الحالة', render: (r: any) => r.status || '—' },
-                    ]}
-                  />
-                )}
-              </Card>
-            ))}
-          </div>
-        )}
       </Card>
 
       <Modal
