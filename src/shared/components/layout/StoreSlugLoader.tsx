@@ -9,6 +9,7 @@ import { recordStoreLinkVisitCallable, getPublicStoreStatusCallable, getPublicSt
 import { parseStoreLocation } from '../../utils/store-route'
 import { StoreUnavailable } from '../../../store/components/StoreUnavailable'
 import type { Store, PublicStoreStatus } from '../../types'
+import { visitEventId } from '../../utils/visit-event'
 
 interface Props {
   children?: any
@@ -38,23 +39,12 @@ export const StoreSlugLoader: FunctionalComponent<Props> = ({ children }) => {
     // store B (cross-tenant attribution).
     sessionStorage.setItem(`mk_sales_ref_${store.id}`, ref)
 
-    // Count the visit once per session per (store, link) — keyed by store so a
-    // code used in store A never suppresses counting in store B.
-    const countedKey = `mk_ref_counted_${store.id}_${ref}`
-    if (sessionStorage.getItem(countedKey)) return
-
-    let cancelled = false
-    recordStoreLinkVisitCallable({ storeId: store.id, code: ref })
-      .then(() => {
-        if (!cancelled) sessionStorage.setItem(countedKey, '1')
-      })
+    recordStoreLinkVisitCallable({ storeId: store.id, code: ref, eventId: visitEventId(`sales_${store.id}_${ref}`) })
+      .then(() => {})
       .catch(() => {
         // Never break the storefront because of an analytics call.
       })
 
-    return () => {
-      cancelled = true
-    }
   }, [slug, ref, store?.id])
 
   useEffect(() => {

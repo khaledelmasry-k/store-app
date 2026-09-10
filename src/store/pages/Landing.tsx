@@ -16,6 +16,7 @@ import { productUnitPrice, tierForQuantity, nextTierQuantity, offerSavings, piec
 import { findVariant, sizeInStock, variantStock } from '../../shared/utils/product-variants'
 import { themeStyleFor } from '../../shared/components/layout/StoreLayout'
 import type { LandingPage, LandingSection, Product, Store } from '../../shared/types'
+import { visitEventId } from '../../shared/utils/visit-event'
 import { Icon } from '../../shared/components/ui/Icon'
 
 interface Props {
@@ -195,20 +196,10 @@ export const StoreLanding: FunctionalComponent<Props> = ({ slug }) => {
     const ref = params.get('ref')
     if (ref) {
       sessionStorage.setItem(`mk_sales_ref_${store.id}`, ref)
-      const countedKey = `mk_ref_counted_${store.id}_${ref}`
-      if (!sessionStorage.getItem(countedKey)) {
-        sessionStorage.setItem(countedKey, '1')
-        recordStoreLinkVisitCallable({ storeId: store.id, code: ref }).catch(() => {})
-      }
+      recordStoreLinkVisitCallable({ storeId: store.id, code: ref, eventId: visitEventId(`sales_${store.id}_${ref}`) }).catch(() => {})
     }
 
-    const viewedKey = `mk_landing_viewed_${landing.id}`
-    if (!sessionStorage.getItem(viewedKey)) {
-      // Set the guard first so a re-render (fresh landing object from the
-      // snapshot) can't fire a second concurrent call before the first resolves.
-      sessionStorage.setItem(viewedKey, '1')
-      recordLandingPageViewCallable({ landingPageId: landing.id }).catch(() => {})
-    }
+    recordLandingPageViewCallable({ landingPageId: landing.id, eventId: visitEventId(`landing_${landing.id}`) }).catch(() => {})
   }, [landing, store?.id])
 
   if (loading) return <Loading />

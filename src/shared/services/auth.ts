@@ -288,7 +288,7 @@ export function resolveStoreLinkCallable(input: { code: string }) {
   return fn(input)
 }
 
-export function recordLandingPageViewCallable(input: { landingPageId: string }) {
+export function recordLandingPageViewCallable(input: { landingPageId: string; eventId?: string }) {
   const functions = getFunctions()
   const fn = httpsCallable(functions, 'recordLandingPageView')
   return fn(input)
