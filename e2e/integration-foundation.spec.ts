@@ -261,6 +261,13 @@ test('local cancellation restores exact variants and plain stock once', async ()
       { id: 'b', productId: productB, quantity: 3, name: 'B', price: 10 },
     ],
   })
+  // Product names and option labels may change after checkout. The persisted
+  // productId/variantId snapshot must remain authoritative for restoration.
+  await db.doc(`products/${productA}`).update({
+    name: 'A renamed after checkout',
+    variants: [{ id: 'm-black', color: 'Midnight', size: 'Medium', stock: 3 }, { id: 'l-black', color: 'Midnight', size: 'Large', stock: 4 }, { id: 'xl-black', color: 'Midnight', size: 'XL', stock: 9 }],
+  })
+  await db.doc(`products/${productB}`).update({ name: 'B renamed after checkout' })
   await callAs('seed-owner-a', 'updateOrderStatus', { orderId, status: 'CANCELLED' })
   await callAs('seed-owner-a', 'updateOrderStatus', { orderId, status: 'CANCELLED' })
   const a = (await db.doc(`products/${productA}`).get()).data()!
