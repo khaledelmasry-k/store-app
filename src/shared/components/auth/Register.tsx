@@ -196,10 +196,11 @@ export const Register:FunctionalComponent = () => {
                 <span>دفعة واحدة</span>
               </div>
               <p>حق استخدام دائم لمتجر واحد داخل Matjari وفق المزايا والحدود المحددة.</p>
-              <ul className="register-lifetime-limits">
-                <li>1,000 منتج</li><li>5,000 طلب</li><li>5 أعضاء فريق</li><li>5 GB تخزين</li><li>3 صفحات هبوط</li><li>50 رابط بيع</li>
-              </ul>
+               <ul className="register-lifetime-limits">
+                 <li>1,000 منتج</li><li>1,500 طلب شهريًا</li><li>3 أعضاء فريق</li><li>2 GB تخزين</li><li>2 صفحة هبوط</li><li>20 رابط بيع</li>
+               </ul>
               <small>لا يشمل ملكية المنصة أو الكود المصدري أو المزايا Premium المستقبلية تلقائياً.</small>
+              <small className="muted" style={{ display: 'block', marginTop: '4px' }}>رسوم الخدمات الخارجية مثل الشحن وWhatsApp والبوابات غير مشمولة.</small>
             </div>
           </section>
         )}
