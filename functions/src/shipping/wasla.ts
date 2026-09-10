@@ -51,7 +51,60 @@ async function request(context: ShippingAdapterContext, path: string, init: Requ
 
 function normalized(value: unknown) {
   return String(value || '').trim().toLocaleLowerCase('ar-EG')
-    .replace(/[إأآ]/g, 'ا').replace(/ى/g, 'ي').replace(/ة/g, 'ه').replace(/[\s\-_/]+/g, '').replace(/^ال/, '')
+    .replace(/[إأآ]/g, 'ا').replace(/ى/g, 'ي').replace(/ة/g, 'ه').replace(/[٠-٩]/g, (d) => String('٠١٢٣٤٥٦٧٨٩'.indexOf(d))).replace(/[\s\-_/]+/g, '').replace(/^ال/, '')
+}
+
+// Canonical customer → Wasla city alias table.
+// Keys are normalized Matjari city names (from EGYPT_CITIES_BY_GOVERNORATE).
+// Values are the exact Wasla `name_ar` strings as returned by /api/v1/merchant/locations.
+// This table is deterministic, documented, and does not perform fuzzy matching.
+// Provider-verified IDs (config.waslaCityIds) remain priority 1; aliases are priority 2.
+const WASLA_CITY_ALIASES: Record<string, string> = {
+  // Alexandria critical P0: mixed-script Agami
+  [normalized('العجمي')]: 'أجami',
+  [normalized('كرموز')]: 'كارموز',
+  // Cairo
+  [normalized('بدر')]: 'مدينة بدر',
+  [normalized('15 مايو')]: 'مدينة 15 مايو',
+  // Giza
+  [normalized('6 أكتوبر')]: 'مدينة ٦ أكتوبر',
+  // Dakahlia
+  [normalized('نبروه')]: 'نبريه',
+  // Sharkia
+  [normalized('العاشر من رمضان')]: 'مدينة ١٠ رمضان',
+  [normalized('منيا القمح')]: 'منية القمح',
+  [normalized('ههيا')]: 'هيهيا',
+  // Monufia
+  [normalized('السادات')]: 'مدينة السادات',
+  // Kafr el-Sheikh
+  [normalized('برج البرلس')]: 'البرلس',
+  // Beni Suef
+  [normalized('ببا')]: 'بيبا',
+  // Minya
+  [normalized('أبو قرقاص')]: 'أبو قرقاس',
+  // Suez
+  [normalized('عتاقة')]: 'عاتقة',
+  [normalized('الجناين')]: 'الجنائن',
+  // Matrouh
+  [normalized('واحة سيوة')]: 'سيوة',
+  // North Sinai
+  [normalized('بئر العبد')]: 'بير العبد',
+  // Port Said: stripe leading "حي " prefix
+  [normalized('حي العرب')]: 'العرب',
+  [normalized('حي الشرق')]: 'الشرق',
+  [normalized('حي المناخ')]: 'المناخ',
+  [normalized('حي الضواحي')]: 'الضواحي',
+  [normalized('حي الزهور')]: 'الزهور',
+  [normalized('حي الجنوب')]: 'جنوب بورسعيد',
+  // Ismailia
+  [normalized('القنطرة غرب')]: 'القنطرة',
+  // Also alias for generic "الإسكندرية" → Wasla has no generic city, map to central "الرمل"
+  // NOT aliased: generic governorate-names as cities are left UNMATCHED and reported as UNSUPPORTED
+  // to avoid unsafe fuzzy (closest wins). Merchant must choose a district.
+}
+
+function cityAliasWaslaName(city: unknown): string | null {
+  return WASLA_CITY_ALIASES[normalized(city)] || null
 }
 
 const WASLA_ITEM_CATEGORIES = new Set(['clothing', 'electronics', 'books', 'accessories', 'toys', 'cosmetics', 'home_appliances', 'office_supplies', 'mobile_devices', 'spare_parts', 'medical_supplies', 'leather', 'shoes', 'perfumes', 'jewelry', 'building_materials', 'agricultural', 'chemicals', 'other'])
@@ -113,7 +166,11 @@ async function resolveDestination(context: ShippingAdapterContext, governorate: 
   }
   if (!governorateRow) throw new ShippingProviderError('MAPPING_MISSING', 'تعذر مطابقة منطقة التوصيل مع شركة الشحن.', false)
   const mappedCityId = locationId((config as any).waslaCityIds, city)
-  const cityRow = governorateRow.cities.find((row) => row.id === mappedCityId) || governorateRow.cities.find((row) => normalized(row.name) === normalized(city)) || governorateRow.cities.find((row) => normalized(row.name) === normalized(resolveAlias(city)))
+  const aliasedWaslaName = cityAliasWaslaName(city)
+  const cityRow = governorateRow.cities.find((row) => row.id === mappedCityId)
+    || (aliasedWaslaName ? governorateRow.cities.find((row) => normalized(row.name) === normalized(aliasedWaslaName)) : null)
+    || governorateRow.cities.find((row) => normalized(row.name) === normalized(city))
+    || governorateRow.cities.find((row) => normalized(row.name) === normalized(resolveAlias(city)))
   if (!cityRow) throw new ShippingProviderError('MAPPING_MISSING', 'تعذر مطابقة المدينة مع شركة الشحن.', false)
   return { governorateId: governorateRow.id, cityId: cityRow.id }
 }
@@ -136,7 +193,10 @@ async function resolveQuoteDestination(context: ShippingAdapterContext, governor
   }
   if (!governorateRow) throw new ShippingProviderError('MAPPING_MISSING', 'تعذر مطابقة منطقة التوصيل مع شركة الشحن.', false)
   const mappedCityId = locationId((config as any).waslaCityIds, city)
-  const cityRow = governorateRow.cities.find((row) => row.id === mappedCityId) || governorateRow.cities.find((row) => normalized(row.name) === normalized(city))
+  const aliasedWaslaName = cityAliasWaslaName(city)
+  const cityRow = governorateRow.cities.find((row) => row.id === mappedCityId)
+    || (aliasedWaslaName ? governorateRow.cities.find((row) => normalized(row.name) === normalized(aliasedWaslaName)) : null)
+    || governorateRow.cities.find((row) => normalized(row.name) === normalized(city))
   return { governorateId: governorateRow.id, cityId: cityRow?.id || null }
 }
 
