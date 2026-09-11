@@ -384,6 +384,54 @@ test('pricing intent registration starts one server-controlled trial of the sele
   expect(sub!.launchUsed).toBeFalsy()
 })
 
+test('registration trial invariants survive re-auth and duplicate registration is blocked', async ({ page }) => {
+  const { email, storeName, ref } = ctx()
+  await registerStore(page, {
+    email,
+    password: PASSWORD,
+    name: 'مالك ثبات التجربة',
+    storeName,
+    storeRef: ref,
+    planName: 'GROWTH',
+  })
+
+  const store = (await pollValue(() => storeBySlug(ref), (value) => value != null))!
+  const initial = (await latestSub(store.id))!
+  expect(initial.status).toBe('trialing')
+  expect(initial.initialTrialPlanId).toBe('plan-growth')
+  expect(initial.trialStartedAt).toBeTruthy()
+  expect(initial.trialEndsAt).toBeTruthy()
+  expect(initial.trialEndsAt.toMillis() - initial.trialStartedAt.toMillis()).toBe(3 * 86400000)
+  expect(initial.trialConsumed).toBe(false)
+
+  await login(page, 'merchant', email, PASSWORD)
+  await logout(page)
+  await login(page, 'merchant', email, PASSWORD)
+  const afterReauth = (await latestSub(store.id))!
+  expect(afterReauth.initialTrialPlanId).toBe(initial.initialTrialPlanId)
+  expect(afterReauth.trialStartedAt.toMillis()).toBe(initial.trialStartedAt.toMillis())
+  expect(afterReauth.trialEndsAt.toMillis()).toBe(initial.trialEndsAt.toMillis())
+  expect(afterReauth.trialConsumed).toBe(initial.trialConsumed)
+
+  await logout(page)
+  await page.goto('/register', { waitUntil: 'domcontentloaded' })
+  await page.locator('#reg-email').fill(email)
+  await page.locator('#reg-password').fill(PASSWORD)
+  await page.locator('#reg-name').fill('محاولة مكررة')
+  await page.locator('#reg-phone').fill(phoneFromEmail(`${email}-duplicate`))
+  await page.locator('.auth-terms input[type="checkbox"]').check()
+  await page.getByRole('button', { name: 'التالي' }).click()
+  await page.getByRole('button', { name: 'تغيير الباقة' }).click()
+  await page.locator('.register-plan-selector .mk-pricing-card').filter({ has: page.locator('.mk-pricing-name', { hasText: 'GROWTH' }) }).locator('.mk-pricing-cta').first().click()
+  await page.getByRole('button', { name: 'التالي' }).click()
+  await page.locator('#store-name').fill('متجر مكرر')
+  await page.locator('#store-ref').fill(`${ref}-duplicate`)
+  await page.getByRole('button', { name: 'إنشاء الحساب' }).click()
+  await expect(page.getByText('فشل التسجيل', { exact: false })).toBeVisible({ timeout: 15000 })
+  expect((await db.collection('users').where('email', '==', email).get()).size).toBe(1)
+  expect((await db.collection('stores').where('ownerId', '==', store.data()?.ownerId).get()).size).toBe(1)
+})
+
 test('Legacy Free is unavailable to new registration', async ({ page }) => {
   const { uniq } = ctx()
   const suffix = `${uniq}-${Date.now()}`
