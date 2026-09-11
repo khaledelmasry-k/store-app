@@ -59,8 +59,21 @@ async function ensureFlowStore(ref: string, name: string, preserveTrial = false)
   const existing = await storeBySlug(ref)
   const storeId = existing?.id || `flow-owner-${ref}`
   const ownerEmail = `${ref}@mk.test`
+  // Auth and Firestore can be reset independently by local emulators. Keep
+  // this fixture convergent rather than assuming the store document implies a
+  // matching Auth account still exists.
+  try {
+    await admin.auth().getUser(storeId)
+    await admin.auth().updateUser(storeId, { email: ownerEmail, password: 'Flow12345', displayName: 'مالك التدفق', disabled: false })
+  } catch (error: any) {
+    if (error?.code !== 'auth/user-not-found') throw error
+    await admin.auth().createUser({ uid: storeId, email: ownerEmail, password: 'Flow12345', displayName: 'مالك التدفق' })
+  }
+  await db.collection('users').doc(storeId).set({
+    uid: storeId, email: ownerEmail, name: 'مالك التدفق', role: 'merchant', storeIds: [storeId], active: true,
+    updatedAt: admin.firestore.FieldValue.serverTimestamp(),
+  }, { merge: true })
   if (!existing) {
-    await admin.auth().createUser({ uid: storeId, email: ownerEmail, password: 'Flow12345', displayName: 'مالك التدفق' }).catch(() => {})
     await db.collection('users').doc(storeId).set({
       uid: storeId, email: ownerEmail, name: 'مالك التدفق', role: 'merchant', storeIds: [storeId], active: true,
       createdAt: admin.firestore.FieldValue.serverTimestamp(), updatedAt: admin.firestore.FieldValue.serverTimestamp(),
@@ -117,7 +130,13 @@ async function login(page: Page, role: 'platform' | 'merchant', email: string, p
   // logout() already lands on the auth route. Reusing that document avoids
   // racing the auth guard with a second navigation to the same URL.
   if (!page.url().includes('/login')) {
-    await page.goto(loginUrl, { waitUntil: 'domcontentloaded' })
+    try {
+      await page.goto(loginUrl, { waitUntil: 'domcontentloaded' })
+    } catch (error) {
+      const message = String(error)
+      const navigationWasAborted = message.includes('ERR_ABORTED') || message.includes('frame was detached')
+      if (!navigationWasAborted || !page.url().includes('/login')) throw error
+    }
   }
   // The auth guard redirects an already-authenticated session away from /login
   // after hydration. Wait for the actual settled surface instead of racing a
@@ -1063,6 +1082,8 @@ test('landing save with empty optional fields works; duplicate slug rejected; du
   await expect(savedRow).toBeVisible()
   await page.getByLabel('الحالة').selectOption('published')
   await expect(savedRow).toHaveCount(0)
+  await page.getByLabel('الحالة').selectOption('')
+  await expect(savedRow).toBeVisible()
 
   // Creating another page with the SAME slug must be rejected client-side.
   await safeClickWithTourGuard(page, page.getByRole('button', { name: 'صفحة جديدة' }))
