@@ -64,7 +64,7 @@ export const MerchantSubscription: FunctionalComponent = () => {
   const subscriptionParams = new URLSearchParams(location.split('?')[1] || window.location.search)
   const lifetimeIntent = subscriptionParams.get('offer') === 'lifetime'
   const toast = useToast()
-  const { subscription, plan, paymentRequests, changeRequests, purchaseRequests, status, nextAmount, launchOffer, loading, error: subscriptionError, refresh, resourceUsage } = useSubscription(storeId)
+  const { subscription, plan, paymentRequests, changeRequests, purchaseRequests, status, nextAmount, loading, error: subscriptionError, refresh, resourceUsage } = useSubscription(storeId)
 
   const plansRes = useCollectionOnce<SubscriptionPlan>('plans', { orderBy: { field: 'priceMonthly' } })
   const allPlans = CANONICAL_PLANS.map((canonical) => {
@@ -224,7 +224,7 @@ export const MerchantSubscription: FunctionalComponent = () => {
     setPromoError('')
     setPromoApplying(true)
     try {
-      const amount = Number(currentMonthlyPrice || nextAmount || plan?.priceMonthly || 0)
+      const amount = Number(currentRenewalPrice || nextAmount || plan?.priceMonthly || 0)
       const billingCycle = (subscription.billingCycle as 'monthly' | 'yearly') || 'monthly'
       const result: any = await quoteSubscriptionCouponCallable({ code, planId: subscription.planId, billingCycle, amount })
       const data = result.data as { originalPrice: number; discountAmount: number; finalPrice: number }
@@ -304,10 +304,22 @@ export const MerchantSubscription: FunctionalComponent = () => {
   const lifetimeOffers = allPlans.filter((p: any) => p.billingModel === 'one_time' && p.isLaunchOffer !== false && Number(p.oneTimePrice || 0) > 0 && offerIsPubliclyAvailable(p))
   const subscriptionOffers = allPlans.filter((p: any) => p.billingModel !== 'one_time' && PUBLIC_PAID_PLAN_IDS.has(p.id))
 
-  // Keep the merchant's immutable commercial snapshot visible for the current
-  // subscription. The canonical catalog is only for new upgrades/offers.
-  const currentMonthlyPrice = Number(subscription.normalPriceSnapshot ?? plan?.priceMonthly ?? 0)
-  const isFreePlan = subscription.planId === 'plan-free' || currentMonthlyPrice <= 0
+  // Historical snapshots remain immutable audit data. Renewal price must match
+  // the server's canonical pricing rule: a later catalog reduction applies,
+  // while an older lower contracted price is never raised.
+  const historicalMonthlyPrice = Number(subscription.normalPriceSnapshot ?? 0)
+  const historicalYearlyPrice = Number(subscription.yearlyPriceSnapshot ?? 0)
+  const canonicalCurrentPlan = CANONICAL_PLANS.find((candidate) => candidate.id === subscription.planId)
+  const canonicalMonthlyPrice = Number(canonicalCurrentPlan?.priceMonthly ?? plan?.priceMonthly ?? 0)
+  const canonicalYearlyPrice = Number(canonicalCurrentPlan?.priceYearly ?? plan?.priceYearly ?? canonicalMonthlyPrice * 10)
+  const billingCycle = subscription.billingCycle === 'yearly' ? 'yearly' : 'monthly'
+  const historicalCyclePrice = billingCycle === 'yearly' ? historicalYearlyPrice : historicalMonthlyPrice
+  const canonicalCyclePrice = billingCycle === 'yearly' ? canonicalYearlyPrice : canonicalMonthlyPrice
+  const currentRenewalPrice = canonicalCyclePrice > 0 && historicalCyclePrice > 0
+    ? Math.min(canonicalCyclePrice, historicalCyclePrice)
+    : canonicalCyclePrice || historicalCyclePrice
+  const hasLegacyHistoricalPrice = historicalCyclePrice > 0 && currentRenewalPrice > 0 && historicalCyclePrice !== currentRenewalPrice
+  const isFreePlan = subscription.planId === 'plan-free' || currentRenewalPrice <= 0
   const paidPeriodEnd = subscription.currentPeriodEnd || subscription.expiresAt
   const renewalLabel = status === 'active' && !isFreePlan && paidPeriodEnd ? formatDate(paidPeriodEnd) : isFreePlan && subscription.trialEndsAt ? `يلزم الترقية قبل ${formatDate(subscription.trialEndsAt)}` : '—'
   const currency = 'EGP'
@@ -406,8 +418,8 @@ export const MerchantSubscription: FunctionalComponent = () => {
             <div><span>حالة الملكية</span><b>{isLifetime ? 'المتجر مملوك' : 'اشتراك دوري'}</b></div>
             <div><span>تاريخ التجديد القادم</span><b>{isLifetime ? 'لا يوجد تجديد لملكية المتجر الأساسية' : renewalLabel}</b></div>
             <div><span>نهاية الدورة الحالية</span><b>{paidPeriodEnd ? formatDate(paidPeriodEnd) : isLifetime ? 'لا تنتهي ملكية المتجر' : 'يُحدَّد عند تفعيل الدورة'}</b></div>
-            <div><span>تكلفة التجديد</span><b>{isLifetime ? 'لا توجد رسوم شهرية للملكية الأساسية' : isFreePlan ? 'اختر Starter أو Growth أو Pro' : `${formatCurrency(currentMonthlyPrice, currency)} / شهرياً`}</b></div>
-            {launchOffer && <div><span>خصم الإطلاق</span><b>أول شهر {formatCurrency(nextAmount, currency)}</b></div>}
+            <div><span>تكلفة التجديد</span><b>{isLifetime ? 'لا توجد رسوم شهرية للملكية الأساسية' : isFreePlan ? 'اختر Basic أو Starter أو Growth أو Pro' : `${formatCurrency(currentRenewalPrice, currency)} / ${billingCycle === 'yearly' ? 'سنويًا' : 'شهرياً'}`}</b></div>
+            {hasLegacyHistoricalPrice && <div><span>سعر الاشتراك السابق</span><b>{formatCurrency(historicalCyclePrice, currency)} / {billingCycle === 'yearly' ? 'سنويًا' : 'شهرياً'}</b></div>}
           </div>
         </div>
         <div className="subscription-summary-actions">
@@ -465,7 +477,7 @@ export const MerchantSubscription: FunctionalComponent = () => {
             <div>
               {subscription?.trialEndsAt ? <CountdownTimer endsAt={subscription.trialEndsAt} label="متبقي من الفترة التجريبية" /> : <strong className="trial-missing-end">تعذر تحديد موعد انتهاء التجربة</strong>}
               {subscription.planId === 'plan-free' ? (
-                <p className="muted small">Free متاحة لمدة 30 يومًا فقط. بياناتك تبقى محفوظة بعد الانتهاء، ويلزم اختيار Starter أو Growth أو Pro لمواصلة العمليات.</p>
+                <p className="muted small">هذه باقة تاريخية غير متاحة للتسجيل الجديد. بيانات متجرك تبقى محفوظة، ويلزم اختيار باقة مدفوعة لمواصلة العمليات.</p>
               ) : (
                 <p className="muted small">تجربتك الحالية لـ {plan?.name || subscription.planName} لمدة 3 أيام. عند انتهائها، يمكنك تفعيل نفس الباقة أو اختيار باقة أخرى مدفوعة — لا تعود تلقائيًا إلى Free.</p>
               )}
@@ -644,7 +656,7 @@ export const MerchantSubscription: FunctionalComponent = () => {
             <EmptyState
               icon="verified"
               title="اشتراكك نشط"
-              description={isLifetime ? 'تم اعتماد ملكية المتجر الأساسية. لا يوجد انتهاء أو تجديد لهذه الملكية، وتظل حدود ومزايا العرض المشتراة مطبقة.' : `باقتك مفعّلة حتى ${formatDate(subscription.currentPeriodEnd || subscription.expiresAt)}. سيتم التجديد تلقائياً بالمبلغ ${formatCurrency(nextAmount, currency)} عند انتهاء الدورة.`}
+              description={isLifetime ? 'تم اعتماد ملكية المتجر الأساسية. لا يوجد انتهاء أو تجديد لهذه الملكية، وتظل حدود ومزايا العرض المشتراة مطبقة.' : `باقتك مفعّلة حتى ${formatDate(subscription.currentPeriodEnd || subscription.expiresAt)}. سيتم التجديد تلقائياً بالمبلغ ${formatCurrency(currentRenewalPrice, currency)} عند انتهاء الدورة.`}
             />
           ) : canSubmit ? (
             <>
@@ -654,8 +666,8 @@ export const MerchantSubscription: FunctionalComponent = () => {
                   : pendingChangeRequest
                   ? `أرسل إثبات الدفع بمبلغ ${formatCurrency(pendingChangeRequest.quotedAmount, pendingChangeRequest.currency || currency)} لإكمال تغيير الباقة.`
                   : status === 'trialing'
-                  ? `بدّل للتجديد المدفوع الآن بخصم الإطلاق: أول شهر ${formatCurrency(nextAmount, currency)} فقط.`
-                  : `متجرك متوقف عن البيع حالياً. فعّل باقتك بمبلغ ${formatCurrency(nextAmount, currency)} لاستئناف العمل فوراً.`}
+                  ? `بدّل للتجديد المدفوع الآن بمبلغ ${formatCurrency(currentRenewalPrice, currency)}.`
+                  : `متجرك متوقف عن البيع حالياً. فعّل باقتك بمبلغ ${formatCurrency(currentRenewalPrice, currency)} لاستئناف العمل فوراً.`}
               </p>
 
               {settings?.paymentInstructions && (

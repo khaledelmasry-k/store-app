@@ -395,7 +395,7 @@ export const PlatformPlans: FunctionalComponent = () => {
           <p className="muted small">المقاعد المستخدمة يديرها الخادم ولا يمكن تعديلها من الواجهة.</p>
         </>}
         {form.billingModel !== 'one_time' && <div className="grid grid-2">
-          <Input label="مدة التجربة (أيام)" type="number" value={form.trialDays ?? 0} onChange={(v) => setForm({ ...form, trialDays: Math.min(90, Math.max(0, Number(v))) })} hint="صفر للباقات المدفوعة بلا تجربة مستقلة؛ Free الحالية 30 يومًا" />
+          <Input label="مدة التجربة (أيام)" type="number" value={form.trialDays ?? 0} onChange={(v) => setForm({ ...form, trialDays: Math.min(90, Math.max(0, Number(v))) })} hint="صفر للباقات المدفوعة بلا تجربة مستقلة؛ Free باقة تاريخية غير قابلة للشراء." />
           <Input label="سعر الإطلاق (الشهر الأول)" type="number" value={form.launchPrice || ''} onChange={(v) => setForm({ ...form, launchPrice: Number(v) })} />
         </div>}
         {form.billingModel !== 'one_time' && <div className="field">

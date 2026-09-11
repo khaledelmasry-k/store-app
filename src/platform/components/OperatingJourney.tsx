@@ -143,8 +143,8 @@ export const OperatingJourney: FunctionalComponent = () => {
       <div className="oj-container">
         <div className="oj-header">
           <span className="oj-eyebrow">دورة التشغيل</span>
-          <h2 id="oj-title">من المتجر إلى القرار، في مسار واحد</h2>
-          <p>كل خطوة تسلّم بياناتها للخطوة التالية داخل Matjari.</p>
+          <h2 id="oj-title">من المنتج إلى الربحية، في مسار واحد</h2>
+          <p>منتج → بيع → طلب → عميل → شحن → متابعة → ربحية. كل خطوة تسلّم بياناتها للخطوة التالية داخل Matjari.</p>
         </div>
 
         <div className="oj-stage" role="group" aria-label="رحلة التشغيل من المتجر إلى التقارير">

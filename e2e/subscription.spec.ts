@@ -146,10 +146,12 @@ test('merchant activates during trial: submit payment → platform approves → 
   // semantic heading), so assert the canonical visible title directly.
   await expect(page.getByText('تفعيل الاشتراك', { exact: true }).first()).toBeVisible({ timeout: 45000 })
 
-  // This fixture is a legacy Starter trial with 399 EGP snapshot (pre-launch).
-  // Historical snapshot must stay 399, but new activation must use launch price 249 EGP (lower wins).
+  // This fixture is a legacy Starter trial with a 399 EGP historical snapshot.
+  // The current renewal display must use the canonical 249 EGP price while the
+  // historical amount remains visible as audit context.
   const renewalRow = page.locator('.subscription-summary-rows > div', { hasText: 'تكلفة التجديد' })
-  await expect(renewalRow).toContainText(/(?:399|٣٩٩)/)
+  await expect(renewalRow).toContainText(/(?:249|٢٤٩)/)
+  await expect(page.locator('.subscription-summary-rows > div', { hasText: 'سعر الاشتراك السابق' })).toContainText(/(?:399|٣٩٩)/)
 
   // Submit a payment request.
   await page.locator('.field', { hasText: 'وسيلة الدفع' }).locator('input').fill('فودافون كاش')
@@ -197,6 +199,20 @@ test('merchant activates during trial: submit payment → platform approves → 
   expect(after.currentPeriodEnd).toBeTruthy()
   expect(after.trialEndsAt).toBeFalsy()
   expect(await pendingRequests(sub.id)).toBe(0)
+})
+
+test('legacy Growth snapshot never becomes the current renewal price', async ({ page }) => {
+  const { storeId, email } = await makeTrialStore('growth-legacy-price', 'plan-growth', 749)
+  await authenticateMerchantUid(page, (await admin.auth().getUserByEmail(email)).uid)
+  await page.goto('/dashboard/subscription', { waitUntil: 'domcontentloaded' })
+
+  const renewalRow = page.locator('.subscription-summary-rows > div', { hasText: 'تكلفة التجديد' })
+  await expect(renewalRow).toContainText(/(?:399|٣٩٩)/, { timeout: 45000 })
+  await expect(renewalRow).not.toContainText(/(?:749|٧٤٩)/)
+  await expect(page.locator('.subscription-summary-rows > div', { hasText: 'سعر الاشتراك السابق' })).toContainText(/(?:749|٧٤٩)/)
+
+  const persisted = await latestSub(storeId)
+  expect(persisted.normalPriceSnapshot).toBe(749)
 })
 
 test('expired merchant cannot publish (server-enforced)', async ({ page }) => {
