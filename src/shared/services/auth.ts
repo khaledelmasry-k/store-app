@@ -352,7 +352,6 @@ export function getPlatformOverviewCallable() {
 }
 
 export function getMerchantSubscriptionCallable(input: { storeId: string }) {
-  const functions = getFunctions()
   const fn = httpsCallable(functions, 'getMerchantSubscription')
   return fn(input)
 }

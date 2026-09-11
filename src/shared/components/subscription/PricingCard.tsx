@@ -35,8 +35,8 @@ function storageLabel(mb: number): string {
  * Professional Arabic RTL pricing card (reused by the public pricing page,
  * the registration wizard and the merchant activation panel).
  * Prices/trial/limits/feature-flags come from the plan document — never
- * hardcoded. The Free plan is a one-time 30-day onboarding window; it is not
- * represented as a recurring free-forever subscription.
+ * hardcoded. The archived Free plan is retained only for historical records;
+ * it is never an offer for new registration.
  */
 export const PricingCard: FunctionalComponent<Props> = ({ plan, selected, featured, yearly, onSelect, ctaLabel, displayName }) => {
   const isFree = Number(plan.priceMonthly || 0) <= 0
@@ -86,7 +86,7 @@ export const PricingCard: FunctionalComponent<Props> = ({ plan, selected, featur
 
       <div className="mk-pricing-price">
         {isFree && !isOneTime ? <strong>مجاناً</strong> : <strong>{formatPriceEgp(price)}</strong>}
-        <span>{isOneTime ? 'دفعة واحدة' : isFree ? `لمدة ${trialDays || 30} يومًا` : yearly ? '/ سنوياً' : '/ شهريًا'}</span>
+        <span>{isOneTime ? 'دفعة واحدة' : isFree ? 'باقة تاريخية' : yearly ? '/ سنوياً' : '/ شهريًا'}</span>
       </div>
 
       {hasLaunch && (
@@ -100,7 +100,7 @@ export const PricingCard: FunctionalComponent<Props> = ({ plan, selected, featur
       {isFree && !isOneTime && (
         <div className="mk-pricing-trial">
           <Icon name="schedule" />
-          مجانًا لمدة 30 يومًا — بعدها اختر باقة مدفوعة
+          باقة تاريخية غير متاحة للتسجيل أو الشراء الجديد
         </div>
       )}
       {!isFree && !isOneTime && trialDays > 0 && (
