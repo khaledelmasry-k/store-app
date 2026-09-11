@@ -21,7 +21,7 @@ import { useToast } from '../../shared/hooks/useToast'
 import { storeLinksService } from '../../shared/services/system'
 import { createSalesLinkCallable } from '../../shared/services/auth'
 import { getPlanLimit, isPlanLimitUnlimited } from '../../shared/services/subscription'
-import { formatCurrency } from '../../shared/utils/format'
+import { formatCurrency, formatDate, timeAgo } from '../../shared/utils/format'
 import { storeBaseUrl } from '../../shared/utils/store-url'
 import type { LandingPage, Product, StoreLink, StoreLinkDestinationType } from '../../shared/types'
 import './StoreLinks.css'
@@ -70,6 +70,7 @@ export const MerchantStoreLinks: FunctionalComponent = () => {
   const [open, setOpen] = useState(false)
   const [saving, setSaving] = useState(false)
   const [deleteTarget, setDeleteTarget] = useState<StoreLink | null>(null)
+  const [performanceTarget, setPerformanceTarget] = useState<StoreLink | null>(null)
   const [form, setForm] = useState<Draft>({
     name: '', code: '', sellerName: '', destinationType: 'home', destinationId: '', source: '', campaign: '', content: '', active: true, archived: false,
   })
@@ -135,7 +136,9 @@ export const MerchantStoreLinks: FunctionalComponent = () => {
         toast.push('تم تحديث الرابط')
       } else {
         const created = await createSalesLinkCallable({ storeId, data })
-        const savedCode = String((created.data as { code?: string } | undefined)?.code || code)
+        const saved = created.data as { id?: string; code?: string; active?: boolean } | undefined
+        if (!saved?.id || !saved?.code || typeof saved.active !== 'boolean') throw new Error('لم يؤكد الخادم حفظ رابط البيع')
+        const savedCode = saved.code
         toast.push('تم إنشاء رابط البيع', `الرابط جاهز للمشاركة: ${publicUrl(savedCode)}`, 'success')
       }
       setOpen(false)
@@ -185,9 +188,19 @@ export const MerchantStoreLinks: FunctionalComponent = () => {
   }
 
   const conversionRate = (l: StoreLink) => (l.visits && l.visits > 0 ? Math.round(((l.ordersCount || 0) / l.visits) * 1000) / 10 : 0)
+  const averageOrderValue = (l: StoreLink) => (l.ordersCount || 0) > 0 ? (l.totalRevenue || 0) / (l.ordersCount || 1) : 0
+  const toggleActive = async (l: StoreLink) => {
+    try {
+      await storeLinksService.update(l.id, { active: !l.active })
+      toast.push(!l.active ? 'تم تفعيل الرابط' : 'تم إيقاف الرابط')
+    } catch (err: any) {
+      toast.push('تعذر تحديث الرابط', err?.message || 'حدث خطأ غير متوقع', 'error')
+    }
+  }
 
   if (!store) return <Loading variant="screen" message="جارٍ تحميل بيانات المتجر..." />
   if (linksRes.loading || productsRes.loading || landingsRes.loading) return <Loading variant="screen" message="جاري تحميل روابط البيع..." />
+  if (linksRes.error) return <EmptyState icon="error" title="تعذر تحميل روابط البيع" description={linksRes.error.message} action={<Button variant="outline" icon="refresh" onClick={() => window.location.reload()}>إعادة المحاولة</Button>} />
 
   const totalClicks = links.reduce((s, l) => s + (l.visits || 0), 0)
   const totalOrders = links.reduce((s, l) => s + (l.ordersCount || 0), 0)
@@ -256,6 +269,8 @@ export const MerchantStoreLinks: FunctionalComponent = () => {
                   <th>اسم الرابط</th>
                   <th>الكود المختصر</th>
                   <th>الوجهة</th>
+                  <th>تاريخ الإنشاء</th>
+                  <th>آخر نشاط</th>
                   <th className="center">الزيارات</th>
                   <th className="center">الطلبات</th>
                   <th className="center">التحويل</th>
@@ -273,6 +288,8 @@ export const MerchantStoreLinks: FunctionalComponent = () => {
                     </td>
                     <td><span className="storelinks-code" dir="ltr">/s/{l.code}</span></td>
                     <td><span className="storelinks-dest">{DESTINATION_LABELS[l.destinationType] || l.destinationType}</span></td>
+                    <td>{formatDate(l.createdAt)}</td>
+                    <td>{l.lastVisitAt ? timeAgo(l.lastVisitAt) : 'لا يوجد'}</td>
                     <td className="center">{l.visits || 0}</td>
                     <td className="center">{l.ordersCount || 0}</td>
                     <td className="center">{conversionRate(l)}%</td>
@@ -282,10 +299,13 @@ export const MerchantStoreLinks: FunctionalComponent = () => {
                     </td>
                     <td>
                       <span className="storelinks-actions">
-                        <button className="icon-btn" onClick={() => copyLink(l.code)} title="نسخ الرابط"><Icon name="content_copy" /></button>
-                        <button className="icon-btn" onClick={() => shareLink(l)} title="مشاركة"><Icon name="share" /></button>
-                        <button className="icon-btn" onClick={() => openForm(l)} title="تعديل"><Icon name="edit" /></button>
-                        <button className="icon-btn icon-btn-danger" onClick={() => archive(l)} title="إيقاف"><Icon name="archive" /></button>
+                        <Button variant="ghost" size="sm" icon="open_in_new" iconOnly onClick={() => window.open(publicUrl(l.code), '_blank', 'noopener,noreferrer')} title="فتح" />
+                        <Button variant="ghost" size="sm" icon="content_copy" iconOnly onClick={() => copyLink(l.code)} title="نسخ" />
+                        <Button variant="ghost" size="sm" icon="share" iconOnly onClick={() => shareLink(l)} title="مشاركة" />
+                        <Button variant="ghost" size="sm" icon="monitoring" iconOnly onClick={() => setPerformanceTarget(l)} title="مشاهدة الأداء" />
+                        <Button variant="ghost" size="sm" icon="edit" iconOnly onClick={() => openForm(l)} title="تعديل" />
+                        <Button variant="ghost" size="sm" icon={l.active ? 'pause_circle' : 'play_circle'} iconOnly onClick={() => toggleActive(l)} title={l.active ? 'إيقاف' : 'تفعيل'} />
+                        <Button variant="danger" size="sm" icon="archive" iconOnly onClick={() => archive(l)} title="أرشفة" />
                       </span>
                     </td>
                   </tr>
@@ -400,6 +420,16 @@ export const MerchantStoreLinks: FunctionalComponent = () => {
             <Button icon="save" onClick={submit} loading={saving}>{form.id ? 'حفظ التغييرات' : 'حفظ وإنشاء'}</Button>
           </div>
         </div>
+      </Drawer>
+
+      <Drawer open={!!performanceTarget} onClose={() => setPerformanceTarget(null)} title={`أداء ${performanceTarget?.name || 'رابط البيع'}`} size="md">
+        {performanceTarget && <div className="storelinks-performance-grid">
+          <StatsCard title="الزيارات" value={performanceTarget.visits || 0} icon="visibility" tone="blue" />
+          <StatsCard title="الطلبات" value={performanceTarget.ordersCount || 0} icon="shopping_bag" tone="green" />
+          <StatsCard title="معدل التحويل" value={`${conversionRate(performanceTarget)}%`} icon="monitoring" tone="indigo" />
+          <StatsCard title="الإيرادات" value={performanceTarget.totalRevenue || 0} currency icon="payments" tone="amber" />
+          <StatsCard title="متوسط الطلب" value={averageOrderValue(performanceTarget)} currency icon="receipt_long" tone="primary" />
+        </div>}
       </Drawer>
 
       <ConfirmDialog open={!!deleteTarget} onCancel={() => setDeleteTarget(null)} onConfirm={async () => { if (deleteTarget) { await storeLinksService.remove(deleteTarget.id); toast.push('تم حذف الرابط'); setDeleteTarget(null) } }} title="حذف رابط البيع" description={`سيتم حذف "${deleteTarget?.name}"`} confirmLabel="حذف" />

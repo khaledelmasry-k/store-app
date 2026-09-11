@@ -9,7 +9,7 @@ import {
 } from 'firebase/auth'
 import { doc, serverTimestamp, setDoc } from 'firebase/firestore'
 import { getFunctions, httpsCallable } from 'firebase/functions'
-import { auth, db } from '../firebase'
+import { auth, db, functions } from '../firebase'
 import type { Role } from '../types'
 
 export interface Credentials {
@@ -288,7 +288,7 @@ export function resolveStoreLinkCallable(input: { code: string }) {
   return fn(input)
 }
 
-export function recordLandingPageViewCallable(input: { landingPageId: string }) {
+export function recordLandingPageViewCallable(input: { landingPageId: string; eventId?: string }) {
   const functions = getFunctions()
   const fn = httpsCallable(functions, 'recordLandingPageView')
   return fn(input)
@@ -336,7 +336,7 @@ export function getPublicStoreCallable(input: { slug: string; preview?: boolean 
 }
 
 export function getPublicLandingPageCallable(input: { slug: string }) {
-  return httpsCallable(getFunctions(), 'getPublicLandingPage')(input)
+  return httpsCallable(functions, 'getPublicLandingPage')(input)
 }
 
 export function createTicketCallable(input: { storeId: string; subject: string; description: string; priority: string }) {
@@ -422,9 +422,7 @@ export function setStorePublishedCallable(input: { storeId: string; published: b
 }
 
 export function createLandingPageCallable(input: Record<string, unknown>) {
-  const functions = getFunctions()
-  const fn = httpsCallable(functions, 'createLandingPage')
-  return fn(input)
+  return httpsCallable(functions, 'createLandingPage')(input)
 }
 
 export function createProductCallable(input: { storeId: string; productId: string; data: Record<string, unknown> }) {

@@ -111,6 +111,12 @@ export const OrderDetailsWorkspace: FunctionalComponent<Props> = ({ id }) => {
     || publicShipmentTrackingCode(shipment.provider || shipment.providerId, shipment.providerShipmentId)
     || shipment.trackingNumber || shipment.providerShipmentId || null) : null
   const currentShipmentStatus = String(shipment?.currentStatus || shipment?.status || 'CREATED')
+  // Older carriers wrote SHIPPED; normalize only the visual journey to the
+  // current canonical status without changing any shipment workflow data.
+  const trackingShipmentStatus = currentShipmentStatus === 'SHIPPED' ? 'IN_TRANSIT' : currentShipmentStatus
+  const shipmentProgress = ['CREATED', 'READY_FOR_PICKUP', 'PICKED_UP', 'IN_TRANSIT', 'OUT_FOR_DELIVERY', 'DELIVERED']
+  const shipmentProgressIndex = shipmentProgress.indexOf(trackingShipmentStatus)
+  const shipmentProviderName = shipment?.providerName || (shipment as any)?.shippingCompanyName || 'شركة الشحن'
   const shipmentProvider = shippingChoices.find((row) => row.provider.id === shipment?.providerId)?.provider
   const selectedProvider = shippingChoices.find((row) => row.provider.id === shippingProviderId)?.provider
   const hasExternalShipment = Boolean(isApiShipment && (shipment?.externalShipmentId || shipment?.providerShipmentId))
@@ -406,15 +412,27 @@ export const OrderDetailsWorkspace: FunctionalComponent<Props> = ({ id }) => {
             </div>
           </div>
 
+          {(order.salesLinkId || order.landingPageId || order.campaignId) && <div className="ods-card">
+            <h3 className="ods-sidebar-title"><Icon name="campaign" ariaHidden /> مصدر الطلب</h3>
+            <div className="ods-kv">
+              {order.salesLinkId && <div><p className="ods-kv-label">رابط بيع</p><p className="ods-kv-value">{order.salesLinkSnapshot?.title || order.salesLinkCode || order.salesLinkRef || 'رابط بيع'}</p></div>}
+              {order.landingPageId && <div><p className="ods-kv-label">صفحة هبوط</p><p className="ods-kv-value">{order.landingPageSnapshot?.title || order.landingPageSnapshot?.slug || 'صفحة هبوط'}</p></div>}
+              {order.campaignId && <div><p className="ods-kv-label">الحملة</p><p className="ods-kv-value">{order.campaignNameSnapshot || order.utmCampaign || order.campaignId}</p></div>}
+            </div>
+          </div>}
+
           <div className="ods-card">
             <h3 className="ods-sidebar-title"><Icon name="local_shipping" ariaHidden /> الشحنة</h3>
             {order.activeShipmentId && shipment ? <div className="stack-list">
-              <div className="shipping-secure-note"><Icon name={isApiShipment ? 'cloud_sync' : 'edit_note'} ariaHidden /><span>{isApiShipment ? `شحنة API متصلة بـ${shipment.providerName || 'شركة الشحن'}؛ الشركة هي مصدر الحالة، لذلك لا تعديل يدوي هنا.` : 'شحنة يدوية: حدّث مرحلتها هنا فقط وسيتم تحديث حالة الطلب تلقائيًا.'}</span></div>
+              <div className="shipping-secure-note"><Icon name={isApiShipment ? 'cloud_sync' : 'edit_note'} ariaHidden /><span>{isApiShipment ? `شحنة API متصلة بـ${shipmentProviderName}؛ الشركة هي مصدر الحالة، لذلك لا تعديل يدوي هنا.` : 'شحنة يدوية: حدّث مرحلتها هنا فقط وسيتم تحديث حالة الطلب تلقائيًا.'}</span></div>
+              {!['FAILED', 'RETURNING', 'RETURNED', 'CANCELLED'].includes(trackingShipmentStatus) && <div className="ods-shipment-progress" aria-label={`رحلة الشحنة: ${SHIPMENT_STATUS_LABELS[trackingShipmentStatus] || trackingShipmentStatus}`}>
+                {shipmentProgress.map((status, index) => <div key={status} className={`ods-shipment-stage${index < shipmentProgressIndex ? ' is-done' : ''}${index === shipmentProgressIndex ? ' is-current' : ''}`}><span className="ods-shipment-dot">{index < shipmentProgressIndex ? <Icon name="check" /> : null}</span><small>{SHIPMENT_STATUS_LABELS[status]}</small></div>)}
+              </div>}
               <div className="ods-kv">
-                <div><p className="ods-kv-label">شركة الشحن</p><p className="ods-kv-value">{shipment.providerName || '—'}</p></div>
+                <div><p className="ods-kv-label">شركة الشحن</p><p className="ods-kv-value">{shipmentProviderName}</p></div>
                 <div><p className="ods-kv-label">كود الشحنة الخارجي</p><p className="ods-kv-value ltr-text">{shipment.externalShipmentId || shipment.providerShipmentId || '—'}</p></div>
                 <div><p className="ods-kv-label">كود التتبع</p><p className="ods-kv-value ltr-text">{shipmentTrackingCode || 'بانتظار كود المتابعة'}</p></div>
-                <div><p className="ods-kv-label">الحالة المحلية</p><p className="ods-kv-value">{SHIPMENT_STATUS_LABELS[currentShipmentStatus] || currentShipmentStatus}</p></div>
+                <div><p className="ods-kv-label">الحالة المحلية</p><p className="ods-kv-value">{SHIPMENT_STATUS_LABELS[trackingShipmentStatus] || trackingShipmentStatus}</p></div>
                 <div><p className="ods-kv-label">آخر حالة من الشركة</p><p className="ods-kv-value">{shipment.remoteStatus == null ? '—' : String(shipment.remoteStatus)}</p></div>
                 <div><p className="ods-kv-label">آخر مزامنة</p><p className="ods-kv-value">{shipment.lastSyncedAt ? formatDateTime(shipment.lastSyncedAt) : '—'}</p></div>
                 {currentShipmentStatus === 'FAILED' && shipment.failureReason && <div><p className="ods-kv-label">سبب تعذر التسليم</p><p className="ods-kv-value">{shipment.failureReason}</p></div>}

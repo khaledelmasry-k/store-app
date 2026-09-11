@@ -1879,6 +1879,86 @@
   z-index: 40 !important;
 }
 
+/* Support mode belongs to the merchant workspace, never to its navigation
+   rail. It remains immediately below the topbar and communicates both the
+   active account and the safe way back to the platform console. */
+.app-shell--dashboard .support-mode-bar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  width: 100%;
+  padding: 12px 24px;
+  color: var(--v3-text);
+  background: color-mix(in srgb, var(--amber) 12%, var(--v3-surface));
+  border-block-end: 1px solid color-mix(in srgb, var(--amber) 42%, var(--v3-outline));
+  box-sizing: border-box;
+}
+
+/* The desktop rail is fixed over the workspace at inline-start. Reserve that
+   exact column for the support notice so its identity never renders beneath
+   navigation; the mobile rule below intentionally resets this reservation. */
+@media (min-width: 769px) {
+  .app-shell--dashboard .support-mode-bar {
+    padding-inline-start: calc(24px + var(--merchant-sidebar-width));
+  }
+}
+
+.support-mode-bar__identity {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  min-width: 0;
+}
+
+.support-mode-bar__icon {
+  display: inline-grid;
+  place-items: center;
+  flex: 0 0 auto;
+  width: 36px;
+  height: 36px;
+  border-radius: var(--radius-sm);
+  color: var(--amber);
+  background: color-mix(in srgb, var(--amber) 16%, transparent);
+}
+
+.support-mode-bar__icon .mk-icon { font-size: 20px; }
+.support-mode-bar__identity strong { display: block; font-size: var(--font-sm); font-weight: 750; }
+.support-mode-bar__identity p {
+  margin: 2px 0 0;
+  color: var(--v3-muted);
+  font-size: var(--font-xs);
+  line-height: 1.5;
+  overflow-wrap: anywhere;
+}
+
+.app-shell--dashboard .support-mode-bar__return {
+  flex: 0 0 auto;
+  color: var(--v3-text);
+  border-color: color-mix(in srgb, var(--amber) 55%, var(--v3-outline));
+  background: var(--v3-surface);
+}
+
+.app-shell--dashboard .support-mode-bar__return:hover:not(:disabled) {
+  color: var(--v3-text);
+  background: color-mix(in srgb, var(--amber) 14%, var(--v3-surface));
+  border-color: var(--amber);
+}
+
+@media (max-width: 768px) {
+  .app-shell--dashboard .support-mode-bar {
+    align-items: stretch;
+    flex-direction: column;
+    gap: 10px;
+    padding: 12px 16px;
+  }
+
+  .app-shell--dashboard .support-mode-bar__return {
+    width: 100%;
+    justify-content: center;
+  }
+}
+
 /* Keep the fixed rail entirely below the full-width topbar. */
 .app-shell .sidebar {
   inset-block-start: var(--topbar-h) !important;

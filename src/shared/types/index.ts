@@ -594,11 +594,16 @@ export interface Order extends Partial<FirestoreMeta> {
   returnReceivedAt?: { seconds: number; nanoseconds: number } | null
   salesLinkRef?: string | null
   salesLinkId?: string | null
+  salesLinkCode?: string | null
   salesLinkStaffId?: string | null
-   salesLinkSnapshot?: SalesLinkSnapshot | null
+  salesLinkSnapshot?: SalesLinkSnapshot | null
+  landingPageId?: string | null
+  landingPageSnapshot?: { slug: string; title?: string } | null
   campaignId?: string | null
   campaignNameSnapshot?: string | null
   attributionSource?: string | null
+  source?: string | null
+  attributedAt?: { seconds: number; nanoseconds: number } | null
   utmSource?: string | null
   utmCampaign?: string | null
    /** True once stock has been restored for a cancelled/returned order (idempotency). */
@@ -1200,6 +1205,7 @@ export interface StoreLink extends Partial<FirestoreMeta> {
   /** Hidden from the storefront + redirect (soft-delete). */
   archived?: boolean
   visits: number
+  lastVisitAt?: { seconds: number; nanoseconds: number } | null
   ordersCount?: number
   totalRevenue?: number
   sellerName?: string
@@ -1264,6 +1270,7 @@ export interface LandingPage extends Partial<FirestoreMeta> {
   ordersCount: number
   /** DELIVERED-only revenue attributed to this page. */
   totalRevenue: number
+  lastViewAt?: { seconds: number; nanoseconds: number } | null
   active: boolean
 }
 

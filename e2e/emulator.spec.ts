@@ -59,8 +59,21 @@ async function ensureFlowStore(ref: string, name: string, preserveTrial = false)
   const existing = await storeBySlug(ref)
   const storeId = existing?.id || `flow-owner-${ref}`
   const ownerEmail = `${ref}@mk.test`
+  // Auth and Firestore can be reset independently by local emulators. Keep
+  // this fixture convergent rather than assuming the store document implies a
+  // matching Auth account still exists.
+  try {
+    await admin.auth().getUser(storeId)
+    await admin.auth().updateUser(storeId, { email: ownerEmail, password: 'Flow12345', displayName: 'مالك التدفق', disabled: false })
+  } catch (error: any) {
+    if (error?.code !== 'auth/user-not-found') throw error
+    await admin.auth().createUser({ uid: storeId, email: ownerEmail, password: 'Flow12345', displayName: 'مالك التدفق' })
+  }
+  await db.collection('users').doc(storeId).set({
+    uid: storeId, email: ownerEmail, name: 'مالك التدفق', role: 'merchant', storeIds: [storeId], active: true,
+    updatedAt: admin.firestore.FieldValue.serverTimestamp(),
+  }, { merge: true })
   if (!existing) {
-    await admin.auth().createUser({ uid: storeId, email: ownerEmail, password: 'Flow12345', displayName: 'مالك التدفق' }).catch(() => {})
     await db.collection('users').doc(storeId).set({
       uid: storeId, email: ownerEmail, name: 'مالك التدفق', role: 'merchant', storeIds: [storeId], active: true,
       createdAt: admin.firestore.FieldValue.serverTimestamp(), updatedAt: admin.firestore.FieldValue.serverTimestamp(),
@@ -117,7 +130,13 @@ async function login(page: Page, role: 'platform' | 'merchant', email: string, p
   // logout() already lands on the auth route. Reusing that document avoids
   // racing the auth guard with a second navigation to the same URL.
   if (!page.url().includes('/login')) {
-    await page.goto(loginUrl, { waitUntil: 'domcontentloaded' })
+    try {
+      await page.goto(loginUrl, { waitUntil: 'domcontentloaded' })
+    } catch (error) {
+      const message = String(error)
+      const navigationWasAborted = message.includes('ERR_ABORTED') || message.includes('frame was detached')
+      if (!navigationWasAborted || !page.url().includes('/login')) throw error
+    }
   }
   // The auth guard redirects an already-authenticated session away from /login
   // after hydration. Wait for the actual settled surface instead of racing a
@@ -715,6 +734,13 @@ test('sales link: /s/:code redirects to the storefront and DELIVERED orders coun
   const { uniq, ref } = ctx()
   await ensureFlowStore(ref, `مقهى التدفق ${uniq}`)
   const store = (await storeBySlug(ref))!
+  // The public resolver reads the projection, which is populated
+  // asynchronously by the store trigger. Wait for that real prerequisite so
+  // this focused test never races its own fixture.
+  await expect.poll(
+    () => db.doc(`publicStores/${store.id}`).get().then((snap) => snap.exists && snap.data()?.published === true),
+    { timeout: 15000 },
+  ).toBe(true)
   // This scenario verifies sales-link attribution, not shipping. A preceding
   // shipping scenario may have enabled a provider on the shared serial store;
   // disable it here so this order keeps the direct order-status lifecycle.
@@ -1037,6 +1063,27 @@ test('landing save with empty optional fields works; duplicate slug rejected; du
   expect(saved.title).toBe('صفحة تسجيل')
   // The undefined productId/hero fields must have been dropped without error.
   expect(saved.productId ?? null).toBeNull()
+
+  // Regression: the desktop row mirrors the header order exactly. This catches
+  // a visual shift where created/last activity were rendered under the slug.
+  const headers = await page.locator('.lp-list-table thead th').allTextContents()
+  const savedRow = page.locator('.lp-list-table tbody tr', { hasText: slug }).first()
+  await expect(savedRow.locator('td')).toHaveCount(headers.length)
+  const cells = await savedRow.locator('td').allTextContents()
+  expect(headers).toEqual(['العنوان', 'الرابط (Slug)', 'شراء سريع', 'الحالة', 'تاريخ الإنشاء', 'آخر نشاط', 'الزيارات', 'الطلبات', 'الإيرادات', 'الإجراءات'])
+  expect(cells[1]).toContain(`/${slug}`)
+  expect(cells[2]).toContain('غير محدد')
+  expect(cells[3]).toContain('مسودة')
+  expect(cells[4]).not.toBe('')
+  expect(cells[5]).toContain('لا يوجد')
+
+  // Filter is an intersection: an empty search may not bypass its status.
+  await page.getByLabel('الحالة').selectOption('draft')
+  await expect(savedRow).toBeVisible()
+  await page.getByLabel('الحالة').selectOption('published')
+  await expect(savedRow).toHaveCount(0)
+  await page.getByLabel('الحالة').selectOption('')
+  await expect(savedRow).toBeVisible()
 
   // Creating another page with the SAME slug must be rejected client-side.
   await safeClickWithTourGuard(page, page.getByRole('button', { name: 'صفحة جديدة' }))

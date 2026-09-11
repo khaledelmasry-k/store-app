@@ -515,7 +515,25 @@
   gap: 10px;
 }
 
+/* Shipment progress is presentation-only.  The dot pulse stops for users
+   who request reduced motion and never advances beyond the actual status. */
+.ods-shipment-progress { display: flex; gap: 0; margin: 4px 0 14px; overflow: hidden; }
+.ods-shipment-stage { flex: 1; min-width: 0; position: relative; display: grid; justify-items: center; gap: 5px; color: var(--text-on-surface-variant); font-size: 10px; text-align: center; }
+.ods-shipment-stage::before { content: ''; position: absolute; top: 9px; inset-inline-start: -50%; width: 100%; height: 2px; background: var(--outline-variant); }
+.ods-shipment-stage:first-child::before { display: none; }
+.ods-shipment-stage.is-done::before, .ods-shipment-stage.is-current::before { background: var(--primary); }
+.ods-shipment-dot { position: relative; z-index: 1; width: 20px; height: 20px; border-radius: 50%; display: grid; place-items: center; border: 2px solid var(--outline); background: var(--surface); color: var(--on-primary); }
+.ods-shipment-stage.is-done .ods-shipment-dot, .ods-shipment-stage.is-current .ods-shipment-dot { border-color: var(--primary); background: var(--primary); }
+.ods-shipment-stage.is-current .ods-shipment-dot { animation: ods-shipment-pulse 1.8s ease-in-out infinite; }
+.ods-shipment-stage small { line-height: 1.25; font-size: 10px; }
+@keyframes ods-shipment-pulse { 50% { box-shadow: 0 0 0 5px color-mix(in srgb, var(--primary) 18%, transparent); } }
+@media (prefers-reduced-motion: reduce) { .ods-shipment-stage.is-current .ods-shipment-dot { animation: none; } }
+
 @media (max-width: 767px) {
+  .ods-shipment-progress { flex-direction: column; gap: 8px; padding-inline-start: 8px; }
+  .ods-shipment-stage { grid-template-columns: 22px 1fr; justify-items: start; text-align: start; }
+  .ods-shipment-stage::before { top: -10px; inset-inline-start: 9px; width: 2px; height: 18px; }
+  .ods-shipment-stage small { padding-block-start: 2px; }
   .ods-header-actions {
     display: none;
   }

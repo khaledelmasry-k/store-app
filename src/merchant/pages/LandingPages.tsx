@@ -17,7 +17,7 @@ import { useSubscription } from '../../shared/hooks/useSubscription'
 import { useToast } from '../../shared/hooks/useToast'
 import { landingPagesService } from '../../shared/services/system'
 import { createLandingPageCallable } from '../../shared/services/auth'
-import { slugify, formatCurrency } from '../../shared/utils/format'
+import { slugify, formatCurrency, formatDate, timeAgo } from '../../shared/utils/format'
 import { storeBaseUrl } from '../../shared/utils/store-url'
 import { STORE_TEMPLATES } from '../../shared/utils/themes'
 import { LandingImageUploader } from '../components/LandingImageUploader'
@@ -125,6 +125,7 @@ export const MerchantLandingPages: FunctionalComponent = () => {
   const [form, setForm] = useState<Draft>(emptyDraft())
   const [query, setQuery] = useState('')
   const [statusFilter, setStatusFilter] = useState('')
+  const [performanceTarget, setPerformanceTarget] = useState<LandingPage | null>(null)
 
   if (!store) return <Loading message="جارٍ تحميل بيانات المتجر..." />
   if (pagesRes.loading || productsRes.loading) return <Loading message="جارٍ تحميل صفحات الهبوط..." />
@@ -276,11 +277,15 @@ export const MerchantLandingPages: FunctionalComponent = () => {
 
   const productName = (id?: string | null) => products.find((p) => p.id === id)?.name || 'غير محدد'
   const templateName = (id?: string) => STORE_TEMPLATES.find((t) => t.id === id)?.name || 'مودرن'
+  const conversionRate = (p: LandingPage) => p.views > 0 ? Math.round((p.ordersCount / p.views) * 1000) / 10 : 0
+  const averageOrderValue = (p: LandingPage) => p.ordersCount > 0 ? p.totalRevenue / p.ordersCount : 0
 
-  const filteredPages = pages.filter(
-    (p) =>
-      (p.title || '').includes(query) || (p.slug || '').includes(query) || (!statusFilter || (statusFilter === 'published' ? p.status === 'published' && p.active : p.status !== 'published' || !p.active)),
-  )
+  const filteredPages = pages.filter((p) => {
+    const matchesQuery = !query || (p.title || '').includes(query) || (p.slug || '').includes(query)
+    const matchesStatus = !statusFilter
+      || (statusFilter === 'published' ? p.status === 'published' && p.active : p.status !== 'published' || !p.active)
+    return matchesQuery && matchesStatus
+  })
 
   return (
     <div className="merchant-operations merchant-landing-pages-page">
@@ -315,6 +320,8 @@ export const MerchantLandingPages: FunctionalComponent = () => {
                 <th>الرابط (Slug)</th>
                 <th>شراء سريع</th>
                 <th>الحالة</th>
+                <th>تاريخ الإنشاء</th>
+                <th>آخر نشاط</th>
                 <th>الزيارات</th>
                 <th>الطلبات</th>
                 <th>الإيرادات</th>
@@ -338,16 +345,19 @@ export const MerchantLandingPages: FunctionalComponent = () => {
                         {isPublished ? 'منشور' : 'مسودة'}
                       </span>
                     </td>
+                    <td>{formatDate(p.createdAt)}</td>
+                    <td>{p.lastViewAt ? timeAgo(p.lastViewAt) : 'لا يوجد'}</td>
                     <td className="mono-num">{p.views || 0}</td>
                     <td className="mono-num">{p.ordersCount || 0}</td>
                     <td><span className="lp-revenue">{formatCurrency(p.totalRevenue || 0)}</span></td>
                     <td className="actions-col">
                       <span className="lp-actions">
-                        <button className="icon-btn" onClick={() => window.open(publicUrl(p.slug), '_blank')} title="معاينة"><Icon name="visibility" /></button>
-                        <button className="icon-btn" onClick={() => openEditor(p)} title="تعديل"><Icon name="edit" /></button>
-                        <button className="icon-btn" onClick={() => setStatus(p, isPublished ? 'draft' : 'published')} title={isPublished ? 'إلغاء النشر' : 'نشر'}><Icon name={isPublished ? 'block' : 'rocket_launch'} /></button>
-                        <button className="icon-btn" onClick={() => duplicate(p)} title="نسخ"><Icon name="content_copy" /></button>
-                        <button className="icon-btn icon-btn-danger" onClick={() => setDeleteTarget(p)} title="حذف"><Icon name="delete" /></button>
+                        <Button variant="ghost" size="sm" icon="visibility" iconOnly onClick={() => window.open(publicUrl(p.slug), '_blank')} title="فتح" />
+                        <Button variant="ghost" size="sm" icon="monitoring" iconOnly onClick={() => setPerformanceTarget(p)} title="الأداء" />
+                        <Button variant="ghost" size="sm" icon="edit" iconOnly onClick={() => openEditor(p)} title="تعديل" />
+                        <Button variant="ghost" size="sm" icon={isPublished ? 'block' : 'rocket_launch'} iconOnly onClick={() => setStatus(p, isPublished ? 'draft' : 'published')} title={isPublished ? 'إيقاف النشر' : 'نشر'} />
+                        <Button variant="ghost" size="sm" icon="content_copy" iconOnly onClick={() => duplicate(p)} title="نسخ" />
+                        <Button variant="danger" size="sm" icon="delete" iconOnly onClick={() => setDeleteTarget(p)} title="حذف" />
                       </span>
                     </td>
                   </tr>
@@ -436,6 +446,16 @@ export const MerchantLandingPages: FunctionalComponent = () => {
           <Button variant="ghost" onClick={() => setOpen(false)}>إلغاء</Button>
           <Button onClick={submit}>حفظ</Button>
         </div>
+      </Drawer>
+
+      <Drawer open={!!performanceTarget} onClose={() => setPerformanceTarget(null)} title={`أداء ${performanceTarget?.title || 'صفحة الهبوط'}`} size="md">
+        {performanceTarget && <div className="storelinks-performance-grid">
+          <StatsCard title="الزيارات" value={performanceTarget.views || 0} icon="visibility" tone="blue" />
+          <StatsCard title="الطلبات" value={performanceTarget.ordersCount || 0} icon="shopping_bag" tone="green" />
+          <StatsCard title="معدل التحويل" value={`${conversionRate(performanceTarget)}%`} icon="monitoring" tone="indigo" />
+          <StatsCard title="الإيرادات" value={performanceTarget.totalRevenue || 0} currency icon="payments" tone="amber" />
+          <StatsCard title="متوسط الطلب" value={averageOrderValue(performanceTarget)} currency icon="receipt_long" tone="primary" />
+        </div>}
       </Drawer>
 
       <ConfirmDialog open={!!deleteTarget} onCancel={() => setDeleteTarget(null)} onConfirm={remove} title="حذف الصفحة" description={`سيتم حذف "${deleteTarget?.title}"`} confirmLabel="حذف" />

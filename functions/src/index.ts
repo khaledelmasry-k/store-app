@@ -1779,14 +1779,18 @@ export const createOrder = onCall({ region: SHIPPING_FUNCTION_REGION, secrets: [
     tx.set(counterRef, { value: seq }, { merge: true })
 
     if (salesLinkRef) {
+      const normalizedSalesLinkCode = String(salesLinkRef).trim().toLowerCase()
       const linkQuery = await db.collection('storeLinks')
         .where('storeId', '==', storeId)
-        .where('code', '==', salesLinkRef)
+        .where('code', '==', normalizedSalesLinkCode)
         .limit(1)
         .get()
       if (!linkQuery.empty) {
         const linkDoc = linkQuery.docs[0]
         const linkData = linkDoc.data()
+        if (linkData?.active !== true || linkData?.archived === true) {
+          throw new HttpsError('failed-precondition', 'رابط البيع غير نشط')
+        }
         // Orders and revenue are counted on the link only when the order is
         // DELIVERED (canonical revenue rule) — updateOrderStatus adjusts the
         // counters on the DELIVERED transition. Here we only snapshot.
@@ -1794,7 +1798,7 @@ export const createOrder = onCall({ region: SHIPPING_FUNCTION_REGION, secrets: [
         salesLinkId = linkDoc.id
         salesLinkStaffId = linkData?.staffId || null
         salesLinkSnapshot = {
-          code: linkData?.code || salesLinkRef,
+          code: linkData?.code || normalizedSalesLinkCode,
           title: linkData?.title || '',
           sellerName: linkData?.sellerName || '',
           destinationType: linkData?.destinationType || 'home',
@@ -1809,7 +1813,7 @@ export const createOrder = onCall({ region: SHIPPING_FUNCTION_REGION, secrets: [
       const landingDoc = await db.collection('landingPages').doc(landingPageId).get()
       if (landingDoc.exists) {
         const landingData = landingDoc.data()
-        if (landingData?.storeId === storeId) {
+        if (landingData?.storeId === storeId && landingData?.active === true && landingData?.status === 'published') {
           landingPageSnapshot = {
             slug: landingData?.slug || '',
             title: landingData?.title || '',
@@ -1866,8 +1870,10 @@ export const createOrder = onCall({ region: SHIPPING_FUNCTION_REGION, secrets: [
     // Also maintains CRM denorm: phoneNormalized, attribution, and stage fallback.
     let customerDocId: string
     const attributionPatch: Record<string, any> = {}
-    if (salesLinkId) { attributionPatch.lastSalesLinkId = salesLinkId; attributionPatch.lastSalesLinkCode = salesLinkRef || null }
-    if (campaignSnapshot?.id) { attributionPatch.lastCampaignId = campaignSnapshot.id; attributionPatch.attributionSource = salesLinkId ? 'sales_link' : landingPageSnapshot ? 'landing_page' : 'campaign_parameter' }
+    const attributionSource = salesLinkId ? 'sales_link' : landingPageSnapshot ? 'landing_page' : campaignSnapshot ? 'campaign_parameter' : null
+    if (salesLinkId) { attributionPatch.lastSalesLinkId = salesLinkId; attributionPatch.lastSalesLinkCode = salesLinkSnapshot?.code || null }
+    if (campaignSnapshot?.id) attributionPatch.lastCampaignId = campaignSnapshot.id
+    if (attributionSource) attributionPatch.attributionSource = attributionSource
     if (utmSource) attributionPatch.lastUtmSource = String(utmSource).slice(0, 120)
     if (utmCampaign) attributionPatch.lastUtmCampaign = String(utmCampaign).slice(0, 120)
     if (existingCustomerDoc) {
@@ -1959,13 +1965,16 @@ export const createOrder = onCall({ region: SHIPPING_FUNCTION_REGION, secrets: [
       trackingCode: null,
       salesLinkRef: salesLinkRef || null,
       salesLinkId,
+      salesLinkCode: salesLinkSnapshot?.code || null,
       salesLinkStaffId,
       salesLinkSnapshot,
       landingPageId: landingPageSnapshot ? landingPageId : null,
       landingPageSnapshot,
       campaignId: campaignSnapshot?.id || null,
       campaignNameSnapshot: campaignSnapshot?.name || null,
-      attributionSource: campaignSnapshot ? (salesLinkId ? 'sales_link' : landingPageSnapshot ? 'landing_page' : 'campaign_parameter') : null,
+      attributionSource,
+      source: attributionSource,
+      attributedAt: attributionSource ? now() : null,
       utmSource: typeof utmSource === 'string' ? utmSource.slice(0, 120) : null,
       utmCampaign: typeof utmCampaign === 'string' ? utmCampaign.slice(0, 120) : null,
       createdAt: now(),
@@ -4479,8 +4488,15 @@ export const createSalesLink = onCall(async (request: CallableRequest<any>) => {
     })
   })
 
-  await auditLog(storeId, request.auth?.uid || 'guest', 'create_sales_link', 'storeLinks', ref.id, { code })
-  return { id: ref.id, code }
+  // Do not acknowledge success until the canonical document can be read back
+  // with the tenant, code and activation state that the merchant listing uses.
+  const saved = await ref.get()
+  const savedData = saved.data() || {}
+  if (!saved.exists || savedData.storeId !== storeId || savedData.code !== code || typeof savedData.active !== 'boolean') {
+    throw new HttpsError('internal', 'تعذر التحقق من حفظ رابط البيع')
+  }
+  await auditLog(storeId, request.auth?.uid || 'guest', 'create_sales_link', 'storeLinks', ref.id, { code }).catch(() => {})
+  return { id: ref.id, code, active: savedData.active, archived: savedData.archived === true }
 })
 
 // ─────────────────────────────────────────────────────────────
@@ -6892,33 +6908,53 @@ export const impersonate = onCall(async (request: CallableRequest<{ storeId?: st
 // ─────────────────────────────────────────────────────────────
 export const exitImpersonation = onCall(async (request: CallableRequest) => {
   if (!request.auth) throw new HttpsError('unauthenticated', 'يجب تسجيل الدخول')
-  const snap = await db.doc(`users/${request.auth.uid}`).get()
-  const user = snap.data()
-  if (!user) throw new HttpsError('not-found', 'الحساب غير موجود')
-  if (!user.impersonatedBy) {
-    // nothing to exit — not an impersonated session
-    return { ok: true }
+  const merchantUid = request.auth.uid
+  const merchantRef = db.doc(`users/${merchantUid}`)
+  const merchantSnap = await merchantRef.get()
+  const merchant = merchantSnap.data()
+  if (!merchant) throw new HttpsError('not-found', 'الحساب غير موجود')
+  if (merchant.role !== 'merchant') throw new HttpsError('permission-denied', 'وضع الدعم متاح لحسابات التجار فقط')
+  if (!merchant.impersonatedBy) throw new HttpsError('failed-precondition', 'جلسة الدعم غير نشطة')
+
+  const expiresAt = merchant.impersonatedUntil
+  const expiryMs = typeof expiresAt?.toMillis === 'function'
+    ? expiresAt.toMillis()
+    : typeof expiresAt?.seconds === 'number'
+      ? expiresAt.seconds * 1000
+      : null
+  if (expiryMs !== null && expiryMs <= Date.now()) {
+    throw new HttpsError('failed-precondition', 'انتهت صلاحية جلسة الدعم')
   }
-  const adminUid = user.impersonatedBy
-  await db.doc(`users/${request.auth.uid}`).update({
-    impersonatedBy: FieldValue.delete(),
-    impersonatedUntil: FieldValue.delete(),
-    impersonatedStoreId: FieldValue.delete(),
-    impersonatedMerchantId: FieldValue.delete(),
+
+  const adminUid = merchant.impersonatedBy
+  const adminSnap = await db.doc(`users/${adminUid}`).get()
+  const admin = adminSnap.data()
+  if (!adminSnap.exists || admin?.role !== 'superAdmin') {
+    throw new HttpsError('permission-denied', 'حساب إدارة المنصة غير صالح')
+  }
+
+  const customToken = await auth.createCustomToken(adminUid)
+  const auditRef = db.collection('auditLogs').doc()
+  await db.runTransaction(async (transaction) => {
+    transaction.update(merchantRef, {
+      impersonatedBy: FieldValue.delete(),
+      impersonatedUntil: FieldValue.delete(),
+      impersonatedStoreId: FieldValue.delete(),
+      impersonatedMerchantId: FieldValue.delete(),
+    })
+    transaction.set(auditRef, {
+      userId: adminUid,
+      action: 'impersonation_ended',
+      resource: 'users',
+      resourceId: merchantUid,
+      actorSuperAdminId: adminUid,
+      merchantId: merchantUid,
+      storeId: merchant.impersonatedStoreId || null,
+      createdAt: now(),
+      createdBy: adminUid,
+    })
   })
-  // Record the exit in the admin's audit trail
-  await db.collection('auditLogs').add({
-    userId: adminUid,
-    action: 'impersonation_exited',
-    resource: 'users',
-    resourceId: request.auth.uid,
-    actorSuperAdminId: adminUid,
-    merchantId: request.auth.uid,
-    storeId: user.impersonatedStoreId || null,
-    createdAt: now(),
-    createdBy: adminUid,
-  })
-  return { ok: true }
+  return { ok: true, customToken }
 })
 
 // ─────────────────────────────────────────────────────────────
@@ -7086,7 +7122,7 @@ export const claimOrder = onCall(async (request: CallableRequest<{ storeId?: str
 //    Validates the link belongs to the store. Clients should
 //    throttle calls (per session) to avoid inflating counts.
 // ─────────────────────────────────────────────────────────────
-export const recordStoreLinkVisit = onCall(async (request: CallableRequest<{ storeId?: string; code?: string }>) => {  const { storeId, code } = request.data || {}
+export const recordStoreLinkVisit = onCall(async (request: CallableRequest<{ storeId?: string; code?: string; eventId?: string }>) => {  const { storeId, code, eventId } = request.data || {}
   if (!storeId || !code) throw new HttpsError('invalid-argument', 'storeId و code مطلوبان')
   const normalizedCode = String(code).trim().toLowerCase()
 
@@ -7107,12 +7143,25 @@ export const recordStoreLinkVisit = onCall(async (request: CallableRequest<{ sto
     return { ok: false }
   }
 
-  await linkQuery.docs[0].ref.update({
-    visits: FieldValue.increment(1),
-    lastVisitAt: now(),
-  })
+  const link = linkQuery.docs[0]
+  if (link.data()?.active !== true || link.data()?.archived === true) return { ok: false }
+  const normalizedEventId = String(eventId || '').trim().slice(0, 160)
+  if (normalizedEventId) {
+    const visitId = createHash('sha256').update(`sales-link:${link.id}:${normalizedEventId}`).digest('hex')
+    const visitRef = db.doc(`storeLinkVisitEvents/${visitId}`)
+    const counted = await db.runTransaction(async (tx) => {
+      const existing = await tx.get(visitRef)
+      if (existing.exists) return false
+      tx.create(visitRef, { storeId, salesLinkId: link.id, eventIdHash: visitId, createdAt: now() })
+      tx.update(link.ref, { visits: FieldValue.increment(1), lastVisitAt: now(), updatedAt: now() })
+      return true
+    })
+    return { ok: true, counted }
+  }
 
-  return { ok: true }
+  await link.ref.update({ visits: FieldValue.increment(1), lastVisitAt: now(), updatedAt: now() })
+
+  return { ok: true, counted: true }
 })
 
 // ─────────────────────────────────────────────────────────────
@@ -7120,8 +7169,8 @@ export const recordStoreLinkVisit = onCall(async (request: CallableRequest<{ sto
 //     Validates the page is active + published and its store is
 //     active. Clients throttle to once per session.
 // ─────────────────────────────────────────────────────────────
-export const recordLandingPageView = onCall(async (request: CallableRequest<{ landingPageId?: string }>) => {
-  const { landingPageId } = request.data || {}
+export const recordLandingPageView = onCall(async (request: CallableRequest<{ landingPageId?: string; eventId?: string }>) => {
+  const { landingPageId, eventId } = request.data || {}
   if (!landingPageId) throw new HttpsError('invalid-argument', 'landingPageId مطلوب')
 
   const landingSnap = await db.doc(`landingPages/${landingPageId}`).get()
@@ -7132,12 +7181,23 @@ export const recordLandingPageView = onCall(async (request: CallableRequest<{ la
   const storeSnap = await db.doc(`stores/${landing.storeId}`).get()
   if (!storeSnap.exists || !storeSnap.data()?.active) return { ok: false }
 
-  await landingSnap.ref.update({
-    views: FieldValue.increment(1),
-    lastViewAt: now(),
-  })
+  const normalizedEventId = String(eventId || '').trim().slice(0, 160)
+  if (normalizedEventId) {
+    const viewId = createHash('sha256').update(`landing-page:${landingPageId}:${normalizedEventId}`).digest('hex')
+    const viewRef = db.doc(`landingPageViewEvents/${viewId}`)
+    const counted = await db.runTransaction(async (tx) => {
+      const existing = await tx.get(viewRef)
+      if (existing.exists) return false
+      tx.create(viewRef, { storeId: landing.storeId, landingPageId, eventIdHash: viewId, createdAt: now() })
+      tx.update(landingSnap.ref, { views: FieldValue.increment(1), lastViewAt: now(), updatedAt: now() })
+      return true
+    })
+    return { ok: true, counted }
+  }
 
-  return { ok: true }
+  await landingSnap.ref.update({ views: FieldValue.increment(1), lastViewAt: now(), updatedAt: now() })
+
+  return { ok: true, counted: true }
 })
 
 // ─────────────────────────────────────────────────────────────
