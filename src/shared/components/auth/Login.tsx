@@ -32,6 +32,7 @@ export const Login: FunctionalComponent<Props> = ({ role }) => {
   const { user, initialized } = useAuth()
   const [loc, navigate] = useLocation()
   const loginParams = new URLSearchParams(loc.split('?')[1] || window.location.search)
+  const verifiedNotice = role === 'merchant' && loginParams.get('verified') === '1'
   const queryLifetimeIntent = role === 'merchant' && loginParams.get('offer') === 'lifetime'
   const [storedLifetimeIntent, setStoredLifetimeIntent] = useState(false)
 
@@ -147,6 +148,7 @@ export const Login: FunctionalComponent<Props> = ({ role }) => {
       <div className="auth-card">
         <h1 className="auth-title">{meta.title}</h1>
         <p className="auth-subtitle">أدخل بياناتك للوصول إلى لوحة التحكم</p>
+        {verifiedNotice && <p className="auth-success-message" role="status">تم تأكيد بريدك الإلكتروني. يمكنك تسجيل الدخول الآن.</p>}
         <form onSubmit={onSubmit} className="auth-form">
           <div className="auth-form-field">
             <label htmlFor="auth-email">البريد الإلكتروني</label>

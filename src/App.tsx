@@ -13,6 +13,7 @@ import { Login } from './shared/components/auth/Login'
 import { Register } from './shared/components/auth/Register'
 import { ForgotPassword } from './shared/components/auth/ForgotPassword'
 import { VerifyEmail } from './shared/components/auth/VerifyEmail'
+import { EmailActionHandler } from './shared/components/auth/EmailActionHandler'
 import { PlatformLayout } from './shared/components/layout/PlatformLayout'
 import { MerchantLayout } from './shared/components/layout/MerchantLayout'
 import { StorefrontShell } from './shared/components/layout/StorefrontShell'
@@ -249,6 +250,7 @@ export default function App() {
                   <Route path="/register" component={Register} />
                   <Route path="/forgot-password" component={ForgotPassword} />
                   <Route path="/verify-email" component={VerifyEmail} />
+                  <Route path="/auth/action" component={EmailActionHandler} />
                   <Route
                     path="/privacy"
                     component={() => (
