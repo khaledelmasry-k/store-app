@@ -246,9 +246,7 @@ export function rejectSubscriptionCallable(input: Record<string, unknown>) {
 }
 
 export function impersonateCallable(input: Record<string, unknown>) {
-  const functions = getFunctions()
-  const fn = httpsCallable(functions, 'impersonate')
-  return fn(input)
+  return httpsCallable(functions, 'impersonate')(input)
 }
 
 export async function startImpersonation(storeId: string) {
@@ -259,9 +257,7 @@ export async function startImpersonation(storeId: string) {
 }
 
 export function exitImpersonationCallable() {
-  const functions = getFunctions()
-  const fn = httpsCallable(functions, 'exitImpersonation')
-  return fn({})
+  return httpsCallable(functions, 'exitImpersonation')({})
 }
 
 export function trackOrderCallable(input: Record<string, unknown>) {
