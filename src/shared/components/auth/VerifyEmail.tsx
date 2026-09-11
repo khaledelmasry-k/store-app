@@ -94,6 +94,7 @@ export const VerifyEmail: FunctionalComponent = () => {
           <span className="auth-status-badge"><i className="auth-status-pulse" /> تحقق مطلوب</span>
           <h1 className="auth-title">تحقق من بريدك الإلكتروني</h1>
           <p className="auth-subtitle">أرسلنا رابط التحقق إلى بريدك. افتح الرابط لتفعيل حساب التاجر ومتابعة إعداد متجرك.</p>
+          <p className="auth-hint">قد تصل الرسالة إلى Inbox أو البريد غير المرغوب فيه (Spam/Junk).</p>
           {maskedEmail && <div className="auth-email-row"><Icon name="mail" ariaHidden /><span dir="ltr">{maskedEmail}</span></div>}
           {message && <p className="field-error email-verification-message" role="status">{message}</p>}
           <div className="email-verification-actions">

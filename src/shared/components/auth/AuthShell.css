@@ -752,6 +752,41 @@ html[data-theme='dark'] .auth-console .auth-panel-visual {
   color: var(--primary);
 }
 
+.auth-console .email-action-card {
+  max-width: 520px;
+  width: 100%;
+}
+
+.auth-console .email-action-state {
+  padding: 32px 28px;
+  border: 1px solid var(--border);
+  border-radius: 24px;
+  background: var(--surface);
+  box-shadow: 0 18px 50px color-mix(in srgb, var(--foreground) 10%, transparent);
+}
+
+.auth-console .email-action-state--success .auth-status-icon { background: color-mix(in srgb, #188a5b 16%, var(--surface)); color: #188a5b; }
+.auth-console .email-action-state--expired .auth-status-icon,
+.auth-console .email-action-state--already_used .auth-status-icon { background: color-mix(in srgb, #c27a18 16%, var(--surface)); color: #a8620d; }
+.auth-console .email-action-state--invalid .auth-status-icon,
+.auth-console .email-action-state--error .auth-status-icon { background: color-mix(in srgb, #c43b4b 14%, var(--surface)); color: #b42338; }
+
+.auth-console .auth-success-message {
+  margin: 0 0 18px;
+  padding: 10px 12px;
+  border: 1px solid color-mix(in srgb, #188a5b 35%, var(--border));
+  border-radius: 12px;
+  background: color-mix(in srgb, #188a5b 10%, var(--surface));
+  color: #176b49;
+  font-size: .86rem;
+}
+
+[data-theme='dark'] .auth-console .auth-success-message { color: #8de0b7; }
+
+@media (max-width: 640px) {
+  .auth-console .email-action-state { padding: 24px 18px; border-radius: 18px; }
+}
+
 .auth-console .auth-status-badge {
   display: inline-flex;
   align-items: center;
