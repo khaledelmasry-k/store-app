@@ -50,12 +50,14 @@ async function main() {
   const expiredCustom = await aauth.createCustomToken(merchantUid, { supportImpersonation: true, supportSessionId: expiredId, supportAdminUid: adminUid, supportMerchantUid: merchantUid, supportStoreId: storeId, supportExpiresAt: Date.now() - 1000 })
   await signOut(auth); await signInWithCustomToken(auth, expiredCustom)
   await expectDenied(() => getDoc(doc(db, 'stores', storeId)), 'expired support read')
+  await expectDenied(() => uploadBytes(ref(storage, `stores/${storeId}/expired.txt`), new Uint8Array([1]), { contentType: 'image/png', customMetadata: { storeId } }), 'expired support storage write')
 
   const wrongStoreId = 'rules-wrong-store'
   await adb.doc(`supportImpersonationSessions/${wrongStoreId}`).set({ sessionId: wrongStoreId, adminUid, merchantUid, storeId, status: 'active', expiresAt: admin.firestore.Timestamp.fromMillis(Date.now() + 600000) })
   const wrongCustom = await aauth.createCustomToken(merchantUid, { supportImpersonation: true, supportSessionId: wrongStoreId, supportAdminUid: adminUid, supportMerchantUid: merchantUid, supportStoreId: 'other-store', supportExpiresAt: Date.now() + 600000 })
   await signOut(auth); await signInWithCustomToken(auth, wrongCustom)
   await expectDenied(() => getDoc(doc(db, 'stores', storeId)), 'wrong-store support claim')
+  await expectDenied(() => uploadBytes(ref(storage, `stores/${storeId}/wrong-store.txt`), new Uint8Array([1]), { contentType: 'image/png', customMetadata: { storeId } }), 'wrong-store support storage write')
 
   const roleRemovedId = 'rules-role-removed'
   await adb.doc(`supportImpersonationSessions/${roleRemovedId}`).set({ sessionId: roleRemovedId, adminUid, merchantUid, storeId, status: 'active', expiresAt: admin.firestore.Timestamp.fromMillis(Date.now() + 600000) })
@@ -63,6 +65,7 @@ async function main() {
   await adb.doc(`users/${adminUid}`).update({ role: 'merchant' })
   await signOut(auth); await signInWithCustomToken(auth, roleRemovedCustom)
   await expectDenied(() => getDoc(doc(db, 'stores', storeId)), 'removed-admin support read')
+  await expectDenied(() => uploadBytes(ref(storage, `stores/${storeId}/removed-admin.txt`), new Uint8Array([1]), { contentType: 'image/png', customMetadata: { storeId } }), 'removed-admin support storage write')
   await deleteApp(app)
   console.log('Firestore rules tests: PASS')
   console.log('Storage rules tests: PASS')
