@@ -157,6 +157,35 @@ html[data-theme='dark'] .landing-enterprise-offer h2{color:#edf2ff}
 html[data-theme='dark'] .landing-enterprise-offer p{color:#b3bdd3}
 @media(max-width:760px){.landing-enterprise-offer{grid-template-columns:1fr;padding:22px}.landing-enterprise-cta{width:100%}}
 
+/* Keep public pricing plans in a strict mobile flow. Cards and their
+   adjacent registration links must occupy separate rows on narrow screens. */
+@media (max-width: 760px) {
+  .landing .landing-pricing-grid {
+    grid-template-columns: 1fr;
+    align-items: start;
+  }
+  .landing .landing-plan-wrap {
+    display: flex;
+    flex-direction: column;
+    position: relative;
+    width: 100%;
+    min-width: 0;
+  }
+  .landing .landing-plan-wrap .mk-pricing-card {
+    width: 100%;
+    max-width: 100%;
+    min-width: 0;
+    height: auto;
+    transform: none;
+  }
+  .landing .landing-plan-link {
+    position: static;
+    width: 100%;
+    flex-shrink: 0;
+    margin-top: 12px;
+  }
+}
+
 /* Commerce OS flow and four-offer launch catalog. */
 .landing-operating-flow{background:linear-gradient(180deg,#fbfcff,#f3f5ff)}
 .landing-flow-track{position:relative;display:grid;grid-template-columns:repeat(6,minmax(0,1fr));gap:12px;margin:0;padding:0;list-style:none}
