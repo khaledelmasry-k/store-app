@@ -6386,6 +6386,10 @@ textarea.input {
   position: relative;
   display: flex;
   flex-direction: column;
+  width: 100%;
+  min-width: 0;
+  height: 100%;
+  box-sizing: border-box;
   gap: 12px;
   padding: var(--space-6);
   border: 1.5px solid var(--border);
@@ -6481,6 +6485,8 @@ textarea.input {
   padding: 0;
   display: flex;
   flex-direction: column;
+  flex: 1 1 auto;
+  min-height: 0;
   gap: 8px;
   font-size: var(--font-sm);
 }
@@ -6495,6 +6501,8 @@ textarea.input {
 }
 .mk-pricing-cta {
   margin-top: auto;
+  flex-shrink: 0;
+  width: 100%;
 }
 
 /* ── Store Unavailable (storefront) ── */
