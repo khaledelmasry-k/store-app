@@ -44,6 +44,28 @@
   z-index: 20;
   transition: width .28s ease;
 }
+.console-shell .sidebar-nav {
+  box-sizing: border-box;
+  width: 100%;
+  max-width: 100%;
+  min-width: 0;
+  overflow-x: hidden;
+}
+.console-shell .sidebar-group,
+.console-shell .sidebar-group-header,
+.console-shell .sidebar-link,
+.console-shell .sidebar-child-link {
+  min-width: 0;
+  max-width: 100%;
+  box-sizing: border-box;
+}
+.console-shell.sidebar-unpinned:not(.sidebar-hover-expanded) .sidebar-nav {
+  padding-inline: 0;
+}
+.console-shell.sidebar-unpinned:not(.sidebar-hover-expanded) .sidebar-group {
+  width: 100%;
+  overflow-x: hidden;
+}
 .console-shell .console-shell-main {
   width: auto !important;
   max-width: 100%;
