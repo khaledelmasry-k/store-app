@@ -51,6 +51,7 @@ type Draft = {
   branding: NonNullable<ShippingProviderDefinition['branding']>
   integrationConfig: NonNullable<ShippingProviderDefinition['integrationConfig']>
 }
+type RequiredField = NonNullable<ShippingProviderDefinition['integrationConfig']>['requiredFields'][number]
 type ServiceForm = {
   code: string
   name: string
@@ -204,6 +205,8 @@ export const PlatformShippingCompanies: FunctionalComponent = () => {
   const [zoneForm, setZoneForm] = useState<ZoneForm>(emptyZone)
   const [showAdvancedZone, setShowAdvancedZone] = useState(false)
   const [testing, setTesting] = useState(false)
+  const [fieldDraft, setFieldDraft] = useState<RequiredField>({ key: '', label: '', type: 'text', required: true, secret: false, scope: 'merchant', options: [] })
+  const [fieldIndex, setFieldIndex] = useState<number | null>(null)
   const [selectedServiceCode, setSelectedServiceCode] = useState('')
   const [deleteTarget, setDeleteTarget] = useState<{
     kind: 'service' | 'zone'
@@ -249,6 +252,17 @@ export const PlatformShippingCompanies: FunctionalComponent = () => {
     setSelectedServiceCode('')
     setTab('general')
   }
+  const saveRequiredField = () => {
+    const key = fieldDraft.key.trim().toLowerCase().replace(/[^a-z0-9_]/g, '_')
+    if (!key || !fieldDraft.label.trim()) return toast.push('المفتاح والاسم مطلوبان', undefined, 'error')
+    const fields = draft.integrationConfig.requiredFields || []
+    if (fields.some((f, i) => f.key === key && i !== fieldIndex)) return toast.push('مفتاح الحقل مستخدم مسبقاً', undefined, 'error')
+    if (fieldDraft.type === 'select' && !(fieldDraft.options || []).filter(Boolean).length) return toast.push('أضف خياراً واحداً على الأقل', undefined, 'error')
+    const nextField = { ...fieldDraft, key, label: fieldDraft.label.trim(), options: fieldDraft.type === 'select' ? (fieldDraft.options || []).filter(Boolean) : [] }
+    const next = [...fields]; if (fieldIndex == null) next.push(nextField); else next[fieldIndex] = nextField
+    setDraft({ ...draft, integrationConfig: { ...draft.integrationConfig, requiredFields: next } }); setFieldIndex(null); setFieldDraft({ key: '', label: '', type: 'text', required: true, secret: false, scope: 'merchant', options: [] })
+  }
+  const moveRequiredField = (index: number, delta: number) => { const next = [...(draft.integrationConfig.requiredFields || [])]; const target = index + delta; if (target < 0 || target >= next.length) return; [next[index], next[target]] = [next[target], next[index]]; setDraft({ ...draft, integrationConfig: { ...draft.integrationConfig, requiredFields: next } }) }
   const save = async (nextStatus?: Draft['status']) => {
     if (!draft.name.trim()) {
       toast.push('أدخل اسم شركة الشحن', undefined, 'error')
@@ -638,6 +652,7 @@ export const PlatformShippingCompanies: FunctionalComponent = () => {
       <Tabs
         tabs={[
           { key: 'general', label: 'عام' },
+          { key: 'required-fields', label: 'حقول التكامل', count: draft.integrationConfig.requiredFields?.length || 0 },
           ...(!merchantApiProvider ? [{ key: 'services', label: 'الخدمات', count: draft.services.length }, { key: 'zones', label: 'المناطق والأسعار' }] : []),
           ...(!manualProvider ? [{ key: 'api', label: 'التكامل API' }] : []),
           { key: 'capabilities', label: 'الإمكانيات' },
@@ -742,6 +757,7 @@ export const PlatformShippingCompanies: FunctionalComponent = () => {
             </div>
           </Card>
         )}
+        {tab === 'required-fields' && <Card title="حقول بيانات الربط المطلوبة" subtitle="تعريف الحقول فقط؛ لا تُخزّن القيم السرية داخل تعريف الشركة."><div className="shipping-secure-note"><Icon name="lock" ariaHidden /><span>هذا الحقل يحدد البيانات المطلوبة فقط ولا يخزن الأسرار داخل تعريف شركة الشحن.</span></div><div className="grid grid-2"><Input label="المفتاح" value={fieldDraft.key} onChange={(value) => setFieldDraft({ ...fieldDraft, key: value })} placeholder="account_code" /><Input label="الاسم الظاهر" value={fieldDraft.label} onChange={(value) => setFieldDraft({ ...fieldDraft, label: value })} placeholder="كود الحساب" /><label className="field"><span className="field-label">النوع</span><select className="input" value={fieldDraft.type} onChange={(event) => setFieldDraft({ ...fieldDraft, type: (event.target as HTMLSelectElement).value as any })}>{['text', 'url', 'password', 'select', 'textarea', 'number', 'boolean'].map((type) => <option value={type} key={type}>{type}</option>)}</select></label><label className="field"><span className="field-label">النطاق</span><select className="input" value={fieldDraft.scope} onChange={(event) => setFieldDraft({ ...fieldDraft, scope: (event.target as HTMLSelectElement).value as any })}><option value="merchant">التاجر</option><option value="platform">المنصة</option></select></label><Input label="Placeholder" value={fieldDraft.placeholder || ''} onChange={(value) => setFieldDraft({ ...fieldDraft, placeholder: value })} /><Input label="مساعدة" value={fieldDraft.helpText || ''} onChange={(value) => setFieldDraft({ ...fieldDraft, helpText: value })} /></div>{fieldDraft.type === 'select' && <Input label="الخيارات (مفصولة بفاصلة)" value={(fieldDraft.options || []).join(', ')} onChange={(value) => setFieldDraft({ ...fieldDraft, options: value.split(',').map((x) => x.trim()).filter(Boolean) })} />}<div className="flex flex-wrap" style={{ gap: 12, marginTop: 12 }}><label><input type="checkbox" checked={fieldDraft.required} onChange={(event) => setFieldDraft({ ...fieldDraft, required: (event.target as HTMLInputElement).checked })} /> مطلوب</label><label><input type="checkbox" checked={fieldDraft.secret} onChange={(event) => setFieldDraft({ ...fieldDraft, secret: (event.target as HTMLInputElement).checked })} /> سري</label><Button size="sm" onClick={saveRequiredField}>{fieldIndex == null ? 'إضافة حقل' : 'حفظ الحقل'}</Button></div><div className="stack-list" style={{ marginTop: 18 }}>{(draft.integrationConfig.requiredFields || []).map((field, index) => <div className="list-row" key={field.key}><div><strong>{field.label}</strong><span className="muted small">{field.key} · {field.type} · {field.scope}{field.secret ? ' · سري' : ''}</span></div><div className="flex" style={{ gap: 6 }}><Button size="sm" variant="ghost" onClick={() => moveRequiredField(index, -1)}>↑</Button><Button size="sm" variant="ghost" onClick={() => moveRequiredField(index, 1)}>↓</Button><Button size="sm" variant="outline" onClick={() => { setFieldIndex(index); setFieldDraft({ ...field, options: field.options || [] }) }}>تعديل</Button><Button size="sm" variant="ghost" onClick={() => setDraft({ ...draft, integrationConfig: { ...draft.integrationConfig, requiredFields: (draft.integrationConfig.requiredFields || []).filter((_, i) => i !== index) } })}>حذف</Button><Button size="sm" variant="ghost" onClick={() => { const copy = { ...field, key: `${field.key}_copy` }; setDraft({ ...draft, integrationConfig: { ...draft.integrationConfig, requiredFields: [...(draft.integrationConfig.requiredFields || []), copy] } }) }}>نسخ</Button></div></div>)}</div><h4 style={{ marginTop: 20 }}>شكل بيانات الربط المطلوبة</h4><div className="stack-list">{(draft.integrationConfig.requiredFields || []).map((field) => <label className="field" key={`preview-${field.key}`}><span className="field-label">{field.label}{field.required ? ' *' : ''}</span><input className="input" type={field.type === 'password' || field.secret ? 'password' : field.type === 'number' ? 'number' : 'text'} placeholder={field.secret ? '••••••••' : field.placeholder || ''} disabled /></label>)}</div></Card>}
         {tab === 'services' && (
           <Card
             title="الخدمات"
