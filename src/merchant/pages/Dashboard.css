@@ -522,9 +522,14 @@
     cursor: pointer;
   }
 
-  .dashboard-quick-btn-primary { background: var(--primary); border-color: var(--primary); color: var(--on-primary); box-shadow: var(--shadow-sm); }
+  .dashboard-quick-btn-primary {
+    background: var(--primary);
+    border-color: var(--primary);
+    color: #fff;
+    box-shadow: var(--shadow-sm);
+  }
 
-  .dashboard-quick-btn-primary .icon { color: var(--on-primary); }
+  .dashboard-quick-btn-primary .mk-icon { color: #fff; }
 
   .dashboard-quick-btn:active { transform: scale(0.97); }
 
