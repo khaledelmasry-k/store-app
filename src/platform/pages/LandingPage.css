@@ -306,3 +306,4 @@ html[data-theme='dark'] .landing-enterprise-offer .landing-enterprise-cta:hover 
   .landing-footer-grid .landing-footer-whatsapp { width: 100%; justify-content: center; }
 }
 @keyframes landingPartnersMarqueeSeamless{from{transform:translateX(0)}to{transform:translateX(calc(50% - 8px))}}.landing-partners-track{animation-name:landingPartnersMarqueeSeamless}
+@media (prefers-reduced-motion: no-preference){.landing-partners-track{animation:none}.landing-partners-grid--moving .landing-partners-track{animation:landingPartnersMarqueeSeamless 24s linear infinite}}
