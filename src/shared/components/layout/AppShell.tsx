@@ -12,6 +12,7 @@ import { auth, db } from '../../firebase'
 import { NAV_GROUPS, ROLE_LABELS, type NavGroup, type NavItem } from '../../utils/constants'
 import { Icon } from '../ui/Icon'
 import './AppShell.css'
+import './ConsoleShell.css'
 import { AdminSidebar } from './AdminSidebar'
 import { AdminTopbar } from './AdminTopbar'
 import { BrandLogo } from '../brand/BrandLogo'
@@ -494,10 +495,10 @@ export const AppShell: FunctionalComponent<Props> = ({ navKey, brand, brandLogo,
   return (
     <Fragment>
       <div
-        className={`app-shell ${navKey === 'dashboard' ? 'merchant-chrome' : 'platform-chrome'} app-shell--${navKey} route-${routeClass}${isPinned ? '' : ' sidebar-unpinned'}${isHoverExpanded ? ' sidebar-hover-expanded' : ''}`}
+        className={`app-shell console-shell ${navKey === 'dashboard' ? 'merchant-chrome' : 'platform-chrome'} app-shell--${navKey} route-${routeClass}${isPinned ? '' : ' sidebar-unpinned'}${isHoverExpanded ? ' sidebar-hover-expanded' : ''}`}
         data-zone={navKey}
       >
-          <AdminTopbar>
+          <AdminTopbar className="console-topbar-inner">
           <button
             type="button"
             className="btn btn-ghost sidebar-toggle"
@@ -585,7 +586,7 @@ export const AppShell: FunctionalComponent<Props> = ({ navKey, brand, brandLogo,
               </Button>
             </section>
           )}
-          <div className="app-shell-body">
+          <div className="app-shell-body console-shell-body">
             <AdminSidebar
               onMouseEnter={handleSidebarEnter}
               onMouseMove={handleSidebarMove}
@@ -593,13 +594,13 @@ export const AppShell: FunctionalComponent<Props> = ({ navKey, brand, brandLogo,
             >
               {!isPinned && !isHoverExpanded ? collapsedSidebarContent : sidebarContent}
             </AdminSidebar>
-            <div className="shell-main">
-              <main className="shell-content">
+            <div className="shell-main console-shell-main">
+              <main className="shell-content console-shell-content">
                 <div className="route-surface">{children}</div>
               </main>
             </div>
           </div>
-        <nav className="mobile-bottom-nav" aria-label="تنقل سريع">
+        <nav className="mobile-bottom-nav console-mobile-nav" aria-label="تنقل سريع">
             {(navKey === 'platform' ? [
               { to: '/platform', label: 'الرئيسية', icon: 'dashboard' },
               { to: '/platform/merchants', label: 'التجار', icon: 'storefront' },
@@ -624,8 +625,8 @@ export const AppShell: FunctionalComponent<Props> = ({ navKey, brand, brandLogo,
         </nav>
       </div>
       {drawerOpen && (
-        <div className="sidebar-drawer-overlay" onClick={() => setDrawerOpen(false)}>
-          <div className="sidebar-drawer" onClick={(e) => e.stopPropagation()}>
+        <div className="sidebar-drawer-overlay console-drawer-overlay" onClick={() => setDrawerOpen(false)}>
+          <div className="sidebar-drawer console-drawer" onClick={(e) => e.stopPropagation()}>
             <div className="sidebar-drawer-header">
               <strong>القائمة</strong>
               <button type="button" className="btn btn-ghost" aria-label="إغلاق القائمة" onClick={() => setDrawerOpen(false)}>

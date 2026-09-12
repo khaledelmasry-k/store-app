@@ -1,0 +1,98 @@
+/* Canonical console shell geometry. Both Merchant and Super Admin use this
+   contract; only navigation data is role-specific. */
+.console-shell {
+  --console-sidebar-width: 232px;
+  --console-rail-width: 72px;
+  --console-topbar-height: 60px;
+  display: block;
+  width: 100%;
+  max-width: 100%;
+  min-width: 0;
+  padding-top: var(--console-topbar-height);
+  overflow: visible;
+  direction: rtl;
+}
+
+.console-shell.sidebar-unpinned { --console-sidebar-width: var(--console-rail-width); }
+.console-shell .console-topbar {
+  position: fixed;
+  inset: 0 0 auto;
+  z-index: 40;
+  width: 100%;
+  max-width: 100%;
+  box-sizing: border-box;
+  min-width: 0;
+}
+.console-shell .console-shell-body {
+  display: grid;
+  grid-template-columns: var(--console-sidebar-width) minmax(0, 1fr);
+  width: 100%;
+  max-width: 100%;
+  min-width: 0;
+  min-height: calc(100vh - var(--console-topbar-height));
+  align-items: stretch;
+}
+.console-shell .console-sidebar {
+  position: sticky;
+  inset-block-start: var(--console-topbar-height);
+  width: 100% !important;
+  min-width: 0;
+  max-width: 100%;
+  height: calc(100vh - var(--console-topbar-height));
+  max-height: calc(100vh - var(--console-topbar-height));
+  overflow: hidden auto;
+  z-index: 20;
+  transition: width .28s ease;
+}
+.console-shell .console-shell-main {
+  width: auto !important;
+  max-width: 100%;
+  min-width: 0;
+  margin: 0 !important;
+  overflow: visible;
+}
+.console-shell .console-shell-content {
+  width: 100%;
+  max-width: 100%;
+  min-width: 0;
+  margin: 0;
+  box-sizing: border-box;
+  overflow: visible;
+}
+.console-shell .route-surface { width: 100%; max-width: 100%; min-width: 0; box-sizing: border-box; }
+.console-shell .console-mobile-nav { display: none; }
+.console-shell .console-drawer-overlay { display: none; }
+
+/* Hover expansion is an overlay and never changes document geometry. */
+.console-shell.sidebar-unpinned.sidebar-hover-expanded .console-sidebar {
+  width: var(--console-sidebar-width);
+  position: sticky;
+  z-index: 30;
+}
+
+@media (max-width: 1024px) {
+  .console-shell { --console-sidebar-width: 0px; padding-top: var(--console-topbar-height); }
+  .console-shell .console-shell-body { display: block; width: 100%; min-height: calc(100vh - var(--console-topbar-height)); }
+  .console-shell .console-sidebar { display: none; }
+  .console-shell .console-shell-main,
+  .console-shell .console-shell-content,
+  .console-shell .route-surface { width: 100%; max-width: 100%; min-width: 0; margin-inline: 0; }
+  .console-shell .console-shell-main { width: 100% !important; margin-inline: 0 !important; }
+  .console-shell .console-topbar { inset-inline: 0; }
+  .console-shell .console-mobile-nav { display: grid; position: fixed; inset-inline: 0; inset-block-end: 0; width: 100%; max-width: 100%; box-sizing: border-box; z-index: 45; }
+  .console-shell .console-drawer-overlay { display: block; position: fixed; inset: 0; z-index: 80; width: 100%; max-width: 100%; }
+  .console-shell .console-drawer { width: min( min(88vw, 360px), 100% ); max-width: 100%; box-sizing: border-box; }
+  .console-shell .console-shell-content { padding-bottom: calc(52px + env(safe-area-inset-bottom)); }
+}
+
+@media (max-width: 420px) {
+  .console-shell .console-topbar { padding-inline: 12px; gap: 8px; }
+  .console-shell .topbar-search { display: none; }
+  .console-shell .console-shell-content { padding-inline: 12px; }
+}
+
+/* A shell child must never force the page track wider than the viewport. */
+.console-shell .console-shell-body > *,
+.console-shell .console-shell-main > *,
+.console-shell .console-shell-content > *,
+.console-shell .route-surface > * { min-width: 0; max-width: 100%; box-sizing: border-box; }
