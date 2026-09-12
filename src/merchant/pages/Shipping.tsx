@@ -85,6 +85,7 @@ export const MerchantShipping: FunctionalComponent = () => {
   const [platformProviders, setPlatformProviders] = useState<Array<{ provider: ShippingProviderDefinition; config: StoreShippingProviderConfig | null; eligibility?: ShippingEligibility }>>([])
   const [platformLoading, setPlatformLoading] = useState(false)
   const [platformSaving, setPlatformSaving] = useState('')
+  const [expandedProvider, setExpandedProvider] = useState<string | null>(null)
   const [expectedVolume, setExpectedVolume] = useState('')
   const [targetGovernorates, setTargetGovernorates] = useState<string[]>([])
   const [platformDrafts, setPlatformDrafts] = useState<Record<string, { fixedRate: string; defaultPackageWeight: string; codEnabled: boolean; serviceCode: string; rateMarkup: string; freeShippingThreshold: string; waslaPickupLocationName: string; waslaPickupContactPhone: string; waslaPickupAddressLine1: string; waslaPickupGovernorateId: string; waslaPickupCityId: string }>>({})
@@ -408,10 +409,11 @@ export const MerchantShipping: FunctionalComponent = () => {
   const modernCoverageCount = platformProviders.reduce((total, entry) => total + (entry.config?.enabled ? (entry.provider.services || []).reduce((count, service) => count + (service.zoneRules?.filter((zone) => zone.enabled !== false).length || 0), 0) : 0), 0)
   const legacyHasData = zones.length > 0 || providers.length > 0 || Number(cfg.flatFee || 0) > 0 || Number(cfg.freeAbove || 0) > 0 || cfg.model === 'zones'
   const legacyMode = !platformLoading && activeProviders === 0 && legacyHasData
-  const visibleTab = tab === 'zones' && !legacyMode ? 'settings' : tab
+  const visibleTab = tab === 'overview' ? 'settings' : tab === 'zones' && !legacyMode ? 'settings' : tab
   return (
     <div data-tour="shipping-workspace" className="merchant-operations merchant-shipping-page shipping-page--stitch">
       <PageHeader title="الشحن والتوصيل" subtitle="إعدادات الشحن والمناطق وشركات التوصيل" />
+      <Tabs tabs={[{ key: 'overview', label: 'نظرة عامة' }, { key: 'companies', label: 'شركات الشحن' }, { key: 'settlements', label: 'التسويات' }]} active={tab} onChange={setTab} />
       <Card title="احتياجات الشحن لمتجرك" className="mt-2" subtitle="تُستخدم هذه البيانات لاقتراح الشركات المناسبة عند إضافة اتصال جديد.">
         <div className="grid grid-2">
           <div><Input label="حجم الشحن الشهري المتوقع" type="number" value={expectedVolume} onChange={setExpectedVolume} /><Button size="sm" onClick={() => void saveShippingProfile()}>حفظ الاحتياجات</Button></div>
@@ -424,7 +426,8 @@ export const MerchantShipping: FunctionalComponent = () => {
         <div><strong>أدر خدمات الشحن من مصدر واحد</strong><span>الشركات اليدوية تُضبط أسعارها هنا؛ شركات API تستخدم السعر الذي تعيده الشركة بعد توفير واجهة تسعير رسمية.</span></div>
       </div>
 
-      <Card title="إنشاء الشحنات تلقائيًا" className="mt-2" subtitle="الطلب يبقى محفوظًا حتى إذا تعذر الاتصال بشركة الشحن. في شحنات API الشركة وحدها تحدد مراحل الشحنة بعد إنشائها.">
+      {tab === 'overview' && <>
+      <Card title="إعدادات التشغيل" className="mt-2" subtitle="الطلب يبقى محفوظًا حتى إذا تعذر الاتصال بشركة الشحن. في شحنات API الشركة وحدها تحدد مراحل الشحنة بعد إنشائها.">
         {!hasEnabledLiveProvider && <div className="shipping-secure-note"><Icon name="schedule" ariaHidden /><span>لا توجد شركة شحن متصلة وجاهزة حاليًا. اختر «يدوي» إلى أن يكتمل ربط شركة API أو تُفعّل شركة جاهزة.</span></div>}
         <label className="field"><span className="field-label">توقيت إنشاء الشحنة</span><select className="input" value={automaticShipmentCreation} onChange={(event) => void saveAutomationMode((event.target as HTMLSelectElement).value as typeof automaticShipmentCreation)}>
           <option value="MANUAL">يدوي — من داخل الطلب فقط</option>
@@ -432,8 +435,9 @@ export const MerchantShipping: FunctionalComponent = () => {
           <option value="IMMEDIATELY_AFTER_CHECKOUT" disabled={!hasEnabledLiveProvider}>فور إتمام العميل للطلب — ينشئ الشحنة تلقائيًا لدى شركة API المختارة{!hasEnabledLiveProvider ? ' (قريبًا)' : ''}</option>
         </select></label>
       </Card>
+      </>}
 
-      <Card title="كشف تسويات شركات الشحن" className="mt-2" titleIcon="account_balance_wallet" subtitle="رصيدك يُحتسب من شحنات الدفع عند الاستلام التي وصلت للعميل: قيمة التحصيل ناقص رسوم الشحن المسجّلة. لا تسجّل شركات الشحن التحويل البنكي داخل API، لذلك تُؤكَّد التسوية هنا بعد استلامك التحويل فعليًا.">
+      {tab === 'settlements' && <Card title="كشف تسويات شركات الشحن" className="mt-2" titleIcon="account_balance_wallet" subtitle="رصيدك يُحتسب من شحنات الدفع عند الاستلام التي وصلت للعميل: قيمة التحصيل ناقص رسوم الشحن المسجّلة. لا تسجّل شركات الشحن التحويل البنكي داخل API، لذلك تُؤكَّد التسوية هنا بعد استلامك التحويل فعليًا.">
         <div className="shipping-settlement-stats">
           <StatsCard title="رصيدك غير المسوّى" value={totalPendingNet} currency icon="account_balance_wallet" tone="primary" changeLabel={`${totalPendingOrders} شحنة COD مسلّمة`} />
           <StatsCard title="ما تمّت تسويته" value={totalSettledNet} currency icon="check_circle" tone="green" changeLabel={`${settlementsRes.data.length} تسوية مسجلة`} />
@@ -453,9 +457,9 @@ export const MerchantShipping: FunctionalComponent = () => {
           </div>
         )}
         {settlementsRes.data.length > 0 && <p className="shipping-settlement-history muted small">آخر تسوية: {settlementsRes.data[0]?.providerName || 'شركة الشحن'} — {formatCurrency(settlementsRes.data[0]?.netMerchantDue || 0)} ({settlementsRes.data[0]?.shipmentCount || 0} شحنة).</p>}
-      </Card>
+      </Card>}
 
-      <Card title="شركات الشحن المتاحة من المنصة" className="mt-2">
+      {tab === 'companies' && <Card title="شركات الشحن المتاحة من المنصة" className="mt-2">
         {platformLoading ? <Loading /> : platformProviders.length === 0 ? <p className="muted">لم تُفعّل إدارة المنصة أي شركة شحن بعد.</p> : <div className="card-grid shipping-providers-grid">
           {platformProviders.map(({ provider, config, eligibility }) => <Card key={provider.id} className="shipping-provider-card" title={provider.name} actions={<Badge tone={eligibility?.grandfathered || config?.enabled ? 'green' : eligibility?.eligible ? 'blue' : 'amber'}>{eligibility?.grandfathered ? 'اتصال حالي محفوظ' : eligibility?.eligible ? 'متاحة لمتجرك' : 'غير مناسبة حاليًا'}</Badge>}>
             <div className="shipping-provider-intro">
@@ -464,13 +468,14 @@ export const MerchantShipping: FunctionalComponent = () => {
             </div>
             <div className="shipping-provider-summary"><span>{provider.supportsCOD ? 'الدفع عند الاستلام' : 'بدون COD'}</span><span>{provider.supportsTracking ? 'تتبع' : 'تتبع يدوي'}</span><span>{connectionStatusLabel(config?.configurationStatus, config?.enabled)}</span>{config?.isDefault && <span>الافتراضية</span>}</div>
             {eligibility && <div className="shipping-secure-note"><Icon name={eligibility.eligible ? 'check_circle' : 'warning'} ariaHidden /><span>{eligibility.grandfathered ? 'اتصالك الحالي محفوظ' : eligibility.eligible ? 'متاحة لمتجرك' : eligibility.reasons.map((reason: any) => reason.message || reason).join(' · ') || 'شركة الشحن غير جاهزة للربط بعد'}{eligibility.minimumMonthlyShipments > 0 && <>{' · '}الحد الأدنى {eligibility.minimumMonthlyShipments} شحنة شهريًا</>}</span></div>}
+            <Button size="sm" variant="outline" onClick={() => setExpandedProvider((current) => current === provider.id ? null : provider.id)}>{expandedProvider === provider.id ? 'إخفاء التفاصيل' : 'عرض التفاصيل'}</Button>
             {provider.integrationType === 'manual' && <div className="shipping-secure-note"><Icon name="local_shipping" ariaHidden /><span>هذا الخيار لا يحتاج API أو حسابًا لدى شركة شحن. فعّله واضبط السعر، ثم سجّل بيانات التتبع يدويًا عند إرسال الشحنة.</span></div>}
             {provider.integrationType === 'api' && !isProviderLive(provider) && <div className="shipping-secure-note"><Icon name="schedule" ariaHidden /><span><strong>قريبًا:</strong> نعمل على محول API الرسمي لـ{provider.name}. الأسعار والمناطق قد تظهر في المتجر، لكن لا تُدخل مفتاح API ولا تعتمد الإنشاء التلقائي قبل أن تصبح الحالة «متصلة».</span></div>}
             {provider.slug === 'bosta' && <p className="muted small">أدخل مفاتيح Bosta الخاصة بهذا المتجر فقط، ثم اختبر الاتصال. عنوان Webhook سيظهر بعد نجاح الحفظ.</p>}
             {provider.slug === 'wasla' && <div className="shipping-secure-note"><Icon name="info" ariaHidden /><span><strong>إعداد مرة واحدة:</strong> وصلة تتطلب عنوان الفرع الذي ستستلم منه الشحنات عند إنشاء الطلب. احفظ عنوان استلام وصلة أدناه مرة واحدة للتاجر؛ لا يراه العميل ولا تعيد إدخاله في كل طلب. الأسعار والتغطية تأتيان من وصلة مباشرة.</span></div>}
             {provider.slug === 'wasla' && <div className="shipping-secure-note"><Icon name="sync" ariaHidden /><span><strong>تحديث الحالة:</strong> العقد الحالي يدعم إنشاء الشحنة وجلب التتبع والحالات من وصلة، لكنه لا يوفر Webhook موثقًا أو إلغاء/AWB/مرتجع عبر API. لن يظهر رابط Webhook وهمي؛ استخدم «تحديث من الشركة» من تفاصيل الطلب لجلب آخر حالة.</span></div>}
             {provider.slug === 'wasla' && config?.enabled && !isProviderReadyForAutomation(provider, config) && <div className="shipping-secure-note"><Icon name="schedule" ariaHidden /><span><strong>ينقص الإعداد:</strong> اختر عنوان استلام وصلة واحفظه. بعد ذلك تنشئ المنصة الشحنات تلقائيًا من هذا الفرع.</span></div>}
-            {config?.enabled && (() => {
+            {expandedProvider === provider.id && config?.enabled && (() => {
               const draft = platformDrafts[provider.id] || { fixedRate: String(config.fixedRate ?? ''), defaultPackageWeight: String(config.defaultPackageWeight ?? ''), codEnabled: config.codEnabled !== false, serviceCode: config.serviceCode || provider.services?.[0]?.code || '', rateMarkup: String(config.rateMarkup ?? ''), freeShippingThreshold: String(config.freeShippingThreshold ?? ''), waslaPickupLocationName: config.waslaPickupLocationName || '', waslaPickupContactPhone: config.waslaPickupContactPhone || '', waslaPickupAddressLine1: config.waslaPickupAddressLine1 || '', waslaPickupGovernorateId: String(config.waslaPickupGovernorateId || ''), waslaPickupCityId: String(config.waslaPickupCityId || '') }
               return <div className="shipping-provider-config grid grid-2 mt-1">
                 {provider.services && provider.services.length > 0 && <label className="field"><span className="field-label">الخدمة</span><select className="input" value={draft.serviceCode} onChange={(e) => setPlatformDrafts((prev) => ({ ...prev, [provider.id]: { ...(prev[provider.id] || draft), serviceCode: (e.target as HTMLSelectElement).value } }))}>{provider.services.filter((service) => service.enabled !== false).map((service) => <option value={service.code} key={service.code}>{service.name}{service.estimatedMinHours || service.estimatedMaxHours ? ` · ${service.estimatedMinHours || '?'}–${service.estimatedMaxHours || '?'} ساعة` : ''}</option>)}</select></label>}
@@ -508,16 +513,16 @@ export const MerchantShipping: FunctionalComponent = () => {
             <div className="shipping-provider-footer"><Button size="sm" loading={platformSaving === provider.id} disabled={!config?.enabled && !isProviderLive(provider)} title={!config?.enabled && !isProviderLive(provider) ? 'قيد التطوير: لا يمكن تفعيل الإنشاء عبر API قبل اكتمال المحول' : undefined} onClick={() => togglePlatformProvider(provider, config)}>{config?.enabled ? 'إيقاف الشركة' : isProviderLive(provider) ? 'تفعيل الشركة' : 'قريبًا'}</Button>{config?.enabled && <Button size="sm" variant="outline" disabled={provider.integrationType === 'manual' || !provider.adapterConfigured} title={provider.integrationType === 'manual' ? 'المزود اليدوي لا يحتاج اختبار API' : !provider.adapterConfigured ? 'قريبًا: يتاح الاختبار بعد إضافة محول API لهذه الشركة' : 'اختبار اتصال المزود'} onClick={() => testPlatformProvider(provider, config)}>اختبار الاتصال</Button>}</div>
           </Card>)}
         </div>}
-      </Card>
+      </Card>}
 
-      <Tabs
+      {tab === 'overview' && <Tabs
         tabs={[
           { key: 'settings', label: 'نظرة عامة' },
           ...(legacyMode ? [{ key: 'zones', label: 'مناطق التوافق القديم', count: zoneCount }] : []),
         ]}
         active={visibleTab}
         onChange={setTab}
-      />
+      />}
 
       {visibleTab === 'settings' && (
         <div className="mt-2">
