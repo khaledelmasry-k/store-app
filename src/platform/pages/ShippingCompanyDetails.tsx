@@ -23,12 +23,20 @@ export const PlatformShippingCompanyDetails: FunctionalComponent<{ id: string }>
   const toast = useToast()
   const [testing, setTesting] = useState(false)
   const [agreement, setAgreement] = useState<any>(null)
-  if (companyRes.loading) return <Loading variant="screen" />
   const company = companyRes.data
+  useEffect(() => {
+    if (!company?.id) {
+      setAgreement(null)
+      return
+    }
+    void getShippingProviderCommercialAgreementCallable({ providerId: company.id })
+      .then((result: any) => setAgreement(result.data?.agreement || {}))
+      .catch(() => setAgreement({}))
+  }, [company?.id])
+  if (companyRes.loading) return <Loading variant="screen" />
   if (!company) return <EmptyState icon="local_shipping" title="شركة الشحن غير موجودة" />
   const merchantManagedApi = company.integrationType === 'api' && company.credentialMode === 'merchant'
   const adapterAvailable = ['wasla', 'bosta'].includes(company.slug.trim().toLowerCase())
-  useEffect(() => { void getShippingProviderCommercialAgreementCallable({ providerId: company.id }).then((result: any) => setAgreement(result.data?.agreement || {})).catch(() => setAgreement({})) }, [company.id])
 
   const testConnection = async () => {
     if (company.integrationType === 'manual') {

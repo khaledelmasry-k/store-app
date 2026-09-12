@@ -5584,6 +5584,7 @@ async function merchantProviderEligibility(provider: any, config: any, store: an
   const missing = targets.filter((value: string) => covered.size > 0 && !covered.has(value))
   const coverageConfigured = covered.size > 0
   const coverageMatched = targets.length === 0 ? coverageConfigured : coverageConfigured && missing.length === 0
+  const shippingProfileReady = grandfathered || targets.length > 0
   const reasons: Array<{ code: string; message: string }> = []
   if (!providerReady) reasons.push({ code: 'PROVIDER_NOT_READY', message: 'شركة الشحن غير جاهزة للربط بعد' })
   if (!agreementActive) reasons.push({ code: 'COMMERCIAL_AGREEMENT_INACTIVE', message: 'لا توجد اتفاقية تجارية نشطة' })
@@ -5591,7 +5592,7 @@ async function merchantProviderEligibility(provider: any, config: any, store: an
   if (!targets.length && !grandfathered) reasons.push({ code: 'SHIPPING_PROFILE_REQUIRED', message: 'أضف المحافظات المستهدفة لمتجرك' })
   if (!coverageConfigured) reasons.push({ code: 'COVERAGE_NOT_CONFIGURED', message: 'شركة الشحن لم تستكمل مناطق التغطية بعد' })
   else if (!coverageMatched) reasons.push({ code: 'COVERAGE_MISMATCH', message: `لا تغطي الشركة: ${missing.join('، ')}` })
-  return { eligible: grandfathered || (providerReady && agreementActive && coverageMatched && effective >= minimum), grandfathered, reasons: grandfathered ? [] : reasons, merchantMonthlyVolume: shipmentVolume, expectedMonthlyVolume: expected, effectiveMonthlyVolume: effective, minimumMonthlyShipments: minimum, coverageMatched, missingGovernorates: missing, providerReady: providerReady && agreementActive }
+  return { eligible: grandfathered || (shippingProfileReady && providerReady && agreementActive && coverageMatched && effective >= minimum), grandfathered, reasons: grandfathered ? [] : reasons, merchantMonthlyVolume: shipmentVolume, expectedMonthlyVolume: expected, effectiveMonthlyVolume: effective, minimumMonthlyShipments: minimum, coverageMatched, missingGovernorates: missing, providerReady: providerReady && agreementActive }
 }
 
 export const saveMerchantShippingProfile = onCall(async (request: CallableRequest<any>) => {
