@@ -90,6 +90,35 @@
   opacity: 0.6;
   cursor: not-allowed;
 }
+
+/* Merchant Orders status action: keep this high-contrast without changing
+   the shared OrderDetails button variant used elsewhere. */
+.merchant-orders-status-button {
+  background: #3730a3;
+  color: #fff;
+  font-weight: 700;
+}
+.ods-btn-primary.merchant-orders-status-button,
+.ods-update-btn.merchant-orders-status-button {
+  background: #3730a3;
+  color: #fff;
+}
+.merchant-orders-status-button:hover {
+  background: #312e81;
+}
+.ods-btn-primary.merchant-orders-status-button:hover,
+.ods-update-btn.merchant-orders-status-button:hover {
+  background: #312e81;
+}
+.merchant-orders-status-button:focus-visible {
+  outline: 3px solid #a5b4fc;
+  outline-offset: 2px;
+}
+.merchant-orders-status-button:disabled {
+  background: #6366f1;
+  color: #fff;
+  opacity: 1;
+}
 .ods-status-dropdown {
   position: relative;
 }
