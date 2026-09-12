@@ -1,5 +1,5 @@
 import { FunctionalComponent } from 'preact'
-import { useState } from 'preact/hooks'
+import { useEffect, useState } from 'preact/hooks'
 import { Link } from 'wouter'
 import { useDocument } from '../../shared/hooks/useDocument'
 import { useCollection } from '../../shared/hooks/useCollection'
@@ -14,6 +14,7 @@ import { Button } from '../../shared/components/ui/Button'
 import { useToast } from '../../shared/hooks/useToast'
 import { testShippingConnectionCallable } from '../../shared/services/auth'
 import type { ShippingProviderDefinition, Shipment, Store } from '../../shared/types'
+import { getShippingProviderCommercialAgreementCallable } from '../../shared/services/auth'
 
 export const PlatformShippingCompanyDetails: FunctionalComponent<{ id: string }> = ({ id }) => {
   const companyRes = useDocument<ShippingProviderDefinition>('shippingProviders', id)
@@ -21,11 +22,13 @@ export const PlatformShippingCompanyDetails: FunctionalComponent<{ id: string }>
   const storesRes = useCollection<Store>('stores', {})
   const toast = useToast()
   const [testing, setTesting] = useState(false)
+  const [agreement, setAgreement] = useState<any>(null)
   if (companyRes.loading) return <Loading variant="screen" />
   const company = companyRes.data
   if (!company) return <EmptyState icon="local_shipping" title="شركة الشحن غير موجودة" />
   const merchantManagedApi = company.integrationType === 'api' && company.credentialMode === 'merchant'
   const adapterAvailable = ['wasla', 'bosta'].includes(company.slug.trim().toLowerCase())
+  useEffect(() => { void getShippingProviderCommercialAgreementCallable({ providerId: company.id }).then((result: any) => setAgreement(result.data?.agreement || {})).catch(() => setAgreement({})) }, [company.id])
 
   const testConnection = async () => {
     if (company.integrationType === 'manual') {
@@ -51,7 +54,7 @@ export const PlatformShippingCompanyDetails: FunctionalComponent<{ id: string }>
   return <div className="platform-operations platform-shipping-company-details">
     <Breadcrumb items={[{ label: 'شركات الشحن', href: '/platform/shipping-companies' }, { label: company.name }]} />
     <PageHeader title={company.name} subtitle={merchantManagedApi ? 'شركة API يربطها كل تاجر بحسابه الخاص' : company.description || 'تعريف شركة الشحن وإعدادات التكامل'} actions={<div className="flex" style={{ gap: 8 }}><Badge tone={company.status === 'active' ? 'green' : company.status === 'draft' ? 'amber' : 'slate'}>{company.status === 'active' ? 'نشطة' : company.status === 'draft' ? 'مسودة' : 'موقوفة'}</Badge>{company.integrationType === 'api' && !merchantManagedApi && <Button size="sm" variant="outline" loading={testing} onClick={testConnection}>اختبار الاتصال</Button>}</div>} />
-    <nav className="tabs platform-shipping-tabs" aria-label="أقسام شركة الشحن"><a href="#overview">نظرة عامة</a><a href="#capabilities">القدرات</a><a href="#merchants">المتاجر</a></nav>
+    <nav className="tabs platform-shipping-tabs" aria-label="أقسام شركة الشحن"><a href="#overview">نظرة عامة</a><a href="#capabilities">التكامل والتغطية</a><a href="#eligibility">أهلية التجار</a><a href="#commercial">الاتفاق التجاري</a></nav>
     <div id="overview" className="stats-grid">
       <StatsCard title="نوع التكامل" value={company.integrationType === 'api' ? 'API' : 'يدوي'} icon="hub" tone="primary" />
       <StatsCard title={merchantManagedApi ? 'ربط التجار' : 'الموصل'} value={merchantManagedApi ? 'من لوحة التاجر' : adapterAvailable ? 'جاهز' : 'غير مهيأ'} icon={merchantManagedApi ? 'storefront' : 'code'} tone={merchantManagedApi || adapterAvailable ? 'green' : 'amber'} />
@@ -63,6 +66,8 @@ export const PlatformShippingCompanyDetails: FunctionalComponent<{ id: string }>
       <Card title={merchantManagedApi ? 'طريقة الربط' : 'الإعدادات الآمنة'}>{merchantManagedApi ? <p className="muted">تُتاح {company.name} للتجار من لوحة الشحن. يضيف كل تاجر مفتاح API الخاص به ويختبره هناك؛ لا تُحفظ مفاتيح التجار أو تُعرض في لوحة المنصة.</p> : <dl className="shipping-provider-dl"><div><dt>Provider key</dt><dd>{company.slug}</dd></div><div><dt>مصدر الاعتماد</dt><dd>{company.credentialMode}</dd></div><div><dt>البلدان</dt><dd>{company.supportedCountries?.join('، ') || 'غير محددة'}</dd></div><div><dt>الأسرار</dt><dd>لا تُعرض في المتصفح</dd></div></dl>}</Card>
     </div>
     <Card title="الخدمات والأسعار"><div className="stack-list">{company.services?.filter((service) => service.enabled !== false).map((service) => <div className="list-row" key={service.code}><div><strong>{service.name}</strong> <span className="muted small">({service.code}) · {service.rateMode === 'zone' ? 'حسب المنطقة' : `${service.fixedRate || 0} ج.م`}</span>{service.zoneRules?.length ? <div className="muted small">{service.zoneRules.map((zone) => `${zone.zoneName}: ${zone.baseRate} ج.م · ${zone.etaMin || '?'}–${zone.etaMax || '?'} ${zone.etaUnit === 'days' ? 'يوم' : 'ساعة'}`).join('، ')}</div> : null}</div><span className="muted small">{service.estimatedMinHours || '?'}–{service.estimatedMaxHours || '?'} ساعة</span></div>) || <p className="muted">لم تُعرّف خدمات بعد.</p>}</div></Card>
+    <Card title="أهلية التجار"><div id="eligibility" className="shipping-provider-dl"><div><dt>الحد الأدنى الشهري</dt><dd>{company.eligibilityConfig?.minimumMerchantMonthlyShipments || 0} شحنة</dd></div><div><dt>جاهزية المحول</dt><dd>{company.integrationType === 'manual' || company.adapterStatus === 'production_ready' ? 'جاهز' : 'غير جاهز'}</dd></div><div><dt>التغطية</dt><dd>{company.services?.reduce((count, service) => count + (service.zoneRules?.length || 0), 0) || 0} منطقة</dd></div><div><dt>الاتفاق التجاري</dt><dd>{agreement?.status === 'active' ? 'نشط' : 'غير نشط'}</dd></div></div></Card>
+    <Card title="الاتفاق التجاري"><div id="commercial" className="shipping-provider-dl"><div><dt>الحالة</dt><dd>{agreement?.status || 'غير مفعّل'}</dd></div><div><dt>دورة التسوية</dt><dd>{agreement?.settlementCycle || 'شهري'}</dd></div><div><dt>الشرائح</dt><dd>{agreement?.tiers?.length || 0}</dd></div><p className="muted small">تُدار قيم العمولات من خلال وظائف SuperAdmin ولا تُعرض للتاجر.</p></div></Card>
     <Card title="المتاجر المستخدمة"><div id="merchants" className="stack-list">{Array.from(new Set(shipmentsRes.data.map((s) => s.storeId))).map((storeId) => <Link key={storeId} href={`/platform/stores/${storeId}`} className="list-row"><span>{storesRes.data.find((s) => s.id === storeId)?.name || storeId}</span><span className="muted">عرض المتجر</span></Link>)}</div>{shipmentsRes.data.length === 0 && <EmptyState icon="storefront" title="لا توجد شحنات مرتبطة بعد" description="سيظهر هنا استخدام المتاجر للشركة بعد إنشاء أول شحنة." />}</Card>
   </div>
 }
