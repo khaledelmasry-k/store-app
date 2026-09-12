@@ -8,6 +8,8 @@ import { Button } from '../../shared/components/ui/Button'
 import { Modal } from '../../shared/components/ui/Modal'
 import { Textarea } from '../../shared/components/ui/Textarea'
 import { Input } from '../../shared/components/ui/Input'
+import { Select } from '../../shared/components/ui/Select'
+import { FilterBar } from '../../shared/components/ui/FilterBar'
 import { useCollection } from '../../shared/hooks/useCollection'
 import { useToast } from '../../shared/hooks/useToast'
 import { formatDateTime, timeAgo } from '../../shared/utils/format'
@@ -109,19 +111,25 @@ export const PlatformTickets: FunctionalComponent = () => {
       <PageHeader title="تذاكر الدعم" subtitle={`${filtered.length} / ${tickets.length} تذكرة`} />
 
       <Card>
-        <div className="tickets-filters">
-          <Input placeholder="بحث..." value={query} onChange={setQuery} />
-          <select className="input" value={statusFilter} onChange={(e) => setStatusFilter((e.target as HTMLSelectElement).value)}>
-            {STATUS_OPTIONS.map((o) => <option key={o.value} value={o.value}>{o.label}</option>)}
-          </select>
-          <select className="input" value={priorityFilter} onChange={(e) => setPriorityFilter((e.target as HTMLSelectElement).value)}>
-            <option value="">كل الأولويات</option>
-            <option value="low">عادية</option>
-            <option value="medium">متوسطة</option>
-            <option value="high">عالية</option>
-            <option value="urgent">عاجلة</option>
-          </select>
-        </div>
+        <FilterBar
+          search={query}
+          onSearch={setQuery}
+          searchPlaceholder="بحث بالموضوع أو المتجر..."
+          actions={
+            <div className="flex" style={{ gap: 8, flexWrap: 'wrap' }}>
+              <select className="input" style={{ minWidth: 150 }} value={statusFilter} onChange={(e) => setStatusFilter((e.target as HTMLSelectElement).value)}>
+                {STATUS_OPTIONS.map((o) => <option key={o.value} value={o.value}>{o.label}</option>)}
+              </select>
+              <select className="input" style={{ minWidth: 150 }} value={priorityFilter} onChange={(e) => setPriorityFilter((e.target as HTMLSelectElement).value)}>
+                <option value="">كل الأولويات</option>
+                <option value="low">عادية</option>
+                <option value="medium">متوسطة</option>
+                <option value="high">عالية</option>
+                <option value="urgent">عاجلة</option>
+              </select>
+            </div>
+          }
+        />
         <Table cardMode
           columns={[
             { key: 'subject', header: 'الموضوع', render: (t: Ticket) => <span className="font-semibold">{t.subject}</span> },
@@ -154,15 +162,9 @@ export const PlatformTickets: FunctionalComponent = () => {
               {(!selected.replies || selected.replies.length === 0) && <p className="muted small">لا توجد ردود بعد.</p>}
             </div>
             <Textarea label="رد جديد" value={reply} onChange={setReply} rows={3} />
-            <div className="flex flex-gap-sm flex-wrap mt-2">
+            <div className="flex flex-gap-sm flex-wrap mt-2" style={{ gap: 8 }}>
               <Button onClick={handleReply} disabled={!reply.trim()}>إرسال الرد</Button>
-              <select className="input" style={{ maxWidth: 160 }} value={selected.status} onChange={(e) => handleStatusChange((e.target as HTMLSelectElement).value)}>
-                <option value="open">مفتوحة</option>
-                <option value="in_progress">قيد المعالجة</option>
-                <option value="waiting_merchant">بانتظار التاجر</option>
-                <option value="waiting_support">بانتظار الدعم</option>
-                <option value="closed">مغلقة</option>
-              </select>
+              <Select value={selected.status} onChange={handleStatusChange} options={[{ value: 'open', label: 'مفتوحة' }, { value: 'in_progress', label: 'قيد المعالجة' }, { value: 'waiting_merchant', label: 'بانتظار التاجر' }, { value: 'waiting_support', label: 'بانتظار الدعم' }, { value: 'closed', label: 'مغلقة' }]} />
               <Input placeholder="تعيين إلى (UID)" value={assignTo} onChange={setAssignTo} />
               <Button variant="outline" onClick={handleAssign}>تعيين</Button>
               {selected.status !== 'closed' ? <Button variant="ghost" onClick={handleClose}>إغلاق</Button> : <Button variant="ghost" onClick={handleReopen}>إعادة فتح</Button>}

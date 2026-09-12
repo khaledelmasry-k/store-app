@@ -18,6 +18,7 @@ import { formatPriceEgp } from '../../shared/utils/format'
 import { PLAN_FEATURE_KEYS, PLAN_FEATURE_LABELS, type PlanFeatureKey } from '../../shared/services/subscription'
 import type { SubscriptionPlan } from '../../shared/types'
 import { Icon } from '../../shared/components/ui/Icon'
+import { Select } from '../../shared/components/ui/Select'
 import { CANONICAL_PLANS } from '../../shared/plans/catalog'
 
 const emptyFlags = () => Object.fromEntries(PLAN_FEATURE_KEYS.map((k) => [k as string, false])) as Record<PlanFeatureKey, boolean>
@@ -367,11 +368,7 @@ export const PlatformPlans: FunctionalComponent = () => {
         }
       >
         <Input label="اسم الباقة" value={form.name || ''} onChange={(v) => setForm({ ...form, name: v })} required />
-        <label className="field-label">نوع العرض</label>
-        <select className="input" value={form.billingModel || 'subscription'} onChange={(e) => setForm({ ...form, billingModel: (e.target as HTMLSelectElement).value as 'subscription' | 'one_time' })}>
-          <option value="subscription">اشتراك شهري / سنوي</option>
-          <option value="one_time">شراء المتجر مرة واحدة</option>
-        </select>
+        <Select label="نوع العرض" value={form.billingModel || 'subscription'} onChange={(v) => setForm({ ...form, billingModel: v as 'subscription' | 'one_time' })} options={[{ value: 'subscription', label: 'اشتراك شهري / سنوي' }, { value: 'one_time', label: 'شراء المتجر مرة واحدة' }]} />
         <div className="grid grid-2">
           <Input label="Slug (للرابط)" value={form.slug || ''} onChange={(v) => setForm({ ...form, slug: v })} hint="مثال: growth" />
           <Input label="ترتيب العرض" type="number" value={form.sortOrder || 0} onChange={(v) => setForm({ ...form, sortOrder: Number(v) })} hint="الأصغر يظهر أولاً" />

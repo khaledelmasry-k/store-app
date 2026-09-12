@@ -132,9 +132,8 @@ export const AppShell: FunctionalComponent<Props> = ({ navKey, brand, brandLogo,
     try {
       const stored = localStorage.getItem(sidebarPreferenceKey)
       if (stored !== null) return stored === '1'
-      // الإدارة تتبع الآن نفس rail لوحة التاجر: يبدأ كمسار أيقونات نظيف
-      // ويتوسع فقط عند التثبيت أو المرور، بدل قائمة منصة منفصلة ومزدحمة.
-      return navKey !== 'platform'
+      // Both consoles start expanded — consistent rail geometry, no surprise collapse on first visit.
+      return true
     } catch {
       return true
     }
@@ -303,6 +302,26 @@ export const AppShell: FunctionalComponent<Props> = ({ navKey, brand, brandLogo,
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [location, navKey])
 
+  // Drawer: Esc to close, body scroll lock, click-outside already via overlay
+  useEffect(() => {
+    if (!drawerOpen) return
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') setDrawerOpen(false)
+    }
+    document.addEventListener('keydown', onKey as any)
+    const prevOverflow = document.body.style.overflow
+    document.body.style.overflow = 'hidden'
+    return () => {
+      document.removeEventListener('keydown', onKey as any)
+      document.body.style.overflow = prevOverflow
+    }
+  }, [drawerOpen])
+
+  // Close drawer after navigation (mobile)
+  useEffect(() => {
+    setDrawerOpen(false)
+  }, [location])
+
   const onNavKeyDown = (e: KeyboardEvent) => {
     const navEl = e.currentTarget as HTMLDivElement
     const focusables = Array.from(navEl.querySelectorAll<HTMLElement>('button[data-nav], a[data-nav]'))
@@ -319,7 +338,7 @@ export const AppShell: FunctionalComponent<Props> = ({ navKey, brand, brandLogo,
   }
 
   const impersonating = Boolean(user?.impersonatedBy)
-  const displayName = navKey === 'platform' ? 'خالد المصري' : (user?.name || '?')
+  const displayName = navKey === 'platform' ? (user?.name || user?.email || 'مدير المنصة') : (user?.name || '?')
   const merchantLogoKind = navKey === 'dashboard' ? storeLogoKind(brandLogo) : 'none'
   const merchantPreset = merchantLogoKind === 'preset' ? presetFromLogo(brandLogo) : null
   const hasMerchantLogo = navKey === 'dashboard' && merchantLogoKind === 'image'

@@ -61,10 +61,13 @@ export const PlatformOrders: FunctionalComponent = () => {
           segments={[{ label: 'كل', value: '' }, ...Object.entries(STATUS_LABELS).map(([k, v]) => ({ label: v, value: k }))]}
           activeSegment={status}
           onSegmentChange={(s) => { setStatus(s); setPage(1) }}
+          actions={
+            <select className="input" style={{ minWidth: 160 }} value={storeFilter} onChange={(e) => { setStoreFilter((e.target as HTMLSelectElement).value); setPage(1) }}>
+              <option value="">كل المتاجر</option>
+              {stores.map((s: any) => <option key={s.id} value={s.id}>{s.name}</option>)}
+            </select>
+          }
         />
-        <div className="platform-orders-filter-row">
-          <label className="field-label">المتجر<select value={storeFilter} onChange={(e) => { setStoreFilter((e.target as HTMLSelectElement).value); setPage(1) }}><option value="">كل المتاجر</option>{stores.map((s: any) => <option key={s.id} value={s.id}>{s.name}</option>)}</select></label>
-        </div>
         {filtered.length === 0 ? (
           <EmptyState icon="receipt_long" title="لا توجد طلبات" description={query ? 'لا توجد نتائج للبحث' : 'لا توجد طلبات بعد'} />
         ) : (

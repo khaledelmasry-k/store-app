@@ -8,6 +8,8 @@ import { Modal } from '../../shared/components/ui/Modal'
 import { Input } from '../../shared/components/ui/Input'
 import { Textarea } from '../../shared/components/ui/Textarea'
 import { Toggle } from '../../shared/components/ui/Toggle'
+import { Select } from '../../shared/components/ui/Select'
+import { SegmentedControl } from '../../shared/components/ui/SegmentedControl'
 import { StatsCard } from '../../shared/components/ui/StatsCard'
 import { Table } from '../../shared/components/ui/Table'
 import { EmptyState } from '../../shared/components/ui/EmptyState'
@@ -277,17 +279,17 @@ export const PlatformSubscriptionCoupons: FunctionalComponent = () => {
       </div>
 
       <Card className="mb-2">
-        <div className="flex" style={{ gap: 8, flexWrap: 'wrap' }}>
-          {[
+        <SegmentedControl
+          value={filter}
+          onChange={(v) => setFilter(v as any)}
+          options={[
             { value: 'all', label: `الكل (${coupons.filter((c) => !isArchived(c)).length})` },
             { value: 'active', label: `نشط (${stats.active})` },
             { value: 'disabled', label: `موقوف (${coupons.filter((c) => c.active === false && !isArchived(c)).length})` },
             { value: 'expired', label: `منتهي (${stats.expired})` },
             { value: 'archived', label: `مؤرشف (${stats.archived})` },
-          ].map((tab) => (
-            <Button key={tab.value} variant={filter === tab.value ? 'primary' : 'ghost'} size="sm" onClick={() => setFilter(tab.value as any)}>{tab.label}</Button>
-          ))}
-        </div>
+          ]}
+        />
         <p className="muted small" style={{ marginTop: 8 }}>يمكن لكل تاجر استخدام نفس الكود <strong>مرة واحدة فقط</strong>. perMerchantLimit = 1 (ثابت حسب سياسة Matjari).</p>
       </Card>
 
@@ -295,7 +297,6 @@ export const PlatformSubscriptionCoupons: FunctionalComponent = () => {
         {loading ? <p className="muted small">جاري التحميل...</p> : filtered.length === 0 ? (
           <EmptyState icon="sell" title="لا توجد أكواد" description={filter === 'all' ? 'أنشئ أول كود خصم للاشتراكات' : `لا توجد أكواد في حالة "${filter}"`} />
         ) : (
-          <div style={{ overflowX: 'auto' }}>
             <Table
               cardMode
               rows={filtered}
@@ -326,7 +327,6 @@ export const PlatformSubscriptionCoupons: FunctionalComponent = () => {
                 ) },
               ]}
             />
-          </div>
         )}
       </Card>
 
@@ -337,13 +337,7 @@ export const PlatformSubscriptionCoupons: FunctionalComponent = () => {
         </div>
         <Textarea label="الوصف" value={form.description} onChange={(v) => setForm({ ...form, description: v })} rows={2} placeholder="وصف داخلي للكود" />
         <div className="grid grid-2">
-          <label className="field">
-            <span className="field-label">نوع الخصم</span>
-            <select className="input" value={form.discountType} onChange={(e) => setForm({ ...form, discountType: (e.target as HTMLSelectElement).value as any })}>
-              <option value="percentage">نسبة مئوية</option>
-              <option value="fixed">مبلغ ثابت</option>
-            </select>
-          </label>
+          <Select label="نوع الخصم" value={form.discountType} onChange={(v) => setForm({ ...form, discountType: v as any })} options={[{ value: 'percentage', label: 'نسبة مئوية' }, { value: 'fixed', label: 'مبلغ ثابت' }]} />
           <Input label={form.discountType === 'percentage' ? 'القيمة % (1-99)' : 'القيمة (ج.م)'} type="number" value={form.discountValue} onChange={(v) => setForm({ ...form, discountValue: Number(v) })} hint={form.discountType === 'percentage' ? 'الحد الأقصى 99%' : 'يجب أن يبقى المبلغ النهائي ≥1 ج.م'} required />
         </div>
         <div className="field">
@@ -406,7 +400,6 @@ export const PlatformSubscriptionCoupons: FunctionalComponent = () => {
 
       <Modal open={!!usageOpen} onClose={() => setUsageOpen(null)} title={`استخدامات الكود ${usageOpen?.code || ''}`} footer={<Button variant="ghost" onClick={() => setUsageOpen(null)}>إغلاق</Button>}>
         {usagesLoading ? <p className="muted small">جاري التحميل...</p> : usages.length === 0 ? <p className="muted small">لا توجد استخدامات بعد.</p> : (
-          <div style={{ overflowX: 'auto' }}>
             <Table
               cardMode
               rows={usages}
@@ -427,7 +420,6 @@ export const PlatformSubscriptionCoupons: FunctionalComponent = () => {
                 } },
               ]}
             />
-          </div>
         )}
       </Modal>
     </div>
