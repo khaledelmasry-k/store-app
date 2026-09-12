@@ -938,6 +938,12 @@ async function assertStoreAccess(request: CallableRequest, storeId: string, perm
   const userSnap = await db.doc(`users/${request.auth.uid}`).get()
   const user = userSnap.data()
   if (!user) throw new HttpsError('permission-denied', 'الحساب غير موجود')
+  if (request.auth.token.supportImpersonation === true) {
+    const support = await requireValidSupportSession(request)
+    if (support.storeId !== storeId || support.merchantUid !== request.auth.uid) {
+      throw new HttpsError('permission-denied', 'جلسة الدعم لا تملك هذا المتجر')
+    }
+  }
   if (user.role === 'superAdmin') return
   // A merchant application is not an operational tenant until a platform
   // administrator approves it.  Keep this check server-side so hiding the

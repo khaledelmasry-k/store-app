@@ -9,10 +9,29 @@ service firebase.storage {
       return request.auth != null;
     }
 
+    function isSupportImpersonation() {
+      return isSignedIn() && 'supportImpersonation' in request.auth.token && request.auth.token.supportImpersonation == true;
+    }
+
+    function validSupportSessionForStore(storeId) {
+      return isSupportImpersonation()
+        && 'supportSessionId' in request.auth.token
+        && 'supportAdminUid' in request.auth.token
+        && 'supportMerchantUid' in request.auth.token
+        && 'supportStoreId' in request.auth.token
+        && request.auth.uid == request.auth.token.supportMerchantUid
+        && request.auth.token.supportStoreId == storeId
+        && firestore.get(/databases/(default)/documents/supportImpersonationSessions/$(request.auth.token.supportSessionId)).data.status == 'active'
+        && firestore.get(/databases/(default)/documents/supportImpersonationSessions/$(request.auth.token.supportSessionId)).data.adminUid == request.auth.token.supportAdminUid
+        && firestore.get(/databases/(default)/documents/supportImpersonationSessions/$(request.auth.token.supportSessionId)).data.merchantUid == request.auth.uid
+        && firestore.get(/databases/(default)/documents/supportImpersonationSessions/$(request.auth.token.supportSessionId)).data.storeId == storeId
+        && request.time < firestore.get(/databases/(default)/documents/supportImpersonationSessions/$(request.auth.token.supportSessionId)).data.expiresAt
+        && firestore.get(/databases/(default)/documents/users/$(request.auth.token.supportAdminUid)).data.role == 'superAdmin';
+    }
+
     function isOwnedByUser(storeId) {
-      return isSignedIn() && (
-        firestore.get(/databases/(default)/documents/users/$(request.auth.uid)).data.storeIds.hasAll([storeId])
-      );
+      return validSupportSessionForStore(storeId)
+        || (isSignedIn() && !isSupportImpersonation() && firestore.get(/databases/(default)/documents/users/$(request.auth.uid)).data.storeIds.hasAll([storeId]));
     }
 
     function isAdmin() {
