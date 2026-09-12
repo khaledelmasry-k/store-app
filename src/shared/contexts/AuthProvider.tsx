@@ -10,16 +10,21 @@ export const AuthProvider: FunctionalComponent = ({ children }) => {
   const [user, setUser] = useState<User | null>(null)
   const [loading, setLoading] = useState(true)
   const [initialized, setInitialized] = useState(false)
+  const [supportSessionActive, setSupportSessionActive] = useState(false)
 
   const refreshUser = async () => {
     const fbUser = auth.currentUser
     if (!fbUser) {
       setUser(null)
+      setSupportSessionActive(false)
       setLoading(false)
       setInitialized(true)
       return
     }
     try {
+      const tokenResult = await fbUser.getIdTokenResult()
+      const supportExpiry = typeof tokenResult.claims.supportExpiresAt === 'number' ? tokenResult.claims.supportExpiresAt : 0
+      setSupportSessionActive(tokenResult.claims.supportImpersonation === true && supportExpiry > Date.now())
       const profileRead = getDoc(doc(db, 'users', fbUser.uid))
       let timeoutId: number | undefined
       const timeout = new Promise<never>((_, reject) => { timeoutId = window.setTimeout(() => reject(new Error('auth-profile-timeout')), 8000) })
@@ -39,6 +44,7 @@ export const AuthProvider: FunctionalComponent = ({ children }) => {
     } catch (err) {
       console.error('Auth state error:', err)
       setUser(null)
+      setSupportSessionActive(false)
     } finally {
       setLoading(false)
       setInitialized(true)
@@ -50,6 +56,7 @@ export const AuthProvider: FunctionalComponent = ({ children }) => {
       try {
         if (!fbUser) {
           setUser(null)
+          setSupportSessionActive(false)
           setLoading(false)
           setInitialized(true)
           return
@@ -69,7 +76,8 @@ export const AuthProvider: FunctionalComponent = ({ children }) => {
   return (
     <AuthContext.Provider
       value={{
-        user,
+          user,
+          supportSessionActive,
         loading,
         initialized,
         refreshUser,

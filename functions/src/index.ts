@@ -676,8 +676,49 @@ async function assertPlatformAdmin(request: CallableRequest) {
 
 async function assertNotImpersonating(request: CallableRequest) {
   if (!request.auth) throw new HttpsError('unauthenticated', 'يجب تسجيل الدخول')
-  const snap = await db.doc(`users/${request.auth.uid}`).get()
-  if (snap.data()?.impersonatedBy) throw new HttpsError('permission-denied', 'هذا الإجراء غير متاح في وضع الدعم')
+  if (request.auth.token.supportImpersonation === true) {
+    await requireValidSupportSession(request)
+    throw new HttpsError('permission-denied', 'هذا الإجراء غير متاح في وضع الدعم')
+  }
+}
+
+type SupportSession = {
+  sessionId: string
+  adminUid: string
+  merchantUid: string
+  storeId: string
+  expiresAt: Timestamp
+}
+
+async function requireValidSupportSession(request: CallableRequest): Promise<SupportSession> {
+  if (!request.auth) throw new HttpsError('unauthenticated', 'يجب تسجيل الدخول')
+  const claims = request.auth.token as Record<string, unknown>
+  if (claims.supportImpersonation !== true) throw new HttpsError('permission-denied', 'جلسة الدعم غير صالحة')
+  const sessionId = typeof claims.supportSessionId === 'string' ? claims.supportSessionId : ''
+  const adminUid = typeof claims.supportAdminUid === 'string' ? claims.supportAdminUid : ''
+  const merchantUid = typeof claims.supportMerchantUid === 'string' ? claims.supportMerchantUid : ''
+  const storeId = typeof claims.supportStoreId === 'string' ? claims.supportStoreId : ''
+  const signedExpiry = typeof claims.supportExpiresAt === 'number' ? claims.supportExpiresAt : 0
+  if (!sessionId || !adminUid || !merchantUid || !storeId || !signedExpiry || request.auth.uid !== merchantUid) {
+    throw new HttpsError('permission-denied', 'جلسة الدعم غير صالحة')
+  }
+  if (signedExpiry <= Date.now()) throw new HttpsError('permission-denied', 'انتهت صلاحية جلسة الدعم')
+  const sessionSnap = await db.doc(`supportImpersonationSessions/${sessionId}`).get()
+  if (!sessionSnap.exists) throw new HttpsError('permission-denied', 'جلسة الدعم غير صالحة')
+  const session = sessionSnap.data() || {}
+  const expiresAt = session.expiresAt as Timestamp | undefined
+  if (session.status !== 'active' || session.adminUid !== adminUid || session.merchantUid !== merchantUid || session.storeId !== storeId || !expiresAt || expiresAt.toMillis() <= Date.now()) {
+    throw new HttpsError('permission-denied', 'جلسة الدعم غير صالحة')
+  }
+  const [adminSnap, merchantSnap, storeSnap] = await Promise.all([
+    db.doc(`users/${adminUid}`).get(),
+    db.doc(`users/${merchantUid}`).get(),
+    db.doc(`stores/${storeId}`).get(),
+  ])
+  if (adminSnap.data()?.role !== 'superAdmin' || merchantSnap.data()?.role !== 'merchant' || storeSnap.data()?.ownerId !== merchantUid) {
+    throw new HttpsError('permission-denied', 'جلسة الدعم غير صالحة')
+  }
+  return { sessionId, adminUid, merchantUid, storeId, expiresAt }
 }
 
 const DEFAULT_ENTERPRISE_WHATSAPP_MESSAGE = 'مرحبًا، أرغب في الحصول على عرض سعر لحلول Enterprise / White Label من Matjari.'
@@ -6888,72 +6929,50 @@ export const impersonate = onCall(async (request: CallableRequest<{ storeId?: st
   const storeSnap = await db.doc(`stores/${storeId}`).get()
   if (!storeSnap.exists) throw new HttpsError('not-found', 'المتجر غير موجود')
   const ownerId = storeSnap.data()!.ownerId
-
-  const token = await auth.createCustomToken(ownerId)
-  const expiry = tsFromDate(new Date(Date.now() + 15 * 60000))
-
-  await db.doc(`users/${ownerId}`).update({
-    impersonatedBy: request.auth!.uid,
-    impersonatedUntil: expiry,
-    impersonatedStoreId: storeId,
-    impersonatedMerchantId: ownerId,
+  const ownerSnap = await db.doc(`users/${ownerId}`).get()
+  if (!ownerSnap.exists || ownerSnap.data()?.role !== 'merchant') throw new HttpsError('failed-precondition', 'حساب التاجر غير صالح')
+  const sessionId = randomBytes(24).toString('hex')
+  const expiresAt = tsFromDate(new Date(Date.now() + 15 * 60000))
+  const supportExpiresAt = expiresAt.toMillis()
+  const token = await auth.createCustomToken(ownerId, {
+    supportImpersonation: true,
+    supportSessionId: sessionId,
+    supportAdminUid: request.auth!.uid,
+    supportMerchantUid: ownerId,
+    supportStoreId: storeId,
+    supportExpiresAt,
   })
-  await db.collection('auditLogs').add({ storeId, userId: request.auth!.uid, action: 'impersonation_started', resource: 'users', resourceId: ownerId, actorSuperAdminId: request.auth!.uid, merchantId: ownerId, createdAt: now(), createdBy: request.auth!.uid })
+  await db.doc(`supportImpersonationSessions/${sessionId}`).set({ sessionId, adminUid: request.auth!.uid, merchantUid: ownerId, storeId, status: 'active', createdAt: now(), expiresAt, endedAt: null, endedBy: null })
+  await db.collection('auditLogs').add({ storeId, userId: request.auth!.uid, action: 'impersonation_started', resource: 'supportImpersonationSessions', resourceId: sessionId, actorSuperAdminId: request.auth!.uid, merchantId: ownerId, supportSessionId: sessionId, createdAt: now(), createdBy: request.auth!.uid })
 
-  return { customToken: token, storeId, merchantId: ownerId }
+  return { customToken: token, storeId, merchantId: ownerId, supportSessionId: sessionId }
 })
 
 // ─────────────────────────────────────────────────────────────
 // 7. exitImpersonation — platform admin leaves a merchant session
 // ─────────────────────────────────────────────────────────────
 export const exitImpersonation = onCall(async (request: CallableRequest) => {
-  if (!request.auth) throw new HttpsError('unauthenticated', 'يجب تسجيل الدخول')
-  const merchantUid = request.auth.uid
-  const merchantRef = db.doc(`users/${merchantUid}`)
-  const merchantSnap = await merchantRef.get()
-  const merchant = merchantSnap.data()
-  if (!merchant) throw new HttpsError('not-found', 'الحساب غير موجود')
-  if (merchant.role !== 'merchant') throw new HttpsError('permission-denied', 'وضع الدعم متاح لحسابات التجار فقط')
-  if (!merchant.impersonatedBy) throw new HttpsError('failed-precondition', 'جلسة الدعم غير نشطة')
-
-  const expiresAt = merchant.impersonatedUntil
-  const expiryMs = typeof expiresAt?.toMillis === 'function'
-    ? expiresAt.toMillis()
-    : typeof expiresAt?.seconds === 'number'
-      ? expiresAt.seconds * 1000
-      : null
-  if (expiryMs !== null && expiryMs <= Date.now()) {
-    throw new HttpsError('failed-precondition', 'انتهت صلاحية جلسة الدعم')
-  }
-
-  const adminUid = merchant.impersonatedBy
-  const adminSnap = await db.doc(`users/${adminUid}`).get()
-  const admin = adminSnap.data()
-  if (!adminSnap.exists || admin?.role !== 'superAdmin') {
-    throw new HttpsError('permission-denied', 'حساب إدارة المنصة غير صالح')
-  }
-
-  const customToken = await auth.createCustomToken(adminUid)
+  const support = await requireValidSupportSession(request)
+  const sessionRef = db.doc(`supportImpersonationSessions/${support.sessionId}`)
   const auditRef = db.collection('auditLogs').doc()
   await db.runTransaction(async (transaction) => {
-    transaction.update(merchantRef, {
-      impersonatedBy: FieldValue.delete(),
-      impersonatedUntil: FieldValue.delete(),
-      impersonatedStoreId: FieldValue.delete(),
-      impersonatedMerchantId: FieldValue.delete(),
-    })
+    const snap = await transaction.get(sessionRef)
+    if (!snap.exists || snap.data()?.status !== 'active') throw new HttpsError('permission-denied', 'جلسة الدعم غير صالحة')
+    transaction.update(sessionRef, { status: 'ended', endedAt: now(), endedBy: support.merchantUid })
     transaction.set(auditRef, {
-      userId: adminUid,
+      userId: support.adminUid,
       action: 'impersonation_ended',
-      resource: 'users',
-      resourceId: merchantUid,
-      actorSuperAdminId: adminUid,
-      merchantId: merchantUid,
-      storeId: merchant.impersonatedStoreId || null,
+      resource: 'supportImpersonationSessions',
+      resourceId: support.sessionId,
+      actorSuperAdminId: support.adminUid,
+      merchantId: support.merchantUid,
+      storeId: support.storeId,
+      supportSessionId: support.sessionId,
       createdAt: now(),
-      createdBy: adminUid,
+      createdBy: support.adminUid,
     })
   })
+  const customToken = await auth.createCustomToken(support.adminUid)
   return { ok: true, customToken }
 })
 
