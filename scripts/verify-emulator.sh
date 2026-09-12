@@ -11,7 +11,7 @@ echo "── Checking icon integrity..."
 node scripts/check-icons.mjs
 
 echo "── Building app for emulator mode..."
-npm run verify:build
+VITE_FIREBASE_USE_EMULATOR=true npm run verify:build
 
 echo "── Starting vite preview on :4173..."
 npx vite preview --port 4173 --strictPort &
