@@ -312,3 +312,5 @@
   .shipping-settlement-row--head { display: none; }
   .shipping-settlement-row > .btn { grid-column: 1 / -1; width: 100%; }
 }
+.shipping-governorate-picker { display:grid; grid-template-columns:repeat(auto-fit,minmax(130px,1fr)); gap:8px; margin-top:8px; max-height:180px; overflow:auto; }
+.shipping-governorate-picker label { font-size:.82rem; display:flex; gap:6px; align-items:center; }

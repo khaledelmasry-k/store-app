@@ -97,7 +97,7 @@ export interface ShippingProfile {
 export interface ShippingEligibility {
   eligible: boolean
   grandfathered: boolean
-  reasons: string[]
+  reasons: Array<{ code: string; message: string }>
   merchantMonthlyVolume: number
   expectedMonthlyVolume?: number
   effectiveMonthlyVolume: number

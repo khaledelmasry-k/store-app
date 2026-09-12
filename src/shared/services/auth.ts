@@ -185,6 +185,7 @@ export function getShippingProviderCommercialAgreementCallable(input: { provider
 export function saveShippingProviderCommercialAgreementCallable(input: Record<string, unknown>) { return httpsCallable(getFunctions(), 'saveShippingProviderCommercialAgreement')(input) }
 export function getShippingPartnerRevenuePeriodCallable(input: { providerId: string; period: string }) { return httpsCallable(getFunctions(), 'getShippingPartnerRevenuePeriod')(input) }
 export function finalizeShippingPartnerRevenuePeriodCallable(input: { providerId: string; period: string }) { return httpsCallable(getFunctions(), 'finalizeShippingPartnerRevenuePeriod')(input) }
+export function markShippingPartnerRevenueSettledCallable(input: { providerId: string; period: string; settlementReference?: string; settlementNotes?: string }) { return httpsCallable(getFunctions(), 'markShippingPartnerRevenueSettled')(input) }
 
 export function saveStoreShippingProviderCallable(input: Record<string, unknown>) {
   return httpsCallable(getFunctions(), 'saveStoreShippingProvider')(input)

@@ -86,6 +86,7 @@ export const MerchantShipping: FunctionalComponent = () => {
   const [platformLoading, setPlatformLoading] = useState(false)
   const [platformSaving, setPlatformSaving] = useState('')
   const [expectedVolume, setExpectedVolume] = useState('')
+  const [targetGovernorates, setTargetGovernorates] = useState<string[]>([])
   const [platformDrafts, setPlatformDrafts] = useState<Record<string, { fixedRate: string; defaultPackageWeight: string; codEnabled: boolean; serviceCode: string; rateMarkup: string; freeShippingThreshold: string; waslaPickupLocationName: string; waslaPickupContactPhone: string; waslaPickupAddressLine1: string; waslaPickupGovernorateId: string; waslaPickupCityId: string }>>({})
   const [credentialDrafts, setCredentialDrafts] = useState<Record<string, { apiKey: string; webhookSecret: string }>>({})
   const [waslaLocations, setWaslaLocations] = useState<Record<string, WaslaLocation[]>>({})
@@ -125,10 +126,11 @@ export const MerchantShipping: FunctionalComponent = () => {
 
   useEffect(() => { void loadPlatformProviders() }, [storeId])
   useEffect(() => { setExpectedVolume(String(store?.shippingProfile?.expectedMonthlyShipments || '')) }, [store?.shippingProfile?.expectedMonthlyShipments])
+  useEffect(() => { setTargetGovernorates(store?.shippingProfile?.targetGovernorates || []) }, [store?.shippingProfile?.targetGovernorates])
 
   const saveShippingProfile = async () => {
     if (!storeId) return
-    try { await saveMerchantShippingProfileCallable({ storeId, expectedMonthlyShipments: Number(expectedVolume || 0) }); toast.push('تم حفظ احتياجات الشحن') }
+    try { await saveMerchantShippingProfileCallable({ storeId, expectedMonthlyShipments: Number(expectedVolume || 0), targetGovernorates }); toast.push('تم حفظ احتياجات الشحن') }
     catch (err: any) { toast.push('تعذر حفظ احتياجات الشحن', err?.message || 'حاول مرة أخرى', 'error') }
   }
 
@@ -413,7 +415,8 @@ export const MerchantShipping: FunctionalComponent = () => {
       <Card title="احتياجات الشحن لمتجرك" className="mt-2" subtitle="تُستخدم هذه البيانات لاقتراح الشركات المناسبة عند إضافة اتصال جديد.">
         <div className="grid grid-2">
           <div><Input label="حجم الشحن الشهري المتوقع" type="number" value={expectedVolume} onChange={setExpectedVolume} /><Button size="sm" onClick={() => void saveShippingProfile()}>حفظ الاحتياجات</Button></div>
-          <div className="shipping-secure-note"><Icon name="info" ariaHidden /><span>الحجم الحالي: {shipmentsRes.data.length} شحنة / آخر 30 يوم</span></div>
+          <div><span className="field-label">المحافظات المستهدفة</span><div className="shipping-governorate-picker">{GOVER_EG.map((governorate) => <label key={governorate}><input type="checkbox" checked={targetGovernorates.includes(governorate)} onChange={() => setTargetGovernorates((current) => current.includes(governorate) ? current.filter((value) => value !== governorate) : [...current, governorate])} /> {governorate}</label>)}</div></div>
+          <div className="shipping-secure-note"><Icon name="info" ariaHidden /><span>الحجم الفعلي آخر 30 يوم: {platformProviders[0]?.eligibility?.merchantMonthlyVolume ?? shipmentsRes.data.length} شحنة · المتوقع: {expectedVolume || 0}</span></div>
         </div>
       </Card>
       <div className="shipping-page-context">
@@ -460,7 +463,7 @@ export const MerchantShipping: FunctionalComponent = () => {
               <span className={`shipping-provider-connection ${isProviderReadyForAutomation(provider, config) ? 'is-ready' : config?.enabled ? 'is-pending' : ''}`}><Icon name={isProviderReadyForAutomation(provider, config) ? 'check_circle' : 'schedule'} ariaHidden />{isProviderReadyForAutomation(provider, config) ? 'جاهزة لإنشاء الشحنات' : config?.enabled ? 'تحتاج إكمال الإعداد' : 'غير مفعلة'}</span>
             </div>
             <div className="shipping-provider-summary"><span>{provider.supportsCOD ? 'الدفع عند الاستلام' : 'بدون COD'}</span><span>{provider.supportsTracking ? 'تتبع' : 'تتبع يدوي'}</span><span>{connectionStatusLabel(config?.configurationStatus, config?.enabled)}</span>{config?.isDefault && <span>الافتراضية</span>}</div>
-            {eligibility && <div className="shipping-secure-note"><Icon name={eligibility.eligible ? 'check_circle' : 'warning'} ariaHidden /><span>{eligibility.grandfathered ? 'اتصالك الحالي محفوظ' : eligibility.eligible ? 'متاحة لمتجرك' : eligibility.reasons.join(' · ') || 'شركة الشحن غير جاهزة للربط بعد'}{eligibility.minimumMonthlyShipments > 0 && <>{' · '}الحد الأدنى {eligibility.minimumMonthlyShipments} شحنة شهريًا</>}</span></div>}
+            {eligibility && <div className="shipping-secure-note"><Icon name={eligibility.eligible ? 'check_circle' : 'warning'} ariaHidden /><span>{eligibility.grandfathered ? 'اتصالك الحالي محفوظ' : eligibility.eligible ? 'متاحة لمتجرك' : eligibility.reasons.map((reason: any) => reason.message || reason).join(' · ') || 'شركة الشحن غير جاهزة للربط بعد'}{eligibility.minimumMonthlyShipments > 0 && <>{' · '}الحد الأدنى {eligibility.minimumMonthlyShipments} شحنة شهريًا</>}</span></div>}
             {provider.integrationType === 'manual' && <div className="shipping-secure-note"><Icon name="local_shipping" ariaHidden /><span>هذا الخيار لا يحتاج API أو حسابًا لدى شركة شحن. فعّله واضبط السعر، ثم سجّل بيانات التتبع يدويًا عند إرسال الشحنة.</span></div>}
             {provider.integrationType === 'api' && !isProviderLive(provider) && <div className="shipping-secure-note"><Icon name="schedule" ariaHidden /><span><strong>قريبًا:</strong> نعمل على محول API الرسمي لـ{provider.name}. الأسعار والمناطق قد تظهر في المتجر، لكن لا تُدخل مفتاح API ولا تعتمد الإنشاء التلقائي قبل أن تصبح الحالة «متصلة».</span></div>}
             {provider.slug === 'bosta' && <p className="muted small">أدخل مفاتيح Bosta الخاصة بهذا المتجر فقط، ثم اختبر الاتصال. عنوان Webhook سيظهر بعد نجاح الحفظ.</p>}
