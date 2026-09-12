@@ -26,10 +26,14 @@ const main = async () => {
     count += 1
     let email = ''
     try { email = (await auth.getUser(doc.id)).email || '' } catch { /* profile may outlive Auth */ }
-    console.log(JSON.stringify({ uid: mask(doc.id), email: mask(email, 2), fields }))
+    console.log(JSON.stringify({ uid: mask(doc.id), email: mask(email, 2), fields, wouldInvalidateSessions: true }))
     if (apply) {
-      const updates = Object.fromEntries(fields.map((field) => [field, admin.firestore.FieldValue.delete()]))
+      const updates = {
+        sessionInvalidBeforeEpoch: Math.floor(Date.now() / 1000),
+        ...Object.fromEntries(fields.map((field) => [field, admin.firestore.FieldValue.delete()])),
+      }
       await doc.ref.update(updates)
+      await auth.revokeRefreshTokens(doc.id)
     }
   }
   console.log(`TOTAL=${count}`)

@@ -1,6 +1,6 @@
 import { FunctionalComponent } from 'preact'
 import { useEffect, useRef, useState } from 'preact/hooks'
-import { onIdTokenChanged } from 'firebase/auth'
+import { onIdTokenChanged, signOut } from 'firebase/auth'
 import { doc, getDoc } from 'firebase/firestore'
 import { auth, db } from '../firebase'
 import { AuthContext, AuthState } from './auth-context'
@@ -44,6 +44,13 @@ export const AuthProvider: FunctionalComponent = ({ children }) => {
         const snap = await Promise.race([profileRead, timeout])
         if (timeoutId !== undefined) window.clearTimeout(timeoutId)
         if (snap.exists()) {
+          const marker = Number(snap.data()?.sessionInvalidBeforeEpoch || 0)
+          const authTime = Number(tokenResult.claims.auth_time || 0)
+          if (marker > 0 && authTime < marker) {
+            await signOut(auth)
+            if (window.location.pathname !== '/login') window.location.assign('/login?role=merchant&session=expired')
+            return
+          }
           const userData = { id: snap.id, uid: snap.id, ...snap.data(), emailVerified: fbUser.emailVerified } as unknown as User
           setUser(userData)
         } else {

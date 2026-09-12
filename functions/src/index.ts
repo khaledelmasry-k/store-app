@@ -676,9 +676,20 @@ async function assertPlatformAdmin(request: CallableRequest) {
 
 async function assertNotImpersonating(request: CallableRequest) {
   if (!request.auth) throw new HttpsError('unauthenticated', 'يجب تسجيل الدخول')
+  await assertFreshAuthSession(request)
   if (request.auth.token.supportImpersonation === true) {
     await requireValidSupportSession(request)
     throw new HttpsError('permission-denied', 'هذا الإجراء غير متاح في وضع الدعم')
+  }
+}
+
+async function assertFreshAuthSession(request: CallableRequest, userData?: Record<string, any>) {
+  if (!request.auth) throw new HttpsError('unauthenticated', 'يجب تسجيل الدخول')
+  const user = userData || (await db.doc(`users/${request.auth.uid}`).get()).data()
+  const marker = Number(user?.sessionInvalidBeforeEpoch || 0)
+  const authTime = Number(request.auth.token.auth_time || 0)
+  if (marker > 0 && authTime < marker) {
+    throw new HttpsError('permission-denied', 'انتهت صلاحية الجلسة، سجّل الدخول مرة أخرى')
   }
 }
 
@@ -938,6 +949,7 @@ async function assertStoreAccess(request: CallableRequest, storeId: string, perm
   const userSnap = await db.doc(`users/${request.auth.uid}`).get()
   const user = userSnap.data()
   if (!user) throw new HttpsError('permission-denied', 'الحساب غير موجود')
+  await assertFreshAuthSession(request, user)
   if (request.auth.token.supportImpersonation === true) {
     const support = await requireValidSupportSession(request)
     if (support.storeId !== storeId || support.merchantUid !== request.auth.uid) {

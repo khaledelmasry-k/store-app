@@ -25,7 +25,14 @@ async function main() {
   await adb.doc(`users/${merchantUid}`).set({ uid: merchantUid, role: 'merchant', active: true, storeIds: [storeId] })
   await adb.doc(`stores/${storeId}`).set({ ownerId: merchantUid, active: true, published: false })
 
-  const merchantCustom = await aauth.createCustomToken(merchantUid); await signOut(auth); await signInWithCustomToken(auth, merchantCustom)
+  const merchantCustom = await aauth.createCustomToken(merchantUid)
+  const cutoff = Math.floor(Date.now() / 1000) + 2
+  await adb.doc(`users/${merchantUid}`).update({ sessionInvalidBeforeEpoch: cutoff })
+  await signOut(auth); await signInWithCustomToken(auth, merchantCustom)
+  await expectDenied(() => getDoc(doc(db, 'stores', storeId)), 'legacy merchant token')
+  await expectDenied(() => uploadBytes(ref(storage, `stores/${storeId}/legacy.txt`), new Uint8Array([1]), { contentType: 'image/png', customMetadata: { storeId } }), 'legacy merchant storage write')
+  await new Promise((resolve) => setTimeout(resolve, 2500))
+  const freshMerchantCustom = await aauth.createCustomToken(merchantUid); await signOut(auth); await signInWithCustomToken(auth, freshMerchantCustom)
   if (!(await getDoc(doc(db, 'stores', storeId))).exists()) throw new Error('normal merchant own read failed')
   await expectDenied(() => getDoc(doc(db, 'stores', 'other-store')), 'normal merchant other store')
 

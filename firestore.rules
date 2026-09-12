@@ -35,6 +35,12 @@ service cloud.firestore {
       return isSignedIn() && 'supportImpersonation' in request.auth.token && request.auth.token.supportImpersonation == true;
     }
 
+    function isFreshAuthSession() {
+      return isSignedIn()
+        && (!('sessionInvalidBeforeEpoch' in get(/databases/$(database)/documents/users/$(request.auth.uid)).data)
+          || request.auth.token.auth_time >= get(/databases/$(database)/documents/users/$(request.auth.uid)).data.sessionInvalidBeforeEpoch);
+    }
+
     // Support access is bound to the signed custom-token claims and the
     // server-owned session record. Merchant profile fields are never used as
     // authority for an impersonated session.
@@ -64,8 +70,8 @@ service cloud.firestore {
 
     // True when the authenticated user is a merchant or staff member that owns/accesses the given storeId.
     function canAccessStore(storeId) {
-      return validSupportSessionForStore(storeId)
-        || (isSignedIn() && !isSupportImpersonation() && get(/databases/$(database)/documents/users/$(request.auth.uid)).data.storeIds.hasAll([storeId]));
+      return isFreshAuthSession() && (validSupportSessionForStore(storeId)
+        || (isSignedIn() && !isSupportImpersonation() && get(/databases/$(database)/documents/users/$(request.auth.uid)).data.storeIds.hasAll([storeId])));
     }
 
     function canAccessStoreOrAdmin(storeId) {
