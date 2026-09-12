@@ -27,6 +27,7 @@ import type {
 import { EGYPT_CITIES_BY_GOVERNORATE, GOVER_EG } from '../../shared/utils/constants'
 import { Icon } from '../../shared/components/ui/Icon'
 import './ShippingCompanies.css'
+import { uploadShippingProviderLogo } from '../../shared/services/uploads'
 
 type Draft = {
   name: string
@@ -43,7 +44,14 @@ type Draft = {
   supportsPickup: boolean
   allowMerchantRateOverride: boolean
   services: ShippingProviderService[]
+  businessProfile: NonNullable<ShippingProviderDefinition['businessProfile']>
+  partnership: NonNullable<ShippingProviderDefinition['partnership']>
+  publicListing: NonNullable<ShippingProviderDefinition['publicListing']>
+  adapterStatus: NonNullable<ShippingProviderDefinition['adapterStatus']>
+  branding: NonNullable<ShippingProviderDefinition['branding']>
+  integrationConfig: NonNullable<ShippingProviderDefinition['integrationConfig']>
 }
+type RequiredField = NonNullable<ShippingProviderDefinition['integrationConfig']>['requiredFields'][number]
 type ServiceForm = {
   code: string
   name: string
@@ -95,6 +103,7 @@ const emptyDraft: Draft = {
   supportsPickup: false,
   allowMerchantRateOverride: false,
   services: [],
+  businessProfile: {}, branding: {}, integrationConfig: { requiredFields: [] }, partnership: { status: 'draft' }, publicListing: { enabled: false, sortOrder: 0, shortDescription: '' }, adapterStatus: 'not_implemented',
 }
 const emptyService: ServiceForm = {
   code: '',
@@ -196,6 +205,8 @@ export const PlatformShippingCompanies: FunctionalComponent = () => {
   const [zoneForm, setZoneForm] = useState<ZoneForm>(emptyZone)
   const [showAdvancedZone, setShowAdvancedZone] = useState(false)
   const [testing, setTesting] = useState(false)
+  const [fieldDraft, setFieldDraft] = useState<RequiredField>({ key: '', label: '', type: 'text', required: true, secret: false, scope: 'merchant', options: [] })
+  const [fieldIndex, setFieldIndex] = useState<number | null>(null)
   const [selectedServiceCode, setSelectedServiceCode] = useState('')
   const [deleteTarget, setDeleteTarget] = useState<{
     kind: 'service' | 'zone'
@@ -230,6 +241,7 @@ export const PlatformShippingCompanies: FunctionalComponent = () => {
       supportsPickup: !!provider.supportsPickup,
       allowMerchantRateOverride: provider.allowMerchantRateOverride === true,
       services: provider.services || [],
+      businessProfile: provider.businessProfile || {}, branding: provider.branding || {}, integrationConfig: provider.integrationConfig || { requiredFields: [] }, partnership: provider.partnership || { status: 'draft' }, publicListing: provider.publicListing || { enabled: false, sortOrder: 0, shortDescription: '' }, adapterStatus: provider.adapterStatus || 'not_implemented',
     })
     setSelectedServiceCode(provider.services?.[0]?.code || '')
     setTab('general')
@@ -240,6 +252,17 @@ export const PlatformShippingCompanies: FunctionalComponent = () => {
     setSelectedServiceCode('')
     setTab('general')
   }
+  const saveRequiredField = () => {
+    const key = fieldDraft.key.trim().toLowerCase().replace(/[^a-z0-9_]/g, '_')
+    if (!key || !fieldDraft.label.trim()) return toast.push('المفتاح والاسم مطلوبان', undefined, 'error')
+    const fields = draft.integrationConfig.requiredFields || []
+    if (fields.some((f, i) => f.key === key && i !== fieldIndex)) return toast.push('مفتاح الحقل مستخدم مسبقاً', undefined, 'error')
+    if (fieldDraft.type === 'select' && !(fieldDraft.options || []).filter(Boolean).length) return toast.push('أضف خياراً واحداً على الأقل', undefined, 'error')
+    const nextField = { ...fieldDraft, key, label: fieldDraft.label.trim(), options: fieldDraft.type === 'select' ? (fieldDraft.options || []).filter(Boolean) : [] }
+    const next = [...fields]; if (fieldIndex == null) next.push(nextField); else next[fieldIndex] = nextField
+    setDraft({ ...draft, integrationConfig: { ...draft.integrationConfig, requiredFields: next } }); setFieldIndex(null); setFieldDraft({ key: '', label: '', type: 'text', required: true, secret: false, scope: 'merchant', options: [] })
+  }
+  const moveRequiredField = (index: number, delta: number) => { const next = [...(draft.integrationConfig.requiredFields || [])]; const target = index + delta; if (target < 0 || target >= next.length) return; [next[index], next[target]] = [next[target], next[index]]; setDraft({ ...draft, integrationConfig: { ...draft.integrationConfig, requiredFields: next } }) }
   const save = async (nextStatus?: Draft['status']) => {
     if (!draft.name.trim()) {
       toast.push('أدخل اسم شركة الشحن', undefined, 'error')
@@ -552,6 +575,7 @@ export const PlatformShippingCompanies: FunctionalComponent = () => {
           subtitle={merchantApiProvider ? 'أتح الشركة للتجار فقط؛ الربط والأسعار يتبعان حساب كل تاجر لدى الشركة' : 'أضف مزود شحن وحدد خدماته وأسعاره ومناطق التغطية'}
         />
         <div className="shipping-editor-actions">
+          <Button variant="outline" onClick={() => navigate('/platform/shipping-companies/applications')}>طلبات الشراكة</Button>
           <Button variant="ghost" onClick={startNew}>
             مزود جديد
           </Button>
@@ -628,6 +652,7 @@ export const PlatformShippingCompanies: FunctionalComponent = () => {
       <Tabs
         tabs={[
           { key: 'general', label: 'عام' },
+          { key: 'required-fields', label: 'حقول التكامل', count: draft.integrationConfig.requiredFields?.length || 0 },
           ...(!merchantApiProvider ? [{ key: 'services', label: 'الخدمات', count: draft.services.length }, { key: 'zones', label: 'المناطق والأسعار' }] : []),
           ...(!manualProvider ? [{ key: 'api', label: 'التكامل API' }] : []),
           { key: 'capabilities', label: 'الإمكانيات' },
@@ -646,6 +671,7 @@ export const PlatformShippingCompanies: FunctionalComponent = () => {
                 onChange={(value) => setDraft({ ...draft, name: value })}
                 placeholder="مثال: شحن متجري"
               />
+              <label className="field"><span className="field-label">رفع شعار الشركة</span><input className="input" type="file" accept="image/*" disabled={!editingId || saving} onChange={async (event) => { const file = (event.target as HTMLInputElement).files?.[0]; if (!file || !editingId) return; try { const url = await uploadShippingProviderLogo(file, editingId); setDraft((current) => ({ ...current, logoUrl: url, branding: { ...current.branding, logoUrl: url } })); toast.push('تم رفع الشعار') } catch (error: any) { toast.push('تعذر رفع الشعار', error?.message || 'تحقق من الملف', 'error') } }} /><span className="field-hint">يتاح بعد إنشاء المزود ويحفظ في مسار آمن خاص به.</span></label>
               {!manualProvider && <Input
                 label="معرّف التكامل"
                 helper="رمز الشركة الذي يحدد موصل الـAPI، وليس مفتاح API"
@@ -720,8 +746,18 @@ export const PlatformShippingCompanies: FunctionalComponent = () => {
               </label>}
             </div>
             {manualProvider && <p className="field-hint">الشحن اليدوي لا يحتاج API أو مفتاحًا أو اختبار اتصال. أضف فقط الخدمات ومناطق التغطية وأسعارها.</p>}
+            <div className="grid grid-2" style={{ marginTop: 16 }}>
+              <Input label="الاسم القانوني" value={draft.businessProfile.legalName || ''} onChange={(value) => setDraft({ ...draft, businessProfile: { ...draft.businessProfile, legalName: value } })} />
+              <Input label="الموقع الإلكتروني" value={draft.businessProfile.websiteUrl || ''} onChange={(value) => setDraft({ ...draft, businessProfile: { ...draft.businessProfile, websiteUrl: value } })} />
+              <Input label="رابط وثائق API" value={draft.businessProfile.apiDocsUrl || ''} onChange={(value) => setDraft({ ...draft, businessProfile: { ...draft.businessProfile, apiDocsUrl: value } })} />
+              <Input label="وصف الظهور العام" value={draft.publicListing.shortDescription || ''} onChange={(value) => setDraft({ ...draft, publicListing: { ...draft.publicListing, shortDescription: value } })} />
+              <label className="field"><span className="field-label">حالة الشراكة</span><select className="input" value={draft.partnership.status || 'draft'} onChange={(event) => setDraft({ ...draft, partnership: { ...draft.partnership, status: (event.target as HTMLSelectElement).value as any } })}><option value="draft">مسودة</option><option value="onboarding">قيد التجهيز</option><option value="contracted">متعاقدة</option><option value="active">نشطة</option><option value="suspended">موقوفة</option></select></label>
+              <label className="field"><span className="field-label">الحالة التقنية</span><select className="input" value={draft.adapterStatus} onChange={(event) => setDraft({ ...draft, adapterStatus: (event.target as HTMLSelectElement).value as any })}><option value="not_implemented">غير منفذ</option><option value="implemented">منفذ</option><option value="testing">قيد الاختبار</option><option value="production_ready">جاهز للإنتاج</option></select></label>
+              <label className="field"><span className="field-label">الظهور في صفحة الهبوط</span><input type="checkbox" checked={draft.publicListing.enabled === true} onChange={(event) => setDraft({ ...draft, publicListing: { ...draft.publicListing, enabled: (event.target as HTMLInputElement).checked } })} /></label>
+            </div>
           </Card>
         )}
+        {tab === 'required-fields' && <Card title="حقول بيانات الربط المطلوبة" subtitle="تعريف الحقول فقط؛ لا تُخزّن القيم السرية داخل تعريف الشركة."><div className="shipping-secure-note"><Icon name="lock" ariaHidden /><span>هذا الحقل يحدد البيانات المطلوبة فقط ولا يخزن الأسرار داخل تعريف شركة الشحن.</span></div><div className="grid grid-2"><Input label="المفتاح" value={fieldDraft.key} onChange={(value) => setFieldDraft({ ...fieldDraft, key: value })} placeholder="account_code" /><Input label="الاسم الظاهر" value={fieldDraft.label} onChange={(value) => setFieldDraft({ ...fieldDraft, label: value })} placeholder="كود الحساب" /><label className="field"><span className="field-label">النوع</span><select className="input" value={fieldDraft.type} onChange={(event) => setFieldDraft({ ...fieldDraft, type: (event.target as HTMLSelectElement).value as any })}>{['text', 'url', 'password', 'select', 'textarea', 'number', 'boolean'].map((type) => <option value={type} key={type}>{type}</option>)}</select></label><label className="field"><span className="field-label">النطاق</span><select className="input" value={fieldDraft.scope} onChange={(event) => setFieldDraft({ ...fieldDraft, scope: (event.target as HTMLSelectElement).value as any })}><option value="merchant">التاجر</option><option value="platform">المنصة</option></select></label><Input label="Placeholder" value={fieldDraft.placeholder || ''} onChange={(value) => setFieldDraft({ ...fieldDraft, placeholder: value })} /><Input label="مساعدة" value={fieldDraft.helpText || ''} onChange={(value) => setFieldDraft({ ...fieldDraft, helpText: value })} /></div>{fieldDraft.type === 'select' && <Input label="الخيارات (مفصولة بفاصلة)" value={(fieldDraft.options || []).join(', ')} onChange={(value) => setFieldDraft({ ...fieldDraft, options: value.split(',').map((x) => x.trim()).filter(Boolean) })} />}<div className="flex flex-wrap" style={{ gap: 12, marginTop: 12 }}><label><input type="checkbox" checked={fieldDraft.required} onChange={(event) => setFieldDraft({ ...fieldDraft, required: (event.target as HTMLInputElement).checked })} /> مطلوب</label><label><input type="checkbox" checked={fieldDraft.secret} onChange={(event) => setFieldDraft({ ...fieldDraft, secret: (event.target as HTMLInputElement).checked })} /> سري</label><Button size="sm" onClick={saveRequiredField}>{fieldIndex == null ? 'إضافة حقل' : 'حفظ الحقل'}</Button></div><div className="stack-list" style={{ marginTop: 18 }}>{(draft.integrationConfig.requiredFields || []).map((field, index) => <div className="list-row" key={field.key}><div><strong>{field.label}</strong><span className="muted small">{field.key} · {field.type} · {field.scope}{field.secret ? ' · سري' : ''}</span></div><div className="flex" style={{ gap: 6 }}><Button size="sm" variant="ghost" onClick={() => moveRequiredField(index, -1)}>↑</Button><Button size="sm" variant="ghost" onClick={() => moveRequiredField(index, 1)}>↓</Button><Button size="sm" variant="outline" onClick={() => { setFieldIndex(index); setFieldDraft({ ...field, options: field.options || [] }) }}>تعديل</Button><Button size="sm" variant="ghost" onClick={() => setDraft({ ...draft, integrationConfig: { ...draft.integrationConfig, requiredFields: (draft.integrationConfig.requiredFields || []).filter((_, i) => i !== index) } })}>حذف</Button><Button size="sm" variant="ghost" onClick={() => { const copy = { ...field, key: `${field.key}_copy` }; setDraft({ ...draft, integrationConfig: { ...draft.integrationConfig, requiredFields: [...(draft.integrationConfig.requiredFields || []), copy] } }) }}>نسخ</Button></div></div>)}</div><h4 style={{ marginTop: 20 }}>شكل بيانات الربط المطلوبة</h4><div className="stack-list">{(draft.integrationConfig.requiredFields || []).map((field) => <label className="field" key={`preview-${field.key}`}><span className="field-label">{field.label}{field.required ? ' *' : ''}</span><input className="input" type={field.type === 'password' || field.secret ? 'password' : field.type === 'number' ? 'number' : 'text'} placeholder={field.secret ? '••••••••' : field.placeholder || ''} disabled /></label>)}</div></Card>}
         {tab === 'services' && (
           <Card
             title="الخدمات"
@@ -976,6 +1012,7 @@ export const PlatformShippingCompanies: FunctionalComponent = () => {
                   الخاصة بمتجره.
                 </span>
               </div>
+              <div className="shipping-secure-note"><Icon name="tune" ariaHidden /><span>حقول التكامل المطلوبة (وصفية فقط، دون قيم سرية): {(draft.integrationConfig?.requiredFields || []).length || 0}</span></div>
               {isWaslaProvider && <div className="shipping-secure-note"><Icon name="info" ariaHidden /><span><strong>نطاق وصلة المدعوم حاليًا:</strong> اختبار اتصال، تحميل محافظات ومدن، تسعير مباشر، إنشاء شحنة، وتتبّع/سجل حالة. لا تضف أسعارًا ثابتة أو مناطق محلية لهذه الشركة. Webhooks والإلغاء وAWB/الملصق وإنشاء المرتجع وطلب الاستلام ليست مدعومة بالعقد الحالي، لذلك لا تظهر كميزات متاحة.</span></div>}
             </Card>
           ))}

@@ -1,0 +1,20 @@
+import admin from 'firebase-admin'
+
+if (!process.env.FIRESTORE_EMULATOR_HOST || !process.env.FIREBASE_AUTH_EMULATOR_HOST) throw new Error('emulators required')
+admin.initializeApp({ projectId: process.env.GCLOUD_PROJECT || 'mk-store-app' })
+const db = admin.firestore(); const auth = admin.auth(); const project = process.env.GCLOUD_PROJECT || 'mk-store-app'; const base = `http://127.0.0.1:5001/${project}/us-central1`; const key = 'AIzaSyASSp0drLCh2gRDBUk32DGMndHYRezET0'
+async function token(uid) { const custom = await auth.createCustomToken(uid); const r = await fetch(`http://127.0.0.1:9099/identitytoolkit.googleapis.com/v1/accounts:signInWithCustomToken?key=${key}`, { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ token: custom, returnSecureToken: true }) }); return (await r.json()).idToken }
+async function call(name, data = {}, idToken) { const r = await fetch(`${base}/${name}`, { method: 'POST', headers: { 'content-type': 'application/json', ...(idToken ? { authorization: `Bearer ${idToken}` } : {}) }, body: JSON.stringify({ data }) }); return { ok: r.ok, body: await r.json() } }
+async function main() {
+  const adminUid = 'partner-v2-admin'; await db.doc(`users/${adminUid}`).set({ uid: adminUid, role: 'superAdmin', active: true }); const adminToken = await token(adminUid)
+  const providers = [['partner-a', true, 'active'], ['partner-b', true, 'active'], ['partner-c', true, 'active'], ['partner-d', true, 'active'], ['partner-draft', true, 'draft'], ['partner-suspended', true, 'suspended'], ['partner-hidden', false, 'active'], ['partner-no-logo', true, 'active']]
+  for (const [id, listed, status] of providers) await db.doc(`shippingProviders/${id}`).set({ id, name: id, slug: id, status, integrationType: 'manual', credentialMode: 'platform', logoUrl: id === 'partner-no-logo' ? null : `https://example.test/${id}.png`, partnership: { status: status === 'active' ? 'active' : 'suspended' }, publicListing: { enabled: listed }, supportsTracking: true, services: [{ code: 'internal', fixedRate: 99, zoneRules: [{ zoneName: 'private' }] }], integrationConfig: { baseUrl: 'https://internal.test', requiredFields: [{ key: 'secret', secret: true }] } })
+  const publicResult = await call('getPublicShippingPartners'); const returned = publicResult.body?.result?.partners || []; if (!publicResult.ok || returned.length !== 4 || returned.some((p) => p.integrationConfig || p.services || p.zoneRules || p.credentialMode)) throw new Error('public partner projection failed')
+  const valid = await call('submitShippingPartnerApplication', { companyName: 'QA Carrier', contactName: 'QA Contact', businessEmail: 'qa@carrier.test', phone: '01000000000', consent: true, apiKey: 'reject-me' }); if (valid.ok) throw new Error('secret-like payload was accepted')
+  const submitted = await call('submitShippingPartnerApplication', { companyName: 'QA Carrier', contactName: 'QA Contact', businessEmail: 'qa@carrier.test', phone: '01000000000', consent: true }); if (!submitted.ok) throw new Error('valid application failed')
+  const appId = submitted.body?.result?.id; const listed = await call('listShippingPartnerApplications', {}, adminToken); if (!listed.ok || !listed.body?.result?.applications?.some((a) => a.id === appId)) throw new Error('admin review list failed')
+  const approved = await call('approveShippingPartnerApplication', { id: appId }, adminToken); if (!approved.ok) throw new Error('approval failed'); const created = (await db.doc(`shippingProviders/${approved.body.result.providerId}`).get()).data(); if (created.status !== 'draft' || created.publicListing?.enabled !== false || created.adapterStatus !== 'not_implemented') throw new Error('approval did not create safe draft')
+  const unsafe = await call('saveShippingProvider', { provider: { name: 'Unsafe', slug: `unsafe-${Date.now()}`, status: 'active', integrationType: 'manual', adapterStatus: 'implemented' } }, adminToken); if (unsafe.ok) throw new Error('unsafe activation accepted')
+  console.log('shipping partner emulator checks: PASS')
+}
+main().catch((error) => { console.error(error.message); process.exitCode = 1 })

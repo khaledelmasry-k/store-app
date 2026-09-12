@@ -7,6 +7,14 @@ import { normalizeStoreLogo } from '../utils/logo-normalize'
 export const MAX_IMAGE_BYTES = 5 * 1024 * 1024 // 5MB
 export const ACCEPTED_IMAGE_TYPES = ['image/jpeg', 'image/png', 'image/webp', 'image/gif']
 
+export async function uploadShippingProviderLogo(file: File, providerId: string): Promise<string> {
+  if (!ACCEPTED_IMAGE_TYPES.includes(file.type)) throw new Error('نوع الشعار غير مدعوم')
+  if (file.size > MAX_IMAGE_BYTES) throw new Error('حجم الشعار كبير')
+  const storageRef = ref(storage, `shippingProviders/${providerId}/logo-${Date.now()}-${uid(6)}`)
+  await uploadBytesResumable(storageRef, file, { contentType: file.type })
+  return getDownloadURL(storageRef)
+}
+
 export interface UploadError {
   code: 'type' | 'size' | 'empty' | 'failed' | 'quota'
   message: string

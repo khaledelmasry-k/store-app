@@ -151,6 +151,36 @@ export interface ShippingProviderDefinition extends Partial<FirestoreMeta> {
   canTrackShipment?: boolean
   canCancelShipment?: boolean
   lastTestedAt?: { seconds: number; nanoseconds: number } | null
+  businessProfile?: { legalName?: string; displayName?: string; description?: string; websiteUrl?: string; supportUrl?: string; merchantPortalUrl?: string; apiDocsUrl?: string; publicContactEmail?: string; publicContactPhone?: string }
+  branding?: { logoUrl?: string; logoStoragePath?: string; brandColor?: string }
+  partnership?: { status?: 'draft' | 'onboarding' | 'contracted' | 'active' | 'suspended'; contractedAt?: unknown; notes?: string }
+  publicListing?: { enabled?: boolean; sortOrder?: number; shortDescription?: string }
+  integrationConfig?: { authType?: 'none' | 'api_key' | 'bearer' | 'basic' | 'oauth2' | 'custom'; baseUrl?: string; sandboxBaseUrl?: string; trackingUrlTemplate?: string; webhookMode?: string; requiredFields?: Array<{ key: string; label: string; type: string; required: boolean; secret: boolean; scope: 'platform' | 'merchant'; placeholder?: string; helpText?: string; options?: string[] }> }
+  adapterStatus?: 'not_implemented' | 'implemented' | 'testing' | 'production_ready'
+}
+
+export interface ShippingPartnerApplication extends Partial<FirestoreMeta> {
+  id: string
+  companyName: string
+  legalName?: string
+  websiteUrl?: string
+  contactName: string
+  jobTitle?: string
+  businessEmail: string
+  phone: string
+  whatsapp?: string
+  coverageGovernorates?: string[]
+  coverageNotes?: string
+  hasApi?: boolean
+  apiDocsUrl?: string
+  supportsCOD?: boolean
+  supportsTracking?: boolean
+  supportsReturns?: boolean
+  supportsPickup?: boolean
+  supportsWebhooks?: boolean
+  message?: string
+  status: 'pending' | 'reviewing' | 'approved' | 'rejected'
+  internalNotes?: string
 }
 
 /** Store-owned provider configuration. Secrets remain server-side. */
