@@ -354,6 +354,20 @@
   .app-shell--platform .shell-main,
   .app-shell--dashboard .shell-main { width: 100% !important; max-width: 100% !important; margin-inline: 0 !important; }
 }
+
+/* Outrank the collapsed-rail selector which intentionally sets an 80px rail
+   on desktop; below tablet width the rail must be absent for both roles. */
+@media (max-width: 1024px) {
+  html body .app-shell.app-shell--platform.sidebar-unpinned:not(.sidebar-hover-expanded) .sidebar,
+  html body .app-shell.app-shell--dashboard.sidebar-unpinned:not(.sidebar-hover-expanded) .sidebar,
+  html body .app-shell.app-shell--platform.sidebar-unpinned.sidebar-hover-expanded .sidebar,
+  html body .app-shell.app-shell--dashboard.sidebar-unpinned.sidebar-hover-expanded .sidebar {
+    display: none !important;
+    width: 0 !important;
+    max-width: 0 !important;
+    min-width: 0 !important;
+  }
+}
 @media (max-width: 768px) {
   .app-shell--platform .shell-content,
   .app-shell--dashboard .shell-content { padding-bottom: calc(92px + env(safe-area-inset-bottom)) !important; }
