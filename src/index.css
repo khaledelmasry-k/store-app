@@ -28,6 +28,7 @@
   --warning: #d97706;
   --warning-soft: rgba(217, 119, 6, 0.10);
   --danger: #dc2626;
+  --danger-contrast: #ffffff;
   --danger-soft: rgba(220, 38, 38, 0.10);
   --info: #0284c7;
   --info-soft: rgba(2, 132, 199, 0.10);
@@ -963,7 +964,7 @@ textarea {
 }
 .btn-danger {
   background: var(--danger);
-  color: #fff;
+  color: var(--danger-contrast);
 }
 .btn-danger:hover:not(:disabled) {
   filter: brightness(0.9);
@@ -8763,6 +8764,7 @@ body {
   --primary-soft: rgba(79, 70, 229, 0.10);
   --primary-contrast: #ffffff;
   --secondary: #2563eb;
+  --secondary-contrast: #ffffff;
   --secondary-soft: rgba(37, 99, 235, 0.10);
   --accent: #06b6d4;
   --accent-soft: rgba(6, 182, 212, 0.11);
@@ -8839,6 +8841,7 @@ body {
   --primary-soft: rgba(129, 140, 248, 0.16);
   --primary-contrast: #ffffff;
   --secondary: #60a5fa;
+  --secondary-contrast: #0b1020;
   --secondary-soft: rgba(96, 165, 250, 0.16);
   --accent: #22d3ee;
   --accent-soft: rgba(34, 211, 238, 0.15);
@@ -8847,6 +8850,7 @@ body {
   --warning: #fbbf24;
   --warning-soft: rgba(251, 191, 36, 0.16);
   --danger: #f87171;
+  --danger-contrast: #3c0a0a;
   --danger-soft: rgba(248, 113, 113, 0.15);
   --info: #38bdf8;
   --info-soft: rgba(56, 189, 248, 0.15);
@@ -9012,7 +9016,7 @@ textarea.input,
 
 .btn-secondary {
   background: var(--secondary);
-  color: #fff;
+  color: var(--secondary-contrast);
 }
 
 .btn-soft {
