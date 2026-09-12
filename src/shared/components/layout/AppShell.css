@@ -2583,3 +2583,21 @@ html body .app-shell--dashboard .shell-main { width: calc(100% - var(--merchant-
   html body .app-shell--dashboard .topbar-brand { max-width: 42vw; }
   html body .app-shell--dashboard .topbar-search { display: none !important; }
 }
+
+/* Final responsive contract: no role-specific rail may override the shared
+   mobile/tablet drawer breakpoint. */
+@media (max-width: 1024px) {
+  html body .app-shell.app-shell--platform .sidebar,
+  html body .app-shell.app-shell--dashboard .sidebar {
+    display: none !important;
+    width: 0 !important;
+    max-width: 0 !important;
+    min-width: 0 !important;
+  }
+  html body .app-shell.app-shell--platform .shell-main,
+  html body .app-shell.app-shell--dashboard .shell-main {
+    width: 100% !important;
+    max-width: 100% !important;
+    margin-inline: 0 !important;
+  }
+}
