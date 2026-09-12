@@ -14,6 +14,7 @@ const envRaw = readFileSync('.env.local', 'utf8')
 const projectId = envRaw.match(/VITE_FIREBASE_PROJECT_ID=(\S+)/)?.[1] || 'mk-store-app'
 if (!admin.apps.length) admin.initializeApp({ projectId })
 const db = admin.firestore()
+const EMULATOR_SUPERADMIN_EMAIL = 'khaaledelmasry@gmail.com'
 
 // ─────────────────────────────────────────────────────────────
 // Helpers
@@ -715,7 +716,7 @@ test('unpublished store shows coming-soon to visitors; owner can preview', async
 })
 
 test('platform Merchants shows seeded usage bars (1020/1500 moderate, 276/300 near)', async ({ page }) => {
-  await login(page, 'platform', 'admin@mk.store', 'Admin12345')
+  await login(page, 'platform', EMULATOR_SUPERADMIN_EMAIL, 'Admin12345')
   await page.goto('/platform/merchants', { waitUntil: 'domcontentloaded' })
 
   const rowA = await merchantRow(page, 'test-store-a')
@@ -1034,7 +1035,7 @@ test('all icons render as SVG glyphs (no raw icon names) — platform', async ({
     }
   }
 
-  await login(page, 'platform', 'admin@mk.store', 'Admin12345')
+  await login(page, 'platform', EMULATOR_SUPERADMIN_EMAIL, 'Admin12345')
   await page.goto('/platform', { waitUntil: 'domcontentloaded' })
   await expect(page.getByText('قريب من الحد').first()).toBeVisible({ timeout: 15000 })
   await assertNoRawIcons()
