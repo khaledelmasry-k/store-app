@@ -31,6 +31,36 @@ service cloud.firestore {
       );
     }
 
+    function isSupportImpersonation() {
+      return isSignedIn() && 'supportImpersonation' in request.auth.token && request.auth.token.supportImpersonation == true;
+    }
+
+    function isFreshAuthSession() {
+      return isSignedIn()
+        && (!('sessionInvalidBeforeEpoch' in get(/databases/$(database)/documents/users/$(request.auth.uid)).data)
+          || request.auth.token.auth_time >= get(/databases/$(database)/documents/users/$(request.auth.uid)).data.sessionInvalidBeforeEpoch);
+    }
+
+    // Support access is bound to the signed custom-token claims and the
+    // server-owned session record. Merchant profile fields are never used as
+    // authority for an impersonated session.
+    function validSupportSessionForStore(storeId) {
+      return isSupportImpersonation()
+        && 'supportSessionId' in request.auth.token
+        && 'supportAdminUid' in request.auth.token
+        && 'supportMerchantUid' in request.auth.token
+        && 'supportStoreId' in request.auth.token
+        && request.auth.uid == request.auth.token.supportMerchantUid
+        && request.auth.token.supportStoreId == storeId
+        && exists(/databases/$(database)/documents/supportImpersonationSessions/$(request.auth.token.supportSessionId))
+        && get(/databases/$(database)/documents/supportImpersonationSessions/$(request.auth.token.supportSessionId)).data.status == 'active'
+        && get(/databases/$(database)/documents/supportImpersonationSessions/$(request.auth.token.supportSessionId)).data.adminUid == request.auth.token.supportAdminUid
+        && get(/databases/$(database)/documents/supportImpersonationSessions/$(request.auth.token.supportSessionId)).data.merchantUid == request.auth.uid
+        && get(/databases/$(database)/documents/supportImpersonationSessions/$(request.auth.token.supportSessionId)).data.storeId == storeId
+        && request.time < get(/databases/$(database)/documents/supportImpersonationSessions/$(request.auth.token.supportSessionId)).data.expiresAt
+        && get(/databases/$(database)/documents/users/$(request.auth.token.supportAdminUid)).data.role == 'superAdmin';
+    }
+
     // True when the authenticated user holds the given permission string.
     function hasPermission(perm) {
       return isSignedIn() && (
@@ -40,9 +70,8 @@ service cloud.firestore {
 
     // True when the authenticated user is a merchant or staff member that owns/accesses the given storeId.
     function canAccessStore(storeId) {
-      return isSignedIn() && (
-        get(/databases/$(database)/documents/users/$(request.auth.uid)).data.storeIds.hasAll([storeId])
-      );
+      return isFreshAuthSession() && (validSupportSessionForStore(storeId)
+        || (isSignedIn() && !isSupportImpersonation() && get(/databases/$(database)/documents/users/$(request.auth.uid)).data.storeIds.hasAll([storeId])));
     }
 
     function canAccessStoreOrAdmin(storeId) {
@@ -168,6 +197,11 @@ function inStore(resource) {
             && !request.resource.data.diff(resource.data).affectedKeys().hasAny(['merchantStatus'])
             && permissionsUnchanged());
       allow delete: if isPlatformAdmin();
+    }
+
+    // Server-managed support sessions are never visible to browser clients.
+    match /supportImpersonationSessions/{sessionId} {
+      allow read, create, update, delete: if false;
     }
 
     // ─────────────────────────────────────────────────────────────

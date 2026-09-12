@@ -112,7 +112,7 @@ const CollapsedSidebarRail: FunctionalComponent<CollapsedSidebarRailProps> = ({
 
 export const AppShell: FunctionalComponent<Props> = ({ navKey, brand, brandLogo, storeSwitcher, storefrontHref, children }) => {
   const storefrontLabel = storefrontHref?.includes('preview=1') ? 'معاينة المتجر' : 'فتح المتجر المنشور'
-  const { user, refreshUser } = useAuth()
+  const { user, refreshUser, supportSessionActive } = useAuth()
   const toast = useToast()
   const theme = useTheme()
   const isDarkTheme = theme.theme === 'dark'
@@ -335,7 +335,7 @@ export const AppShell: FunctionalComponent<Props> = ({ navKey, brand, brandLogo,
     focusables[next]?.focus()
   }
 
-  const impersonating = Boolean(user?.impersonatedBy)
+  const impersonating = supportSessionActive
   const displayName = navKey === 'platform' ? (user?.name || user?.email || 'مدير المنصة') : (user?.name || '?')
   const merchantLogoKind = navKey === 'dashboard' ? storeLogoKind(brandLogo) : 'none'
   const merchantPreset = merchantLogoKind === 'preset' ? presetFromLogo(brandLogo) : null
