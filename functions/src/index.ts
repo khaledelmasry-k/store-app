@@ -466,6 +466,7 @@ function normalizeShippingProviderPayload(input: any) {
   if (['bosta', 'wasla'].includes(slug) && (integrationType !== 'api' || credentialMode !== 'merchant')) {
     throw new HttpsError('invalid-argument', `${slug === 'wasla' ? 'Wasla' : 'Bosta'} must use API integration with merchant-owned credentials`)
   }
+  if (status === 'active' && input?.adapterStatus && input.adapterStatus !== 'production_ready') throw new HttpsError('failed-precondition', 'لا يمكن تفعيل مزود قبل جاهزية المحول للإنتاج')
   const services = normalizeProviderServices(input?.services)
   const businessProfile = input?.businessProfile && typeof input.businessProfile === 'object' ? Object.fromEntries(['legalName', 'displayName', 'description', 'websiteUrl', 'supportUrl', 'merchantPortalUrl', 'apiDocsUrl', 'publicContactEmail', 'publicContactPhone'].map((key) => [key, input.businessProfile[key] ? sanitizeSensitiveText(String(input.businessProfile[key])).slice(0, 500) : undefined]).filter(([, value]) => value)) : undefined
   const branding = input?.branding && typeof input.branding === 'object' ? { logoUrl: input.branding.logoUrl ? String(input.branding.logoUrl).slice(0, 2000) : undefined, logoStoragePath: input.branding.logoStoragePath ? String(input.branding.logoStoragePath).slice(0, 500) : undefined, brandColor: input.branding.brandColor ? String(input.branding.brandColor).slice(0, 40) : undefined } : undefined
