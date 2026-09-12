@@ -184,38 +184,6 @@
 .app-shell--dashboard .sidebar-foot-user strong { color: var(--v3-text); }
 .app-shell--dashboard .sidebar-foot-user small { color: var(--v3-muted); }
 
-.app-shell--platform .sidebar {
-  background: var(--v3-surface);
-  color: #171b2d;
-  border: 0;
-  border-inline-end: 1px solid var(--v3-outline);
-  box-shadow: none;
-}
-.app-shell--platform .sidebar-group-header,
-.app-shell--platform .sidebar-child-link,
-.app-shell--platform .sidebar-link { color: #171b2d; }
-.app-shell--platform .sidebar-group-header { color: #4a4b60; }
-.app-shell--platform .sidebar-group-header:hover,
-.app-shell--platform .sidebar-child-link:hover,
-.app-shell--platform .sidebar-link:hover { color: var(--v3-primary); background: var(--v3-primary-soft); }
-.app-shell--platform .sidebar-child-link.active,
-.app-shell--platform .sidebar-link.active {
-  color: var(--v3-primary);
-  background: var(--v3-primary-soft);
-  font-weight: 700;
-}
-.app-shell--platform .sidebar-foot-user strong { color: #171b2d; }
-.app-shell--platform .sidebar-foot-user small { color: #5b5d70; }
-.app-shell--platform .sidebar-group-header,
-.app-shell--platform .sidebar-child-link,
-.app-shell--platform .sidebar-link { min-height: 38px; border-radius: 8px; }
-.app-shell--platform .sidebar-group-items { padding-block: 2px 6px; }
-.app-shell--platform .sidebar-group-label,
-.app-shell--platform .sidebar-child-link span,
-.app-shell--platform .sidebar-link span { font-weight: 500; }
-.app-shell--platform .sidebar-top { padding-block: 10px 8px; }
-.app-shell--platform .sidebar-foot { border-top: 0; }
-
 .app-shell--platform .shell-main,
 .app-shell--platform .shell-content,
 .app-shell--platform .route-surface { background: var(--mka-bg); }
@@ -330,6 +298,136 @@
   .app-shell .shell-content { padding: 20px 16px 88px; }
   .app-shell--platform .shell-content { padding: 20px 16px 32px; }
   .app-shell .topbar { padding-inline: 16px; }
+}
+
+/* Final shared-shell contract: platform and merchant rails intentionally
+   resolve to the same geometry and interaction surface. */
+.app-shell--platform .sidebar,
+.app-shell--dashboard .sidebar {
+  width: var(--merchant-sidebar-width) !important;
+  max-width: var(--merchant-sidebar-width) !important;
+  background: var(--v3-surface) !important;
+  border: 0 !important;
+  box-shadow: none !important;
+}
+.app-shell--platform .sidebar-top,
+.app-shell--dashboard .sidebar-top {
+  min-height: 56px !important;
+  padding: 12px 12px 10px !important;
+  background: transparent !important;
+  border: 0 !important;
+}
+.app-shell--platform .sidebar-nav,
+.app-shell--dashboard .sidebar-nav { padding: 8px 10px 12px !important; gap: 0 !important; }
+.app-shell--platform .sidebar-group,
+.app-shell--dashboard .sidebar-group { margin-block-end: 10px !important; }
+.app-shell--platform .sidebar-group-header,
+.app-shell--platform .sidebar-child-link,
+.app-shell--platform .sidebar-link,
+.app-shell--dashboard .sidebar-group-header,
+.app-shell--dashboard .sidebar-child-link,
+.app-shell--dashboard .sidebar-link {
+  min-height: 42px !important;
+  padding: 8px 12px !important;
+  border: 0 !important;
+  border-radius: 10px !important;
+  box-shadow: none !important;
+}
+.app-shell--platform .sidebar-group-header,
+.app-shell--dashboard .sidebar-group-header { padding-block: 8px !important; }
+.app-shell--platform .sidebar-group-header:hover,
+.app-shell--platform .sidebar-child-link:hover,
+.app-shell--platform .sidebar-link:hover,
+.app-shell--dashboard .sidebar-group-header:hover,
+.app-shell--dashboard .sidebar-child-link:hover,
+.app-shell--dashboard .sidebar-link:hover { background: var(--surface-3) !important; color: var(--text) !important; }
+.app-shell--platform .sidebar-child-link.active,
+.app-shell--platform .sidebar-link.active,
+.app-shell--dashboard .sidebar-child-link.active,
+.app-shell--dashboard .sidebar-link.active { background: var(--primary-soft) !important; color: var(--primary) !important; }
+.app-shell--platform .sidebar-foot,
+.app-shell--dashboard .sidebar-foot { margin: 8px 0 0 !important; padding: 10px 12px 12px !important; border: 0 !important; background: transparent !important; }
+
+@media (max-width: 1024px) {
+  .app-shell--platform .sidebar,
+  .app-shell--dashboard .sidebar { display: none !important; width: 0 !important; max-width: 0 !important; }
+  .app-shell--platform .shell-main,
+  .app-shell--dashboard .shell-main { width: 100% !important; max-width: 100% !important; margin-inline: 0 !important; }
+}
+@media (max-width: 768px) {
+  .app-shell--platform .shell-content,
+  .app-shell--dashboard .shell-content { padding-bottom: calc(92px + env(safe-area-inset-bottom)) !important; }
+}
+
+/* High-specificity guard keeps later legacy platform selectors from changing
+   the shared rail geometry. */
+html body .app-shell--platform .sidebar,
+html body .app-shell--dashboard .sidebar { width: var(--merchant-sidebar-width) !important; max-width: var(--merchant-sidebar-width) !important; }
+html body .app-shell--platform .sidebar-top,
+html body .app-shell--dashboard .sidebar-top { min-height: 56px !important; padding: 12px 12px 10px !important; }
+html body .app-shell--platform .sidebar-nav,
+html body .app-shell--dashboard .sidebar-nav { padding: 8px 10px 12px !important; gap: 0 !important; }
+html body .app-shell--platform .sidebar-group,
+html body .app-shell--dashboard .sidebar-group { margin-block-end: 10px !important; }
+html body .app-shell--platform .sidebar-group-header,
+html body .app-shell--platform .sidebar-child-link,
+html body .app-shell--platform .sidebar-link,
+html body .app-shell--dashboard .sidebar-group-header,
+html body .app-shell--dashboard .sidebar-child-link,
+html body .app-shell--dashboard .sidebar-link { min-height: 42px !important; padding: 8px 12px !important; border-radius: 10px !important; }
+html body .app-shell--platform .shell-main,
+html body .app-shell--dashboard .shell-main { width: calc(100% - var(--merchant-sidebar-width)); margin-inline-start: var(--merchant-sidebar-width); }
+@media (max-width: 1024px) {
+  html body .app-shell--platform .sidebar,
+  html body .app-shell--dashboard .sidebar { display: none !important; width: 0 !important; max-width: 0 !important; }
+  html body .app-shell--platform .shell-main,
+  html body .app-shell--dashboard .shell-main { width: 100% !important; margin-inline: 0 !important; }
+}
+
+/* Shared sidebar contract: platform navigation uses the merchant shell
+   geometry and responsive behavior; only NAV_GROUPS content differs. */
+.app-shell--platform .sidebar {
+  width: var(--merchant-sidebar-width) !important;
+  background: var(--surface-muted) !important;
+  border: 0 !important;
+  box-shadow: none !important;
+}
+.app-shell--platform .sidebar-top {
+  min-height: 56px !important;
+  padding: 12px 12px 10px !important;
+  border: 0 !important;
+  background: transparent !important;
+}
+.app-shell--platform .sidebar-nav { padding: 10px 10px 16px !important; gap: 4px !important; }
+.app-shell--platform .sidebar-group { margin-block-end: 6px !important; }
+.app-shell--platform .sidebar-group-header,
+.app-shell--platform .sidebar-child-link,
+.app-shell--platform .sidebar-link {
+  min-height: 42px !important;
+  padding: 8px 12px !important;
+  border: 0 !important;
+  border-radius: 10px !important;
+  box-shadow: none !important;
+}
+.app-shell--platform .sidebar-group-header { padding-block: 11px !important; font-size: 13px !important; font-weight: 700 !important; }
+.app-shell--platform .sidebar-child-link,
+.app-shell--platform .sidebar-link { font-size: 14px !important; font-weight: 500 !important; }
+.app-shell--platform .sidebar-group-header:hover,
+.app-shell--platform .sidebar-child-link:hover,
+.app-shell--platform .sidebar-link:hover { color: var(--text) !important; background: var(--surface-3) !important; }
+.app-shell--platform .sidebar-child-link.active,
+.app-shell--platform .sidebar-link.active { color: var(--primary) !important; background: var(--primary-soft) !important; font-weight: 700 !important; }
+.app-shell--platform .sidebar-foot { margin: 8px 0 0 !important; padding: 10px 12px 12px !important; border: 0 !important; background: none !important; }
+.app-shell--platform .sidebar-foot-user { border-radius: 10px !important; }
+.app-shell--platform .shell-main { width: calc(100% - var(--merchant-sidebar-width)); margin-inline-start: var(--merchant-sidebar-width); }
+
+@media (max-width: 1024px) {
+  .app-shell--platform .sidebar { display: none !important; width: 0 !important; max-width: 0 !important; }
+  .app-shell--platform .shell-main { width: 100% !important; max-width: 100% !important; margin-inline: 0 !important; }
+}
+
+@media (max-width: 768px) {
+  .app-shell--platform .shell-content { padding: 20px 16px 88px !important; }
 }
 
 /* Hover expansion must use the same 256px geometry for both role shells;
@@ -1059,97 +1157,6 @@
 [data-theme='dark'] .app-shell--dashboard .topbar-search {
   background: var(--surface-2);
   border-color: var(--border);
-}
-
-[data-theme='dark'] .app-shell--platform .sidebar {
-  background: #121827;
-  border-inline-end-color: rgba(197, 204, 236, 0.12);
-}
-
-[data-theme='dark'] .app-shell--platform .sidebar-group-header,
-[data-theme='dark'] .app-shell--platform .sidebar-link { color: var(--text-secondary); }
-
-[data-theme='dark'] .app-shell--platform .sidebar-child-link { color: var(--foreground); }
-
-[data-theme='dark'] .app-shell--platform .sidebar-group-header:hover,
-[data-theme='dark'] .app-shell--platform .sidebar-child-link:hover,
-[data-theme='dark'] .app-shell--platform .sidebar-link:hover { color: var(--foreground); background: var(--surface-muted); }
-
-[data-theme='dark'] .app-shell--platform .sidebar-child-link.active,
-[data-theme='dark'] .app-shell--platform .sidebar-link.active {
-  color: var(--on-primary-container);
-  background: var(--primary-container);
-}
-
-/* ── Platform sidebar: same console identity as the merchant shell ──
-   The SuperAdmin routes use the shared AppShell with the `platform` key.
-   Keep this explicit (rather than inheriting merchant-only rules) so the
-   platform console always receives the brand header, compact groups and the
-   active-route rail on both desktop and the mobile drawer. */
-.app-shell--platform .sidebar {
-  background: var(--surface-muted);
-  border-inline-end: 1px solid var(--border);
-  box-shadow: none;
-}
-.app-shell--platform .sidebar-top {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 8px;
-  min-height: 66px;
-  padding: 12px 14px;
-  border-block-end: 1px solid var(--border);
-  background: var(--surface);
-}
-.app-shell--platform .sidebar-console-brand {
-  display: inline-flex;
-  min-width: 0;
-  align-items: center;
-  gap: 10px;
-  color: var(--text);
-  text-decoration: none;
-}
-.app-shell--platform .sidebar-console-brand > span { display: grid; min-width: 0; gap: 1px; }
-.app-shell--platform .sidebar-console-brand strong { color: var(--primary); font-size: 18px; font-weight: 900; line-height: 1.1; }
-.app-shell--platform .sidebar-console-brand small { color: var(--text-muted); font-size: 11px; font-weight: 600; }
-.app-shell--platform .sidebar-console-brand:hover strong { filter: brightness(.88); }
-.app-shell--platform .sidebar-top .sidebar-pin-btn { margin: 0; }
-.app-shell--platform .sidebar-nav { padding: 12px 10px 18px; gap: 5px; }
-.app-shell--platform .sidebar-group { margin-block-end: 6px; }
-.app-shell--platform .sidebar-group-header,
-.app-shell--platform .sidebar-child-link,
-.app-shell--platform .sidebar-link { border-radius: 10px; }
-.app-shell--platform .sidebar-group-header {
-  min-height: 42px;
-  padding: 10px 12px;
-  color: var(--text-secondary);
-  font-size: 13px;
-  font-weight: 700;
-}
-.app-shell--platform .sidebar-child-link,
-.app-shell--platform .sidebar-link {
-  min-height: 40px;
-  padding: 8px 12px;
-  color: var(--text);
-  font-size: 13px;
-}
-.app-shell--platform .sidebar-child-link.active,
-.app-shell--platform .sidebar-link.active {
-  position: relative;
-  color: var(--primary);
-  background: var(--primary-soft);
-}
-.app-shell--platform .sidebar-foot {
-  margin-top: auto;
-  padding: 12px 10px;
-  border-block-start: 1px solid var(--border);
-  background: var(--surface);
-}
-.app-shell--platform .sidebar-foot-user { border-radius: 10px; background: var(--surface-muted); }
-
-@media (max-width: 1024px) {
-  .app-shell--platform .sidebar-drawer .sidebar-top { display: flex; }
-  .app-shell--platform .sidebar-drawer .sidebar-console-brand { color: var(--text); }
 }
 
 /* ── Mobile drawer: same flat surface (visual consistency) ── */

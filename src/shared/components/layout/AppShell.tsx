@@ -122,12 +122,9 @@ export const AppShell: FunctionalComponent<Props> = ({ navKey, brand, brandLogo,
   const [exiting, setExiting] = useState(false)
   const [drawerOpen, setDrawerOpen] = useState(false)
   // The old shared preference could leave either console permanently in the
-  // narrow icon rail after the rail geometry changed.  Start the refreshed
-  // navigation expanded for both roles, while keeping any *new* choice per
-  // console separate.
-  const sidebarPreferenceKey = navKey === 'platform'
-    ? 'platformSidebarPinnedV3'
-    : 'merchantSidebarPinnedV2'
+  // Start the refreshed navigation expanded for both roles. One shared
+  // preference keeps collapse/expand behavior identical across consoles.
+  const sidebarPreferenceKey = 'merchantSidebarPinnedV2'
   const [isPinned, setIsPinned] = useState<boolean>(() => {
     try {
       const stored = localStorage.getItem(sidebarPreferenceKey)
@@ -602,13 +599,16 @@ export const AppShell: FunctionalComponent<Props> = ({ navKey, brand, brandLogo,
               </main>
             </div>
           </div>
-        {navKey === 'dashboard' && (
-          <nav className="mobile-bottom-nav" aria-label="تنقل سريع">
-            {[
+        <nav className="mobile-bottom-nav" aria-label="تنقل سريع">
+            {(navKey === 'platform' ? [
+              { to: '/platform', label: 'الرئيسية', icon: 'dashboard' },
+              { to: '/platform/merchants', label: 'التجار', icon: 'storefront' },
+              { to: '/platform/orders', label: 'الطلبات', icon: 'shopping_cart' },
+            ] : [
               { to: '/dashboard', label: 'الرئيسية', icon: 'dashboard' },
               { to: '/dashboard/orders', label: 'الطلبات', icon: 'shopping_cart' },
               { to: '/dashboard/products', label: 'المنتجات', icon: 'inventory_2' },
-            ].map((item) => {
+            ]).map((item) => {
               const active = location === item.to || location.startsWith(item.to + '/')
               return (
                 <Link key={item.to} href={item.to} className={`mobile-bottom-nav-item${active ? ' active' : ''}`}>
@@ -621,8 +621,7 @@ export const AppShell: FunctionalComponent<Props> = ({ navKey, brand, brandLogo,
               <Icon name="menu" />
               <span>المزيد</span>
             </button>
-          </nav>
-        )}
+        </nav>
       </div>
       {drawerOpen && (
         <div className="sidebar-drawer-overlay" onClick={() => setDrawerOpen(false)}>
