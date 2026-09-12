@@ -414,17 +414,17 @@ export const MerchantShipping: FunctionalComponent = () => {
     <div data-tour="shipping-workspace" className="merchant-operations merchant-shipping-page shipping-page--stitch">
       <PageHeader title="الشحن والتوصيل" subtitle="إعدادات الشحن والمناطق وشركات التوصيل" />
       <Tabs tabs={[{ key: 'overview', label: 'نظرة عامة' }, { key: 'companies', label: 'شركات الشحن' }, { key: 'settlements', label: 'التسويات' }]} active={tab} onChange={setTab} />
-      <Card title="احتياجات الشحن لمتجرك" className="mt-2" subtitle="تُستخدم هذه البيانات لاقتراح الشركات المناسبة عند إضافة اتصال جديد.">
+      {tab === 'overview' && <Card title="احتياجات الشحن لمتجرك" className="mt-2" subtitle="تُستخدم هذه البيانات لاقتراح الشركات المناسبة عند إضافة اتصال جديد.">
         <div className="grid grid-2">
           <div><Input label="حجم الشحن الشهري المتوقع" type="number" value={expectedVolume} onChange={setExpectedVolume} /><Button size="sm" onClick={() => void saveShippingProfile()}>حفظ الاحتياجات</Button></div>
           <div><span className="field-label">المحافظات المستهدفة</span><div className="shipping-governorate-picker">{GOVER_EG.map((governorate) => <label key={governorate}><input type="checkbox" checked={targetGovernorates.includes(governorate)} onChange={() => setTargetGovernorates((current) => current.includes(governorate) ? current.filter((value) => value !== governorate) : [...current, governorate])} /> {governorate}</label>)}</div></div>
           <div className="shipping-secure-note"><Icon name="info" ariaHidden /><span>الحجم الفعلي آخر 30 يوم: {platformProviders[0]?.eligibility?.merchantMonthlyVolume ?? shipmentsRes.data.length} شحنة · المتوقع: {expectedVolume || 0}</span></div>
         </div>
-      </Card>
-      <div className="shipping-page-context">
+      </Card>}
+      {tab === 'overview' && <div className="shipping-page-context">
         <span className="shipping-page-context-icon"><Icon name="compare_arrows" ariaHidden /></span>
         <div><strong>أدر خدمات الشحن من مصدر واحد</strong><span>الشركات اليدوية تُضبط أسعارها هنا؛ شركات API تستخدم السعر الذي تعيده الشركة بعد توفير واجهة تسعير رسمية.</span></div>
-      </div>
+      </div>}
 
       {tab === 'overview' && <>
       <Card title="إعدادات التشغيل" className="mt-2" subtitle="الطلب يبقى محفوظًا حتى إذا تعذر الاتصال بشركة الشحن. في شحنات API الشركة وحدها تحدد مراحل الشحنة بعد إنشائها.">
@@ -528,10 +528,10 @@ export const MerchantShipping: FunctionalComponent = () => {
         <div className="mt-2">
           <div className="stats-grid">
             <StatsCard title="شركات الشحن المتاحة" value={platformLoading ? '—' : platformProviders.length} icon="local_shipping" tone="primary" />
-            <StatsCard title="الشركات المفعلة" value={platformLoading ? '—' : activeProviders} icon="check_circle" tone="green" />
-            <StatsCard title="الخدمات المفعلة" value={platformLoading ? '—' : enabledServiceCount} icon="local_shipping" tone="indigo" />
-            <StatsCard title="مناطق التغطية" value={platformLoading ? '—' : (activeProviders > 0 ? modernCoverageCount : activeZones)} icon="map" tone="blue" />
+            <StatsCard title="الشحنات آخر 30 يومًا" value={platformLoading ? '—' : (platformProviders[0]?.eligibility?.merchantMonthlyVolume ?? shipmentsRes.data.length)} icon="local_shipping" tone="indigo" />
+            <StatsCard title="الشحنات قيد التوصيل" value={shipmentsRes.data.filter((shipment) => !['DELIVERED', 'RETURNED', 'CANCELLED'].includes(shipment.status)).length} icon="local_shipping" tone="blue" />
           </div>
+          {platformProviders.find((entry) => entry.config?.enabled) && (() => { const current = platformProviders.find((entry) => entry.config?.enabled)!; return <Card title="شركة الشحن الحالية" className="mt-2"><div className="shipping-provider-summary"><strong>{current.provider.name}</strong><span>{connectionStatusLabel(current.config?.configurationStatus, true)}</span><span>{current.eligibility?.grandfathered ? 'اتصال حالي محفوظ' : 'متصلة'}</span><span>{current.provider.supportsCOD ? 'COD ✓' : 'بدون COD'}</span><span>{current.provider.supportsTracking ? 'تتبع ✓' : 'تتبع يدوي'}</span><span>{current.provider.supportsReturns ? 'مرتجعات ✓' : 'بدون مرتجعات'}</span></div></Card> })()}
 
           <div className="shipping-settings-grid">
             <div className="shipping-settings-main">
