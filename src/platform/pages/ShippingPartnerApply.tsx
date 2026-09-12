@@ -1,0 +1,12 @@
+import { FunctionalComponent } from 'preact'
+import { useState } from 'preact/hooks'
+import { Link } from 'wouter'
+import { submitShippingPartnerApplicationCallable } from '../../shared/services/auth'
+import './LandingPage.css'
+
+export const ShippingPartnerApply: FunctionalComponent = () => {
+  const [sent, setSent] = useState(false); const [busy, setBusy] = useState(false); const [error, setError] = useState('')
+  const submit = async (event: Event) => { event.preventDefault(); setBusy(true); setError(''); const form = event.currentTarget as HTMLFormElement; const data = Object.fromEntries(new FormData(form).entries()); try { await submitShippingPartnerApplicationCallable({ ...data, hasApi: data.hasApi === 'on', supportsCOD: data.supportsCOD === 'on', supportsTracking: data.supportsTracking === 'on', consent: data.consent === 'on' }); setSent(true) } catch (e: any) { setError(e?.message || 'تعذر إرسال الطلب') } finally { setBusy(false) } }
+  return <div className="landing" dir="rtl"><main className="stitch-info-section"><div className="stitch-info-container"><span className="stitch-info-eyebrow">شراكات الشحن</span><h1>انضم كشريك شحن</h1>{sent ? <><p>تم استلام طلب الشراكة وسيتواصل معك فريق متجري بعد المراجعة.</p><Link href="/">العودة للصفحة الرئيسية</Link></> : <form onSubmit={submit} className="stack-list"><p>شارك بيانات شركتك الأساسية فقط. لا ترسل أي مفاتيح أو كلمات مرور أو أسرار تكامل.</p><input name="companyName" required placeholder="اسم الشركة" /><input name="legalName" placeholder="الاسم القانوني" /><input name="contactName" required placeholder="اسم جهة الاتصال" /><input name="jobTitle" placeholder="المسمى الوظيفي" /><input name="businessEmail" type="email" required placeholder="البريد المهني" /><input name="phone" required placeholder="الهاتف" /><input name="websiteUrl" type="url" placeholder="الموقع الإلكتروني" /><textarea name="coverageNotes" placeholder="نطاق التغطية" rows={3} /><textarea name="message" placeholder="رسالة إضافية" rows={4} /><label><input type="checkbox" name="hasApi" /> لدينا تكامل API</label><label><input type="checkbox" name="supportsCOD" /> الدفع عند الاستلام</label><label><input type="checkbox" name="supportsTracking" /> التتبع</label><label><input type="checkbox" name="consent" required /> أوافق على التواصل بشأن طلب الشراكة</label>{error && <p role="alert">{error}</p>}<button type="submit" disabled={busy}>{busy ? 'جارٍ الإرسال…' : 'إرسال طلب الشراكة'}</button></form>}</div></main></div>
+}
+export default ShippingPartnerApply

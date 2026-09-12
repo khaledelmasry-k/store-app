@@ -27,6 +27,7 @@ import type {
 import { EGYPT_CITIES_BY_GOVERNORATE, GOVER_EG } from '../../shared/utils/constants'
 import { Icon } from '../../shared/components/ui/Icon'
 import './ShippingCompanies.css'
+import { uploadShippingProviderLogo } from '../../shared/services/uploads'
 
 type Draft = {
   name: string
@@ -43,6 +44,12 @@ type Draft = {
   supportsPickup: boolean
   allowMerchantRateOverride: boolean
   services: ShippingProviderService[]
+  businessProfile: NonNullable<ShippingProviderDefinition['businessProfile']>
+  partnership: NonNullable<ShippingProviderDefinition['partnership']>
+  publicListing: NonNullable<ShippingProviderDefinition['publicListing']>
+  adapterStatus: NonNullable<ShippingProviderDefinition['adapterStatus']>
+  branding: NonNullable<ShippingProviderDefinition['branding']>
+  integrationConfig: NonNullable<ShippingProviderDefinition['integrationConfig']>
 }
 type ServiceForm = {
   code: string
@@ -95,6 +102,7 @@ const emptyDraft: Draft = {
   supportsPickup: false,
   allowMerchantRateOverride: false,
   services: [],
+  businessProfile: {}, branding: {}, integrationConfig: { requiredFields: [] }, partnership: { status: 'draft' }, publicListing: { enabled: false, sortOrder: 0, shortDescription: '' }, adapterStatus: 'not_implemented',
 }
 const emptyService: ServiceForm = {
   code: '',
@@ -230,6 +238,7 @@ export const PlatformShippingCompanies: FunctionalComponent = () => {
       supportsPickup: !!provider.supportsPickup,
       allowMerchantRateOverride: provider.allowMerchantRateOverride === true,
       services: provider.services || [],
+      businessProfile: provider.businessProfile || {}, branding: provider.branding || {}, integrationConfig: provider.integrationConfig || { requiredFields: [] }, partnership: provider.partnership || { status: 'draft' }, publicListing: provider.publicListing || { enabled: false, sortOrder: 0, shortDescription: '' }, adapterStatus: provider.adapterStatus || 'not_implemented',
     })
     setSelectedServiceCode(provider.services?.[0]?.code || '')
     setTab('general')
@@ -552,6 +561,7 @@ export const PlatformShippingCompanies: FunctionalComponent = () => {
           subtitle={merchantApiProvider ? 'أتح الشركة للتجار فقط؛ الربط والأسعار يتبعان حساب كل تاجر لدى الشركة' : 'أضف مزود شحن وحدد خدماته وأسعاره ومناطق التغطية'}
         />
         <div className="shipping-editor-actions">
+          <Button variant="outline" onClick={() => navigate('/platform/shipping-companies/applications')}>طلبات الشراكة</Button>
           <Button variant="ghost" onClick={startNew}>
             مزود جديد
           </Button>
@@ -646,6 +656,7 @@ export const PlatformShippingCompanies: FunctionalComponent = () => {
                 onChange={(value) => setDraft({ ...draft, name: value })}
                 placeholder="مثال: شحن متجري"
               />
+              <label className="field"><span className="field-label">رفع شعار الشركة</span><input className="input" type="file" accept="image/*" disabled={!editingId || saving} onChange={async (event) => { const file = (event.target as HTMLInputElement).files?.[0]; if (!file || !editingId) return; try { const url = await uploadShippingProviderLogo(file, editingId); setDraft((current) => ({ ...current, logoUrl: url, branding: { ...current.branding, logoUrl: url } })); toast.push('تم رفع الشعار') } catch (error: any) { toast.push('تعذر رفع الشعار', error?.message || 'تحقق من الملف', 'error') } }} /><span className="field-hint">يتاح بعد إنشاء المزود ويحفظ في مسار آمن خاص به.</span></label>
               {!manualProvider && <Input
                 label="معرّف التكامل"
                 helper="رمز الشركة الذي يحدد موصل الـAPI، وليس مفتاح API"
@@ -720,6 +731,15 @@ export const PlatformShippingCompanies: FunctionalComponent = () => {
               </label>}
             </div>
             {manualProvider && <p className="field-hint">الشحن اليدوي لا يحتاج API أو مفتاحًا أو اختبار اتصال. أضف فقط الخدمات ومناطق التغطية وأسعارها.</p>}
+            <div className="grid grid-2" style={{ marginTop: 16 }}>
+              <Input label="الاسم القانوني" value={draft.businessProfile.legalName || ''} onChange={(value) => setDraft({ ...draft, businessProfile: { ...draft.businessProfile, legalName: value } })} />
+              <Input label="الموقع الإلكتروني" value={draft.businessProfile.websiteUrl || ''} onChange={(value) => setDraft({ ...draft, businessProfile: { ...draft.businessProfile, websiteUrl: value } })} />
+              <Input label="رابط وثائق API" value={draft.businessProfile.apiDocsUrl || ''} onChange={(value) => setDraft({ ...draft, businessProfile: { ...draft.businessProfile, apiDocsUrl: value } })} />
+              <Input label="وصف الظهور العام" value={draft.publicListing.shortDescription || ''} onChange={(value) => setDraft({ ...draft, publicListing: { ...draft.publicListing, shortDescription: value } })} />
+              <label className="field"><span className="field-label">حالة الشراكة</span><select className="input" value={draft.partnership.status || 'draft'} onChange={(event) => setDraft({ ...draft, partnership: { ...draft.partnership, status: (event.target as HTMLSelectElement).value as any } })}><option value="draft">مسودة</option><option value="onboarding">قيد التجهيز</option><option value="contracted">متعاقدة</option><option value="active">نشطة</option><option value="suspended">موقوفة</option></select></label>
+              <label className="field"><span className="field-label">الحالة التقنية</span><select className="input" value={draft.adapterStatus} onChange={(event) => setDraft({ ...draft, adapterStatus: (event.target as HTMLSelectElement).value as any })}><option value="not_implemented">غير منفذ</option><option value="implemented">منفذ</option><option value="testing">قيد الاختبار</option><option value="production_ready">جاهز للإنتاج</option></select></label>
+              <label className="field"><span className="field-label">الظهور في صفحة الهبوط</span><input type="checkbox" checked={draft.publicListing.enabled === true} onChange={(event) => setDraft({ ...draft, publicListing: { ...draft.publicListing, enabled: (event.target as HTMLInputElement).checked } })} /></label>
+            </div>
           </Card>
         )}
         {tab === 'services' && (
@@ -976,6 +996,7 @@ export const PlatformShippingCompanies: FunctionalComponent = () => {
                   الخاصة بمتجره.
                 </span>
               </div>
+              <div className="shipping-secure-note"><Icon name="tune" ariaHidden /><span>حقول التكامل المطلوبة (وصفية فقط، دون قيم سرية): {(draft.integrationConfig?.requiredFields || []).length || 0}</span></div>
               {isWaslaProvider && <div className="shipping-secure-note"><Icon name="info" ariaHidden /><span><strong>نطاق وصلة المدعوم حاليًا:</strong> اختبار اتصال، تحميل محافظات ومدن، تسعير مباشر، إنشاء شحنة، وتتبّع/سجل حالة. لا تضف أسعارًا ثابتة أو مناطق محلية لهذه الشركة. Webhooks والإلغاء وAWB/الملصق وإنشاء المرتجع وطلب الاستلام ليست مدعومة بالعقد الحالي، لذلك لا تظهر كميزات متاحة.</span></div>}
             </Card>
           ))}

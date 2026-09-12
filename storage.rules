@@ -163,6 +163,13 @@ service firebase.storage {
       allow delete: if ownsTenant(storeId);
     }
 
+    // Provider logos are public branding assets; only platform admins may upload them.
+    match /shippingProviders/{providerId}/{allPaths=**} {
+      allow read: if true;
+      allow write: if isAdmin() && request.resource.size < 5 * 1024 * 1024 && request.resource.contentType.matches('image/.*');
+      allow delete: if isAdmin();
+    }
+
     // Fallback — never expose unclassified/internal objects publicly.
     match /{allPaths=**} {
       allow read: if isAdmin();

@@ -446,6 +446,12 @@ function safeShippingProvider(id: string, data: any) {
     canTrackShipment: Boolean(adapter?.trackShipment && capabilities.includes('tracking')),
     canCancelShipment: Boolean(adapter?.cancelShipment && capabilities.includes('cancel')),
     lastTestedAt: data?.lastTestedAt || null,
+    businessProfile: data?.businessProfile || undefined,
+    branding: data?.branding ? { logoUrl: data.branding.logoUrl || undefined, logoStoragePath: data.branding.logoStoragePath || undefined, brandColor: data.branding.brandColor || undefined } : undefined,
+    partnership: data?.partnership ? { status: data.partnership.status || 'draft', contractedAt: data.partnership.contractedAt || null, notes: data.partnership.notes || undefined } : undefined,
+    publicListing: data?.publicListing ? { enabled: data.publicListing.enabled === true, sortOrder: Number(data.publicListing.sortOrder || 0), shortDescription: data.publicListing.shortDescription || undefined } : undefined,
+    integrationConfig: data?.integrationConfig ? { authType: data.integrationConfig.authType || 'none', baseUrl: data.integrationConfig.baseUrl || undefined, sandboxBaseUrl: data.integrationConfig.sandboxBaseUrl || undefined, trackingUrlTemplate: data.integrationConfig.trackingUrlTemplate || undefined, webhookMode: data.integrationConfig.webhookMode || undefined, requiredFields: Array.isArray(data.integrationConfig.requiredFields) ? data.integrationConfig.requiredFields.map((f: any) => ({ key: String(f.key || ''), label: String(f.label || ''), type: String(f.type || 'text'), required: f.required === true, secret: f.secret === true, scope: f.scope === 'platform' ? 'platform' : 'merchant', placeholder: f.placeholder ? String(f.placeholder) : undefined, helpText: f.helpText ? String(f.helpText) : undefined, options: Array.isArray(f.options) ? f.options.map(String).slice(0, 20) : undefined })) : [] } : undefined,
+    adapterStatus: ['not_implemented', 'implemented', 'testing', 'production_ready'].includes(data?.adapterStatus) ? data.adapterStatus : (adapter ? 'implemented' : 'not_implemented'),
   }
 }
 
@@ -461,6 +467,11 @@ function normalizeShippingProviderPayload(input: any) {
     throw new HttpsError('invalid-argument', `${slug === 'wasla' ? 'Wasla' : 'Bosta'} must use API integration with merchant-owned credentials`)
   }
   const services = normalizeProviderServices(input?.services)
+  const businessProfile = input?.businessProfile && typeof input.businessProfile === 'object' ? Object.fromEntries(['legalName', 'displayName', 'description', 'websiteUrl', 'supportUrl', 'merchantPortalUrl', 'apiDocsUrl', 'publicContactEmail', 'publicContactPhone'].map((key) => [key, input.businessProfile[key] ? sanitizeSensitiveText(String(input.businessProfile[key])).slice(0, 500) : undefined]).filter(([, value]) => value)) : undefined
+  const branding = input?.branding && typeof input.branding === 'object' ? { logoUrl: input.branding.logoUrl ? String(input.branding.logoUrl).slice(0, 2000) : undefined, logoStoragePath: input.branding.logoStoragePath ? String(input.branding.logoStoragePath).slice(0, 500) : undefined, brandColor: input.branding.brandColor ? String(input.branding.brandColor).slice(0, 40) : undefined } : undefined
+  const partnership = input?.partnership && typeof input.partnership === 'object' ? { status: ['draft', 'onboarding', 'contracted', 'active', 'suspended'].includes(input.partnership.status) ? input.partnership.status : 'draft', contractedAt: input.partnership.contractedAt || null, notes: input.partnership.notes ? sanitizeSensitiveText(String(input.partnership.notes)).slice(0, 2000) : undefined } : undefined
+  const publicListing = input?.publicListing && typeof input.publicListing === 'object' ? { enabled: input.publicListing.enabled === true, sortOrder: Math.max(0, Math.min(999, Number(input.publicListing.sortOrder || 0))), shortDescription: input.publicListing.shortDescription ? sanitizeSensitiveText(String(input.publicListing.shortDescription)).slice(0, 300) : undefined } : undefined
+  const integrationConfig = input?.integrationConfig && typeof input.integrationConfig === 'object' ? { authType: ['none', 'api_key', 'bearer', 'basic', 'oauth2', 'custom'].includes(input.integrationConfig.authType) ? input.integrationConfig.authType : 'none', baseUrl: input.integrationConfig.baseUrl ? String(input.integrationConfig.baseUrl).slice(0, 500) : undefined, sandboxBaseUrl: input.integrationConfig.sandboxBaseUrl ? String(input.integrationConfig.sandboxBaseUrl).slice(0, 500) : undefined, trackingUrlTemplate: input.integrationConfig.trackingUrlTemplate ? String(input.integrationConfig.trackingUrlTemplate).slice(0, 500) : undefined, webhookMode: input.integrationConfig.webhookMode ? String(input.integrationConfig.webhookMode).slice(0, 100) : undefined, requiredFields: Array.isArray(input.integrationConfig.requiredFields) ? input.integrationConfig.requiredFields.slice(0, 30).map((f: any) => ({ key: sanitizeSensitiveText(String(f.key || '')).slice(0, 80), label: sanitizeSensitiveText(String(f.label || '')).slice(0, 120), type: String(f.type || 'text'), required: f.required === true, secret: f.secret === true, scope: f.scope === 'platform' ? 'platform' : 'merchant', placeholder: f.placeholder ? sanitizeSensitiveText(String(f.placeholder)).slice(0, 200) : undefined, helpText: f.helpText ? sanitizeSensitiveText(String(f.helpText)).slice(0, 300) : undefined, options: Array.isArray(f.options) ? f.options.map((x: any) => sanitizeSensitiveText(String(x)).slice(0, 100)).slice(0, 20) : undefined })) : [] } : undefined
   return {
     name,
     slug,
@@ -481,6 +492,8 @@ function normalizeShippingProviderPayload(input: any) {
     defaultServiceCodes: Array.isArray(input?.defaultServiceCodes) ? input.defaultServiceCodes.map(String).slice(0, 100) : [],
     services,
     allowMerchantRateOverride: input?.allowMerchantRateOverride === true,
+    ...(businessProfile ? { businessProfile } : {}), ...(branding ? { branding } : {}), ...(partnership ? { partnership } : {}), ...(publicListing ? { publicListing } : {}), ...(integrationConfig ? { integrationConfig } : {}),
+    adapterStatus: ['not_implemented', 'implemented', 'testing', 'production_ready'].includes(input?.adapterStatus) ? input.adapterStatus : undefined,
   }
 }
 
@@ -5524,6 +5537,30 @@ export const setShippingProviderStatus = onCall(async (request: CallableRequest<
   await ref.update({ status, updatedAt: now() })
   return { ok: true, provider: safeShippingProvider(providerId, { ...snap.data(), status }) }
 })
+
+export const getPublicShippingPartners = onCall(async () => {
+  const snap = await db.collection('shippingProviders').where('status', '==', 'active').get()
+  return { partners: snap.docs.map((doc) => ({ id: doc.id, data: doc.data() })).filter(({ data }) => data?.partnership?.status === 'active' && data?.publicListing?.enabled === true && Boolean(data?.logoUrl || data?.branding?.logoUrl)).sort((a, b) => Number(a.data?.publicListing?.sortOrder || 0) - Number(b.data?.publicListing?.sortOrder || 0)).map(({ id, data }) => ({ id, name: String(data.name || ''), logoUrl: data.logoUrl || data.branding?.logoUrl || null, websiteUrl: data.businessProfile?.websiteUrl || null, shortDescription: data.publicListing?.shortDescription || data.description || '', ...(data.supportsTracking === true ? { supportsTracking: true } : {}), ...(data.supportsCOD === true ? { supportsCOD: true } : {}) })) }
+})
+
+function normalizePartnerApplication(input: any) {
+  const text = (key: string, max: number) => sanitizeSensitiveText(String(input?.[key] || '')).trim().slice(0, max)
+  const companyName = text('companyName', 160); const contactName = text('contactName', 120); const businessEmail = text('businessEmail', 160); const phone = text('phone', 40)
+  if (!companyName || !contactName || !businessEmail || !phone || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(businessEmail)) throw new HttpsError('invalid-argument', 'بيانات طلب الشراكة غير مكتملة')
+  return { companyName, legalName: text('legalName', 160), websiteUrl: text('websiteUrl', 500), contactName, jobTitle: text('jobTitle', 120), businessEmail, phone, whatsapp: text('whatsapp', 40), coverageGovernorates: Array.isArray(input?.coverageGovernorates) ? input.coverageGovernorates.map((x: any) => textValue(x, 80)).slice(0, 30) : [], coverageNotes: text('coverageNotes', 1000), hasApi: input?.hasApi === true, apiDocsUrl: text('apiDocsUrl', 500), supportsCOD: input?.supportsCOD === true, supportsTracking: input?.supportsTracking === true, supportsReturns: input?.supportsReturns === true, supportsPickup: input?.supportsPickup === true, supportsWebhooks: input?.supportsWebhooks === true, message: text('message', 2000), status: 'pending', createdAt: now() }
+}
+function textValue(value: any, max: number) { return sanitizeSensitiveText(String(value || '')).trim().slice(0, max) }
+
+export const submitShippingPartnerApplication = onCall(async (request: CallableRequest<any>) => {
+  const payload = request.data || {}
+  if (payload.password || payload.apiKey || payload.secret || payload.token || payload.clientSecret) throw new HttpsError('invalid-argument', 'لا تُرسل أسراراً في الطلب')
+  if (payload.consent !== true) throw new HttpsError('invalid-argument', 'الموافقة مطلوبة')
+  const ref = db.collection('shippingPartnerApplications').doc(); await ref.set(normalizePartnerApplication(payload)); return { ok: true, id: ref.id }
+})
+
+export const listShippingPartnerApplications = onCall(async (request: CallableRequest<any>) => { await assertPlatformAdmin(request); const snap = await db.collection('shippingPartnerApplications').orderBy('createdAt', 'desc').limit(100).get(); return { applications: snap.docs.map((doc) => ({ id: doc.id, ...doc.data() })) } })
+export const updateShippingPartnerApplication = onCall(async (request: CallableRequest<any>) => { await assertPlatformAdmin(request); const id = String(request.data?.id || '').trim(); const status = ['pending', 'reviewing', 'approved', 'rejected'].includes(request.data?.status) ? request.data.status : null; if (!id || !status) throw new HttpsError('invalid-argument', 'بيانات الحالة غير صالحة'); await db.doc(`shippingPartnerApplications/${id}`).set({ status, internalNotes: sanitizeSensitiveText(String(request.data?.internalNotes || '')).slice(0, 2000), reviewedAt: now(), reviewedBy: request.auth!.uid }, { merge: true }); return { ok: true } })
+export const approveShippingPartnerApplication = onCall(async (request: CallableRequest<any>) => { await assertPlatformAdmin(request); const id = String(request.data?.id || '').trim(); const snap = await db.doc(`shippingPartnerApplications/${id}`).get(); if (!snap.exists) throw new HttpsError('not-found', 'الطلب غير موجود'); const a = snap.data() || {}; const ref = db.collection('shippingProviders').doc(); const slug = String(a.companyName || 'partner').toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '').slice(0, 60) || `partner-${ref.id.slice(0, 6)}`; await ref.set({ id: ref.id, name: a.companyName, slug, description: a.coverageNotes || '', logoUrl: null, status: 'draft', integrationType: 'manual', credentialMode: 'platform', supportsCOD: a.supportsCOD === true, supportsTracking: a.supportsTracking === true, supportsReturns: a.supportsReturns === true, supportsPickup: a.supportsPickup === true, supportsWebhooks: false, supportedCountries: ['EG'], businessProfile: { legalName: a.legalName || undefined, websiteUrl: a.websiteUrl || undefined, publicContactEmail: a.businessEmail || undefined, publicContactPhone: a.phone || undefined, apiDocsUrl: a.apiDocsUrl || undefined }, partnership: { status: 'draft' }, publicListing: { enabled: false, sortOrder: 0, shortDescription: '' }, adapterStatus: 'not_implemented', createdAt: now(), updatedAt: now(), createdBy: request.auth!.uid }); await db.doc(`shippingPartnerApplications/${id}`).set({ status: 'approved', approvedProviderId: ref.id, reviewedAt: now(), reviewedBy: request.auth!.uid }, { merge: true }); return { ok: true, providerId: ref.id } })
 
 export const getMerchantShippingProviders = onCall(async (request: CallableRequest<{ storeId?: string }>) => {
   if (!request.auth) throw new HttpsError('unauthenticated', 'يجب تسجيل الدخول')

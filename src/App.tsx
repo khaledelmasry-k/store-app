@@ -52,6 +52,8 @@ const PlatformNotifications = lazy(() => import('./platform/pages/Notifications'
 const PlatformSettings = lazy(() => import('./platform/pages/Settings'))
 const PlatformShippingCompanies = lazy(() => import('./platform/pages/ShippingCompanies'))
 const PlatformShippingCompanyDetails = lazy(() => import('./platform/pages/ShippingCompanyDetails'))
+const PlatformShippingPartnerApplications = lazy(() => import('./platform/pages/ShippingPartnerApplications'))
+const ShippingPartnerApply = lazy(() => import('./platform/pages/ShippingPartnerApply'))
 
 const MerchantDashboard = lazy(() => import('./merchant/pages/Dashboard'))
 const MerchantProducts = lazy(() => import('./merchant/pages/Products'))
@@ -165,6 +167,7 @@ function PlatformRoutes() {
       <Route path="/notifications" component={() => <PlatformNotifications />} />
       <Route path="/settings" component={() => <PlatformSettings />} />
       <Route path="/shipping-companies" component={() => <PlatformShippingCompanies />} />
+      <Route path="/shipping-companies/applications" component={() => <PlatformShippingPartnerApplications />} />
       <Route path="/shipping-companies/:id" component={({ params }: any) => <PlatformShippingCompanyDetails id={params.id} />} />
       <Route component={() => <Redirect to="/platform" replace />} />
     </ZoneRouter>
@@ -251,6 +254,7 @@ export default function App() {
                   <Route path="/forgot-password" component={ForgotPassword} />
                   <Route path="/verify-email" component={VerifyEmail} />
                   <Route path="/auth/action" component={EmailActionHandler} />
+                  <Route path="/partners/shipping/apply" component={() => <ShippingPartnerApply />} />
                   <Route
                     path="/privacy"
                     component={() => (

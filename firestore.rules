@@ -455,6 +455,10 @@ match /orders/{id} {
       allow write: if isPlatformAdmin();
     }
 
+    match /shippingPartnerApplications/{id} {
+      allow read, write: if false;
+    }
+
     match /storeShippingProviders/{id} {
       allow read: if isPlatformAdmin() || isAdminOrStore(resource.data.storeId);
       // Callable-only: default-provider uniqueness, credential health, and

@@ -38,6 +38,8 @@ html[data-theme='dark'] .stitch-info-container p { color:var(--text-secondary); 
 .landing-final-cta{padding:82px 0}
 @media (max-width:760px){.landing-hero{padding-top:38px}.landing-hero-inner{gap:22px}.landing-hero h1{font-size:36px;line-height:1.28}.landing-hero p{line-height:1.8}.landing-hero-actions{margin-top:18px}.landing-hero .landing-mockup{width:100%}.landing-hero-visual{width:calc(100% + 34px);margin-inline:-17px}.landing-hero-visual img{filter:drop-shadow(0 18px 24px rgba(30,41,95,.2))}.landing-section{padding:68px 0}.landing-stats{padding:14px 0}}
 
+.landing-shipping-partners{background:#fff}.landing-partners-grid{display:flex;flex-wrap:wrap;justify-content:center;gap:16px}.landing-partner-card{display:flex;align-items:center;gap:10px;min-width:180px;padding:16px 20px;border:1px solid var(--line);border-radius:14px;background:#fff;text-decoration:none}.landing-partner-card img{width:52px;height:36px;object-fit:contain}.landing-partner-card span{font-weight:700}.landing-partner-cta{display:flex;align-items:center;justify-content:center;gap:18px;margin-top:28px}.landing-partner-cta a{display:inline-flex;align-items:center;min-height:42px;padding:0 18px;border-radius:10px;background:var(--brand);color:#fff;text-decoration:none;font-weight:700}
+
 /* Hero motion system: a calm, staged product story. The copy arrives first,
    then the live dashboard takes over with chart activity and ambient motion. */
 @keyframes landingHeroReveal {
