@@ -576,7 +576,7 @@ export const AppShell: FunctionalComponent<Props> = ({ navKey, brand, brandLogo,
               <Button
                 variant="outline"
                 size="sm"
-                icon="keyboard_return"
+                icon="arrow_back"
                 loading={exiting}
                 disabled={exiting}
                 onClick={handleExitImpersonation}

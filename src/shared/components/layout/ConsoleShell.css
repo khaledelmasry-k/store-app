@@ -60,6 +60,16 @@
   overflow: visible;
 }
 .console-shell .route-surface { width: 100%; max-width: 100%; min-width: 0; box-sizing: border-box; }
+.console-shell .segmented {
+  width: 100%;
+  max-width: 100%;
+  min-width: 0;
+  box-sizing: border-box;
+  display: flex;
+  overflow-x: auto;
+  scrollbar-width: thin;
+}
+.console-shell .segmented .segment { flex: 0 1 auto; min-width: 0; white-space: nowrap; }
 .console-shell .console-mobile-nav { display: none; }
 .console-shell .console-drawer-overlay { display: none; }
 
