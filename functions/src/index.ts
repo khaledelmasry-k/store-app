@@ -452,6 +452,7 @@ function safeShippingProvider(id: string, data: any) {
     publicListing: data?.publicListing ? { enabled: data.publicListing.enabled === true, sortOrder: Number(data.publicListing.sortOrder || 0), shortDescription: data.publicListing.shortDescription || undefined } : undefined,
     integrationConfig: data?.integrationConfig ? { authType: data.integrationConfig.authType || 'none', baseUrl: data.integrationConfig.baseUrl || undefined, sandboxBaseUrl: data.integrationConfig.sandboxBaseUrl || undefined, trackingUrlTemplate: data.integrationConfig.trackingUrlTemplate || undefined, webhookMode: data.integrationConfig.webhookMode || undefined, requiredFields: Array.isArray(data.integrationConfig.requiredFields) ? data.integrationConfig.requiredFields.map((f: any) => ({ key: String(f.key || ''), label: String(f.label || ''), type: String(f.type || 'text'), required: f.required === true, secret: f.secret === true, scope: f.scope === 'platform' ? 'platform' : 'merchant', placeholder: f.placeholder ? String(f.placeholder) : undefined, helpText: f.helpText ? String(f.helpText) : undefined, options: Array.isArray(f.options) ? f.options.map(String).slice(0, 20) : undefined })) : [] } : undefined,
     adapterStatus: ['not_implemented', 'implemented', 'testing', 'production_ready'].includes(data?.adapterStatus) ? data.adapterStatus : (adapter ? 'implemented' : 'not_implemented'),
+    eligibilityConfig: data?.eligibilityConfig ? { enabled: data.eligibilityConfig.enabled !== false, minimumMerchantMonthlyShipments: Math.max(0, Number(data.eligibilityConfig.minimumMerchantMonthlyShipments || 0)) } : undefined,
   }
 }
 
@@ -473,6 +474,7 @@ function normalizeShippingProviderPayload(input: any) {
   const partnership = input?.partnership && typeof input.partnership === 'object' ? { status: ['draft', 'onboarding', 'contracted', 'active', 'suspended'].includes(input.partnership.status) ? input.partnership.status : 'draft', contractedAt: input.partnership.contractedAt || null, notes: input.partnership.notes ? sanitizeSensitiveText(String(input.partnership.notes)).slice(0, 2000) : undefined } : undefined
   const publicListing = input?.publicListing && typeof input.publicListing === 'object' ? { enabled: input.publicListing.enabled === true, sortOrder: Math.max(0, Math.min(999, Number(input.publicListing.sortOrder || 0))), shortDescription: input.publicListing.shortDescription ? sanitizeSensitiveText(String(input.publicListing.shortDescription)).slice(0, 300) : undefined } : undefined
   const integrationConfig = input?.integrationConfig && typeof input.integrationConfig === 'object' ? { authType: ['none', 'api_key', 'bearer', 'basic', 'oauth2', 'custom'].includes(input.integrationConfig.authType) ? input.integrationConfig.authType : 'none', baseUrl: input.integrationConfig.baseUrl ? String(input.integrationConfig.baseUrl).slice(0, 500) : undefined, sandboxBaseUrl: input.integrationConfig.sandboxBaseUrl ? String(input.integrationConfig.sandboxBaseUrl).slice(0, 500) : undefined, trackingUrlTemplate: input.integrationConfig.trackingUrlTemplate ? String(input.integrationConfig.trackingUrlTemplate).slice(0, 500) : undefined, webhookMode: input.integrationConfig.webhookMode ? String(input.integrationConfig.webhookMode).slice(0, 100) : undefined, requiredFields: Array.isArray(input.integrationConfig.requiredFields) ? input.integrationConfig.requiredFields.slice(0, 30).map((f: any) => ({ key: sanitizeSensitiveText(String(f.key || '')).slice(0, 80), label: sanitizeSensitiveText(String(f.label || '')).slice(0, 120), type: String(f.type || 'text'), required: f.required === true, secret: f.secret === true, scope: f.scope === 'platform' ? 'platform' : 'merchant', placeholder: f.placeholder ? sanitizeSensitiveText(String(f.placeholder)).slice(0, 200) : undefined, helpText: f.helpText ? sanitizeSensitiveText(String(f.helpText)).slice(0, 300) : undefined, options: Array.isArray(f.options) ? f.options.map((x: any) => sanitizeSensitiveText(String(x)).slice(0, 100)).slice(0, 20) : undefined })) : [] } : undefined
+  const eligibilityConfig = input?.eligibilityConfig && typeof input.eligibilityConfig === 'object' ? { enabled: input.eligibilityConfig.enabled !== false, minimumMerchantMonthlyShipments: Math.max(0, Math.floor(Number(input.eligibilityConfig.minimumMerchantMonthlyShipments || 0))) } : undefined
   return {
     name,
     slug,
@@ -493,7 +495,7 @@ function normalizeShippingProviderPayload(input: any) {
     defaultServiceCodes: Array.isArray(input?.defaultServiceCodes) ? input.defaultServiceCodes.map(String).slice(0, 100) : [],
     services,
     allowMerchantRateOverride: input?.allowMerchantRateOverride === true,
-    ...(businessProfile ? { businessProfile } : {}), ...(branding ? { branding } : {}), ...(partnership ? { partnership } : {}), ...(publicListing ? { publicListing } : {}), ...(integrationConfig ? { integrationConfig } : {}),
+    ...(businessProfile ? { businessProfile } : {}), ...(branding ? { branding } : {}), ...(partnership ? { partnership } : {}), ...(publicListing ? { publicListing } : {}), ...(integrationConfig ? { integrationConfig } : {}), ...(eligibilityConfig ? { eligibilityConfig } : {}),
     adapterStatus: ['not_implemented', 'implemented', 'testing', 'production_ready'].includes(input?.adapterStatus) ? input.adapterStatus : undefined,
   }
 }
@@ -5563,16 +5565,51 @@ export const listShippingPartnerApplications = onCall(async (request: CallableRe
 export const updateShippingPartnerApplication = onCall(async (request: CallableRequest<any>) => { await assertPlatformAdmin(request); const id = String(request.data?.id || '').trim(); const status = ['pending', 'reviewing', 'approved', 'rejected'].includes(request.data?.status) ? request.data.status : null; if (!id || !status) throw new HttpsError('invalid-argument', 'بيانات الحالة غير صالحة'); await db.doc(`shippingPartnerApplications/${id}`).set({ status, internalNotes: sanitizeSensitiveText(String(request.data?.internalNotes || '')).slice(0, 2000), reviewedAt: now(), reviewedBy: request.auth!.uid }, { merge: true }); return { ok: true } })
 export const approveShippingPartnerApplication = onCall(async (request: CallableRequest<any>) => { await assertPlatformAdmin(request); const id = String(request.data?.id || '').trim(); const snap = await db.doc(`shippingPartnerApplications/${id}`).get(); if (!snap.exists) throw new HttpsError('not-found', 'الطلب غير موجود'); const a = snap.data() || {}; const ref = db.collection('shippingProviders').doc(); const slug = String(a.companyName || 'partner').toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '').slice(0, 60) || `partner-${ref.id.slice(0, 6)}`; await ref.set({ id: ref.id, name: a.companyName, slug, description: a.coverageNotes || '', logoUrl: null, status: 'draft', integrationType: 'manual', credentialMode: 'platform', supportsCOD: a.supportsCOD === true, supportsTracking: a.supportsTracking === true, supportsReturns: a.supportsReturns === true, supportsPickup: a.supportsPickup === true, supportsWebhooks: false, supportedCountries: ['EG'], businessProfile: { legalName: a.legalName || undefined, websiteUrl: a.websiteUrl || undefined, publicContactEmail: a.businessEmail || undefined, publicContactPhone: a.phone || undefined, apiDocsUrl: a.apiDocsUrl || undefined }, partnership: { status: 'draft' }, publicListing: { enabled: false, sortOrder: 0, shortDescription: '' }, adapterStatus: 'not_implemented', createdAt: now(), updatedAt: now(), createdBy: request.auth!.uid }); await db.doc(`shippingPartnerApplications/${id}`).set({ status: 'approved', approvedProviderId: ref.id, reviewedAt: now(), reviewedBy: request.auth!.uid }, { merge: true }); return { ok: true, providerId: ref.id } })
 
+async function merchantProviderEligibility(provider: any, config: any, store: any, shipmentVolume: number): Promise<any> {
+  const profile = store?.shippingProfile || {}
+  const expected = Number(profile.expectedMonthlyShipments || 0) || undefined
+  const effective = Math.max(shipmentVolume, expected || 0)
+  const minimum = Math.max(0, Number(provider?.eligibilityConfig?.minimumMerchantMonthlyShipments || 0))
+  const grandfathered = config?.enabled === true
+  const providerReady = provider?.status === 'active'
+    && provider?.partnership?.status === 'active'
+    && (provider?.integrationType === 'manual' || provider?.adapterStatus === 'production_ready')
+    && Array.isArray(provider?.services) && provider.services.length > 0
+  const targets = Array.isArray(profile.targetGovernorates) ? profile.targetGovernorates.map(String) : []
+  const covered = new Set<string>()
+  for (const service of provider?.services || []) for (const zone of service?.zoneRules || []) for (const governorate of zone?.governorates || []) covered.add(String(governorate))
+  const missing = targets.filter((value: string) => covered.size > 0 && !covered.has(value))
+  const coverageMatched = missing.length === 0
+  const reasons: string[] = []
+  if (!providerReady) reasons.push('شركة الشحن غير جاهزة للربط بعد')
+  if (minimum > 0 && effective < minimum) reasons.push(`هذه الشركة تبدأ من ${minimum} شحنة شهريًا، وحجم متجرك الحالي ${shipmentVolume} شحنة`)
+  if (!coverageMatched) reasons.push(`لا تغطي الشركة: ${missing.join('، ')}`)
+  return { eligible: grandfathered || (providerReady && coverageMatched && effective >= minimum), grandfathered, reasons: grandfathered ? [] : reasons, merchantMonthlyVolume: shipmentVolume, expectedMonthlyVolume: expected, effectiveMonthlyVolume: effective, minimumMonthlyShipments: minimum, coverageMatched, missingGovernorates: missing, providerReady }
+}
+
+export const saveMerchantShippingProfile = onCall(async (request: CallableRequest<any>) => {
+  if (!request.auth) throw new HttpsError('unauthenticated', 'يجب تسجيل الدخول')
+  const storeId = String(request.data?.storeId || '').trim()
+  if (!storeId) throw new HttpsError('invalid-argument', 'storeId مطلوب')
+  await assertStoreAccess(request, storeId, 'settings:edit')
+  const expected = Math.max(0, Math.min(1000000, Math.floor(Number(request.data?.expectedMonthlyShipments || 0))))
+  const governors = Array.isArray(request.data?.targetGovernorates) ? request.data.targetGovernorates.map((x: any) => sanitizeSensitiveText(String(x)).slice(0, 100)).filter(Boolean).slice(0, 30) : []
+  await db.doc(`stores/${storeId}`).set({ shippingProfile: { expectedMonthlyShipments: expected, targetGovernorates: governors }, updatedAt: now() }, { merge: true })
+  return { shippingProfile: { expectedMonthlyShipments: expected, targetGovernorates: governors } }
+})
+
 export const getMerchantShippingProviders = onCall(async (request: CallableRequest<{ storeId?: string }>) => {
   if (!request.auth) throw new HttpsError('unauthenticated', 'يجب تسجيل الدخول')
   const storeId = String(request.data?.storeId || '').trim()
   if (!storeId) throw new HttpsError('invalid-argument', 'storeId مطلوب')
   await assertStoreAccess(request, storeId, 'settings:view')
-  const [providersSnap, configsSnap, credentialsSnap, settingsSnap] = await Promise.all([
+  const [providersSnap, configsSnap, credentialsSnap, settingsSnap, storeSnap, shipmentsSnap] = await Promise.all([
     db.collection('shippingProviders').where('status', '==', 'active').get(),
     db.collection('storeShippingProviders').where('storeId', '==', storeId).get(),
     db.collection('integrationCredentials').where('storeId', '==', storeId).where('integrationType', '==', 'shipping').get(),
     db.doc(`storeIntegrationSettings/${storeId}`).get(),
+    db.doc(`stores/${storeId}`).get(),
+    db.collection('shipments').where('storeId', '==', storeId).get(),
   ])
   const configs = Object.fromEntries(configsSnap.docs.map((doc) => [doc.data()?.providerId, { id: doc.id, ...doc.data() }]))
   const credentialByProvider = Object.fromEntries(credentialsSnap.docs.map((doc) => [doc.data()?.provider, {
@@ -5582,7 +5619,12 @@ export const getMerchantShippingProviders = onCall(async (request: CallableReque
     lastValidationStatus: doc.data()?.lastValidationStatus || null,
   }]))
   return {
-    providers: providersSnap.docs.map((doc) => ({ provider: safeShippingProvider(doc.id, doc.data()), config: configs[doc.id] ? { ...configs[doc.id], credential: credentialByProvider[doc.data()?.slug] || null } : null })),
+    providers: await Promise.all(providersSnap.docs.map(async (doc) => {
+      const config = configs[doc.id] ? { ...configs[doc.id], credential: credentialByProvider[doc.data()?.slug] || null } : null
+      const provider = safeShippingProvider(doc.id, doc.data())
+      const eligibility = await merchantProviderEligibility(doc.data(), config, storeSnap.data() || {}, shipmentsSnap.docs.length)
+      return { provider, config, eligibility }
+    })),
     adapters: listShippingAdapters(),
     settings: settingsSnap.exists ? settingsSnap.data() : { automaticShipmentCreation: 'AFTER_CONFIRMATION' },
     runtime: {
@@ -5735,6 +5777,14 @@ export const saveStoreShippingProvider = onCall(async (request: CallableRequest<
   }
   const ref = db.doc(`storeShippingProviders/${storeId}_${providerId}`)
   const existing = await ref.get()
+  if (config.enabled) {
+    const storeSnap = await db.doc(`stores/${storeId}`).get()
+    const shipmentsSnap = await db.collection('shipments').where('storeId', '==', storeId).get()
+    const eligibility = await merchantProviderEligibility(providerSnap.data(), existing.exists ? existing.data() : null, storeSnap.data() || {}, shipmentsSnap.docs.length)
+    if (!existing.data()?.enabled && !eligibility.eligible) {
+      throw new HttpsError('failed-precondition', 'شركة الشحن غير مؤهلة لمتجرك حالياً', { code: 'PROVIDER_NOT_ELIGIBLE', reasons: eligibility.reasons })
+    }
+  }
   await db.runTransaction(async (tx) => {
     if (config.isDefault) {
       const currentDefaults = await tx.get(db.collection('storeShippingProviders').where('storeId', '==', storeId).where('isDefault', '==', true))
@@ -5745,6 +5795,19 @@ export const saveStoreShippingProvider = onCall(async (request: CallableRequest<
   })
   return { config: { id: ref.id, ...config, maskedAccountIdentifier: null, lastVerifiedAt: null } }
 })
+
+function normalizeCommercialAgreement(input: any, providerId: string) {
+  const tiers = Array.isArray(input?.tiers) ? input.tiers.slice(0, 30).map((tier: any) => ({ minShipments: Math.max(0, Math.floor(Number(tier?.minShipments || 0))), maxShipments: tier?.maxShipments == null || tier.maxShipments === '' ? null : Math.max(0, Math.floor(Number(tier.maxShipments))), deliveredCommission: Math.max(0, Number(tier?.deliveredCommission || 0)), returnedCommission: Math.max(0, Number(tier?.returnedCommission || 0)) })).sort((a: any, b: any) => a.minShipments - b.minShipments) : []
+  for (let i = 1; i < tiers.length; i++) if (tiers[i - 1].maxShipments != null && tiers[i].minShipments <= tiers[i - 1].maxShipments) throw new HttpsError('invalid-argument', 'شرائح الحجم متداخلة')
+  return { providerId, status: ['draft', 'active', 'expired', 'suspended'].includes(input?.status) ? input.status : 'draft', currency: 'EGP', settlementCycle: 'monthly', volumeMetric: 'sourced_shipments', effectiveFrom: input?.effectiveFrom || null, effectiveTo: input?.effectiveTo || null, tiers, contractReference: input?.contractReference ? sanitizeSensitiveText(String(input.contractReference)).slice(0, 200) : undefined, internalNotes: input?.internalNotes ? sanitizeSensitiveText(String(input.internalNotes)).slice(0, 2000) : undefined, updatedAt: now() }
+}
+
+export const getShippingProviderCommercialAgreement = onCall(async (request: CallableRequest<any>) => { await assertPlatformAdmin(request); const providerId = String(request.data?.providerId || '').trim(); if (!providerId) throw new HttpsError('invalid-argument', 'providerId مطلوب'); const snap = await db.doc(`shippingProviderCommercialAgreements/${providerId}`).get(); return { agreement: snap.exists ? { id: snap.id, ...snap.data() } : null } })
+export const saveShippingProviderCommercialAgreement = onCall(async (request: CallableRequest<any>) => { await assertPlatformAdmin(request); const providerId = String(request.data?.providerId || '').trim(); if (!providerId) throw new HttpsError('invalid-argument', 'providerId مطلوب'); const ref = db.doc(`shippingProviderCommercialAgreements/${providerId}`); const existing = await ref.get(); const agreement = normalizeCommercialAgreement(request.data, providerId); await ref.set({ ...agreement, createdAt: existing.exists ? existing.data()?.createdAt : now(), createdBy: existing.exists ? existing.data()?.createdBy : request.auth!.uid, updatedBy: request.auth!.uid }, { merge: true }); return { agreement: { id: ref.id, ...agreement } } })
+
+export const getShippingPartnerRevenuePeriod = onCall(async (request: CallableRequest<any>) => { await assertPlatformAdmin(request); const providerId = String(request.data?.providerId || '').trim(); const period = String(request.data?.period || '').trim(); if (!providerId || !/^\d{4}-\d{2}$/.test(period)) throw new HttpsError('invalid-argument', 'providerId والفترة مطلوبان'); const snap = await db.doc(`shippingPartnerRevenuePeriods/${providerId}_${period}`).get(); return { period: snap.exists ? { id: snap.id, ...snap.data() } : null } })
+
+export const finalizeShippingPartnerRevenuePeriod = onCall(async (request: CallableRequest<any>) => { await assertPlatformAdmin(request); const providerId = String(request.data?.providerId || '').trim(); const period = String(request.data?.period || '').trim(); if (!providerId || !/^\d{4}-\d{2}$/.test(period)) throw new HttpsError('invalid-argument', 'providerId والفترة مطلوبان'); const ref = db.doc(`shippingPartnerRevenuePeriods/${providerId}_${period}`); const current = await ref.get(); if (current.exists && ['FINALIZED', 'SETTLED'].includes(current.data()?.status)) return { period: { id: ref.id, ...current.data() } }; const agreement = (await db.doc(`shippingProviderCommercialAgreements/${providerId}`).get()).data() || {}; const start = new Date(`${period}-01T00:00:00Z`); const end = new Date(start); end.setUTCMonth(end.getUTCMonth() + 1); const shipments = await db.collection('shipments').where('providerId', '==', providerId).where('createdAt', '>=', start).where('createdAt', '<', end).get(); const docs = shipments.docs.map((d) => d.data()); const deliveredCount = docs.filter((d) => ['DELIVERED', 'delivered'].includes(String(d.status || d.currentStatus))).length; const returnedCount = docs.filter((d) => ['RETURNED', 'returned'].includes(String(d.status || d.currentStatus))).length; const pendingCount = Math.max(0, docs.length - deliveredCount - returnedCount); const tier = (agreement.tiers || []).find((t: any) => docs.length >= Number(t.minShipments || 0) && (t.maxShipments == null || docs.length <= Number(t.maxShipments))) || { minShipments: 0, maxShipments: null, deliveredCommission: 0, returnedCommission: 0 }; const data = { providerId, period, shipmentVolume: docs.length, deliveredCount, returnedCount, pendingCount, tierSnapshot: tier, deliveredRevenue: deliveredCount * Number(tier.deliveredCommission || 0), returnedRevenue: returnedCount * Number(tier.returnedCommission || 0), totalRevenue: deliveredCount * Number(tier.deliveredCommission || 0) + returnedCount * Number(tier.returnedCommission || 0), status: 'FINALIZED', finalizedAt: now(), agreementVersion: String(agreement.updatedAt?.seconds || '') }; await ref.set({ ...data, createdAt: current.exists ? current.data()?.createdAt : now() }, { merge: false }); return { period: { id: ref.id, ...data } } })
 
 export const testShippingConnection = onCall({ region: SHIPPING_FUNCTION_REGION, secrets: [integrationVaultKey] }, async (request: CallableRequest<any>) => {
   if (!request.auth) throw new HttpsError('unauthenticated', 'يجب تسجيل الدخول')

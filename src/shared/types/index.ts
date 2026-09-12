@@ -84,6 +84,29 @@ export type ShippingProviderStatus = 'active' | 'inactive' | 'draft'
 export type ShippingIntegrationType = 'api' | 'manual'
 export type ShippingCredentialMode = 'platform' | 'merchant' | 'hybrid'
 
+export interface ShippingEligibilityConfig {
+  minimumMerchantMonthlyShipments?: number
+  enabled?: boolean
+}
+
+export interface ShippingProfile {
+  expectedMonthlyShipments?: number
+  targetGovernorates?: string[]
+}
+
+export interface ShippingEligibility {
+  eligible: boolean
+  grandfathered: boolean
+  reasons: string[]
+  merchantMonthlyVolume: number
+  expectedMonthlyVolume?: number
+  effectiveMonthlyVolume: number
+  minimumMonthlyShipments: number
+  coverageMatched: boolean
+  missingGovernorates: string[]
+  providerReady: boolean
+}
+
 export interface ShippingZoneRule {
   zoneId: string
   zoneName: string
@@ -157,6 +180,39 @@ export interface ShippingProviderDefinition extends Partial<FirestoreMeta> {
   publicListing?: { enabled?: boolean; sortOrder?: number; shortDescription?: string }
   integrationConfig?: { authType?: 'none' | 'api_key' | 'bearer' | 'basic' | 'oauth2' | 'custom'; baseUrl?: string; sandboxBaseUrl?: string; trackingUrlTemplate?: string; webhookMode?: string; requiredFields?: Array<{ key: string; label: string; type: string; required: boolean; secret: boolean; scope: 'platform' | 'merchant'; placeholder?: string; helpText?: string; options?: string[] }> }
   adapterStatus?: 'not_implemented' | 'implemented' | 'testing' | 'production_ready'
+  eligibilityConfig?: ShippingEligibilityConfig
+}
+
+export interface ShippingProviderCommercialAgreement {
+  providerId: string
+  status: 'draft' | 'active' | 'expired' | 'suspended'
+  currency: 'EGP' | string
+  settlementCycle: 'monthly' | string
+  volumeMetric: 'sourced_shipments' | string
+  effectiveFrom?: unknown
+  effectiveTo?: unknown
+  tiers: Array<{ minShipments: number; maxShipments: number | null; deliveredCommission: number; returnedCommission: number }>
+  contractReference?: string
+  internalNotes?: string
+  createdAt?: unknown
+  updatedAt?: unknown
+}
+
+export interface ShippingPartnerRevenuePeriod {
+  providerId: string
+  period: string
+  shipmentVolume: number
+  deliveredCount: number
+  returnedCount: number
+  pendingCount: number
+  tierSnapshot: { minShipments: number; maxShipments: number | null; deliveredCommission: number; returnedCommission: number }
+  deliveredRevenue: number
+  returnedRevenue: number
+  totalRevenue: number
+  status: 'OPEN' | 'FINALIZED' | 'SETTLED'
+  finalizedAt?: unknown
+  settledAt?: unknown
+  agreementVersion?: string
 }
 
 export interface ShippingPartnerApplication extends Partial<FirestoreMeta> {
@@ -248,6 +304,10 @@ export interface Shipment extends Partial<FirestoreMeta> {
   providerName?: string
   integrationType?: 'api' | 'manual'
   providerShipmentId?: string
+  providerNameSnapshot?: string | null
+  providerLogoSnapshot?: string | null
+  serviceCode?: string | null
+  serviceNameSnapshot?: string | null
   trackingUrl?: string | null
   events?: Array<{ status: string; at: { seconds: number; nanoseconds: number }; note?: string }>
   priceSnapshot?: ShipmentPriceSnapshot
@@ -338,6 +398,7 @@ export interface Store extends Partial<FirestoreMeta> {
   active: boolean
   /** Whether the storefront is publicly visible and can accept orders. */
   published: boolean
+  shippingProfile?: ShippingProfile
   /** Canonical storefront publication state. `published` is retained as a
    * compatibility flag for legacy documents and public projections. */
   storeStatus?: 'draft' | 'published' | 'suspended'
