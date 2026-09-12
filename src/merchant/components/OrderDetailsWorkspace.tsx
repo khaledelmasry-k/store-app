@@ -288,7 +288,7 @@ export const OrderDetailsWorkspace: FunctionalComponent<Props> = ({ id }) => {
         <div className="ods-header-actions">
           <button type="button" className="ods-btn-bordered" onClick={print}><Icon name="print" ariaHidden /> طباعة</button>
           {orderTransitions.length > 0 && <div className="ods-status-dropdown">
-            <button type="button" className="ods-btn-primary" onClick={() => setMenuOpen(!menuOpen)}>
+            <button type="button" className="ods-btn-primary merchant-orders-status-button" onClick={() => setMenuOpen(!menuOpen)}>
               تحديث الحالة <Icon name="expand_more" ariaHidden />
             </button>
             {menuOpen && statusMenu((s) => setPendingStatus(s))}
@@ -490,7 +490,7 @@ export const OrderDetailsWorkspace: FunctionalComponent<Props> = ({ id }) => {
 
       <div className="ods-mobile-bar">
         <button type="button" className="ods-more-btn" onClick={print} title="طباعة"><Icon name="more_vert" ariaHidden /></button>
-        {orderTransitions.length > 0 && <button type="button" className="ods-update-btn" onClick={() => setSheetOpen(!sheetOpen)}>
+        {orderTransitions.length > 0 && <button type="button" className="ods-update-btn merchant-orders-status-button" onClick={() => setSheetOpen(!sheetOpen)}>
           تحديث الحالة <Icon name="edit" ariaHidden />
         </button>}
       </div>
