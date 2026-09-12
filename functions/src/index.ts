@@ -1487,6 +1487,14 @@ export const createOrder = onCall({ region: SHIPPING_FUNCTION_REGION, secrets: [
   const requestedCouponCode = String(request.data?.couponCode || '').trim().toUpperCase()
   if (!storeId || !Array.isArray(items) || items.length === 0) throw new HttpsError('invalid-argument', 'بيانات الطلب غير مكتملة')
   if (!customer?.name || !customer?.phone) throw new HttpsError('invalid-argument', 'بيانات العميل مطلوبة')
+  // Checkout is public by design; a support token must nevertheless remain
+  // confined to the exact tenant represented by its signed session.
+  if (request.auth?.token.supportImpersonation === true) {
+    const support = await requireValidSupportSession(request)
+    if (support.storeId !== String(storeId) || support.merchantUid !== request.auth.uid) {
+      throw new HttpsError('permission-denied', 'جلسة الدعم لا تملك هذا المتجر')
+    }
+  }
 
   const allowedPayments = ['cod', 'bank']
   if (paymentMethod && !allowedPayments.includes(paymentMethod)) {
