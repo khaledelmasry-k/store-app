@@ -118,6 +118,8 @@ export const OrderDetailsWorkspace: FunctionalComponent<Props> = ({ id }) => {
   const shipmentProgressIndex = shipmentProgress.indexOf(trackingShipmentStatus)
   const shipmentProviderName = shipment?.providerName || (shipment as any)?.shippingCompanyName || 'شركة الشحن'
   const shipmentProvider = shippingChoices.find((row) => row.provider.id === shipment?.providerId)?.provider
+  const shipmentProviderLogo = (shipment as any)?.providerLogoSnapshot || (shipment as any)?.providerLogoUrl || (shipmentProvider as any)?.logoUrl || null
+  const shipmentServiceName = (shipment as any)?.serviceNameSnapshot || (shipment as any)?.serviceName || null
   const selectedProvider = shippingChoices.find((row) => row.provider.id === shippingProviderId)?.provider
   const hasExternalShipment = Boolean(isApiShipment && (shipment?.externalShipmentId || shipment?.providerShipmentId))
   const canTrackShipment = Boolean(shipmentProvider?.canTrackShipment)
@@ -283,7 +285,12 @@ export const OrderDetailsWorkspace: FunctionalComponent<Props> = ({ id }) => {
             <span className="ods-status-pill">{visibleStatusLabel}</span>
             <span className="ods-number">{order.orderNumber}</span>
           </h2>
-          <p className="ods-date"><Icon name="calendar_today" ariaHidden /> {formatDateTime(order.createdAt)}</p>
+          <div className="ods-order-meta">
+            <p className="ods-date"><Icon name="calendar_today" ariaHidden /> {formatDateTime(order.createdAt)}</p>
+            <span className="ods-meta-divider" aria-hidden="true" />
+            <span className="ods-meta-item"><span className="ods-meta-label">الإجمالي</span><strong>{formatCurrency(order.totalPrice)}</strong></span>
+            <span className="ods-meta-item"><span className="ods-meta-label">الدفع</span><strong>{order.paymentMethod === 'cod' ? 'عند الاستلام' : order.paymentMethod === 'bank' ? 'تحويل بنكي' : order.paymentMethod}</strong></span>
+          </div>
         </div>
         <div className="ods-header-actions">
           <button type="button" className="ods-btn-bordered" onClick={print}><Icon name="print" ariaHidden /> طباعة</button>
@@ -424,6 +431,10 @@ export const OrderDetailsWorkspace: FunctionalComponent<Props> = ({ id }) => {
           <div className="ods-card">
             <h3 className="ods-sidebar-title"><Icon name="local_shipping" ariaHidden /> الشحنة</h3>
             {order.activeShipmentId && shipment ? <div className="stack-list">
+              <div className="ods-shipment-provider">
+                <div className="ods-shipment-logo">{shipmentProviderLogo ? <img src={shipmentProviderLogo} alt="" /> : <Icon name="local_shipping" ariaHidden />}</div>
+                <div><strong>{shipmentProviderName}</strong>{shipmentServiceName && <span>{shipmentServiceName}</span>}</div>
+              </div>
               <div className="shipping-secure-note"><Icon name={isApiShipment ? 'cloud_sync' : 'edit_note'} ariaHidden /><span>{isApiShipment ? `شحنة API متصلة بـ${shipmentProviderName}؛ الشركة هي مصدر الحالة، لذلك لا تعديل يدوي هنا.` : 'شحنة يدوية: حدّث مرحلتها هنا فقط وسيتم تحديث حالة الطلب تلقائيًا.'}</span></div>
               {!['FAILED', 'RETURNING', 'RETURNED', 'CANCELLED'].includes(trackingShipmentStatus) && <div className="ods-shipment-progress" aria-label={`رحلة الشحنة: ${SHIPMENT_STATUS_LABELS[trackingShipmentStatus] || trackingShipmentStatus}`}>
                 {shipmentProgress.map((status, index) => <div key={status} className={`ods-shipment-stage${index < shipmentProgressIndex ? ' is-done' : ''}${index === shipmentProgressIndex ? ' is-current' : ''}`}><span className="ods-shipment-dot">{index < shipmentProgressIndex ? <Icon name="check" /> : null}</span><small>{SHIPMENT_STATUS_LABELS[status]}</small></div>)}
