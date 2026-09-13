@@ -21,7 +21,7 @@ const shot = async (page: Page, theme: string, name: string) => {
 }
 
 async function capture(page: Page, route: string, name: string, themes = themeModes) {
-  await page.goto(route, { waitUntil: 'domcontentloaded' }).catch(() => {})
+  await page.goto(route, { waitUntil: 'commit', timeout: 10000 }).catch(() => {})
   await page.waitForTimeout(500)
   for (const theme of themes) await shot(page, theme, name)
 }
