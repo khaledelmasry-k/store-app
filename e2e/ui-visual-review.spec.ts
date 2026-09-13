@@ -1,5 +1,6 @@
 import { test, expect, type Page } from '@playwright/test'
 import { mkdirSync } from 'node:fs'
+import { dismissMerchantTourIfVisible } from './helpers/tour-guard'
 
 const themeModes = ['light', 'dark'] as const
 const shot = async (page: Page, theme: string, name: string) => {
@@ -32,6 +33,7 @@ async function loginAs(page: Page, role: 'merchant' | 'platform') {
   await page.locator('input[type="password"]').fill(role === 'merchant' ? 'Owner12345' : 'Admin12345')
   await page.getByRole('button', { name: 'تسجيل الدخول', exact: true }).click()
   await page.waitForURL(role === 'merchant' ? /\/dashboard/ : /\/platform/, { timeout: 20000 })
+  if (role === 'merchant') await dismissMerchantTourIfVisible(page)
 }
 
 test('public and storefront visual matrix', async ({ page }) => {
