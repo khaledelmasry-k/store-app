@@ -362,16 +362,29 @@ const PNG = Buffer.from(
   'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNkYPhfDwAChwGA60e6kgAAAABJRU5ErkJggg==',
   'base64',
 )
-function ctx() {
-  const p = test.info().project.name
+type FlowContext = { uniq: string; email: string; ref: string; storeName: string }
+const contexts = new Map<string, FlowContext>()
+
+function ctx(): FlowContext {
+  const info = test.info()
+  // A test may call ctx() more than once while converging a fixture and then
+  // signing into it. Keep all fields stable within that test/retry; retries
+  // still get an isolated namespace.
+  const key = `${info.project.name}:${info.testId}:${info.retry}`
+  const existing = contexts.get(key)
+  if (existing) return existing
+
+  const p = info.project.name
   const project = p === 'desktop' ? 'desktop' : `m${p.replace('mobile-', '')}`
   const uniq = `${project}-${Date.now().toString(36).slice(-6)}-${Math.random().toString(36).slice(2, 6)}`
   // The serial suite may be replayed after a failure. Include the retry in
   // the fixture namespace so a replay never collides with the first attempt's
   // Auth user/store.
-  const retry = test.info().retry
+  const retry = info.retry
   const suffix = retry > 0 ? `${uniq}-retry${retry}` : uniq
-  return { uniq: suffix, email: `flow-${suffix}@mk.test`, ref: `flow-${suffix}`, storeName: `مقهى التدفق ${suffix}` }
+  const value = { uniq: suffix, email: `flow-${suffix}@mk.test`, ref: `flow-${suffix}`, storeName: `مقهى التدفق ${suffix}` }
+  contexts.set(key, value)
+  return value
 }
 
 // ─────────────────────────────────────────────────────────────
