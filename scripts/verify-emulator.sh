@@ -13,8 +13,13 @@ node scripts/check-icons.mjs
 echo "── Building app for emulator mode..."
 VITE_FIREBASE_USE_EMULATOR=true npm run verify:build
 
-echo "── Starting vite preview on :4173..."
-npx vite preview --port 4173 --strictPort &
+PREVIEW_URL="${PW_BASE_URL:-http://127.0.0.1:4173}"
+
+echo "── Starting vite preview on 127.0.0.1:4173..."
+# The emulator environment builds public URLs from VITE_STORE_BASE_URL. Bind
+# preview to the same loopback address so redirects such as /s/:code do not
+# switch from localhost to an unreachable IPv4 endpoint in CI.
+npx vite preview --host 127.0.0.1 --port 4173 --strictPort &
 PREVIEW_PID=$!
 cleanup_preview() {
   kill "$PREVIEW_PID" 2>/dev/null || true
@@ -25,7 +30,7 @@ cleanup_preview() {
 trap cleanup_preview EXIT INT TERM
 
 for _ in $(seq 1 40); do
-  if curl -sf http://localhost:4173 >/dev/null 2>&1; then
+  if curl -sf "$PREVIEW_URL" >/dev/null 2>&1; then
     break
   fi
   sleep 1

@@ -14,7 +14,9 @@ export default defineConfig({
   workers: 1,
   reporter: 'list',
   use: {
-    baseURL: process.env.PW_BASE_URL ?? 'http://localhost:4173',
+    // Keep browser navigation aligned with VITE_STORE_BASE_URL used by the
+    // emulator build. Public short links deliberately redirect to this host.
+    baseURL: process.env.PW_BASE_URL ?? 'http://127.0.0.1:4173',
   },
   projects: [
     {
