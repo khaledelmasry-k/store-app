@@ -88,7 +88,24 @@ test.beforeAll(async () => {
   await new Promise<void>((resolve) => carrier.listen(4789, '127.0.0.1', resolve))
   await db.doc('shippingProviders/provider-bosta').set({
     id: 'provider-bosta', name: 'Bosta', slug: 'bosta', status: 'active', integrationType: 'api', credentialMode: 'merchant',
-    apiBaseUrl: 'http://127.0.0.1:4789/api/v2', supportsCOD: true, supportsTracking: true, supportsWebhooks: true, services: [],
+    apiBaseUrl: 'http://127.0.0.1:4789/api/v2', supportsCOD: true, supportsTracking: true, supportsWebhooks: true,
+    partnership: { status: 'active' },
+    eligibilityConfig: { enabled: true, minimumMerchantMonthlyShipments: 0 },
+    adapterStatus: 'production_ready',
+    services: [{ code: 'standard', name: 'Standard Delivery', zoneRules: [{ zoneId: 'cairo', zoneName: 'القاهرة', governorates: ['القاهرة'] }] }],
+  })
+  await db.doc('stores/store-a').set({
+    shippingProfile: { expectedMonthlyShipments: 10, targetGovernorates: ['القاهرة'] },
+  }, { merge: true })
+  await db.doc('shippingProviderCommercialAgreements/provider-bosta').set({
+    providerId: 'provider-bosta',
+    status: 'active',
+    currency: 'EGP',
+    settlementCycle: 'monthly',
+    volumeMetric: 'sourced_shipments',
+    tiers: [{ minShipments: 0, maxShipments: null, deliveredCommission: 1, returnedCommission: 0.5 }],
+    createdAt: admin.firestore.FieldValue.serverTimestamp(),
+    updatedAt: admin.firestore.FieldValue.serverTimestamp(),
   })
   await callAs('seed-owner-a', 'saveStoreShippingProvider', { storeId: 'store-a', providerId: 'provider-bosta', config: { enabled: true, isDefault: true, codEnabled: true, defaultPackageWeight: 1 } })
 })
