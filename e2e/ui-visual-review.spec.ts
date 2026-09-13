@@ -70,6 +70,10 @@ test('merchant visual matrix', async ({ page }) => {
 })
 
 test('superadmin visual matrix', async ({ page }) => {
+  // SuperAdmin covers the broadest route matrix; allow the complete visual
+  // capture to finish without aborting mid-matrix while retaining bounded
+  // per-navigation timeouts in capture().
+  test.setTimeout(180000)
   await loginAs(page, 'platform')
   const routes: [string, string][] = [
     ['/platform', 'platform-dashboard'], ['/platform/merchants', 'platform-merchants'], ['/platform/crm', 'platform-crm'],
