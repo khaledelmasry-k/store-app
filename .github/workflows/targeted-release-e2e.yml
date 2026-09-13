@@ -87,3 +87,56 @@ jobs:
           path: |
             test-results/
             playwright-report/
+
+  shipping-commercial:
+    name: shipping-commercial
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '21'
+
+      - name: Install application dependencies
+        run: npm ci
+
+      - name: Install Functions dependencies
+        run: npm ci --prefix functions
+
+      - name: Build Functions before emulator startup
+        run: npm --prefix functions run build
+
+      - name: Install Firebase CLI
+        run: npm install --global firebase-tools
+
+      - name: Create emulator-only environment
+        run: |
+          cp .env.example .env.local
+          cat >> .env.local <<'EOF'
+          VITE_FIREBASE_PROJECT_ID=mk-store-app
+          VITE_FIREBASE_USE_EMULATOR=true
+          VITE_STORE_BASE_URL=http://127.0.0.1:4173
+          EOF
+
+      - name: Run shipping commercial assertions
+        run: >-
+          firebase emulators:exec --project mk-store-app
+          --only auth,firestore,functions
+          "npm run verify:shipping-commercial"
+
+      - name: Upload shipping commercial artifacts
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: shipping-commercial
+          if-no-files-found: ignore
+          path: |
+            test-results/
+            playwright-report/
