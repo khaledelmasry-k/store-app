@@ -46,6 +46,18 @@ async function issueEmulatorState(uid: string): Promise<EmulatorAuthState> {
 async function authenticate(page: Page, uid: string, expectedRole: string, route: string) {
   const state = await issueEmulatorState(uid)
   const key = `firebase:authUser:${API_KEY}:[DEFAULT]`
+  // Each journey test authenticates an intentionally isolated emulator user.
+  // Clear only the browser auth state before issuing the new token so a prior
+  // test cannot leave a stale session that keeps the router on /login.
+  await page.context().clearCookies()
+  await page.evaluate(async () => {
+    localStorage.clear()
+    sessionStorage.clear()
+    await new Promise<void>((resolve) => {
+      const request = indexedDB.deleteDatabase('firebaseLocalStorageDb')
+      request.onsuccess = request.onerror = request.onblocked = () => resolve()
+    })
+  }).catch(() => {})
   await page.goto('/', { waitUntil: 'domcontentloaded' })
   let ok = false
   try {
