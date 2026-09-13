@@ -53,6 +53,7 @@ const PlatformSettings = lazy(() => import('./platform/pages/Settings'))
 const PlatformShippingCompanies = lazy(() => import('./platform/pages/ShippingCompanies'))
 const PlatformShippingCompanyDetails = lazy(() => import('./platform/pages/ShippingCompanyDetails'))
 const PlatformShippingPartnerApplications = lazy(() => import('./platform/pages/ShippingPartnerApplications'))
+const PlatformShippingRevenue = lazy(() => import('./platform/pages/ShippingRevenue'))
 const ShippingPartnerApply = lazy(() => import('./platform/pages/ShippingPartnerApply'))
 
 const MerchantDashboard = lazy(() => import('./merchant/pages/Dashboard'))
@@ -167,6 +168,7 @@ function PlatformRoutes() {
       <Route path="/notifications" component={() => <PlatformNotifications />} />
       <Route path="/settings" component={() => <PlatformSettings />} />
       <Route path="/shipping-companies" component={() => <PlatformShippingCompanies />} />
+      <Route path="/shipping-revenue" component={() => <PlatformShippingRevenue />} />
       <Route path="/shipping-companies/applications" component={() => <PlatformShippingPartnerApplications />} />
       <Route path="/shipping-companies/:id" component={({ params }: any) => <PlatformShippingCompanyDetails id={params.id} />} />
       <Route component={() => <Redirect to="/platform" replace />} />

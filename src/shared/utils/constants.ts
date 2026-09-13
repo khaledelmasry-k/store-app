@@ -624,6 +624,7 @@ export const NAV_GROUPS: Record<'platform' | 'dashboard', NavGroup[]> = {
       items: [
         { to: '/platform/orders', label: 'الطلبات', icon: 'receipt_long' },
         { to: '/platform/shipping-companies', label: 'شركات الشحن', icon: 'local_shipping' },
+        { to: '/platform/shipping-revenue', label: 'إيرادات الشحن', icon: 'payments' },
       ],
     },
     {

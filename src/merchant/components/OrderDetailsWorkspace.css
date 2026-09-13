@@ -45,6 +45,28 @@
 .ods-date .mk-icon {
   font-size: 14px;
 }
+.ods-order-meta {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 12px;
+}
+.ods-meta-item {
+  display: inline-flex;
+  align-items: baseline;
+  gap: 6px;
+  color: var(--text-on-surface);
+  font-size: 13px;
+}
+.ods-meta-label {
+  color: var(--text-on-surface-variant);
+  font-size: 12px;
+}
+.ods-meta-divider {
+  width: 1px;
+  height: 16px;
+  background: var(--outline-variant);
+}
 .ods-header-actions {
   display: flex;
   align-items: center;
@@ -187,7 +209,9 @@
 }
 @media (min-width: 1024px) {
   .ods-grid {
-    grid-template-columns: 2fr 1fr;
+    grid-template-columns: minmax(0, 2.1fr) minmax(280px, 1fr);
+    align-items: start;
+    gap: 20px;
   }
 }
 .ods-main {
@@ -308,6 +332,40 @@
   margin: 6px 8px 6px 26px;
   padding: 12px 4px 4px 26px;
   border-inline-start: 2px solid color-mix(in srgb, var(--primary) 20%, transparent);
+}
+@media (min-width: 768px) {
+  .ods-timeline {
+    display: grid;
+    grid-template-columns: repeat(5, minmax(0, 1fr));
+    gap: 8px;
+    margin: 0;
+    padding: 22px 18px 16px;
+    border-inline-start: 0;
+  }
+  .ods-step {
+    min-width: 0;
+    padding: 0 8px;
+    text-align: center;
+  }
+  .ods-step::before {
+    content: '';
+    position: absolute;
+    top: 7px;
+    inset-inline-start: -50%;
+    width: 100%;
+    height: 2px;
+    background: var(--outline-variant);
+  }
+  .ods-step:first-child::before { display: none; }
+  .ods-step.is-done::before,
+  .ods-step.is-active::before { background: var(--primary); }
+  .ods-step-dot {
+    position: relative;
+    inset-inline-start: auto;
+    margin: 0 auto 8px;
+  }
+  .ods-step-body h4 { font-size: 12px; }
+  .ods-step-note { max-width: 100%; }
 }
 .ods-step {
   position: relative;
@@ -456,6 +514,33 @@
   color: var(--tertiary-container);
   font-weight: 700;
 }
+.ods-shipment-provider {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 12px 16px 0;
+}
+.ods-shipment-logo {
+  width: 40px;
+  height: 40px;
+  flex: 0 0 40px;
+  display: grid;
+  place-items: center;
+  overflow: hidden;
+  border: 1px solid var(--outline-variant);
+  border-radius: 10px;
+  background: var(--surface-container-low);
+  color: var(--primary);
+}
+.ods-shipment-logo img {
+  width: 100%;
+  height: 100%;
+  object-fit: contain;
+}
+.ods-shipment-provider strong,
+.ods-shipment-provider span { display: block; }
+.ods-shipment-provider strong { color: var(--text-on-surface); font-size: 14px; }
+.ods-shipment-provider span { color: var(--text-on-surface-variant); font-size: 12px; margin-top: 2px; }
 .ods-margin-badge {
   background: var(--tertiary-container);
   color: var(--on-tertiary-container, var(--on-primary));
@@ -612,4 +697,52 @@
   .ods-workspace {
     padding-bottom: 70px;
   }
+}
+
+@media (max-width: 640px) {
+  .ods-items-table {
+    display: block;
+    white-space: normal;
+  }
+  .ods-items-table thead {
+    display: none;
+  }
+  .ods-items-table tbody {
+    display: grid;
+    gap: 10px;
+    padding: 12px;
+  }
+  .ods-items-table tbody tr {
+    display: grid;
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+    gap: 8px;
+    padding: 10px;
+    border: 1px solid var(--outline-variant);
+    border-radius: 10px;
+    background: var(--surface-container-low);
+  }
+  .ods-items-table tbody td {
+    min-width: 0;
+    padding: 4px 2px;
+    border: 0;
+    font-size: 12px;
+  }
+  .ods-items-table tbody td:first-child {
+    grid-column: 1 / -1;
+    padding-bottom: 7px;
+    border-bottom: 1px solid var(--outline-variant);
+  }
+  .ods-items-table tbody td:not(:first-child)::before {
+    display: block;
+    margin-bottom: 3px;
+    color: var(--text-on-surface-variant);
+    font-size: 10px;
+  }
+  .ods-items-table tbody td:nth-child(2)::before { content: 'الكمية'; }
+  .ods-items-table tbody td:nth-child(3)::before { content: 'سعر الوحدة'; }
+  .ods-items-table tbody td:nth-child(4)::before { content: 'الإجمالي'; }
+  .ods-item-cell { gap: 10px; }
+  .ods-item-thumb { width: 36px; height: 36px; }
+  .ods-item-name { font-size: 13px; }
+  .ods-shipment-actions { flex-wrap: wrap; }
 }

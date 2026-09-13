@@ -180,6 +180,12 @@ export function approveShippingPartnerApplicationCallable(input: { id: string })
 export function getMerchantShippingProvidersCallable(input: { storeId: string }) {
   return httpsCallable(getFunctions(), 'getMerchantShippingProviders')(input)
 }
+export function saveMerchantShippingProfileCallable(input: { storeId: string; expectedMonthlyShipments?: number; targetGovernorates?: string[] }) { return httpsCallable(getFunctions(), 'saveMerchantShippingProfile')(input) }
+export function getShippingProviderCommercialAgreementCallable(input: { providerId: string }) { return httpsCallable(getFunctions(), 'getShippingProviderCommercialAgreement')(input) }
+export function saveShippingProviderCommercialAgreementCallable(input: Record<string, unknown>) { return httpsCallable(getFunctions(), 'saveShippingProviderCommercialAgreement')(input) }
+export function getShippingPartnerRevenuePeriodCallable(input: { providerId: string; period: string }) { return httpsCallable(getFunctions(), 'getShippingPartnerRevenuePeriod')(input) }
+export function finalizeShippingPartnerRevenuePeriodCallable(input: { providerId: string; period: string }) { return httpsCallable(getFunctions(), 'finalizeShippingPartnerRevenuePeriod')(input) }
+export function markShippingPartnerRevenueSettledCallable(input: { providerId: string; period: string; settlementReference?: string; settlementNotes?: string }) { return httpsCallable(getFunctions(), 'markShippingPartnerRevenueSettled')(input) }
 
 export function saveStoreShippingProviderCallable(input: Record<string, unknown>) {
   return httpsCallable(getFunctions(), 'saveStoreShippingProvider')(input)
