@@ -26,12 +26,12 @@ async function capture(page: Page, route: string, name: string, themes = themeMo
   if (route === '__first-order') {
     await page.goto('/dashboard/orders', { waitUntil: 'commit', timeout: 10000 }).catch(() => {})
     await page.waitForTimeout(700)
-    const href = await page.locator('a[href*="/dashboard/orders/"]').first().getAttribute('href').catch(() => null)
+    const href = await page.locator('a[href*="/dashboard/orders/"]').first().getAttribute('href', { timeout: 1500 }).catch(() => null)
     targetRoute = href || '/dashboard/orders'
   } else if (route === '__first-provider') {
     await page.goto('/platform/shipping-companies', { waitUntil: 'commit', timeout: 10000 }).catch(() => {})
     await page.waitForTimeout(700)
-    const href = await page.locator('a[href*="/platform/shipping-companies/"]').first().getAttribute('href').catch(() => null)
+    const href = await page.locator('a[href*="/platform/shipping-companies/"]').first().getAttribute('href', { timeout: 1500 }).catch(() => null)
     targetRoute = href || '/platform/shipping-companies'
   }
   await page.goto(targetRoute, { waitUntil: 'commit', timeout: 10000 }).catch(() => {})
@@ -70,10 +70,9 @@ test('merchant visual matrix', async ({ page }) => {
 })
 
 test('superadmin visual matrix', async ({ page }) => {
-  // SuperAdmin covers the broadest route matrix; allow the complete visual
-  // capture to finish without aborting mid-matrix while retaining bounded
-  // per-navigation timeouts in capture().
-  test.setTimeout(180000)
+  // Keep the broad matrix bounded; route discovery and navigation are capped
+  // individually so an empty fixture cannot stall the whole visual run.
+  test.setTimeout(120000)
   await loginAs(page, 'platform')
   const routes: [string, string][] = [
     ['/platform', 'platform-dashboard'], ['/platform/merchants', 'platform-merchants'], ['/platform/crm', 'platform-crm'],
