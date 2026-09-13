@@ -14,7 +14,7 @@
     "emulators:seed": "node scripts/seed-emulator.mjs",
     "verify:build": "tsc -b --noEmit && vite build --mode emulator",
     "verify:run": "bash scripts/verify-emulator.sh",
-    "verify:e2e": "firebase emulators:exec --project mk-store-app --only auth,firestore,functions,storage \"npm run verify:run\"",
+    "verify:e2e": "bash scripts/verify-e2e-isolated.sh",
     "verify:integration": "firebase emulators:exec --project mk-store-app --only auth,firestore,functions,storage \"bash scripts/verify-integration.sh\"",
     "verify:wasla-rates": "npm --prefix functions run build && node scripts/verify-wasla-rates.mjs",
     "verify:shipping-commercial": "node scripts/verify-shipping-commercial.mjs",
