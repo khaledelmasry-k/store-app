@@ -4,6 +4,7 @@ on:
   push:
     branches:
       - ci/release-e2e-isolation
+  workflow_dispatch:
 
 permissions:
   contents: read
