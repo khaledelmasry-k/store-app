@@ -9,7 +9,7 @@ set -euo pipefail
 declare -A GROUP_SPECS=(
   # These are each their own lifecycle because they intentionally create and
   # mutate many Auth, store, subscription, and public projection fixtures.
-  [emulator-core]='e2e/emulator.spec.ts --grep-invert=shipping:.*default\\|landing.*hero.*image'
+  [emulator-core]='e2e/emulator.spec.ts --grep-invert=shipping:.*default'
   [subscription-lifecycle]='e2e/subscription.spec.ts --grep-invert=merchant.*activates.*trial'
   [public-storefront]='e2e/landing.spec.ts e2e/branding.spec.ts e2e/seo.spec.ts e2e/storage-limit.spec.ts'
   [auth-subscription]='e2e/auth-harness.spec.ts e2e/email-verification.spec.ts e2e/saas.spec.ts e2e/payment-proof.spec.ts e2e/platform-subscriptions.spec.ts'
