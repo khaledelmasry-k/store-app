@@ -1293,7 +1293,11 @@ test('shipping: default provider honored (client+server) and refused-policy togg
     currentPeriodEnd: admin.firestore.Timestamp.fromDate(new Date(Date.now() + 29 * 86400000)),
     updatedAt: admin.firestore.FieldValue.serverTimestamp(),
   })
-  await db.collection('stores').doc(store.id).update({ published: true, activeSubscriptionId: subscription.id })
+  await db.collection('stores').doc(store.id).update({
+    published: true,
+    storeStatus: 'published',
+    activeSubscriptionId: subscription.id,
+  })
   await db.collection('users').doc(String(store.data()?.ownerId || store.id)).set({
     active: true,
     merchantStatus: 'active',
