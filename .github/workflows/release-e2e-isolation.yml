@@ -16,8 +16,10 @@ jobs:
       fail-fast: false
       matrix:
         group:
+          - emulator-core
           - public-storefront
           - auth-subscription
+          - subscription-lifecycle
           - merchant-commerce
           - platform-admin
           - journeys-responsive

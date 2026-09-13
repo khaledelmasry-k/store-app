@@ -7,14 +7,18 @@
 set -euo pipefail
 
 declare -A GROUP_SPECS=(
-  [public-storefront]='e2e/emulator.spec.ts e2e/landing.spec.ts e2e/branding.spec.ts e2e/seo.spec.ts e2e/storage-limit.spec.ts'
-  [auth-subscription]='e2e/auth-harness.spec.ts e2e/email-verification.spec.ts e2e/subscription.spec.ts e2e/saas.spec.ts e2e/payment-proof.spec.ts e2e/platform-subscriptions.spec.ts'
+  # These are each their own lifecycle because they intentionally create and
+  # mutate many Auth, store, subscription, and public projection fixtures.
+  [emulator-core]='e2e/emulator.spec.ts'
+  [subscription-lifecycle]='e2e/subscription.spec.ts'
+  [public-storefront]='e2e/landing.spec.ts e2e/branding.spec.ts e2e/seo.spec.ts e2e/storage-limit.spec.ts'
+  [auth-subscription]='e2e/auth-harness.spec.ts e2e/email-verification.spec.ts e2e/saas.spec.ts e2e/payment-proof.spec.ts e2e/platform-subscriptions.spec.ts'
   [merchant-commerce]='e2e/products.spec.ts e2e/variant-logic.spec.ts e2e/variant-flow.spec.ts e2e/customer-flow.spec.ts'
   [platform-admin]='e2e/merchant-lifecycle.spec.ts e2e/platform-crm.spec.ts e2e/system-audit.spec.ts e2e/integration-foundation.spec.ts'
   [journeys-responsive]='e2e/launch-ops-verification.spec.ts e2e/launch-full-tour.spec.ts e2e/launch-coupons.spec.ts e2e/launch-impersonation.spec.ts e2e/launch-shipping-onboarding.spec.ts e2e/launch-tour-suppression.spec.ts e2e/responsive.spec.ts'
 )
 
-ALL_GROUPS=(public-storefront auth-subscription merchant-commerce platform-admin journeys-responsive)
+ALL_GROUPS=(emulator-core public-storefront auth-subscription subscription-lifecycle merchant-commerce platform-admin journeys-responsive)
 
 if [[ -n "${VERIFY_E2E_GROUP:-}" ]]; then
   if [[ -z "${GROUP_SPECS[$VERIFY_E2E_GROUP]+x}" ]]; then
