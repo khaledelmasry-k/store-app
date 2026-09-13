@@ -66,9 +66,12 @@
 }
 .storefront-brand img.store-logo {
   display: block;
-  width: auto;
+  /* Keep a consistent, legible merchant-brand footprint. `width: auto` made
+     square uploads collapse to a 52px sliver despite the available header
+     space. The image itself remains contained and never crops. */
+  width: clamp(80px, 10vw, 120px);
   height: 52px;
-  max-width: 180px;
+  max-width: 120px;
   max-height: 56px;
   object-fit: contain;
 }
@@ -327,7 +330,7 @@
     overflow: hidden;
   }
   .storefront-brand img.store-logo {
-    width: auto;
+    width: min(104px, 100%);
     height: 48px;
     max-width: min(132px, 100%);
   }

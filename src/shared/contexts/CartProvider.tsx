@@ -32,6 +32,22 @@ export const CartProvider: FunctionalComponent = ({ children }) => {
     localStorage.setItem(cartKey, JSON.stringify(items))
   }, [cartKey, items])
 
+  // Persist mutations synchronously as well as after render. A shopper can
+  // navigate immediately after pressing “add to cart”; relying only on the
+  // render effect risks losing that just-added line during a document route
+  // transition.
+  const updateItems = (updater: (previous: CartLine[]) => CartLine[]) => {
+    setItems((previous) => {
+      const next = updater(previous)
+      try {
+        localStorage.setItem(cartKey, JSON.stringify(next))
+      } catch {
+        // The normal effect remains the best-effort persistence fallback.
+      }
+      return next
+    })
+  }
+
   // When switching stores (slug changes), reload that store's cart.
   useEffect(() => {
     try {
@@ -42,7 +58,7 @@ export const CartProvider: FunctionalComponent = ({ children }) => {
   }, [cartKey])
 
   const add = (line: CartLine) =>
-    setItems((prev) => {
+    updateItems((prev) => {
       // Bundle (quantity) pricing lines never merge — each add is a distinct
       // bundle selection (merging would sum quantities and break the tier).
       if (line.pricingMode === 'quantity') return [...prev, line]
@@ -62,10 +78,10 @@ export const CartProvider: FunctionalComponent = ({ children }) => {
       return [...prev, line]
     })
 
-  const remove = (index: number) => setItems((prev) => prev.filter((_, i) => i !== index))
+  const remove = (index: number) => updateItems((prev) => prev.filter((_, i) => i !== index))
   const setQty = (index: number, qty: number) =>
-    setItems((prev) => prev.map((item, i) => (i === index ? { ...item, quantity: qty } : item)))
-  const clear = () => setItems([])
+    updateItems((prev) => prev.map((item, i) => (i === index ? { ...item, quantity: qty } : item)))
+  const clear = () => updateItems(() => [])
 
   const count = items.reduce((s, i) => s + i.quantity, 0)
   const subtotal = cartSubtotal(items)

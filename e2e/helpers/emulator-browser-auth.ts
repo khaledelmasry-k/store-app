@@ -1,12 +1,23 @@
 import admin from 'firebase-admin'
 import type { Page } from '@playwright/test'
+import { readFileSync } from 'node:fs'
 
 process.env.FIRESTORE_EMULATOR_HOST ||= '127.0.0.1:8080'
 process.env.FIREBASE_AUTH_EMULATOR_HOST ||= '127.0.0.1:9099'
 
 if (!admin.apps.length) admin.initializeApp({ projectId: 'mk-store-app' })
 
-const API_KEY = 'AIzaSyASSp0drLChc2gRDBUk32DGMndHYRezET0'
+// Match the Vite configuration used by the running test app. The Auth
+// emulator accepts public placeholder keys, but IndexedDB persistence is
+// keyed by that exact value.
+const API_KEY = (() => {
+  try {
+    return readFileSync('.env.local', 'utf8').match(/^VITE_FIREBASE_API_KEY=(\S+)/m)?.[1]
+      || 'AIzaSyASSp0drLChc2gRDBUk32DGMndHYRezET0'
+  } catch {
+    return 'AIzaSyASSp0drLChc2gRDBUk32DGMndHYRezET0'
+  }
+})()
 const AUTH_EMULATOR = 'http://127.0.0.1:9099'
 
 type EmulatorAuthState = {

@@ -64,7 +64,9 @@ test('A: new merchant registration creates an unverified gated account and resen
   await inputs.nth(3).fill(password)
   await page.locator('.auth-terms input[type="checkbox"]').check()
   await page.getByRole('button', { name: 'التالي' }).click()
-  await page.locator('.register-plan-pill').filter({ hasText: 'FREE' }).click()
+  // FREE is retained only for legacy subscriptions; new registrations start
+  // on the current purchasable BASIC plan.
+  await page.locator('.register-plan-pill').filter({ hasText: 'BASIC' }).click()
   await page.getByRole('button', { name: 'التالي' }).click()
   await inputs.nth(0).fill('متجر التحقق')
   await inputs.nth(1).fill(ref)

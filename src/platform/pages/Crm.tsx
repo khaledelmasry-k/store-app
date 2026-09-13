@@ -69,15 +69,15 @@ export const PlatformCrm: FunctionalComponent = () => {
         searchPlaceholder="اسم المتجر أو البريد..."
         actions={
           <div className="flex" style={{ gap: 8, flexWrap: 'wrap' }}>
-            <select className="input" style={{ minWidth: 140 }} value={stage} onChange={(e: any) => setStage((e.target as HTMLSelectElement).value)}>
+            <select aria-label="المرحلة" className="input" style={{ minWidth: 140 }} value={stage} onChange={(e: any) => setStage((e.target as HTMLSelectElement).value)}>
               <option value="">كل المراحل</option>
               {STAGES.map((s) => <option key={s} value={s}>{s}</option>)}
             </select>
-            <select className="input" style={{ minWidth: 140 }} value={plan} onChange={(e: any) => setPlan((e.target as HTMLSelectElement).value)}>
+            <select aria-label="الخطة" className="input" style={{ minWidth: 140 }} value={plan} onChange={(e: any) => setPlan((e.target as HTMLSelectElement).value)}>
               <option value="">كل الخطط</option>
               {planOptions.map((p) => <option key={p} value={p}>{p}</option>)}
             </select>
-            <select className="input" style={{ minWidth: 140 }} value={subscriptionStatus} onChange={(e: any) => setSubscriptionStatus((e.target as HTMLSelectElement).value)}>
+            <select aria-label="حالة الاشتراك" className="input" style={{ minWidth: 140 }} value={subscriptionStatus} onChange={(e: any) => setSubscriptionStatus((e.target as HTMLSelectElement).value)}>
               <option value="">كل الحالات</option>
               {statusOptions.map((s) => <option key={s} value={s}>{s}</option>)}
             </select>
