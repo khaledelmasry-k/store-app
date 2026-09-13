@@ -17,9 +17,12 @@ jobs:
       matrix:
         group:
           - emulator-core
+          - emulator-core-shipping
+          - emulator-core-hero
           - public-storefront
           - auth-subscription
           - subscription-lifecycle
+          - subscription-activation
           - merchant-commerce
           - platform-admin
           - journeys-responsive
