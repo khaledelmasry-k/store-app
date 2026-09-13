@@ -21,12 +21,12 @@ if [[ -n "${VERIFY_E2E_GROUP:-}" ]]; then
     echo "Unknown VERIFY_E2E_GROUP: $VERIFY_E2E_GROUP" >&2
     exit 2
   fi
-  GROUPS=("$VERIFY_E2E_GROUP")
+  E2E_GROUPS=("$VERIFY_E2E_GROUP")
 else
-  GROUPS=("${ALL_GROUPS[@]}")
+  E2E_GROUPS=("${ALL_GROUPS[@]}")
 fi
 
-for group in "${GROUPS[@]}"; do
+for group in "${E2E_GROUPS[@]}"; do
   echo "── Release E2E group: $group (fresh emulator lifecycle)"
   # Build before emulator startup so Functions never begins from a stale/missing
   # lib directory. verify:run keeps its own build as a local safety check.
