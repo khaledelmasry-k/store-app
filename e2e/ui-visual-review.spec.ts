@@ -24,6 +24,10 @@ const shot = async (page: Page, theme: string, name: string) => {
 async function capture(page: Page, route: string, name: string, themes = themeModes) {
   await page.goto(route, { waitUntil: 'commit', timeout: 10000 }).catch(() => {})
   await page.waitForTimeout(500)
+  // The onboarding guide is a persisted merchant-only surface and can be
+  // re-mounted on route changes in a fresh visual fixture. Dismiss it for
+  // each capture so screenshots represent the actual page being reviewed.
+  await dismissMerchantTourIfVisible(page)
   for (const theme of themes) await shot(page, theme, name)
 }
 
