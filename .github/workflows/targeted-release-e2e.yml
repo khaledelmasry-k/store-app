@@ -1,0 +1,86 @@
+name: Targeted release E2E
+
+on:
+  push:
+    branches:
+      - ci/targeted-release-e2e
+
+permissions:
+  contents: read
+
+jobs:
+  targeted-e2e:
+    name: ${{ matrix.name }}
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - name: branding
+            specs: e2e/branding.spec.ts
+          - name: email-verification
+            specs: e2e/email-verification.spec.ts
+          - name: merchant-lifecycle
+            specs: e2e/merchant-lifecycle.spec.ts
+          - name: platform-crm
+            specs: e2e/platform-crm.spec.ts
+          - name: subscription
+            specs: e2e/subscription.spec.ts
+          - name: variant-flow
+            specs: e2e/variant-flow.spec.ts
+          - name: landing
+            specs: e2e/landing.spec.ts
+          - name: products-saas
+            specs: e2e/products.spec.ts e2e/saas.spec.ts
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '21'
+
+      - name: Install application dependencies
+        run: npm ci
+
+      - name: Install Functions dependencies
+        run: npm ci --prefix functions
+
+      - name: Install Firebase CLI
+        run: npm install --global firebase-tools
+
+      - name: Install Playwright Chromium
+        run: npx playwright install --with-deps chromium
+
+      - name: Create emulator-only environment
+        run: |
+          cp .env.example .env.local
+          cat >> .env.local <<'EOF'
+          VITE_FIREBASE_PROJECT_ID=mk-store-app
+          VITE_FIREBASE_USE_EMULATOR=true
+          VITE_STORE_BASE_URL=http://127.0.0.1:4173
+          EOF
+
+      - name: Run targeted emulator E2E
+        env:
+          VERIFY_PROJECTS: desktop
+        run: >-
+          firebase emulators:exec --project mk-store-app
+          --only auth,firestore,functions,storage
+          "npm run verify:run -- ${{ matrix.specs }}"
+
+      - name: Upload test artifacts
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: targeted-release-e2e-${{ matrix.name }}
+          if-no-files-found: ignore
+          path: |
+            test-results/
+            playwright-report/
