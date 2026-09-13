@@ -1282,7 +1282,18 @@ test('shipping: default provider honored (client+server) and refused-policy togg
     })
   }
   const store = (await storeBySlug(ref))!
-  await db.collection('stores').doc(store.id).update({ published: true })
+  // This is a shipping quote fixture, not a subscription lifecycle fixture.
+  // Converge the granting subscription explicitly before opening its public
+  // storefront so a just-registered trial cannot race the public gate.
+  const subscription = await latestSub(store.id)
+  expect(subscription).not.toBeNull()
+  await db.collection('subscriptions').doc(subscription.id).update({
+    status: 'active',
+    currentPeriodStart: admin.firestore.Timestamp.fromDate(new Date(Date.now() - 86400000)),
+    currentPeriodEnd: admin.firestore.Timestamp.fromDate(new Date(Date.now() + 29 * 86400000)),
+    updatedAt: admin.firestore.FieldValue.serverTimestamp(),
+  })
+  await db.collection('stores').doc(store.id).update({ published: true, activeSubscriptionId: subscription.id })
   const category = await db.collection('categories').add({
     storeId: store.id,
     name: 'منتجات الشحن',
