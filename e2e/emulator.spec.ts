@@ -1294,6 +1294,11 @@ test('shipping: default provider honored (client+server) and refused-policy togg
     updatedAt: admin.firestore.FieldValue.serverTimestamp(),
   })
   await db.collection('stores').doc(store.id).update({ published: true, activeSubscriptionId: subscription.id })
+  await db.collection('users').doc(String(store.data()?.ownerId || store.id)).set({
+    active: true,
+    merchantStatus: 'active',
+    updatedAt: admin.firestore.FieldValue.serverTimestamp(),
+  }, { merge: true })
   const category = await db.collection('categories').add({
     storeId: store.id,
     name: 'منتجات الشحن',
