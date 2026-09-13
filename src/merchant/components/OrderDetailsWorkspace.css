@@ -698,3 +698,51 @@
     padding-bottom: 70px;
   }
 }
+
+@media (max-width: 640px) {
+  .ods-items-table {
+    display: block;
+    white-space: normal;
+  }
+  .ods-items-table thead {
+    display: none;
+  }
+  .ods-items-table tbody {
+    display: grid;
+    gap: 10px;
+    padding: 12px;
+  }
+  .ods-items-table tbody tr {
+    display: grid;
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+    gap: 8px;
+    padding: 10px;
+    border: 1px solid var(--outline-variant);
+    border-radius: 10px;
+    background: var(--surface-container-low);
+  }
+  .ods-items-table tbody td {
+    min-width: 0;
+    padding: 4px 2px;
+    border: 0;
+    font-size: 12px;
+  }
+  .ods-items-table tbody td:first-child {
+    grid-column: 1 / -1;
+    padding-bottom: 7px;
+    border-bottom: 1px solid var(--outline-variant);
+  }
+  .ods-items-table tbody td:not(:first-child)::before {
+    display: block;
+    margin-bottom: 3px;
+    color: var(--text-on-surface-variant);
+    font-size: 10px;
+  }
+  .ods-items-table tbody td:nth-child(2)::before { content: 'الكمية'; }
+  .ods-items-table tbody td:nth-child(3)::before { content: 'سعر الوحدة'; }
+  .ods-items-table tbody td:nth-child(4)::before { content: 'الإجمالي'; }
+  .ods-item-cell { gap: 10px; }
+  .ods-item-thumb { width: 36px; height: 36px; }
+  .ods-item-name { font-size: 13px; }
+  .ods-shipment-actions { flex-wrap: wrap; }
+}

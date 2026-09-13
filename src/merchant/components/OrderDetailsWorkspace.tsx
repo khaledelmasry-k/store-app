@@ -116,8 +116,8 @@ export const OrderDetailsWorkspace: FunctionalComponent<Props> = ({ id }) => {
   const trackingShipmentStatus = currentShipmentStatus === 'SHIPPED' ? 'IN_TRANSIT' : currentShipmentStatus
   const shipmentProgress = ['CREATED', 'READY_FOR_PICKUP', 'PICKED_UP', 'IN_TRANSIT', 'OUT_FOR_DELIVERY', 'DELIVERED']
   const shipmentProgressIndex = shipmentProgress.indexOf(trackingShipmentStatus)
-  const shipmentProviderName = shipment?.providerName || (shipment as any)?.shippingCompanyName || 'شركة الشحن'
   const shipmentProvider = shippingChoices.find((row) => row.provider.id === shipment?.providerId)?.provider
+  const shipmentProviderName = (shipment as any)?.providerNameSnapshot || shipment?.providerName || (shipment as any)?.shippingCompanyName || shipmentProvider?.name || 'شركة الشحن'
   const shipmentProviderLogo = (shipment as any)?.providerLogoSnapshot || (shipment as any)?.providerLogoUrl || (shipmentProvider as any)?.logoUrl || null
   const shipmentServiceName = (shipment as any)?.serviceNameSnapshot || (shipment as any)?.serviceName || null
   const selectedProvider = shippingChoices.find((row) => row.provider.id === shippingProviderId)?.provider
@@ -290,6 +290,7 @@ export const OrderDetailsWorkspace: FunctionalComponent<Props> = ({ id }) => {
             <span className="ods-meta-divider" aria-hidden="true" />
             <span className="ods-meta-item"><span className="ods-meta-label">الإجمالي</span><strong>{formatCurrency(order.totalPrice)}</strong></span>
             <span className="ods-meta-item"><span className="ods-meta-label">الدفع</span><strong>{order.paymentMethod === 'cod' ? 'عند الاستلام' : order.paymentMethod === 'bank' ? 'تحويل بنكي' : order.paymentMethod}</strong></span>
+            <span className="ods-meta-item"><span className="ods-meta-label">المنتجات</span><strong>{order.items.length}</strong></span>
           </div>
         </div>
         <div className="ods-header-actions">
@@ -375,6 +376,51 @@ export const OrderDetailsWorkspace: FunctionalComponent<Props> = ({ id }) => {
               </div>
             )}
           </div>
+
+          <div className="ods-card ods-shipment-card">
+            <h3 className="ods-sidebar-title"><Icon name="local_shipping" ariaHidden /> الشحنة</h3>
+            {order.activeShipmentId && shipment ? <div className="stack-list">
+              <div className="ods-shipment-provider">
+                <div className="ods-shipment-logo">{shipmentProviderLogo ? <img src={shipmentProviderLogo} alt="" /> : <Icon name="local_shipping" ariaHidden />}</div>
+                <div><strong>{shipmentProviderName}</strong>{shipmentServiceName && <span>{shipmentServiceName}</span>}</div>
+              </div>
+              <div className="shipping-secure-note"><Icon name={isApiShipment ? 'cloud_sync' : 'edit_note'} ariaHidden /><span>{isApiShipment ? `شحنة API متصلة بـ${shipmentProviderName}؛ الشركة هي مصدر الحالة، لذلك لا تعديل يدوي هنا.` : 'شحنة يدوية: حدّث مرحلتها هنا فقط وسيتم تحديث حالة الطلب تلقائيًا.'}</span></div>
+              {!['FAILED', 'RETURNING', 'RETURNED', 'CANCELLED'].includes(trackingShipmentStatus) && <div className="ods-shipment-progress" aria-label={`رحلة الشحنة: ${SHIPMENT_STATUS_LABELS[trackingShipmentStatus] || trackingShipmentStatus}`}>
+                {shipmentProgress.map((status, index) => <div key={status} className={`ods-shipment-stage${index < shipmentProgressIndex ? ' is-done' : ''}${index === shipmentProgressIndex ? ' is-current' : ''}`}><span className="ods-shipment-dot">{index < shipmentProgressIndex ? <Icon name="check" /> : null}</span><small>{SHIPMENT_STATUS_LABELS[status]}</small></div>)}
+              </div>}
+              <div className="ods-kv">
+                <div><p className="ods-kv-label">شركة الشحن</p><p className="ods-kv-value">{shipmentProviderName}</p></div>
+                <div><p className="ods-kv-label">كود الشحنة الخارجي</p><p className="ods-kv-value ltr-text">{shipment.externalShipmentId || shipment.providerShipmentId || '—'}</p></div>
+                <div><p className="ods-kv-label">كود التتبع</p><p className="ods-kv-value ltr-text">{shipmentTrackingCode || 'بانتظار كود المتابعة'}</p></div>
+                <div><p className="ods-kv-label">الحالة المحلية</p><p className="ods-kv-value">{SHIPMENT_STATUS_LABELS[trackingShipmentStatus] || trackingShipmentStatus}</p></div>
+                <div><p className="ods-kv-label">آخر حالة من الشركة</p><p className="ods-kv-value">{shipment.remoteStatus == null ? '—' : String(shipment.remoteStatus)}</p></div>
+                <div><p className="ods-kv-label">آخر مزامنة</p><p className="ods-kv-value">{shipment.lastSyncedAt ? formatDateTime(shipment.lastSyncedAt) : '—'}</p></div>
+                {currentShipmentStatus === 'FAILED' && shipment.failureReason && <div><p className="ods-kv-label">سبب تعذر التسليم</p><p className="ods-kv-value">{shipment.failureReason}</p></div>}
+              </div>
+              <div className="flex ods-shipment-actions" style={{ gap: 8 }}>
+                {shipment.trackingUrl && <a className="btn btn-outline btn-sm" href={shipment.trackingUrl} target="_blank" rel="noreferrer">تتبع</a>}
+                {isApiShipment && canTrackShipment && <Button size="sm" variant="outline" loading={shipmentAction === 'refresh'} disabled={shipmentAction !== null} onClick={refreshShipment}>تحديث الحالة</Button>}
+                {shipment.documentAvailable && <Button size="sm" variant="outline" loading={shipmentAction === 'document'} disabled={shipmentAction !== null} onClick={downloadShipmentDocument}>مستند الشحنة</Button>}
+              </div>
+              {!isApiShipment && manualShipmentChoices.length > 0 && <div className="stack-list">
+                <label className="field"><span className="field-label">المرحلة التالية للشحنة</span><select className="input" value={nextManualShipmentStatus} onChange={(event) => setNextManualShipmentStatus((event.target as HTMLSelectElement).value)}><option value="">اختر الحالة</option>{manualShipmentChoices.map((status) => <option key={status} value={status}>{SHIPMENT_STATUS_LABELS[status] || status}</option>)}</select></label>
+                <Button size="sm" loading={shipmentAction === 'manual-status'} disabled={!nextManualShipmentStatus || shipmentAction !== null} onClick={updateManualShipment}>حفظ حالة الشحنة</Button>
+              </div>}
+            </div> : shippingChoices.length === 0 ? <p className="muted small">لا توجد شركة شحن مفعلة لهذا المتجر.</p> : <div className="stack-list">
+              {order.shippingCreationStatus === 'FAILED' && <div className="alert alert-error"><strong>تعذر إنشاء الشحنة</strong><span>{order.shippingCreationErrorMessage || 'تحقق من إعدادات شركة الشحن ثم أعد المحاولة.'}</span></div>}
+              <select className="input" value={shippingProviderId} onChange={(e) => setShippingProviderId((e.target as HTMLSelectElement).value)}>{shippingChoices.map((row) => <option value={row.provider.id} key={row.provider.id}>{row.provider.name}</option>)}</select>
+              <Button size="sm" loading={shipmentAction === 'create'} disabled={shipmentAction !== null || selectedProvider?.canCreateShipment !== true} onClick={createShipment}>{order.shippingCreationStatus === 'FAILED' ? 'إعادة محاولة الإنشاء' : 'إنشاء الشحنة'}</Button>
+            </div>}
+            {orderCancellationEligible && <div className="stack-list mt-2">
+              {hasExternalShipment && !canCancelShipment && <div className="alert alert-error"><strong>شركة الشحن الحالية لا تتيح الإلغاء التلقائي عبر API.</strong><span>ألغِ الشحنة من لوحة الشركة أولًا، ثم حدّث حالتها من متجري بعد التأكيد. لن نعرض نجاحًا محليًا قبل تأكيد الشركة.</span></div>}
+              {(!hasExternalShipment || (canCancelShipment && shipmentCancellationEligible)) && <Button size="sm" variant="outline" loading={shipmentAction === 'cancel'} disabled={shipmentAction !== null} onClick={cancelOrder}>{hasExternalShipment ? 'إلغاء الطلب والشحنة' : 'إلغاء الطلب'}</Button>}
+            </div>}
+          </div>
+
+          {Array.isArray(order.statusHistory) && order.statusHistory.some((event) => event.title) && <div className="ods-card ods-history-card">
+            <h3 className="ods-sidebar-title"><Icon name="history" ariaHidden /> سجل دورة الطلب</h3>
+            <div className="stack-list">{order.statusHistory.filter((event) => event.title).slice(-10).reverse().map((event, index) => <div key={event.eventId || `${event.status}-${index}`} className="ods-kv"><div><p className="ods-kv-value">{event.title}</p><p className="ods-kv-label">{formatDateTime(event.at)}{event.source ? ` — ${event.source}` : ''}{event.provider ? ` — ${event.provider}` : ''}</p></div></div>)}</div>
+          </div>}
         </div>
 
         <div className="ods-sidebar">
@@ -426,51 +472,6 @@ export const OrderDetailsWorkspace: FunctionalComponent<Props> = ({ id }) => {
               {order.landingPageId && <div><p className="ods-kv-label">صفحة هبوط</p><p className="ods-kv-value">{order.landingPageSnapshot?.title || order.landingPageSnapshot?.slug || 'صفحة هبوط'}</p></div>}
               {order.campaignId && <div><p className="ods-kv-label">الحملة</p><p className="ods-kv-value">{order.campaignNameSnapshot || order.utmCampaign || order.campaignId}</p></div>}
             </div>
-          </div>}
-
-          <div className="ods-card">
-            <h3 className="ods-sidebar-title"><Icon name="local_shipping" ariaHidden /> الشحنة</h3>
-            {order.activeShipmentId && shipment ? <div className="stack-list">
-              <div className="ods-shipment-provider">
-                <div className="ods-shipment-logo">{shipmentProviderLogo ? <img src={shipmentProviderLogo} alt="" /> : <Icon name="local_shipping" ariaHidden />}</div>
-                <div><strong>{shipmentProviderName}</strong>{shipmentServiceName && <span>{shipmentServiceName}</span>}</div>
-              </div>
-              <div className="shipping-secure-note"><Icon name={isApiShipment ? 'cloud_sync' : 'edit_note'} ariaHidden /><span>{isApiShipment ? `شحنة API متصلة بـ${shipmentProviderName}؛ الشركة هي مصدر الحالة، لذلك لا تعديل يدوي هنا.` : 'شحنة يدوية: حدّث مرحلتها هنا فقط وسيتم تحديث حالة الطلب تلقائيًا.'}</span></div>
-              {!['FAILED', 'RETURNING', 'RETURNED', 'CANCELLED'].includes(trackingShipmentStatus) && <div className="ods-shipment-progress" aria-label={`رحلة الشحنة: ${SHIPMENT_STATUS_LABELS[trackingShipmentStatus] || trackingShipmentStatus}`}>
-                {shipmentProgress.map((status, index) => <div key={status} className={`ods-shipment-stage${index < shipmentProgressIndex ? ' is-done' : ''}${index === shipmentProgressIndex ? ' is-current' : ''}`}><span className="ods-shipment-dot">{index < shipmentProgressIndex ? <Icon name="check" /> : null}</span><small>{SHIPMENT_STATUS_LABELS[status]}</small></div>)}
-              </div>}
-              <div className="ods-kv">
-                <div><p className="ods-kv-label">شركة الشحن</p><p className="ods-kv-value">{shipmentProviderName}</p></div>
-                <div><p className="ods-kv-label">كود الشحنة الخارجي</p><p className="ods-kv-value ltr-text">{shipment.externalShipmentId || shipment.providerShipmentId || '—'}</p></div>
-                <div><p className="ods-kv-label">كود التتبع</p><p className="ods-kv-value ltr-text">{shipmentTrackingCode || 'بانتظار كود المتابعة'}</p></div>
-                <div><p className="ods-kv-label">الحالة المحلية</p><p className="ods-kv-value">{SHIPMENT_STATUS_LABELS[trackingShipmentStatus] || trackingShipmentStatus}</p></div>
-                <div><p className="ods-kv-label">آخر حالة من الشركة</p><p className="ods-kv-value">{shipment.remoteStatus == null ? '—' : String(shipment.remoteStatus)}</p></div>
-                <div><p className="ods-kv-label">آخر مزامنة</p><p className="ods-kv-value">{shipment.lastSyncedAt ? formatDateTime(shipment.lastSyncedAt) : '—'}</p></div>
-                {currentShipmentStatus === 'FAILED' && shipment.failureReason && <div><p className="ods-kv-label">سبب تعذر التسليم</p><p className="ods-kv-value">{shipment.failureReason}</p></div>}
-              </div>
-              <div className="flex" style={{ gap: 8 }}>
-                {shipment.trackingUrl && <a className="btn btn-outline btn-sm" href={shipment.trackingUrl} target="_blank" rel="noreferrer">تتبع</a>}
-                {isApiShipment && canTrackShipment && <Button size="sm" variant="outline" loading={shipmentAction === 'refresh'} disabled={shipmentAction !== null} onClick={refreshShipment}>تحديث الحالة</Button>}
-                {shipment.documentAvailable && <Button size="sm" variant="outline" loading={shipmentAction === 'document'} disabled={shipmentAction !== null} onClick={downloadShipmentDocument}>مستند الشحنة</Button>}
-              </div>
-              {!isApiShipment && manualShipmentChoices.length > 0 && <div className="stack-list">
-                <label className="field"><span className="field-label">المرحلة التالية للشحنة</span><select className="input" value={nextManualShipmentStatus} onChange={(event) => setNextManualShipmentStatus((event.target as HTMLSelectElement).value)}><option value="">اختر الحالة</option>{manualShipmentChoices.map((status) => <option key={status} value={status}>{SHIPMENT_STATUS_LABELS[status] || status}</option>)}</select></label>
-                <Button size="sm" loading={shipmentAction === 'manual-status'} disabled={!nextManualShipmentStatus || shipmentAction !== null} onClick={updateManualShipment}>حفظ حالة الشحنة</Button>
-              </div>}
-            </div> : shippingChoices.length === 0 ? <p className="muted small">لا توجد شركة شحن مفعلة لهذا المتجر.</p> : <div className="stack-list">
-              {order.shippingCreationStatus === 'FAILED' && <div className="alert alert-error"><strong>تعذر إنشاء الشحنة</strong><span>{order.shippingCreationErrorMessage || 'تحقق من إعدادات شركة الشحن ثم أعد المحاولة.'}</span></div>}
-              <select className="input" value={shippingProviderId} onChange={(e) => setShippingProviderId((e.target as HTMLSelectElement).value)}>{shippingChoices.map((row) => <option value={row.provider.id} key={row.provider.id}>{row.provider.name}</option>)}</select>
-              <Button size="sm" loading={shipmentAction === 'create'} disabled={shipmentAction !== null || selectedProvider?.canCreateShipment !== true} onClick={createShipment}>{order.shippingCreationStatus === 'FAILED' ? 'إعادة محاولة الإنشاء' : 'إنشاء الشحنة'}</Button>
-            </div>}
-            {orderCancellationEligible && <div className="stack-list mt-2">
-              {hasExternalShipment && !canCancelShipment && <div className="alert alert-error"><strong>شركة الشحن الحالية لا تتيح الإلغاء التلقائي عبر API.</strong><span>ألغِ الشحنة من لوحة الشركة أولًا، ثم حدّث حالتها من متجري بعد التأكيد. لن نعرض نجاحًا محليًا قبل تأكيد الشركة.</span></div>}
-              {(!hasExternalShipment || (canCancelShipment && shipmentCancellationEligible)) && <Button size="sm" variant="outline" loading={shipmentAction === 'cancel'} disabled={shipmentAction !== null} onClick={cancelOrder}>{hasExternalShipment ? 'إلغاء الطلب والشحنة' : 'إلغاء الطلب'}</Button>}
-            </div>}
-          </div>
-
-          {Array.isArray(order.statusHistory) && order.statusHistory.some((event) => event.title) && <div className="ods-card">
-            <h3 className="ods-sidebar-title"><Icon name="history" ariaHidden /> سجل دورة الطلب</h3>
-            <div className="stack-list">{order.statusHistory.filter((event) => event.title).slice(-10).reverse().map((event, index) => <div key={event.eventId || `${event.status}-${index}`} className="ods-kv"><div><p className="ods-kv-value">{event.title}</p><p className="ods-kv-label">{formatDateTime(event.at)}{event.source ? ` — ${event.source}` : ''}{event.provider ? ` — ${event.provider}` : ''}</p></div></div>)}</div>
           </div>}
 
           {order.status === 'DELIVERED' && <div className="ods-card">
