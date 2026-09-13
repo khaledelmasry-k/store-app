@@ -1,6 +1,5 @@
 import { test, expect, type Page } from '@playwright/test'
 import { mkdirSync } from 'node:fs'
-import { authenticateMerchant, authenticateSuperAdmin } from './helpers/emulator-browser-auth'
 
 const themeModes = ['light', 'dark'] as const
 const shot = async (page: Page, theme: string, name: string) => {
@@ -27,6 +26,14 @@ async function capture(page: Page, route: string, name: string, themes = themeMo
   for (const theme of themes) await shot(page, theme, name)
 }
 
+async function loginAs(page: Page, role: 'merchant' | 'platform') {
+  await page.goto(`/login?role=${role}`, { waitUntil: 'domcontentloaded' })
+  await page.locator('input[type="email"]').fill(role === 'merchant' ? 'owner@a.store' : 'khaaledelmasry@gmail.com')
+  await page.locator('input[type="password"]').fill(role === 'merchant' ? 'Owner12345' : 'Admin12345')
+  await page.getByRole('button', { name: 'تسجيل الدخول', exact: true }).click()
+  await page.waitForURL(role === 'merchant' ? /\/dashboard/ : /\/platform/, { timeout: 20000 })
+}
+
 test('public and storefront visual matrix', async ({ page }) => {
   for (const [route, name] of [['/', 'landing'], ['/login', 'login'], ['/register', 'register'], ['/store/test-store-a', 'storefront'], ['/store/test-store-a/cart', 'cart'], ['/store/test-store-a/checkout', 'checkout']]) {
     await capture(page, route, name)
@@ -34,7 +41,7 @@ test('public and storefront visual matrix', async ({ page }) => {
 })
 
 test('merchant visual matrix', async ({ page }) => {
-  await authenticateMerchant(page)
+  await loginAs(page, 'merchant')
   const routes: [string, string][] = [
     ['/dashboard', 'merchant-dashboard'], ['/dashboard/products', 'merchant-products'], ['/dashboard/orders', 'merchant-orders'],
     ['/dashboard/orders/qa-order', 'merchant-order-details'], ['/dashboard/customers', 'merchant-customers'], ['/dashboard/shipping', 'merchant-shipping'],
@@ -45,7 +52,7 @@ test('merchant visual matrix', async ({ page }) => {
 })
 
 test('superadmin visual matrix', async ({ page }) => {
-  await authenticateSuperAdmin(page)
+  await loginAs(page, 'platform')
   const routes: [string, string][] = [
     ['/platform', 'platform-dashboard'], ['/platform/merchants', 'platform-merchants'], ['/platform/crm', 'platform-crm'],
     ['/platform/subscriptions', 'platform-subscriptions'], ['/platform/plans', 'platform-plans'], ['/platform/payments', 'platform-payments'],
