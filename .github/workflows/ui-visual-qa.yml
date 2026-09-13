@@ -1,0 +1,40 @@
+name: UI visual QA
+
+on:
+  push:
+    branches: [ui/release-polish]
+
+permissions:
+  contents: read
+
+jobs:
+  visual:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with: { node-version: 22, cache: npm }
+      - uses: actions/setup-java@v4
+        with: { distribution: temurin, java-version: '21' }
+      - run: npm ci
+      - run: npm ci --prefix functions
+      - run: npm install --global firebase-tools
+      - run: npx playwright install --with-deps chromium
+      - name: Create emulator-only environment
+        run: |
+          cp .env.example .env.local
+          cat >> .env.local <<'EOF'
+          VITE_FIREBASE_PROJECT_ID=mk-store-app
+          VITE_FIREBASE_USE_EMULATOR=true
+          VITE_STORE_BASE_URL=http://127.0.0.1:4173
+          EOF
+      - run: firebase emulators:exec --project mk-store-app --only auth,firestore,functions,storage "npm run verify:visual"
+      - if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: ui-visual-artifacts
+          if-no-files-found: ignore
+          path: |
+            artifacts/ui-visual/
+            test-results/
+            playwright-report/
