@@ -112,8 +112,19 @@ async function authenticate(page: Page, uid: string, expectedRole: string, route
     ok = true
   }
   if (!ok) throw new Error('authenticate failed')
+  const shellSelector = expectedRole === 'merchant' ? '.app-shell--dashboard' : '.app-shell--platform'
   await page.goto(route, { waitUntil: 'domcontentloaded' })
-  await page.locator(expectedRole === 'merchant' ? '.app-shell--dashboard' : '.app-shell--platform').waitFor({ state: 'visible' })
+  // IndexedDB persistence can hydrate just after the first route navigation,
+  // especially in the constrained mobile project. Give the auth listener a
+  // short bounded opportunity, then reload once to consume the persisted user.
+  const shell = page.locator(shellSelector)
+  if (!(await shell.isVisible().catch(() => false))) {
+    await page.waitForTimeout(500)
+    if (!(await shell.isVisible().catch(() => false))) {
+      await page.reload({ waitUntil: 'domcontentloaded' })
+    }
+  }
+  await shell.waitFor({ state: 'visible' })
   await page.waitForFunction((role) => {
     const shell = document.querySelector(role === 'merchant' ? '.app-shell--dashboard' : '.app-shell--platform')
     return Boolean(shell && !document.body.innerText.includes('تسجيل الدخول'))
