@@ -22,7 +22,19 @@ const shot = async (page: Page, theme: string, name: string) => {
 }
 
 async function capture(page: Page, route: string, name: string, themes = themeModes) {
-  await page.goto(route, { waitUntil: 'commit', timeout: 10000 }).catch(() => {})
+  let targetRoute = route
+  if (route === '__first-order') {
+    await page.goto('/dashboard/orders', { waitUntil: 'commit', timeout: 10000 }).catch(() => {})
+    await page.waitForTimeout(700)
+    const href = await page.locator('a[href*="/dashboard/orders/"]').first().getAttribute('href').catch(() => null)
+    targetRoute = href || '/dashboard/orders'
+  } else if (route === '__first-provider') {
+    await page.goto('/platform/shipping-companies', { waitUntil: 'commit', timeout: 10000 }).catch(() => {})
+    await page.waitForTimeout(700)
+    const href = await page.locator('a[href*="/platform/shipping-companies/"]').first().getAttribute('href').catch(() => null)
+    targetRoute = href || '/platform/shipping-companies'
+  }
+  await page.goto(targetRoute, { waitUntil: 'commit', timeout: 10000 }).catch(() => {})
   await page.waitForTimeout(500)
   // The onboarding guide is a persisted merchant-only surface and can be
   // re-mounted on route changes in a fresh visual fixture. Dismiss it for
@@ -50,7 +62,7 @@ test('merchant visual matrix', async ({ page }) => {
   await loginAs(page, 'merchant')
   const routes: [string, string][] = [
     ['/dashboard', 'merchant-dashboard'], ['/dashboard/products', 'merchant-products'], ['/dashboard/orders', 'merchant-orders'],
-    ['/dashboard/orders/qa-order', 'merchant-order-details'], ['/dashboard/customers', 'merchant-customers'], ['/dashboard/shipping', 'merchant-shipping'],
+    ['__first-order', 'merchant-order-details'], ['/dashboard/customers', 'merchant-customers'], ['/dashboard/shipping', 'merchant-shipping'],
     ['/dashboard/subscription', 'merchant-subscription'], ['/dashboard/settings', 'merchant-settings'], ['/dashboard/themes', 'merchant-themes'],
     ['/dashboard/store-links', 'merchant-store-links'], ['/dashboard/landing-pages', 'merchant-landing-pages'], ['/dashboard/analytics', 'merchant-analytics'], ['/dashboard/team', 'merchant-team'],
   ]
@@ -64,7 +76,7 @@ test('superadmin visual matrix', async ({ page }) => {
     ['/platform/subscriptions', 'platform-subscriptions'], ['/platform/plans', 'platform-plans'], ['/platform/payments', 'platform-payments'],
     ['/platform/coupons', 'platform-coupons'], ['/platform/analytics', 'platform-analytics'], ['/platform/audit', 'platform-audit'],
     ['/platform/notifications', 'platform-notifications'], ['/platform/tickets', 'platform-tickets'], ['/platform/settings', 'platform-settings'],
-    ['/platform/shipping-companies', 'platform-shipping-companies'], ['/platform/shipping-companies/qa-partner-1', 'platform-provider-details'], ['/platform/shipping-revenue', 'platform-shipping-revenue'],
+    ['/platform/shipping-companies', 'platform-shipping-companies'], ['__first-provider', 'platform-provider-details'], ['/platform/shipping-revenue', 'platform-shipping-revenue'],
   ]
   for (const [route, name] of routes) await capture(page, route, name, ['light', 'dark'])
 })
