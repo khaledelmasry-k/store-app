@@ -255,7 +255,7 @@ test('expired Free merchant is gated but can request a 249 EGP Starter upgrade',
   await expect(page.getByText('هذه الميزة غير متاحة في باقتك الحالية')).toBeVisible({ timeout: 15000 })
   await page.goto('/dashboard/subscription', { waitUntil: 'domcontentloaded' })
   await dismissMerchantTourIfVisible(page)
-  await expect(page.getByText('اختر Starter أو Growth أو Pro')).toBeVisible({ timeout: 15000 })
+  await expect(page.getByText('اختر Basic أو Starter أو Growth أو Pro')).toBeVisible({ timeout: 15000 })
   await dismissMerchantTourIfVisible(page)
   await safeClickWithTourGuard(page, page.locator('.subscription-summary-actions').getByRole('button', { name: 'ترقية الخطة' }))
   const starter = page.locator('.mk-pricing-card').filter({ has: page.locator('.mk-pricing-name', { hasText: 'STARTER' }) }).last()

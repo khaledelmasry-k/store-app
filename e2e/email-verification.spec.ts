@@ -64,9 +64,8 @@ test('A: new merchant registration creates an unverified gated account and resen
   await inputs.nth(3).fill(password)
   await page.locator('.auth-terms input[type="checkbox"]').check()
   await page.getByRole('button', { name: 'التالي' }).click()
-  // FREE is retained only for legacy subscriptions; new registrations start
-  // on the current purchasable BASIC plan.
-  await page.locator('.register-plan-pill').filter({ hasText: 'BASIC' }).click()
+  // New registration has BASIC selected by default. FREE remains a legacy-only
+  // plan and the selector is intentionally not opened for the default flow.
   await page.getByRole('button', { name: 'التالي' }).click()
   await inputs.nth(0).fill('متجر التحقق')
   await inputs.nth(1).fill(ref)

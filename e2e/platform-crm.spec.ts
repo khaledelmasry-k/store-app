@@ -55,7 +55,7 @@ test('CRM filters are bounded and stage/plan/status filters do not duplicate row
   expect(await rows.count()).toBeLessThanOrEqual(5)
   await page.getByLabel('الخطة').selectOption('')
   await page.getByLabel('حالة الاشتراك').selectOption('')
-  await page.getByRole('textbox', { name: 'بحث' }).fill('owner@a.store')
+  await page.getByPlaceholder('اسم المتجر أو البريد...').fill('owner@a.store')
   await expect(rows).toHaveCount(1)
 })
 

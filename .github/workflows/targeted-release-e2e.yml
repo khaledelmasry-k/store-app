@@ -52,6 +52,9 @@ jobs:
       - name: Install Functions dependencies
         run: npm ci --prefix functions
 
+      - name: Build Functions before emulator startup
+        run: npm --prefix functions run build
+
       - name: Install Firebase CLI
         run: npm install --global firebase-tools
 
