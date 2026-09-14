@@ -51,9 +51,16 @@ if (target === 'production') {
 // A deployment is impossible until every local safety gate is green.
 run('PRE_DEPLOY typecheck', 'npm', ['run', 'typecheck'])
 run('PRE_DEPLOY functions build', 'npm', ['--prefix', 'functions', 'run', 'build'])
-run('PRE_DEPLOY production build', 'npm', ['run', 'build', '--', '--mode', target])
 run('PRE_DEPLOY integration', 'npm', ['run', 'verify:integration'])
 run('PRE_DEPLOY E2E', 'npm', ['run', 'verify:e2e'])
+// E2E intentionally writes an emulator bundle to dist/. Recreate the exact
+// Hosting artifact only after all emulator-backed validation has finished.
+if (target === 'production') {
+  run('FINAL PRODUCTION BUILD', 'node', ['scripts/build-production-safe.mjs'])
+  run('FINAL PRODUCTION DIST GUARD', 'node', ['scripts/verify-production-dist.mjs'])
+} else {
+  run('FINAL STAGING BUILD', 'npm', ['run', 'build', '--', '--mode', target])
+}
 run('PRE_DEPLOY production-runtime', 'npm', ['run', 'verify:production-runtime'])
 
 // Keep the release order explicit so a failure cannot skip prerequisite rules

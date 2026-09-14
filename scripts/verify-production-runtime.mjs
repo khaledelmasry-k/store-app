@@ -12,6 +12,8 @@ const baseUrl = externalBaseUrl || `http://127.0.0.1:${PREVIEW_PORT}`
 const isLiveRuntime = Boolean(externalBaseUrl)
 const routes = ['/', '/login', '/register']
 const fatalRuntimePattern = /Cannot read properties of undefined|reading ['"]_?_[Hh]['"]|reading ['"]context['"]|ChunkLoadError|Failed to fetch dynamically imported module|ErrorBoundary caught|unhandled(?: promise)? rejection/i
+const emulatorArtifactPattern = /(?:https?:\/\/)?(?:localhost|127\.0\.0\.1):(?:8080|5001|9099|9199)(?:\b|\/)/i
+const emulatorHostPattern = /^(?:localhost|127\.0\.0\.1)(?::\d+)?$/i
 
 function fail(message) {
   throw new Error(message)
@@ -40,6 +42,12 @@ async function verifyBuildArtifacts() {
   }
 
   const assets = await readdir(path.join(DIST_DIR, 'assets'))
+  const emulatorArtifacts = []
+  for (const file of await collectFiles(DIST_DIR)) {
+    const match = (await readFile(file, 'utf8')).match(emulatorArtifactPattern)
+    if (match) emulatorArtifacts.push(`${path.relative(DIST_DIR, file)}: ${match[0]}`)
+  }
+  if (emulatorArtifacts.length > 0) fail(`Emulator endpoint found in built dist:\n${emulatorArtifacts.join('\n')}`)
   const forcedPreactChunks = assets.filter((name) => /^preact-vendor-.*\.js$/.test(name))
   if (forcedPreactChunks.length > 0) {
     fail(`Forced Preact vendor chunk returned: ${forcedPreactChunks.join(', ')}`)
@@ -49,12 +57,20 @@ async function verifyBuildArtifacts() {
   console.log('PREACT_SINGLE_RUNTIME_BUILD_GUARD PASS')
 }
 
+async function collectFiles(directory) {
+  const entries = await readdir(directory, { withFileTypes: true })
+  return (await Promise.all(entries.map((entry) => {
+    const file = path.join(directory, entry.name)
+    return entry.isDirectory() ? collectFiles(file) : [file]
+  }))).flat()
+}
+
 async function waitForPreview(child) {
   const deadline = Date.now() + 20_000
   let lastError = 'preview did not respond'
 
   while (Date.now() < deadline) {
-    if (child.exitCode !== null) fail(`vite preview exited early with code ${child.exitCode}`)
+    if (child.exitCode !== null && child.exitCode !== undefined) fail(`vite preview exited early with code ${child.exitCode}`)
     try {
       const response = await fetch(baseUrl)
       if (response.ok) return
@@ -98,6 +114,7 @@ async function inspectRoute(context, route) {
   const fatalConsoleErrors = new Set()
   const nonFatalConsoleErrors = new Set()
   const failedRequests = new Set()
+  const emulatorRequests = new Set()
 
   page.on('pageerror', (error) => pageErrors.add(error.stack || error.message))
   page.on('console', (message) => {
@@ -113,6 +130,14 @@ async function inspectRoute(context, route) {
   page.on('requestfailed', (request) => {
     const url = new URL(request.url())
     failedRequests.add(`${request.resourceType()} ${url.host} ${request.url()} (${request.failure()?.errorText || 'unknown failure'})`)
+  })
+  page.on('request', (request) => {
+    const url = new URL(request.url())
+    // The local verifier necessarily serves the document from 127.0.0.1.
+    // Every other loopback request is a fatal production configuration leak.
+    if (emulatorHostPattern.test(url.host) && url.origin !== new URL(baseUrl).origin) {
+      emulatorRequests.add(`${request.resourceType()} ${request.url()}`)
+    }
   })
   await page.addInitScript(() => {
     window.addEventListener('unhandledrejection', (event) => {
@@ -160,6 +185,7 @@ async function inspectRoute(context, route) {
   }
   if (pageErrors.size > 0) violations.push(`pageerror detected:\n${[...pageErrors].join('\n')}`)
   if (fatalConsoleErrors.size > 0) violations.push(`fatal console error detected:\n${[...fatalConsoleErrors].join('\n')}`)
+  if (emulatorRequests.size > 0) violations.push(`FATAL emulator request detected:\n${[...emulatorRequests].join('\n')}`)
   if (isLiveRuntime && failedRequests.size > 0) violations.push(`failed request detected:\n${[...failedRequests].join('\n')}`)
   if (violations.length > 0) fail(`${route}:\n${violations.join('\n')}`)
 
