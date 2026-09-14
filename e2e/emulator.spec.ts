@@ -893,7 +893,11 @@ test('sales link: /s/:code redirects to the storefront and DELIVERED orders coun
   // Buy via the link → the order snapshots the link.
   await page.getByRole('button', { name: 'أضف إلى السلة' }).click()
   await expect(page.getByRole('link', { name: /السلة،\s*1 منتج/ })).toBeVisible({ timeout: 15000 })
-  await page.goto(`/store/${ref}/cart`, { waitUntil: 'domcontentloaded' })
+  // Follow the visible cart link so the cart context remains hydrated for the
+  // current storefront scope; this mirrors the shopper path and avoids a
+  // document navigation racing cart persistence.
+  await page.getByRole('link', { name: /السلة،\s*1 منتج/ }).click()
+  await page.waitForURL(new RegExp(`/store/${ref}/cart`), { timeout: 15000 })
   await page.getByRole('button', { name: 'إتمام الطلب' }).click()
   await page.locator('.field', { hasText: 'الاسم الكامل' }).locator('input').fill('عميل الرابط')
   await page.locator('.field', { hasText: 'رقم الهاتف' }).locator('input').fill('01099990002')

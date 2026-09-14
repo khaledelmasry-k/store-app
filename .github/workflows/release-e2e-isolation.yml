@@ -20,6 +20,7 @@ jobs:
           - emulator-core
           - emulator-core-shipping
           - emulator-core-hero
+          - emulator-core-sales-link
           - public-storefront
           - auth-subscription
           - subscription-lifecycle
