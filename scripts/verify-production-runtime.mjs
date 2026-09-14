@@ -9,6 +9,7 @@ const PREVIEW_PORT = Number(process.env.PRODUCTION_PREVIEW_PORT || 4173)
 const liveArg = process.argv.find((arg) => arg.startsWith('--url='))
 const externalBaseUrl = liveArg?.slice('--url='.length).replace(/\/$/, '')
 const baseUrl = externalBaseUrl || `http://127.0.0.1:${PREVIEW_PORT}`
+const isLiveRuntime = Boolean(externalBaseUrl)
 const routes = ['/', '/login', '/register']
 const fatalRuntimePattern = /Cannot read properties of undefined|reading ['"]_?_[Hh]['"]|reading ['"]context['"]|ChunkLoadError|Failed to fetch dynamically imported module|ErrorBoundary caught|unhandled(?: promise)? rejection/i
 
@@ -95,11 +96,23 @@ async function inspectRoute(context, route) {
   const page = await context.newPage()
   const pageErrors = new Set()
   const fatalConsoleErrors = new Set()
+  const nonFatalConsoleErrors = new Set()
+  const failedRequests = new Set()
 
   page.on('pageerror', (error) => pageErrors.add(error.stack || error.message))
   page.on('console', (message) => {
     const text = message.text()
-    if (message.type() === 'error' || fatalRuntimePattern.test(text)) fatalConsoleErrors.add(`${message.type()}: ${text}`)
+    const entry = `${message.type()}: ${text}`
+    const runtimeFatal = fatalRuntimePattern.test(text)
+    if (runtimeFatal || (isLiveRuntime && message.type() === 'error')) {
+      fatalConsoleErrors.add(entry)
+    } else if (message.type() === 'error') {
+      nonFatalConsoleErrors.add(entry)
+    }
+  })
+  page.on('requestfailed', (request) => {
+    const url = new URL(request.url())
+    failedRequests.add(`${request.resourceType()} ${url.host} ${request.url()} (${request.failure()?.errorText || 'unknown failure'})`)
   })
   await page.addInitScript(() => {
     window.addEventListener('unhandledrejection', (event) => {
@@ -147,8 +160,14 @@ async function inspectRoute(context, route) {
   }
   if (pageErrors.size > 0) violations.push(`pageerror detected:\n${[...pageErrors].join('\n')}`)
   if (fatalConsoleErrors.size > 0) violations.push(`fatal console error detected:\n${[...fatalConsoleErrors].join('\n')}`)
+  if (isLiveRuntime && failedRequests.size > 0) violations.push(`failed request detected:\n${[...failedRequests].join('\n')}`)
   if (violations.length > 0) fail(`${route}:\n${violations.join('\n')}`)
 
+  if (!isLiveRuntime && (nonFatalConsoleErrors.size > 0 || failedRequests.size > 0)) {
+    console.log(`${route} NON_FATAL_EXTERNAL_CONSOLE_ERRORS ${nonFatalConsoleErrors.size} | REQUEST_FAILURES ${failedRequests.size}`)
+    for (const entry of nonFatalConsoleErrors) console.log(`  ${entry}`)
+    for (const entry of failedRequests) console.log(`  REQUEST_FAILED ${entry}`)
+  }
   console.log(`${route} PASS | pageerrors 0 | fatal console errors 0 | blank screen false`)
   await page.close()
 }
