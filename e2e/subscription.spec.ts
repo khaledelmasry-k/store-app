@@ -135,6 +135,11 @@ test('expired store is gated for visitors; products stay intact', async ({ page 
 })
 
 test('merchant activates during trial: submit payment → platform approves → active + orders reset', async ({ page, browser }) => {
+  // This stateful cross-context approval path performs two authenticated UI
+  // sessions plus Firestore projection polling. It exceeds the general 90s
+  // mobile-test budget under CI contention, so give only this release gate a
+  // bounded deterministic allowance.
+  test.setTimeout(180_000)
   const { storeId, email, password } = await makeTrialStore('activate')
   const sub = (await latestSub(storeId))!
   await db.collection('subscriptions').doc(sub.id).update({ ordersUsed: 12 })
