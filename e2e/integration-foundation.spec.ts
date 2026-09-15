@@ -299,6 +299,6 @@ test('Wasla adapter exposes no automatic cancellation capability', async () => {
   const providers = await callAs('seed-owner-a', 'getMerchantShippingProviders', { storeId: 'store-a' })
   const wasla = ((providers.data as any).adapters || []).find((adapter: any) => adapter.slug === 'wasla')
   expect(wasla.capabilities).toContain('createShipment')
-  expect(wasla.capabilities).toContain('tracking')
-  expect(wasla.capabilities).not.toContain('cancel')
+  expect(wasla.capabilities).toContain('trackShipment')
+  expect(wasla.capabilities).not.toContain('cancelShipment')
 })

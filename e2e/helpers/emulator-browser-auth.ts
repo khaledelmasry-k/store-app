@@ -136,11 +136,15 @@ async function authenticate(page: Page, uid: string, expectedRole: string, route
       await page.reload({ waitUntil: 'domcontentloaded' })
     }
   }
-  await shell.waitFor({ state: 'visible' })
+  // Never allow an unhealthy emulator listener to consume an entire test's
+  // budget. The hydration/reload path above is already the only recovery
+  // contract; if it cannot produce the role shell, fail with a bounded auth
+  // error so the calling spec can retry from a fresh browser context.
+  await shell.waitFor({ state: 'visible', timeout: 20_000 })
   await page.waitForFunction((role) => {
     const shell = document.querySelector(role === 'merchant' ? '.app-shell--dashboard' : '.app-shell--platform')
     return Boolean(shell && !document.body.innerText.includes('تسجيل الدخول'))
-  }, expectedRole)
+  }, expectedRole, { timeout: 20_000 })
   const identity = await page.evaluate(async (k) => {
     // Try window global first (if production had it), then fallback to indexedDB
     const wAuth: any = (window as any).__FIREBASE_AUTH__
