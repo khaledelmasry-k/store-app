@@ -37,7 +37,7 @@ export const PlatformShippingCompanyDetails: FunctionalComponent<{ id: string }>
   if (companyRes.loading) return <Loading variant="screen" />
   if (!company) return <EmptyState icon="local_shipping" title="شركة الشحن غير موجودة" />
   const merchantManagedApi = company.integrationType === 'api' && company.credentialMode === 'merchant'
-  const adapterAvailable = ['wasla', 'bosta'].includes(company.slug.trim().toLowerCase())
+  const adapterAvailable = company.integrationType === 'manual' || company.adapterStatus === 'production_ready'
 
   const testConnection = async () => {
     if (company.integrationType === 'manual') {
