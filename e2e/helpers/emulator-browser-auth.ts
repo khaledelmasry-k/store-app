@@ -43,6 +43,59 @@ async function issueEmulatorState(uid: string): Promise<EmulatorAuthState> {
   return response.json().then((payload) => ({ ...payload, customToken })) as Promise<EmulatorAuthState>
 }
 
+async function persistEmulatorAuthState(page: Page, uid: string, key: string, state: EmulatorAuthState) {
+  let adminEmail = ''
+  let adminDisplay = ''
+  try {
+    const rec: any = await admin.auth().getUser(uid)
+    adminEmail = rec.email || ''
+    adminDisplay = rec.displayName || ''
+  } catch {}
+  const emailVal = adminEmail || state.email || `${uid}@mk.test`
+  const displayVal = adminDisplay || emailVal.split('@')[0]
+  const expirationTime = Date.now() + Number(state.expiresIn || 3600) * 1000
+  const value: any = {
+    uid,
+    email: emailVal,
+    emailVerified: true,
+    displayName: displayVal,
+    isAnonymous: false,
+    providerData: [{ providerId: 'password', uid: emailVal, displayName: displayVal, email: emailVal, phoneNumber: null, photoURL: null }],
+    stsTokenManager: { refreshToken: state.refreshToken, accessToken: state.idToken, expirationTime },
+    createdAt: String(Date.now() - 86400000),
+    lastLoginAt: String(Date.now()),
+    apiKey: API_KEY,
+    appName: '[DEFAULT]',
+  }
+  await page.evaluate(
+    async ({ k, v }: { k: string; v: any }) => {
+      await new Promise<void>((resolve, reject) => {
+        const req = indexedDB.open('firebaseLocalStorageDb', 1)
+        const t = setTimeout(() => reject(new Error('indexedDB open timeout')), 5000)
+        req.onupgradeneeded = () => {
+          try {
+            if (!req.result.objectStoreNames.contains('firebaseLocalStorage')) req.result.createObjectStore('firebaseLocalStorage')
+          } catch {}
+        }
+        req.onsuccess = () => {
+          clearTimeout(t)
+          const db: any = req.result
+          try {
+            const tx = db.transaction('firebaseLocalStorage', 'readwrite')
+            const store: any = tx.objectStore('firebaseLocalStorage')
+            const put: any = store.put({ fbase_key: k, value: v })
+            put.onerror = () => reject(put.error)
+            tx.oncomplete = () => { db.close(); resolve() }
+            tx.onerror = () => reject(tx.error)
+          } catch (error) { reject(error) }
+        }
+        req.onerror = () => { clearTimeout(t); reject(req.error) }
+      })
+    },
+    { k: key, v: value },
+  )
+}
+
 async function authenticate(page: Page, uid: string, expectedRole: string, route: string) {
   const state = await issueEmulatorState(uid)
   const key = `firebase:authUser:${API_KEY}:[DEFAULT]`
@@ -70,56 +123,7 @@ async function authenticate(page: Page, uid: string, expectedRole: string, route
     ok = true
   } catch (e) {
     // Fallback for vite preview (no /src serving) - write directly to indexedDB
-    let adminEmail = ''
-    let adminDisplay = ''
-    try {
-      const rec: any = await admin.auth().getUser(uid)
-      adminEmail = rec.email || ''
-      adminDisplay = rec.displayName || ''
-    } catch {}
-    const emailVal = adminEmail || (state as any).email || `${uid}@mk.test`
-    const displayVal = adminDisplay || emailVal.split('@')[0]
-    const expirationTime = Date.now() + Number((state as any).expiresIn || 3600) * 1000
-    const value: any = {
-      uid,
-      email: emailVal,
-      emailVerified: true,
-      displayName: displayVal,
-      isAnonymous: false,
-      providerData: [{ providerId: 'password', uid: emailVal, displayName: displayVal, email: emailVal, phoneNumber: null, photoURL: null }],
-      stsTokenManager: { refreshToken: (state as any).refreshToken, accessToken: (state as any).idToken, expirationTime },
-      createdAt: String(Date.now() - 86400000),
-      lastLoginAt: String(Date.now()),
-      apiKey: API_KEY,
-      appName: '[DEFAULT]',
-    }
-    await page.evaluate(
-      async ({ k, v }: { k: string; v: any }) => {
-        await new Promise<void>((resolve, reject) => {
-          const req = indexedDB.open('firebaseLocalStorageDb', 1)
-          const t = setTimeout(() => reject(new Error('indexedDB open timeout')), 5000)
-          req.onupgradeneeded = () => {
-            try {
-              if (!req.result.objectStoreNames.contains('firebaseLocalStorage')) req.result.createObjectStore('firebaseLocalStorage')
-            } catch {}
-          }
-          req.onsuccess = () => {
-            clearTimeout(t)
-            const db: any = req.result
-            try {
-              const tx = db.transaction('firebaseLocalStorage', 'readwrite')
-              const store: any = tx.objectStore('firebaseLocalStorage')
-              const put: any = store.put({ fbase_key: k, value: v })
-              put.onerror = () => reject(put.error)
-              tx.oncomplete = () => { db.close(); resolve() }
-              tx.onerror = () => reject(tx.error)
-            } catch (e) { reject(e) }
-          }
-          req.onerror = () => { clearTimeout(t); reject(req.error) }
-        })
-      },
-      { k: key, v: value }
-    )
+    await persistEmulatorAuthState(page, uid, key, state)
     await page.reload({ waitUntil: 'domcontentloaded' })
     ok = true
   }
@@ -140,13 +144,19 @@ async function authenticate(page: Page, uid: string, expectedRole: string, route
     if (!(await waitForRoleShell(5_000))) {
       // A constrained emulator can occasionally lose the first AuthProvider
       // subscription while IndexedDB is being recreated. Reissue the already
-      // validated custom token once, then navigate from a fresh auth event.
-      await page.evaluate(async (token) => {
-        const firebase: any = await import('/src/shared/firebase/index.ts')
-        const mod: any = await import('/node_modules/.vite/deps/firebase_auth.js')
-        await mod.signOut(firebase.auth)
-        await mod.signInWithCustomToken(firebase.auth, token)
-      }, state.customToken)
+      // validated token once; vite preview uses the same IndexedDB fallback
+      // because it deliberately does not serve /src modules.
+      try {
+        await page.evaluate(async (token) => {
+          const firebase: any = await import('/src/shared/firebase/index.ts')
+          const mod: any = await import('/node_modules/.vite/deps/firebase_auth.js')
+          await mod.signOut(firebase.auth)
+          await mod.signInWithCustomToken(firebase.auth, token)
+        }, state.customToken)
+      } catch {
+        await persistEmulatorAuthState(page, uid, key, state)
+        await page.reload({ waitUntil: 'domcontentloaded' })
+      }
       await page.goto(route, { waitUntil: 'domcontentloaded' })
     }
   }
