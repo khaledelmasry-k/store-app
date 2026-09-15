@@ -1,17 +1,11 @@
 import { timingSafeEqual } from 'node:crypto'
 import type { CanonicalShipmentStatus, ShippingAdapterContext, ShippingProviderAdapter } from './types'
 import { sanitizeSensitiveText } from '../integrations/vault'
+import { ShippingProviderError } from './errors'
 
 const DEFAULT_BASE_URL = 'https://app.bosta.co/api/v2'
 
-export class ShippingProviderError extends Error {
-  constructor(
-    public readonly code: 'INVALID_CREDENTIALS' | 'PROVIDER_UNAVAILABLE' | 'CONFIGURATION_ERROR' | 'PROVIDER_REJECTED' | 'MAPPING_MISSING' | 'NOT_COVERED' | 'NO_PROVIDER',
-    message: string,
-    public readonly retryable: boolean,
-    public readonly httpStatus?: number,
-  ) { super(message) }
-}
+export { ShippingProviderError } from './errors'
 
 function baseUrl(context: ShippingAdapterContext) {
   const configured = String((context.provider as any)?.apiBaseUrl || '').trim()
@@ -164,7 +158,17 @@ export function mapBostaStatus(value: string | number): CanonicalShipmentStatus 
 
 export const bostaAdapter: ShippingProviderAdapter = {
   slug: 'bosta',
-  capabilities: ['createShipment', 'tracking', 'cancel', 'webhooks', 'cod', 'awb'],
+  capabilities: ['createShipment', 'trackShipment', 'cancelShipment', 'getDocument', 'webhook'],
+  requiresMerchantCredentials: true,
+  sanitizeCredentials(input) {
+    const raw = input && typeof input === 'object' ? input as Record<string, unknown> : {}
+    const apiKey = String(raw.apiKey || '').trim()
+    const webhookSecret = String(raw.webhookSecret || '').trim()
+    if (!apiKey) throw new Error('Bosta API key is required')
+    if (!webhookSecret) throw new Error('Bosta webhook Authorization key is required')
+    if (apiKey.length > 4096 || webhookSecret.length > 4096) throw new Error('Credential value is too long')
+    return { apiKey, webhookSecret }
+  },
   async testConnection(context) {
     await request(context, '/businesses/deliveries?limit=1&page=0')
     return { ok: true, message: 'Bosta credentials were validated by the provider' }

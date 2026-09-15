@@ -7,12 +7,11 @@ import { onDocumentCreated, onDocumentWritten } from 'firebase-functions/v2/fire
 import { defineSecret } from 'firebase-functions/params'
 import { createHash, randomBytes } from 'node:crypto'
 import { CANONICAL_PLANS } from './planCatalog'
-import { getShippingAdapter, getShippingRateAdapter, listShippingAdapters } from './shipping/registry'
-import { credentialSummary, encryptCredentials, sanitizeCredentials, sanitizeSensitiveText } from './integrations/vault'
+import { getShippingAdapter, getShippingAdapterForProvider, getShippingProviderConfig, listShippingAdapters, prepareShippingProviderConfig, resolveProviderTrackingNumber, sanitizeShippingCredentials, supportsShippingCapability } from './shipping/registry'
+import { credentialSummary, encryptCredentials, sanitizeSensitiveText } from './integrations/vault'
 import { emitIntegrationEvent } from './integrations/outbox'
 import { createShipmentForOrder, credentialDocumentId, loadIntegrationCredentials, publicWebhookUrl } from './shipping/service'
-import { ShippingProviderError } from './shipping/bosta'
-import { waslaPublicTrackingCode } from './shipping/wasla'
+import { ShippingProviderError } from './shipping/errors'
 
 admin.initializeApp()
 
@@ -398,7 +397,7 @@ function normalizeProviderServices(input: any) {
  */
 function hasVerifiedWebhookContract(slug: unknown, integrationType: unknown): boolean {
   const adapter = getShippingAdapter(String(slug || ''), String(integrationType || 'manual'))
-  return Boolean(adapter?.parseWebhook && adapter?.verifyWebhookSignature)
+  return Boolean(adapter?.parseWebhook && adapter?.verifyWebhookSignature && supportsShippingCapability(adapter, 'webhook'))
 }
 
 function safeShippingProvider(id: string, data: any) {
@@ -442,9 +441,9 @@ function safeShippingProvider(id: string, data: any) {
     allowMerchantRateOverride: data?.allowMerchantRateOverride === true,
     adapterConfigured: Boolean(adapter),
     capabilities,
-    canCreateShipment: Boolean(adapter?.createShipment && capabilities.includes('createShipment')),
-    canTrackShipment: Boolean(adapter?.trackShipment && capabilities.includes('tracking')),
-    canCancelShipment: Boolean(adapter?.cancelShipment && capabilities.includes('cancel')),
+    canCreateShipment: Boolean(adapter?.createShipment && supportsShippingCapability(adapter, 'createShipment')),
+    canTrackShipment: Boolean(adapter?.trackShipment && supportsShippingCapability(adapter, 'trackShipment')),
+    canCancelShipment: Boolean(adapter?.cancelShipment && supportsShippingCapability(adapter, 'cancelShipment')),
     lastTestedAt: data?.lastTestedAt || null,
     businessProfile: data?.businessProfile || undefined,
     branding: data?.branding ? { logoUrl: data.branding.logoUrl || undefined, logoStoragePath: data.branding.logoStoragePath || undefined, brandColor: data.branding.brandColor || undefined } : undefined,
@@ -464,8 +463,9 @@ function normalizeShippingProviderPayload(input: any) {
   const status = SHIPPING_PROVIDER_STATUSES.includes(input?.status) ? input.status : 'draft'
   const integrationType = SHIPPING_INTEGRATION_TYPES.includes(input?.integrationType) ? input.integrationType : 'manual'
   const credentialMode = SHIPPING_CREDENTIAL_MODES.includes(input?.credentialMode) ? input.credentialMode : 'platform'
-  if (['bosta', 'wasla'].includes(slug) && (integrationType !== 'api' || credentialMode !== 'merchant')) {
-    throw new HttpsError('invalid-argument', `${slug === 'wasla' ? 'Wasla' : 'Bosta'} must use API integration with merchant-owned credentials`)
+  const adapter = getShippingAdapter(slug, integrationType)
+  if (adapter?.requiresMerchantCredentials && (integrationType !== 'api' || credentialMode !== 'merchant')) {
+    throw new HttpsError('invalid-argument', 'This provider requires API integration with merchant-owned credentials')
   }
   if (status === 'active' && input?.adapterStatus && input.adapterStatus !== 'production_ready') throw new HttpsError('failed-precondition', 'لا يمكن تفعيل مزود قبل جاهزية المحول للإنتاج')
   const services = normalizeProviderServices(input?.services)
@@ -1611,9 +1611,10 @@ export const createOrder = onCall({ region: SHIPPING_FUNCTION_REGION, secrets: [
     }
     selectedShippingProvider = { id: providerSnap.id, ...(providerSnap.data() || {}) }
     selectedShippingConfig = configSnap.data() || {}
-    if (String(selectedShippingProvider.slug || '').toLowerCase() === 'wasla') {
-      const vault = await loadIntegrationCredentials(db, String(storeId), 'shipping', 'wasla').catch(() => null)
-      if (!vault) throw new HttpsError('failed-precondition', 'أكمل التاجر حفظ مفتاح وصلة واختبار الاتصال أولاً')
+    const adapter = getShippingAdapterForProvider(selectedShippingProvider)
+    if (selectedShippingProvider.integrationType === 'api' && supportsShippingCapability(adapter, 'getRates')) {
+      const vault = await loadIntegrationCredentials(db, String(storeId), 'shipping', String(selectedShippingProvider.slug || '')).catch(() => null)
+      if (!vault) throw new HttpsError('failed-precondition', 'أكمل التاجر حفظ بيانات اعتماد شركة الشحن واختبار الاتصال أولاً')
       selectedShippingCredentials = vault.credentials
     }
   }
@@ -1909,9 +1910,9 @@ export const createOrder = onCall({ region: SHIPPING_FUNCTION_REGION, secrets: [
     // and zones are only a compatibility fallback when no provider was sent.
     let shipping = computeShippingFee(shippingCfg, zones, subtotal, customer.governorate || '')
     if (selectedShippingProvider && selectedShippingConfig) {
-      const adapter = getShippingRateAdapter(selectedShippingProvider.slug, selectedShippingProvider.integrationType)
-      const rates = adapter?.getRates
-        ? await adapter.getRates({ provider: selectedShippingProvider, config: selectedShippingConfig, credentials: selectedShippingCredentials }, { subtotal, currency: storeData.currency || 'EGP', governorate: customer.governorate || '', city: customer.city || '', area: customer.area || '', weightKg: Math.max(0, Number(request.data?.packageWeightKg || selectedShippingConfig.defaultPackageWeight || 1)) })
+      const adapter = getShippingAdapterForProvider(selectedShippingProvider)
+      const rates = adapter?.getRates && supportsShippingCapability(adapter, 'getRates')
+        ? await adapter.getRates({ provider: selectedShippingProvider, config: getShippingProviderConfig(adapter, selectedShippingConfig), credentials: selectedShippingCredentials }, { subtotal, currency: storeData.currency || 'EGP', governorate: customer.governorate || '', city: customer.city || '', area: customer.area || '', weightKg: Math.max(0, Number(request.data?.packageWeightKg || selectedShippingConfig.defaultPackageWeight || 1)) })
         : []
       const enabledCodes = Array.isArray(selectedShippingConfig.enabledServiceCodes) ? selectedShippingConfig.enabledServiceCodes.map(String) : []
       const matchingRates = rates.filter((candidate) => !enabledCodes.length || enabledCodes.includes(String(candidate.serviceCode || '')))
@@ -5667,11 +5668,13 @@ export const saveIntegrationCredentials = onCall({ region: SHIPPING_FUNCTION_REG
   if (!storeSnap.exists) throw new HttpsError('not-found', 'المتجر غير موجود')
   if (!providerSnap.exists || providerSnap.data()?.integrationType !== 'api') throw new HttpsError('failed-precondition', 'مزود API غير صالح')
   const provider = String(providerSnap.data()?.slug || '').trim().toLowerCase()
-  if (provider === 'bosta' && providerSnap.data()?.credentialMode !== 'merchant') {
-    throw new HttpsError('failed-precondition', 'Bosta requires merchant-owned credentials')
+  const adapter = getShippingAdapterForProvider({ id: providerSnap.id, ...(providerSnap.data() || {}) })
+  if (!adapter || !adapter.sanitizeCredentials) throw new HttpsError('failed-precondition', 'مزود الاعتماد غير مدعوم')
+  if (adapter.requiresMerchantCredentials && providerSnap.data()?.credentialMode !== 'merchant') {
+    throw new HttpsError('failed-precondition', 'هذا المزود يتطلب بيانات اعتماد يملكها التاجر')
   }
   let credentials: Record<string, string>
-  try { credentials = sanitizeCredentials(provider, request.data?.credentials) }
+  try { credentials = sanitizeShippingCredentials(adapter, request.data?.credentials) }
   catch (error) { throw new HttpsError('invalid-argument', error instanceof Error ? error.message : 'بيانات الاعتماد غير صالحة') }
   const ref = db.doc(`integrationCredentials/${credentialDocumentId(storeId, 'shipping', provider)}`)
   const existing = await ref.get()
@@ -5735,17 +5738,10 @@ export const saveStoreShippingProvider = onCall(async (request: CallableRequest<
   if (enabledServiceCodes.some((code: string) => providerServices.length > 0 && !providerServices.includes(code))) {
     throw new HttpsError('invalid-argument', 'الخدمة المختارة غير متاحة لدى شركة الشحن')
   }
-  const waslaIdMap = (value: unknown, label: string) => {
-    const rawMap = value && typeof value === 'object' ? value as Record<string, unknown> : {}
-    const entries = Object.entries(rawMap).slice(0, 200)
-    const result: Record<string, number> = {}
-    for (const [name, id] of entries) {
-      const numericId = Number(id)
-      if (!String(name).trim() || !Number.isInteger(numericId) || numericId <= 0) throw new HttpsError('invalid-argument', `معرف ${label} غير صالح`)
-      result[String(name).trim().slice(0, 120)] = numericId
-    }
-    return result
-  }
+  const adapter = getShippingAdapterForProvider({ id: providerSnap.id, ...(providerSnap.data() || {}) })
+  let providerConfigWrite
+  try { providerConfigWrite = prepareShippingProviderConfig(adapter, input) }
+  catch (error) { throw new HttpsError('invalid-argument', error instanceof Error ? error.message : 'إعدادات مزود الشحن غير صالحة') }
   const config = {
     storeId,
     providerId,
@@ -5764,14 +5760,8 @@ export const saveStoreShippingProvider = onCall(async (request: CallableRequest<
     etaMinHours: Math.max(0, Number(input.etaMinHours || 0)),
     etaMaxHours: Math.max(0, Number(input.etaMaxHours || 0)),
     allowRateOverride: input.allowRateOverride === true,
-    waslaPickupLocationType: String(input.waslaPickupLocationType || 'merchant_store').slice(0, 60),
-    waslaPickupLocationName: String(input.waslaPickupLocationName || '').slice(0, 160),
-    waslaPickupContactPhone: String(input.waslaPickupContactPhone || '').slice(0, 40),
-    waslaPickupAddressLine1: String(input.waslaPickupAddressLine1 || '').slice(0, 500),
-    waslaPickupGovernorateId: Math.max(0, Math.floor(Number(input.waslaPickupGovernorateId || 0))),
-    waslaPickupCityId: Math.max(0, Math.floor(Number(input.waslaPickupCityId || 0))),
-    waslaGovernorateIds: waslaIdMap(input.waslaGovernorateIds, 'محافظة وصلة'),
-    waslaCityIds: waslaIdMap(input.waslaCityIds, 'مدينة وصلة'),
+    providerConfig: { [providerSlug]: providerConfigWrite.providerConfig },
+    ...(providerConfigWrite.legacyConfig || {}),
     isDefault: input.isDefault === true,
     configurationStatus: input.enabled === false
       ? 'DISABLED'
@@ -5835,7 +5825,7 @@ export const testShippingConnection = onCall({ region: SHIPPING_FUNCTION_REGION,
   const storeId = request.data?.storeId ? String(request.data.storeId).trim() : ''
   const providerSnap = await db.doc(`shippingProviders/${providerId}`).get()
   if (!providerSnap.exists) throw new HttpsError('not-found', 'شركة الشحن غير موجودة')
-  const provider = providerSnap.data() || {}
+  const provider = { id: providerSnap.id, ...(providerSnap.data() || {}) } as Record<string, any>
   const role = await getUserRole(request.auth.uid)
   if (role === 'superAdmin') {
     // Platform credentials are loaded only from server-side secret storage when
@@ -5846,7 +5836,7 @@ export const testShippingConnection = onCall({ region: SHIPPING_FUNCTION_REGION,
     const configSnap = await db.doc(`storeShippingProviders/${storeId}_${providerId}`).get()
     if (!configSnap.exists) throw new HttpsError('failed-precondition', 'فعّل شركة الشحن وأكمل إعدادها أولاً')
   }
-  const adapter = getShippingAdapter(provider.slug, provider.integrationType)
+  const adapter = getShippingAdapterForProvider(provider)
   if (!adapter) return { ok: false, configured: false, message: 'API integration not configured' }
   const config = storeId ? (await db.doc(`storeShippingProviders/${storeId}_${providerId}`).get()).data() : null
   const vault = storeId && provider.integrationType !== 'manual'
@@ -5854,7 +5844,7 @@ export const testShippingConnection = onCall({ region: SHIPPING_FUNCTION_REGION,
     : null
   if (provider.integrationType !== 'manual' && !vault) return { ok: false, configured: false, status: 'NOT_CONFIGURED', message: 'بيانات الاعتماد غير محفوظة' }
   try {
-    const result = await adapter.testConnection({ provider, config, credentials: vault?.credentials || null })
+    const result = await adapter.testConnection({ provider, config: getShippingProviderConfig(adapter, config), credentials: vault?.credentials || null })
     const returnedStatus = String((result as any)?.status || '')
     const status = result.ok
       ? 'CONNECTED'
@@ -6001,22 +5991,22 @@ export const getShippingOptions = onCall({ region: SHIPPING_FUNCTION_REGION, sec
       continue
     }
     hasCanonicalProvider = true
-    const adapter = getShippingRateAdapter(provider.slug, provider.integrationType)
-    if (!adapter.getRates) {
+    const adapter = getShippingAdapterForProvider(provider)
+    if (!adapter || !adapter.getRates || !supportsShippingCapability(adapter, 'getRates')) {
       unavailableReasons.push(`شركة ${String(provider.name || 'الشحن')} لا تدعم التسعير حالياً`)
       continue
     }
     let rates: Array<Record<string, any>> = []
     try {
       const providerSlug = String(provider.slug || '').toLowerCase()
-      const vault = providerSlug === 'wasla'
+      const vault = provider.integrationType === 'api'
         ? await loadIntegrationCredentials(db, storeId, 'shipping', providerSlug).catch(() => null)
         : null
-      if (providerSlug === 'wasla' && !vault) {
-        unavailableReasons.push('أكمل التاجر حفظ واختبار مفتاح وصلة أولاً')
+      if (provider.integrationType === 'api' && !vault) {
+        unavailableReasons.push('أكمل التاجر حفظ واختبار بيانات اعتماد شركة الشحن أولاً')
         continue
       }
-      rates = await adapter.getRates({ provider, config, credentials: vault?.credentials || null }, {
+      rates = await adapter.getRates({ provider, config: getShippingProviderConfig(adapter, config), credentials: vault?.credentials || null }, {
         subtotal,
         currency: storeSnap.data()?.currency || 'EGP',
         governorate: destination.governorate,
@@ -6044,8 +6034,7 @@ export const getShippingOptions = onCall({ region: SHIPPING_FUNCTION_REGION, sec
       continue
     }
     if (!rates.length) {
-      // Distinguish between genuinely not covered vs other cases
-      // For wasla, NOT_COVERED is already thrown, so this is for other providers or empty rates
+      // Empty normalized rates mean the destination is not covered.
       unavailableReasons.push('شركة الشحن لا تغطي هذه الوجهة.')
     }
     const enabledCodes = Array.isArray(config.enabledServiceCodes) ? config.enabledServiceCodes.map(String) : []
@@ -6083,25 +6072,33 @@ export const getShippingOptions = onCall({ region: SHIPPING_FUNCTION_REGION, sec
   return { options, unavailableReason: options.length ? null : actionableReason || unavailableReasons[0] || 'لا توجد خدمة شحن مفعّلة لهذه الوجهة' }
 })
 
-/** Merchant-only lookup: returns Wasla's live location names/IDs, never its API key. */
-export const getWaslaLocations = onCall({ region: SHIPPING_FUNCTION_REGION, secrets: [integrationVaultKey] }, async (request: CallableRequest<any>) => {
+/** Merchant-only provider location lookup. Provider-specific mapping stays in its adapter. */
+async function getShippingProviderLocationsHandler(request: CallableRequest<any>) {
   if (!request.auth) throw new HttpsError('unauthenticated', 'يجب تسجيل الدخول')
   const storeId = String(request.data?.storeId || '').trim()
   const providerId = String(request.data?.providerId || '').trim()
   if (!storeId || !providerId) throw new HttpsError('invalid-argument', 'storeId و providerId مطلوبان')
   await assertStoreAccess(request, storeId, 'settings:edit')
   const providerSnap = await db.doc(`shippingProviders/${providerId}`).get()
-  if (!providerSnap.exists || String(providerSnap.data()?.slug || '').toLowerCase() !== 'wasla') throw new HttpsError('failed-precondition', 'مزود وصلة غير صالح')
-  const vault = await loadIntegrationCredentials(db, storeId, 'shipping', 'wasla').catch(() => null)
-  if (!vault) throw new HttpsError('failed-precondition', 'احفظ مفتاح وصلة أولاً')
-  const adapter = getShippingAdapter('wasla', 'api')
-  if (!adapter?.getLocations) throw new HttpsError('failed-precondition', 'محول وصلة غير متاح')
+  if (!providerSnap.exists || providerSnap.data()?.status !== 'active') throw new HttpsError('failed-precondition', 'مزود الشحن غير صالح')
+  const provider = { id: providerSnap.id, ...(providerSnap.data() || {}) } as Record<string, any>
+  const adapter = getShippingAdapterForProvider(provider)
+  if (!adapter?.getLocations || !supportsShippingCapability(adapter, 'locations')) throw new HttpsError('failed-precondition', 'هذا المزود لا يدعم مواقع الشحن')
+  const vault = provider.integrationType === 'api'
+    ? await loadIntegrationCredentials(db, storeId, 'shipping', String(provider.slug || '')).catch(() => null)
+    : null
+  if (provider.integrationType === 'api' && !vault) throw new HttpsError('failed-precondition', 'احفظ بيانات اعتماد شركة الشحن أولاً')
+  const configSnap = await db.doc(`storeShippingProviders/${storeId}_${providerId}`).get()
   try {
-    return { locations: await adapter.getLocations({ provider: providerSnap.data() || {}, credentials: vault.credentials || null }) }
+    return { providerId, locations: await adapter.getLocations({ provider, config: getShippingProviderConfig(adapter, configSnap.data() || {}), credentials: vault?.credentials || null }) }
   } catch (error) {
-    throw new HttpsError('unavailable', sanitizeSensitiveText(error instanceof Error ? error.message : 'تعذر تحميل مناطق وصلة'))
+    throw new HttpsError('unavailable', sanitizeSensitiveText(error instanceof Error ? error.message : 'تعذر تحميل مواقع شركة الشحن'))
   }
-})
+}
+
+export const getShippingProviderLocations = onCall({ region: SHIPPING_FUNCTION_REGION, secrets: [integrationVaultKey] }, getShippingProviderLocationsHandler)
+/** Compatibility callable retained for existing Wasla merchant settings screens. */
+export const getWaslaLocations = onCall({ region: SHIPPING_FUNCTION_REGION, secrets: [integrationVaultKey] }, getShippingProviderLocationsHandler)
 
 /** Creates a shipment through the selected store-enabled provider. */
 export const createOrderShipment = onCall({ region: SHIPPING_FUNCTION_REGION, secrets: [integrationVaultKey] }, async (request: CallableRequest<any>) => {
@@ -6189,20 +6186,17 @@ export const refreshShipmentTracking = onCall({ region: SHIPPING_FUNCTION_REGION
   const [providerSnap, configSnap] = await Promise.all([db.doc(`shippingProviders/${shipment.providerId}`).get(), db.doc(`storeShippingProviders/${shipment.storeId}_${shipment.providerId}`).get()])
   if (!providerSnap.exists) throw new HttpsError('failed-precondition', 'مزود الشحن غير موجود')
   const provider = { id: providerSnap.id, ...(providerSnap.data() || {}) } as Record<string, any>
-  const adapter = getShippingAdapter(provider.slug, provider.integrationType)
-  if (!adapter?.trackShipment) throw new HttpsError('failed-precondition', 'التتبع غير مدعوم لهذا المزود')
+  const adapter = getShippingAdapterForProvider(provider)
+  if (!adapter?.trackShipment || !supportsShippingCapability(adapter, 'trackShipment')) throw new HttpsError('failed-precondition', 'التتبع غير مدعوم لهذا المزود')
   const vault = await loadIntegrationCredentials(db, shipment.storeId, 'shipping', provider.slug)
   if (!vault) throw new HttpsError('failed-precondition', 'بيانات الاعتماد غير مهيأة')
-  const result = await adapter.trackShipment({ provider, config: configSnap.data() || {}, credentials: vault.credentials }, shipment)
+  const result = await adapter.trackShipment({ provider, config: getShippingProviderConfig(adapter, configSnap.data() || {}), credentials: vault.credentials }, shipment)
   const status = adapter.mapStatus ? adapter.mapStatus(String(result.status || shipment.status)) : shipment.status
   // API-carrier state is authoritative. Apply it through the same guarded
   // transition used by webhooks so the linked order, inventory and analytics
   // can never drift away from the shipment after a manual refresh.
   await applySystemShipmentStatus(shipmentId, String(status), `poll:${String(provider.slug || 'carrier')}`)
-  const waslaFallbackCode = String(provider.slug || '') === 'wasla'
-    ? waslaPublicTrackingCode(result.providerShipmentId || shipment.providerShipmentId)
-    : null
-  const trackingNumber = result.trackingNumber || waslaFallbackCode || shipment.trackingNumber || shipment.providerShipmentId || null
+  const trackingNumber = resolveProviderTrackingNumber(adapter, result) || shipment.trackingNumber || shipment.providerShipmentId || null
   // A carrier can disclose the delivery-attempt reason in an earlier response
   // but omit it in a later status poll. Never replace a real recorded reason
   // with the generic fallback in that case.
@@ -6322,12 +6316,12 @@ export const downloadShipmentDocument = onCall({ region: SHIPPING_FUNCTION_REGIO
   ])
   if (!providerSnap.exists) throw new HttpsError('failed-precondition', 'مزود الشحن غير موجود')
   const provider = { id: providerSnap.id, ...(providerSnap.data() || {}) } as Record<string, any>
-  const adapter = getShippingAdapter(provider.slug, provider.integrationType)
-  if (!adapter?.getShipmentDocument) throw new HttpsError('failed-precondition', 'مستند الشحنة غير مدعوم لهذا المزود')
+  const adapter = getShippingAdapterForProvider(provider)
+  if (!adapter?.getShipmentDocument || !supportsShippingCapability(adapter, 'getDocument')) throw new HttpsError('failed-precondition', 'مستند الشحنة غير مدعوم لهذا المزود')
   const vault = await loadIntegrationCredentials(db, shipment.storeId, 'shipping', provider.slug)
   if (!vault) throw new HttpsError('failed-precondition', 'بيانات الاعتماد غير مهيأة')
   try {
-    const document = await adapter.getShipmentDocument({ provider, config: configSnap.data() || {}, credentials: vault.credentials }, shipment)
+    const document = await adapter.getShipmentDocument({ provider, config: getShippingProviderConfig(adapter, configSnap.data() || {}), credentials: vault.credentials }, shipment)
     await shipmentSnap.ref.set({ documentAvailable: true, documentVerifiedAt: now(), updatedAt: now() }, { merge: true })
     return { ok: true, ...document }
   } catch (error) {
@@ -6353,9 +6347,9 @@ export const cancelExternalShipment = onCall({ region: SHIPPING_FUNCTION_REGION,
   const [providerSnap, configSnap] = await Promise.all([db.doc(`shippingProviders/${shipment.providerId}`).get(), db.doc(`storeShippingProviders/${shipment.storeId}_${shipment.providerId}`).get()])
   if (!providerSnap.exists) throw new HttpsError('failed-precondition', 'مزود الشحن غير موجود')
   const provider = { id: providerSnap.id, ...(providerSnap.data() || {}) } as Record<string, any>
-  const adapter = getShippingAdapter(provider.slug, provider.integrationType)
-  const canTrackShipment = Boolean(adapter?.trackShipment && adapter.capabilities.includes('tracking'))
-  const canCancelShipment = Boolean(adapter?.cancelShipment && adapter.capabilities.includes('cancel'))
+  const adapter = getShippingAdapterForProvider(provider)
+  const canTrackShipment = Boolean(adapter?.trackShipment && supportsShippingCapability(adapter, 'trackShipment'))
+  const canCancelShipment = Boolean(adapter?.cancelShipment && supportsShippingCapability(adapter, 'cancelShipment'))
   if (!canCancelShipment) throw new HttpsError('failed-precondition', 'شركة الشحن الحالية لا تتيح الإلغاء التلقائي عبر API. ألغِ الشحنة من لوحة الشركة أولاً، ثم استخدم تحديث الحالة لتأكيدها في متجري.')
   const vault = await loadIntegrationCredentials(db, shipment.storeId, 'shipping', provider.slug)
   if (!vault) throw new HttpsError('failed-precondition', 'بيانات الاعتماد غير مهيأة')
@@ -6363,7 +6357,7 @@ export const cancelExternalShipment = onCall({ region: SHIPPING_FUNCTION_REGION,
   // Refresh first when the adapter has a real tracking contract. A stale local
   // CREATED state must never authorize cancelling an already-picked-up parcel.
   if (canTrackShipment) {
-    const remote = await adapter!.trackShipment!({ provider, config: configSnap.data() || {}, credentials: vault.credentials }, shipment)
+    const remote = await adapter!.trackShipment!({ provider, config: getShippingProviderConfig(adapter, configSnap.data() || {}), credentials: vault.credentials }, shipment)
     const remoteStatus = adapter!.mapStatus ? adapter!.mapStatus(String(remote.status || shipment.status)) : String(remote.status || shipment.status)
     await applySystemShipmentStatus(shipmentId, String(remoteStatus), `poll:${String(provider.slug || 'carrier')}`)
     if (remoteStatus === 'CANCELLED') return { ok: true, status: 'CANCELLED', duplicate: true }
@@ -6397,7 +6391,7 @@ export const cancelExternalShipment = onCall({ region: SHIPPING_FUNCTION_REGION,
   // A resolved provider cancellation call is the remote confirmation. Local
   // cancellation and inventory restoration happen only after this succeeds.
   try {
-    await adapter!.cancelShipment!({ provider, config: configSnap.data() || {}, credentials: vault.credentials }, freshShipment)
+    await adapter!.cancelShipment!({ provider, config: getShippingProviderConfig(adapter, configSnap.data() || {}), credentials: vault.credentials }, freshShipment)
   } catch (error) {
     await shipmentRef.set({ cancellationState: 'FAILED', cancellationError: sanitizeSensitiveText(error instanceof Error ? error.message : 'تعذر إلغاء الشحنة').slice(0, 500), updatedAt: now() }, { merge: true })
     if (error instanceof ShippingProviderError) throw new HttpsError(error.retryable ? 'unavailable' : 'failed-precondition', error.message, { code: error.code, retryable: error.retryable })
@@ -6611,7 +6605,7 @@ export const shippingWebhook = onRequest({ region: SHIPPING_FUNCTION_REGION, sec
   if (request.method !== 'POST') { response.status(405).send('Method Not Allowed'); return }
   const providerSlug = String(request.path.split('/').filter(Boolean).pop() || request.query.provider || '').toLowerCase()
   const adapter = getShippingAdapter(providerSlug, 'api')
-  if (!adapter?.parseWebhook || !adapter.verifyWebhookSignature) { response.status(404).send('Unknown provider'); return }
+  if (!adapter?.parseWebhook || !adapter.verifyWebhookSignature || !supportsShippingCapability(adapter, 'webhook')) { response.status(404).send('Unknown provider'); return }
   let parsed: Record<string, any>
   try { parsed = adapter.parseWebhook(request.body, request.headers as Record<string, string | string[] | undefined>) as Record<string, any> }
   catch { response.status(400).send('Invalid payload'); return }
@@ -7190,9 +7184,10 @@ export const trackOrder = onCall(async (request: CallableRequest<{ storeId?: str
       shipment: shipmentSnap?.exists ? {
         providerName: shipment.providerName || null,
         status: shipment.status || null,
-        trackingNumber: String(shipment.provider || shipment.providerId || '').toLowerCase() === 'wasla'
-          ? waslaPublicTrackingCode(shipment.trackingNumber) || waslaPublicTrackingCode(shipment.providerShipmentId) || shipment.trackingNumber || shipment.providerShipmentId || shipment.externalShipmentId || null
-          : shipment.trackingNumber || shipment.providerShipmentId || shipment.externalShipmentId || null,
+        trackingNumber: resolveProviderTrackingNumber(
+          getShippingAdapter(String(shipment.provider || ''), shipment.integrationType),
+          { trackingNumber: shipment.trackingNumber, providerShipmentId: shipment.providerShipmentId },
+        ) || shipment.providerShipmentId || shipment.externalShipmentId || null,
         trackingUrl: shipment.trackingUrl || null,
         failureReason: shipment.failureReason || null,
         updatedAt: shipment.updatedAt || null,

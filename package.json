@@ -18,6 +18,7 @@
     "verify:visual": "bash scripts/verify-visual.sh",
     "verify:integration": "firebase emulators:exec --project mk-store-app --only auth,firestore,functions,storage \"bash scripts/verify-integration.sh\"",
     "verify:wasla-rates": "npm --prefix functions run build && node scripts/verify-wasla-rates.mjs",
+    "verify:shipping-provider-neutral": "npm --prefix functions run build && node scripts/verify-shipping-provider-neutral.mjs",
     "verify:shipping-commercial": "node scripts/verify-shipping-commercial.mjs",
     "verify:production-runtime": "node scripts/verify-production-runtime.mjs",
     "verify:production-dist": "node scripts/verify-production-dist.mjs",

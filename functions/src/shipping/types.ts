@@ -1,5 +1,6 @@
 export type ShippingIntegrationType = 'api' | 'manual'
 export type ShippingCredentialMode = 'platform' | 'merchant' | 'hybrid'
+export type ShippingCapability = 'getRates' | 'createShipment' | 'trackShipment' | 'cancelShipment' | 'getDocument' | 'webhook' | 'locations'
 
 export type CanonicalShipmentStatus =
   | 'CREATED'
@@ -19,9 +20,25 @@ export interface ShippingAdapterContext {
   credentials?: Record<string, unknown> | null
 }
 
+export interface ShippingProviderConfigWrite {
+  /** New neutral storage location: storeShippingProviders.providerConfig[slug]. */
+  providerConfig: Record<string, unknown>
+  /** Compatibility mirror for existing screens/documents. Never required by core. */
+  legacyConfig?: Record<string, unknown>
+}
+
 export interface ShippingProviderAdapter {
   readonly slug: string
-  readonly capabilities: string[]
+  readonly capabilities: readonly ShippingCapability[]
+  readonly requiresMerchantCredentials?: boolean
+  /** Credential validation belongs to the provider contract, never the vault. */
+  sanitizeCredentials?(input: unknown): Record<string, string>
+  /** Reads namespaced config first, with provider-owned legacy compatibility. */
+  readConfig?(config: Record<string, unknown> | null | undefined): Record<string, unknown>
+  /** Produces the namespaced provider config and an optional legacy compatibility mirror. */
+  prepareConfig?(input: Record<string, unknown>): ShippingProviderConfigWrite
+  /** Provider-owned fallback for legacy tracking identities. */
+  resolveTrackingNumber?(input: { providerShipmentId?: unknown; trackingNumber?: unknown }): string | null
   testConnection(context: ShippingAdapterContext): Promise<{ ok: boolean; message: string; account?: string | null }>
   getServices?(context: ShippingAdapterContext, input?: Record<string, unknown>): Promise<Array<Record<string, unknown>>>
   getZones?(context: ShippingAdapterContext, input?: Record<string, unknown>): Promise<Array<Record<string, unknown>>>

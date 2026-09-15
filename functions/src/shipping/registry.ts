@@ -1,10 +1,10 @@
-import type { ShippingAdapterContext, ShippingProviderAdapter, CanonicalShipmentStatus } from './types'
+import type { ShippingAdapterContext, ShippingProviderAdapter, CanonicalShipmentStatus, ShippingCapability } from './types'
 import { bostaAdapter } from './bosta'
 import { waslaAdapter } from './wasla'
 
 const manualAdapter: ShippingProviderAdapter = {
   slug: 'manual',
-  capabilities: ['services', 'zones', 'rates', 'eta', 'createShipment', 'manualTracking', 'manualStatus'],
+  capabilities: ['getRates', 'createShipment'],
   async testConnection(_context: ShippingAdapterContext) {
     return { ok: true, message: 'التكامل اليدوي جاهز للاستخدام' }
   },
@@ -132,14 +132,34 @@ export function getShippingAdapter(slug: string | undefined | null, integrationT
   return adapters[normalizedSlug] || null
 }
 
-/**
- * Quoting can safely use the platform's configured service/zones even before a
- * carrier has a live API adapter. Shipment creation continues to use
- * getShippingAdapter and therefore never pretends that an unimplemented API
- * integration can create a label or tracking number.
- */
-export function getShippingRateAdapter(slug: string | undefined | null, integrationType?: string): ShippingProviderAdapter {
-  return getShippingAdapter(slug, integrationType) || manualAdapter
+/** Resolve the adapter from the provider record selected by providerId. */
+export function getShippingAdapterForProvider(provider: Record<string, unknown> | null | undefined): ShippingProviderAdapter | null {
+  if (!provider) return null
+  return getShippingAdapter(String(provider.adapterKey || provider.slug || ''), String(provider.integrationType || 'manual'))
+}
+
+/** The only capability check shipping core should need. */
+export function supportsShippingCapability(adapter: ShippingProviderAdapter | null | undefined, capability: ShippingCapability): boolean {
+  return Boolean(adapter?.capabilities.includes(capability))
+}
+
+export function getShippingProviderConfig(adapter: ShippingProviderAdapter | null | undefined, config: Record<string, unknown> | null | undefined) {
+  return adapter?.readConfig ? adapter.readConfig(config) : (config || {})
+}
+
+export function prepareShippingProviderConfig(adapter: ShippingProviderAdapter | null | undefined, input: Record<string, unknown>) {
+  return adapter?.prepareConfig
+    ? adapter.prepareConfig(input)
+    : { providerConfig: input }
+}
+
+export function sanitizeShippingCredentials(adapter: ShippingProviderAdapter | null | undefined, input: unknown): Record<string, string> {
+  if (!adapter?.sanitizeCredentials) throw new Error('This shipping provider does not accept credentials')
+  return adapter.sanitizeCredentials(input)
+}
+
+export function resolveProviderTrackingNumber(adapter: ShippingProviderAdapter | null | undefined, input: { providerShipmentId?: unknown; trackingNumber?: unknown }): string | null {
+  return adapter?.resolveTrackingNumber?.(input) || String(input.trackingNumber || '').trim() || null
 }
 
 export function listShippingAdapters() {

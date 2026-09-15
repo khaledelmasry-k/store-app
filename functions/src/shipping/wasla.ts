@@ -1,8 +1,80 @@
 import type { CanonicalShipmentStatus, ShippingAdapterContext, ShippingProviderAdapter } from './types'
-import { ShippingProviderError } from './bosta'
+import { ShippingProviderError } from './errors'
 import { sanitizeSensitiveText } from '../integrations/vault'
 
 const DEFAULT_BASE_URL = 'https://wasla.express'
+
+/**
+ * Phase-1 compatibility boundary. New store settings live under
+ * `providerConfig.wasla`; historic top-level `wasla*` values are read until a
+ * later explicit data migration. Keeping this translation in the adapter
+ * means shipping core never needs to understand Wasla's fields.
+ */
+function waslaConfig(config: Record<string, unknown> | null | undefined): Record<string, unknown> {
+  const legacy = config || {}
+  const namespaced = legacy.providerConfig && typeof legacy.providerConfig === 'object'
+    ? (legacy.providerConfig as Record<string, unknown>).wasla
+    : null
+  const providerConfig = namespaced && typeof namespaced === 'object' ? namespaced as Record<string, unknown> : {}
+  const pickup = providerConfig.pickup && typeof providerConfig.pickup === 'object' ? providerConfig.pickup as Record<string, unknown> : {}
+  const mappings = providerConfig.destinationMappings && typeof providerConfig.destinationMappings === 'object'
+    ? providerConfig.destinationMappings as Record<string, unknown>
+    : {}
+  return {
+    ...legacy,
+    waslaPickupLocationType: pickup.locationType ?? legacy.waslaPickupLocationType,
+    waslaPickupLocationName: pickup.locationName ?? legacy.waslaPickupLocationName,
+    waslaPickupContactPhone: pickup.contactPhone ?? legacy.waslaPickupContactPhone,
+    waslaPickupAddressLine1: pickup.addressLine1 ?? legacy.waslaPickupAddressLine1,
+    waslaPickupGovernorateId: pickup.governorateId ?? legacy.waslaPickupGovernorateId,
+    waslaPickupCityId: pickup.cityId ?? legacy.waslaPickupCityId,
+    waslaGovernorateIds: mappings.governorateIds ?? legacy.waslaGovernorateIds,
+    waslaCityIds: mappings.cityIds ?? legacy.waslaCityIds,
+  }
+}
+
+function waslaConfigWrite(input: Record<string, unknown>) {
+  const current = waslaConfig(input)
+  const idMap = (value: unknown): Record<string, number> => {
+    const result: Record<string, number> = {}
+    for (const [rawName, rawId] of Object.entries(value && typeof value === 'object' ? value as Record<string, unknown> : {}).slice(0, 200)) {
+      const name = String(rawName).trim().slice(0, 120)
+      const id = Number(rawId)
+      if (!name || !Number.isInteger(id) || id <= 0) throw new Error('Invalid provider location mapping')
+      result[name] = id
+    }
+    return result
+  }
+  const providerConfig = {
+    pickup: {
+      locationType: String(current.waslaPickupLocationType || 'merchant_store').slice(0, 60),
+      locationName: String(current.waslaPickupLocationName || '').slice(0, 160),
+      contactPhone: String(current.waslaPickupContactPhone || '').slice(0, 40),
+      addressLine1: String(current.waslaPickupAddressLine1 || '').slice(0, 500),
+      governorateId: Math.max(0, Math.floor(Number(current.waslaPickupGovernorateId || 0))),
+      cityId: Math.max(0, Math.floor(Number(current.waslaPickupCityId || 0))),
+    },
+    destinationMappings: {
+      governorateIds: idMap(current.waslaGovernorateIds),
+      cityIds: idMap(current.waslaCityIds),
+    },
+  }
+  return {
+    providerConfig,
+    // Existing merchant settings screens still read these fields. Retaining a
+    // mirror is non-destructive and avoids a reconnect or UI refactor.
+    legacyConfig: {
+      waslaPickupLocationType: providerConfig.pickup.locationType,
+      waslaPickupLocationName: providerConfig.pickup.locationName,
+      waslaPickupContactPhone: providerConfig.pickup.contactPhone,
+      waslaPickupAddressLine1: providerConfig.pickup.addressLine1,
+      waslaPickupGovernorateId: providerConfig.pickup.governorateId,
+      waslaPickupCityId: providerConfig.pickup.cityId,
+      waslaGovernorateIds: providerConfig.destinationMappings.governorateIds,
+      waslaCityIds: providerConfig.destinationMappings.cityIds,
+    },
+  }
+}
 
 function baseUrl(context: ShippingAdapterContext) {
   const configured = String((context.provider as any)?.apiBaseUrl || '').trim()
@@ -156,7 +228,7 @@ function locationRows(response: any): WaslaLocation[] {
 async function locations(context: ShippingAdapterContext) { return locationRows(await request(context, '/api/v1/merchant/locations')) }
 
 async function resolveDestination(context: ShippingAdapterContext, governorate: unknown, city: unknown) {
-  const config = context.config || {}
+  const config = waslaConfig(context.config)
   const rows = await locations(context)
   const mappedGovernorateId = locationId((config as any).waslaGovernorateIds, governorate)
   let governorateRow = rows.find((row) => row.id === mappedGovernorateId)
@@ -182,7 +254,7 @@ async function resolveDestination(context: ShippingAdapterContext, governorate: 
  * stricter resolver above is still used before creating a shipment.
  */
 async function resolveQuoteDestination(context: ShippingAdapterContext, governorate: unknown, city: unknown) {
-  const config = context.config || {}
+  const config = waslaConfig(context.config)
   const rows = await locations(context)
   const mappedGovernorateId = locationId((config as any).waslaGovernorateIds, governorate)
   // Priority: 1. waslaGovernorateIds, 2. documented aliases, 3. normalized exact match
@@ -202,7 +274,7 @@ async function resolveQuoteDestination(context: ShippingAdapterContext, governor
 
 async function waslaPayload(input: Record<string, any>, context: ShippingAdapterContext) {
   const order = input.order || {}
-  const config = context.config || {}
+  const config = waslaConfig(context.config)
   const destination = await resolveDestination(context, order.governorate, order.city)
   const pickupGovernorateId = Number((config as any).waslaPickupGovernorateId || 0)
   const pickupCityId = Number((config as any).waslaPickupCityId || 0)
@@ -303,7 +375,18 @@ export function mapWaslaStatus(value: unknown): CanonicalShipmentStatus {
 
 export const waslaAdapter: ShippingProviderAdapter = {
   slug: 'wasla',
-  capabilities: ['createShipment', 'tracking', 'timeline', 'cod', 'idempotency', 'locations', 'rates'],
+  capabilities: ['getRates', 'createShipment', 'trackShipment', 'locations'],
+  requiresMerchantCredentials: true,
+  sanitizeCredentials(input) {
+    const raw = input && typeof input === 'object' ? input as Record<string, unknown> : {}
+    const apiKey = String(raw.apiKey || '').trim()
+    if (!apiKey) throw new Error('Wasla API key is required')
+    if (apiKey.length > 4096) throw new Error('Credential value is too long')
+    return { apiKey }
+  },
+  readConfig: waslaConfig,
+  prepareConfig: waslaConfigWrite,
+  resolveTrackingNumber(input) { return waslaPublicTrackingCode(input.trackingNumber) || waslaPublicTrackingCode(input.providerShipmentId) },
   async testConnection(context) {
     const data = unwrap(await request(context, '/api/v1/merchant/me'))
     return { ok: true, message: 'Wasla API key was validated by the provider', account: String(data?.name || data?.public_id || data?.code || '') || null }
@@ -352,7 +435,7 @@ export const waslaAdapter: ShippingProviderAdapter = {
     return (await locations(context)).map((row) => ({ id: row.id, name: row.name, pickupSupported: row.pickupSupported, deliverySupported: row.deliverySupported, cities: row.cities }))
   },
   async getRates(context, input) {
-    const config = context.config || {}
+    const config = waslaConfig(context.config)
     const pickupGovernorateId = Number((config as any).waslaPickupGovernorateId || 0)
     const pickupCityId = Number((config as any).waslaPickupCityId || 0)
     if (!Number.isInteger(pickupGovernorateId) || pickupGovernorateId <= 0 || !Number.isInteger(pickupCityId) || pickupCityId <= 0) throw new ShippingProviderError('CONFIGURATION_ERROR', 'تعذر مطابقة منطقة التوصيل مع شركة الشحن.', false)

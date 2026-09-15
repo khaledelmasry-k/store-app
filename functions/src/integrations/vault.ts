@@ -76,25 +76,6 @@ export function redactCredentialValue(value: unknown): string | null {
   return `${'*'.repeat(12)}${normalized.slice(-4)}`
 }
 
-export function sanitizeCredentials(provider: string, input: unknown): Record<string, string> {
-  const raw = input && typeof input === 'object' ? input as Record<string, unknown> : {}
-  if (provider === 'bosta') {
-    const apiKey = String(raw.apiKey || '').trim()
-    const webhookSecret = String(raw.webhookSecret || '').trim()
-    if (!apiKey) throw new Error('Bosta API key is required')
-    if (!webhookSecret) throw new Error('Bosta webhook Authorization key is required')
-    if (apiKey.length > 4096 || webhookSecret.length > 4096) throw new Error('Credential value is too long')
-    return { apiKey, webhookSecret }
-  }
-  if (provider === 'wasla') {
-    const apiKey = String(raw.apiKey || '').trim()
-    if (!apiKey) throw new Error('Wasla API key is required')
-    if (apiKey.length > 4096) throw new Error('Credential value is too long')
-    return { apiKey }
-  }
-  throw new Error(`Unsupported credential provider: ${provider}`)
-}
-
 export function credentialSummary(credentials: Record<string, unknown>) {
   return Object.fromEntries(Object.entries(credentials).map(([key, value]) => [key, redactCredentialValue(value)]))
 }

@@ -1,10 +1,9 @@
 import type { Firestore } from 'firebase-admin/firestore'
 import { FieldValue, Timestamp } from 'firebase-admin/firestore'
-import { getShippingAdapter } from './registry'
+import { getShippingAdapterForProvider, getShippingProviderConfig, resolveProviderTrackingNumber, supportsShippingCapability } from './registry'
 import { decryptCredentials, sanitizeSensitiveText, type CredentialEnvelope } from '../integrations/vault'
 import { emitIntegrationEvent } from '../integrations/outbox'
-import { ShippingProviderError } from './bosta'
-import { waslaPublicTrackingCode } from './wasla'
+import { ShippingProviderError } from './errors'
 
 export type ShipmentCreationTrigger = 'MANUAL' | 'AFTER_CONFIRMATION' | 'IMMEDIATELY_AFTER_CHECKOUT' | 'RETRY'
 
@@ -133,9 +132,9 @@ export async function createShipmentForOrder(
     if (!configSnap.exists || configSnap.data()?.enabled !== true) throw new ShippingProviderError('CONFIGURATION_ERROR', 'Shipping provider is disabled for this store', false)
     const provider: Record<string, any> = { id: providerSnap.id, ...(providerSnap.data() || {}) }
     const config = configSnap.data() || {}
-    const adapter = getShippingAdapter(String(provider.slug || ''), provider.integrationType)
+    const adapter = getShippingAdapterForProvider(provider)
     const createShipment = adapter?.createShipment
-    if (!adapter || !createShipment || !adapter.capabilities.includes('createShipment')) throw new ShippingProviderError('CONFIGURATION_ERROR', 'Shipping provider cannot create shipments', false)
+    if (!adapter || !createShipment || !supportsShippingCapability(adapter, 'createShipment')) throw new ShippingProviderError('CONFIGURATION_ERROR', 'Shipping provider cannot create shipments', false)
     if (!['MANUAL', 'RETRY'].includes(input.trigger) && provider.integrationType !== 'api') {
       throw new ShippingProviderError('CONFIGURATION_ERROR', 'Automatic shipment creation requires an API provider', false)
     }
@@ -144,10 +143,14 @@ export async function createShipmentForOrder(
       : await loadIntegrationCredentials(db, storeId, 'shipping', String(provider.slug || ''))
     if (provider.integrationType !== 'manual' && !vault) throw new ShippingProviderError('CONFIGURATION_ERROR', 'Shipping credentials are not configured', false)
     const result = await createShipment(
-      { provider, config, credentials: vault?.credentials || null },
+      { provider, config: getShippingProviderConfig(adapter, config), credentials: vault?.credentials || null },
       { orderId: input.orderId, order, idempotencyKey: guardId, webhookUrl: publicWebhookUrl(String(provider.slug || '')) },
     )
     const status = adapter.mapStatus ? adapter.mapStatus(String(result.status || 'CREATED')) : 'CREATED'
+    const trackingNumber = resolveProviderTrackingNumber(adapter, {
+      providerShipmentId: result.providerShipmentId,
+      trackingNumber: result.trackingNumber,
+    })
     const shipment = {
       id: shipmentRef.id,
       storeId,
@@ -162,7 +165,7 @@ export async function createShipmentForOrder(
       integrationType: provider.integrationType === 'api' ? 'api' : 'manual',
       externalShipmentId: result.providerShipmentId || null,
       providerShipmentId: result.providerShipmentId || null,
-      trackingNumber: result.trackingNumber || (String(provider.slug || '') === 'wasla' ? waslaPublicTrackingCode(result.providerShipmentId) : null),
+      trackingNumber,
       trackingUrl: result.trackingUrl || null,
       labelUrl: result.labelUrl || null,
       documentAvailable: result.documentAvailable === true,
@@ -194,7 +197,7 @@ export async function createShipmentForOrder(
         shippingCreationStatus: 'CREATED',
         shippingCreationErrorCode: null,
         shippingCreationErrorMessage: null,
-        trackingNumber: result.trackingNumber || (String(provider.slug || '') === 'wasla' ? waslaPublicTrackingCode(result.providerShipmentId) : result.providerShipmentId || null),
+        trackingNumber: trackingNumber || result.providerShipmentId || null,
         statusHistory: FieldValue.arrayUnion({
           status: freshOrder.data()?.status || 'NEW',
           shipmentStatus: status,
