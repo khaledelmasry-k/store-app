@@ -126,14 +126,28 @@ async function authenticate(page: Page, uid: string, expectedRole: string, route
   if (!ok) throw new Error('authenticate failed')
   const shellSelector = expectedRole === 'merchant' ? '.app-shell--dashboard' : '.app-shell--platform'
   await page.goto(route, { waitUntil: 'domcontentloaded' })
-  // IndexedDB persistence can hydrate just after the first route navigation,
-  // especially in the constrained mobile project. Give the auth listener a
-  // short bounded opportunity, then reload once to consume the persisted user.
+  // IndexedDB persistence can hydrate just after the first route navigation.
+  // Wait for the actual role shell rather than assuming a fixed delay is
+  // sufficient, then perform the one documented persistence reload.
   const shell = page.locator(shellSelector)
-  if (!(await shell.isVisible().catch(() => false))) {
-    await page.waitForTimeout(500)
-    if (!(await shell.isVisible().catch(() => false))) {
-      await page.reload({ waitUntil: 'domcontentloaded' })
+  const waitForRoleShell = (timeout: number) => page.waitForFunction(
+    (selector) => Boolean(document.querySelector(selector)),
+    shellSelector,
+    { timeout },
+  ).then(() => true).catch(() => false)
+  if (!(await waitForRoleShell(5_000))) {
+    await page.reload({ waitUntil: 'domcontentloaded' })
+    if (!(await waitForRoleShell(5_000))) {
+      // A constrained emulator can occasionally lose the first AuthProvider
+      // subscription while IndexedDB is being recreated. Reissue the already
+      // validated custom token once, then navigate from a fresh auth event.
+      await page.evaluate(async (token) => {
+        const firebase: any = await import('/src/shared/firebase/index.ts')
+        const mod: any = await import('/node_modules/.vite/deps/firebase_auth.js')
+        await mod.signOut(firebase.auth)
+        await mod.signInWithCustomToken(firebase.auth, token)
+      }, state.customToken)
+      await page.goto(route, { waitUntil: 'domcontentloaded' })
     }
   }
   // Never allow an unhealthy emulator listener to consume an entire test's
