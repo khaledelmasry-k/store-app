@@ -444,6 +444,7 @@ function safeShippingProvider(id: string, data: any) {
     canCreateShipment: Boolean(adapter?.createShipment && supportsShippingCapability(adapter, 'createShipment')),
     canTrackShipment: Boolean(adapter?.trackShipment && supportsShippingCapability(adapter, 'trackShipment')),
     canCancelShipment: Boolean(adapter?.cancelShipment && supportsShippingCapability(adapter, 'cancelShipment')),
+    canGetDocument: Boolean(adapter?.getShipmentDocument && supportsShippingCapability(adapter, 'getDocument')),
     lastTestedAt: data?.lastTestedAt || null,
     businessProfile: data?.businessProfile || undefined,
     branding: data?.branding ? { logoUrl: data.branding.logoUrl || undefined, logoStoragePath: data.branding.logoStoragePath || undefined, brandColor: data.branding.brandColor || undefined } : undefined,
@@ -5596,6 +5597,20 @@ async function merchantProviderEligibility(provider: any, config: any, store: an
   return { eligible: grandfathered || (shippingProfileReady && providerReady && agreementActive && coverageMatched && effective >= minimum), grandfathered, reasons: grandfathered ? [] : reasons, merchantMonthlyVolume: shipmentVolume, expectedMonthlyVolume: expected, effectiveMonthlyVolume: effective, minimumMonthlyShipments: minimum, coverageMatched, missingGovernorates: missing, providerReady: providerReady && agreementActive }
 }
 
+function merchantProviderSetup(provider: Record<string, any>, config: Record<string, any> | null) {
+  if (!config?.enabled) return { setupComplete: false, setupRequirements: ['enabled'], setupMessage: 'فعّل شركة الشحن واحفظ إعداداتها قبل الاستخدام.', connectionStatus: config?.configurationStatus || 'DISABLED' }
+  if (provider.integrationType === 'manual') return { setupComplete: true, setupRequirements: [], setupMessage: null, connectionStatus: config.configurationStatus || 'CONNECTED' }
+  if (config.configurationStatus !== 'CONNECTED') return { setupComplete: false, setupRequirements: ['connection'], setupMessage: 'احفظ بيانات الاتصال واختبرها قبل الاستخدام.', connectionStatus: config.configurationStatus || 'NOT_CONFIGURED' }
+  const adapter = getShippingAdapterForProvider(provider)
+  const providerStatus = adapter?.getSetupStatus?.({ provider, config: getShippingProviderConfig(adapter, config) })
+  return {
+    setupComplete: providerStatus?.complete !== false,
+    setupRequirements: providerStatus?.requirements || [],
+    setupMessage: providerStatus?.message || null,
+    connectionStatus: config.configurationStatus,
+  }
+}
+
 export const saveMerchantShippingProfile = onCall(async (request: CallableRequest<any>) => {
   if (!request.auth) throw new HttpsError('unauthenticated', 'يجب تسجيل الدخول')
   const storeId = String(request.data?.storeId || '').trim()
@@ -5633,7 +5648,7 @@ export const getMerchantShippingProviders = onCall(async (request: CallableReque
       const provider = safeShippingProvider(doc.id, doc.data())
       const agreementSnap = await db.doc(`shippingProviderCommercialAgreements/${doc.id}`).get()
       const eligibility = await merchantProviderEligibility({ ...(doc.data() || {}), _commercialAgreement: agreementSnap.exists ? agreementSnap.data() : null }, config, storeSnap.data() || {}, shipmentsSnap.docs.length)
-      return { provider, config, eligibility }
+      return { provider, config, eligibility, ...merchantProviderSetup({ id: doc.id, ...(doc.data() || {}) }, config) }
     })),
     adapters: listShippingAdapters(),
     settings: settingsSnap.exists ? settingsSnap.data() : { automaticShipmentCreation: 'AFTER_CONFIRMATION' },
@@ -6058,6 +6073,9 @@ export const getShippingOptions = onCall({ region: SHIPPING_FUNCTION_REGION, sec
         codFee: Number(rate.codFee || 0),
         returnFee: Number(rate.returnFee || 0),
         weightKg: Number(rate.weightKg || 0),
+        destinationDisplayName: String(rate.destinationDisplayName || destination.city || destination.governorate || ''),
+        destinationOptions: Array.isArray(rate.destinationOptions) ? rate.destinationOptions : [],
+        destinationGuidance: rate.destinationGuidance ? String(rate.destinationGuidance) : null,
       })))
   }
   // Legacy zones are only a migration fallback for stores that have no

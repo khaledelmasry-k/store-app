@@ -67,18 +67,12 @@ export const MerchantDashboard: FunctionalComponent = () => {
   useEffect(() => {
     if (!secondaryReady || !storeId || !isOwner) return
     getMerchantShippingProvidersCallable({ storeId }).then((result: any) => {
-      const entries = (result.data?.providers || []) as Array<{ provider?: any; config?: any }>
-      const ready = entries.find(({ provider, config }) => {
-        if (!provider || config?.enabled !== true) return false
-        if (provider.integrationType === 'manual') return true
-        if (config.configurationStatus !== 'CONNECTED') return false
-        if (provider.slug !== 'wasla') return true
-        return Boolean(config.waslaPickupLocationName && config.waslaPickupAddressLine1 && Number(config.waslaPickupGovernorateId) > 0 && Number(config.waslaPickupCityId) > 0)
-      })
+      const entries = (result.data?.providers || []) as Array<{ provider?: any; config?: any; setupComplete?: boolean; setupMessage?: string }>
+      const ready = entries.find((entry) => entry.config?.enabled === true && entry.setupComplete === true)
       if (ready) setShippingSetup({ done: true, reason: '' })
       else {
         const enabled = entries.find((entry) => entry.config?.enabled)
-        setShippingSetup({ done: false, reason: enabled?.provider?.slug === 'wasla' ? 'أكمل عنوان الاستلام والمحافظة والمدينة في إعدادات وصلة' : 'فعّل شركة شحن واحفظ إعداداتها قبل النشر' })
+        setShippingSetup({ done: false, reason: enabled?.setupMessage || 'فعّل شركة شحن واحفظ إعداداتها قبل النشر' })
       }
     }).catch(() => setShippingSetup({ done: false, reason: 'تعذر التحقق من إعدادات الشحن' }))
   }, [secondaryReady, storeId, isOwner])

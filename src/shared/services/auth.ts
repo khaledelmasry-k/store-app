@@ -199,6 +199,10 @@ export function getWaslaLocationsCallable(input: Record<string, unknown>) {
   return httpsCallable(getFunctions(), 'getWaslaLocations')(input)
 }
 
+export function getShippingProviderLocationsCallable(input: Record<string, unknown>) {
+  return httpsCallable(getFunctions(), 'getShippingProviderLocations')(input)
+}
+
 export function saveIntegrationCredentialsCallable(input: Record<string, unknown>) {
   return httpsCallable(getFunctions(), 'saveIntegrationCredentials')(input)
 }

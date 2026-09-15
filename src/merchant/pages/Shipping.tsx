@@ -19,9 +19,10 @@ import { shippingService } from '../../shared/services/billing'
 import { storesService } from '../../shared/services/stores'
 import { formatCurrency } from '../../shared/utils/format'
 import { GOVER_EG } from '../../shared/utils/constants'
-import { getMerchantShippingProvidersCallable, getWaslaLocationsCallable, recordShippingSettlementCallable, saveIntegrationCredentialsCallable, saveMerchantShippingProfileCallable, saveShippingAutomationSettingsCallable, saveStoreShippingProviderCallable, testShippingConnectionCallable } from '../../shared/services/auth'
+import { getMerchantShippingProvidersCallable, recordShippingSettlementCallable, saveIntegrationCredentialsCallable, saveMerchantShippingProfileCallable, saveShippingAutomationSettingsCallable, saveStoreShippingProviderCallable, testShippingConnectionCallable } from '../../shared/services/auth'
 import type { Shipment, ShippingEligibility, ShippingProviderDefinition, ShippingSettlement, ShippingZone, StoreShippingProviderConfig } from '../../shared/types'
 import { Icon } from '../../shared/components/ui/Icon'
+import { ShippingProviderSettings } from '../components/shipping/ShippingProviderSettings'
 import './Shipping.css'
 
 type ZoneDraft = {
@@ -35,7 +36,6 @@ type ZoneDraft = {
   active: boolean
 }
 
-type WaslaLocation = { id: number; name: string; pickupSupported?: boolean; deliverySupported?: boolean; cities: Array<{ id: number; name: string }> }
 type SettlementLine = {
   providerId: string
   providerName: string
@@ -82,16 +82,12 @@ export const MerchantShipping: FunctionalComponent = () => {
   const [zoneOpen, setZoneOpen] = useState(false)
   const [deleteTarget, setDeleteTarget] = useState<{ kind: 'zone'; id: string } | null>(null)
   const [zoneForm, setZoneForm] = useState<ZoneDraft>({ name: '', governorates: [], fee: '', freeAbove: '', estimatedDays: '', providerId: '', active: true })
-  const [platformProviders, setPlatformProviders] = useState<Array<{ provider: ShippingProviderDefinition; config: StoreShippingProviderConfig | null; eligibility?: ShippingEligibility }>>([])
+  const [platformProviders, setPlatformProviders] = useState<Array<{ provider: ShippingProviderDefinition; config: StoreShippingProviderConfig | null; eligibility?: ShippingEligibility; setupComplete?: boolean; setupRequirements?: string[]; setupMessage?: string | null; connectionStatus?: string }>>([])
   const [platformLoading, setPlatformLoading] = useState(false)
   const [platformSaving, setPlatformSaving] = useState('')
   const [expandedProvider, setExpandedProvider] = useState<string | null>(null)
   const [expectedVolume, setExpectedVolume] = useState('')
   const [targetGovernorates, setTargetGovernorates] = useState<string[]>([])
-  const [platformDrafts, setPlatformDrafts] = useState<Record<string, { fixedRate: string; defaultPackageWeight: string; codEnabled: boolean; serviceCode: string; rateMarkup: string; freeShippingThreshold: string; waslaPickupLocationName: string; waslaPickupContactPhone: string; waslaPickupAddressLine1: string; waslaPickupGovernorateId: string; waslaPickupCityId: string }>>({})
-  const [credentialDrafts, setCredentialDrafts] = useState<Record<string, { apiKey: string; webhookSecret: string }>>({})
-  const [waslaLocations, setWaslaLocations] = useState<Record<string, WaslaLocation[]>>({})
-  const [waslaLocationsLoading, setWaslaLocationsLoading] = useState<Record<string, boolean>>({})
   const [automaticShipmentCreation, setAutomaticShipmentCreation] = useState<'MANUAL' | 'AFTER_CONFIRMATION' | 'IMMEDIATELY_AFTER_CHECKOUT'>('AFTER_CONFIRMATION')
   const [settlementTarget, setSettlementTarget] = useState<SettlementLine | null>(null)
   const [settlementReference, setSettlementReference] = useState('')
@@ -101,24 +97,15 @@ export const MerchantShipping: FunctionalComponent = () => {
   const cfg = store?.shipping || { enabled: false, model: 'flat' as const, flatFee: 0, freeAbove: 0, refusedPolicy: '', providers: [] }
   const providers = cfg.providers || []
   const isProviderLive = (provider: ShippingProviderDefinition) => provider.integrationType === 'manual' || provider.adapterConfigured === true
-  const isProviderReadyForAutomation = (provider: ShippingProviderDefinition, config: StoreShippingProviderConfig | null) => {
-    if (!config?.enabled) return false
-    if (provider.integrationType === 'manual') return true
-    if (provider.adapterConfigured !== true || config.configurationStatus !== 'CONNECTED') return false
-    if (provider.slug !== 'wasla') return true
-    return Boolean(
-      config.waslaPickupLocationName && config.waslaPickupAddressLine1
-      && Number(config.waslaPickupGovernorateId) > 0 && Number(config.waslaPickupCityId) > 0,
-    )
-  }
-  const hasEnabledLiveProvider = platformProviders.some(({ provider, config }) => isProviderReadyForAutomation(provider, config))
+  const isProviderReadyForAutomation = (entry: typeof platformProviders[number]) => entry.config?.enabled === true && entry.setupComplete === true
+  const hasEnabledLiveProvider = platformProviders.some(isProviderReadyForAutomation)
 
   const loadPlatformProviders = async () => {
     if (!storeId) return
     setPlatformLoading(true)
     try {
       const result = await getMerchantShippingProvidersCallable({ storeId })
-      setPlatformProviders(((result.data as any)?.providers || []) as Array<{ provider: ShippingProviderDefinition; config: StoreShippingProviderConfig | null; eligibility?: ShippingEligibility }>)
+      setPlatformProviders(((result.data as any)?.providers || []) as typeof platformProviders)
       setAutomaticShipmentCreation((result.data as any)?.settings?.automaticShipmentCreation || 'AFTER_CONFIRMATION')
     } catch (err: any) {
       toast.push('تعذر تحميل شركات المنصة', err?.message || 'حاول مرة أخرى', 'error')
@@ -178,25 +165,6 @@ export const MerchantShipping: FunctionalComponent = () => {
     finally { setPlatformSaving('') }
   }
 
-  const loadWaslaLocations = async (provider: ShippingProviderDefinition) => {
-    setWaslaLocationsLoading((current) => ({ ...current, [provider.id]: true }))
-    try {
-      const result = await getWaslaLocationsCallable({ storeId, providerId: provider.id })
-      const locations = ((result.data as any)?.locations || []) as WaslaLocation[]
-      setWaslaLocations((current) => ({ ...current, [provider.id]: locations }))
-      toast.push('تم تحميل مناطق وصلة', `ظهرت ${locations.length} محافظة متاحة لحسابك.`, 'success')
-    } catch (err: any) { toast.push('تعذر تحميل مناطق وصلة', err?.message || 'احفظ المفتاح واختبره أولاً', 'error') }
-    finally { setWaslaLocationsLoading((current) => ({ ...current, [provider.id]: false })) }
-  }
-
-  // The live Wasla location catalogue is needed for the branch selectors.
-  // Keep it available after every page refresh instead of requiring the merchant
-  // to press "تحميل مناطق وصلة" again before the dropdowns can be used.
-  useEffect(() => {
-    const wasla = platformProviders.find(({ provider, config }) => provider.slug === 'wasla' && config?.enabled && config.configurationStatus === 'CONNECTED')
-    if (wasla && !waslaLocations[wasla.provider.id]) void loadWaslaLocations(wasla.provider)
-  }, [platformProviders, storeId])
-
   const saveAutomationMode = async (mode: 'MANUAL' | 'AFTER_CONFIRMATION' | 'IMMEDIATELY_AFTER_CHECKOUT') => {
     setAutomaticShipmentCreation(mode)
     try {
@@ -205,23 +173,16 @@ export const MerchantShipping: FunctionalComponent = () => {
     } catch (err: any) { toast.push('تعذر حفظ إعداد التشغيل', err?.message || 'حاول مرة أخرى', 'error') }
   }
 
-  const saveCredentials = async (provider: ShippingProviderDefinition) => {
+  const saveCredentials = async (provider: ShippingProviderDefinition, credentials: Record<string, string>) => {
     if (!provider.adapterConfigured) {
       toast.push('ربط API قيد التطوير', 'لن نطلب منك مفتاحًا أو نحفظه قبل أن يكتمل محول هذه الشركة واختبار الاتصال الحقيقي.', 'error')
       return
     }
-    if (!['bosta', 'wasla'].includes(provider.slug)) {
-      toast.push('بيانات API لهذه الشركة لا تُحفظ من هذا النموذج', 'لكل شركة طريقة مصادقة وحقول مختلفة؛ لا نستخدم حقول Bosta مع مزود آخر.', 'error')
-      return
-    }
-    const draft = credentialDrafts[provider.id] || { apiKey: '', webhookSecret: '' }
-    if (!draft.apiKey.trim()) { toast.push('أدخل مفتاح API', undefined, 'error'); return }
-    if (provider.slug === 'bosta' && !draft.webhookSecret.trim()) { toast.push('أدخل Webhook Authorization Key مستقلة لهذا المتجر', undefined, 'error'); return }
+    if (!Object.values(credentials).some((value) => value.trim())) { toast.push('أدخل بيانات الربط', undefined, 'error'); return }
     setPlatformSaving(provider.id)
     try {
-      const result = await saveIntegrationCredentialsCallable({ storeId, providerId: provider.id, credentials: draft })
+      const result = await saveIntegrationCredentialsCallable({ storeId, providerId: provider.id, credentials })
       const saved = result.data as { status?: StoreShippingProviderConfig['configurationStatus']; maskedCredentials?: Record<string, string | null> }
-      setCredentialDrafts((current) => ({ ...current, [provider.id]: { apiKey: '', webhookSecret: '' } }))
       // Do not reload the whole providers workspace after saving one key. Besides
       // being visually disruptive, that reset every card while the merchant was
       // still completing the pickup-address fields.
@@ -461,57 +422,20 @@ export const MerchantShipping: FunctionalComponent = () => {
 
       {tab === 'companies' && <Card title="شركات الشحن المتاحة من المنصة" className="mt-2">
         {platformLoading ? <Loading /> : platformProviders.length === 0 ? <p className="muted">لم تُفعّل إدارة المنصة أي شركة شحن بعد.</p> : <div className="card-grid shipping-providers-grid">
-          {platformProviders.map(({ provider, config, eligibility }) => <Card key={provider.id} className="shipping-provider-card" title={provider.name} actions={<Badge tone={eligibility?.grandfathered || config?.enabled ? 'green' : eligibility?.eligible ? 'blue' : 'amber'}>{eligibility?.grandfathered ? 'اتصال حالي محفوظ' : eligibility?.eligible ? 'متاحة لمتجرك' : 'غير مناسبة حاليًا'}</Badge>}>
+          {platformProviders.map((entry) => { const { provider, config, eligibility } = entry; const ready = isProviderReadyForAutomation(entry); return <Card key={provider.id} className="shipping-provider-card" title={provider.name} actions={<Badge tone={eligibility?.grandfathered || config?.enabled ? 'green' : eligibility?.eligible ? 'blue' : 'amber'}>{eligibility?.grandfathered ? 'اتصال حالي محفوظ' : eligibility?.eligible ? 'متاحة لمتجرك' : 'غير مناسبة حاليًا'}</Badge>}>
             <div className="shipping-provider-intro">
               <div><strong>{provider.integrationType === 'api' ? 'ربط مباشر مع شركة الشحن' : 'شحن يدوي من لوحة المتجر'}</strong><p className="muted small">{provider.description || 'شركة شحن مُدارة من منصة متجري'}</p></div>
-              <span className={`shipping-provider-connection ${isProviderReadyForAutomation(provider, config) ? 'is-ready' : config?.enabled ? 'is-pending' : ''}`}><Icon name={isProviderReadyForAutomation(provider, config) ? 'check_circle' : 'schedule'} ariaHidden />{isProviderReadyForAutomation(provider, config) ? 'جاهزة لإنشاء الشحنات' : config?.enabled ? 'تحتاج إكمال الإعداد' : 'غير مفعلة'}</span>
+              <span className={`shipping-provider-connection ${ready ? 'is-ready' : config?.enabled ? 'is-pending' : ''}`}><Icon name={ready ? 'check_circle' : 'schedule'} ariaHidden />{ready ? 'جاهزة لإنشاء الشحنات' : config?.enabled ? 'تحتاج إكمال الإعداد' : 'غير مفعلة'}</span>
             </div>
             <div className="shipping-provider-summary"><span>{provider.supportsCOD ? 'الدفع عند الاستلام' : 'بدون COD'}</span><span>{provider.supportsTracking ? 'تتبع' : 'تتبع يدوي'}</span><span>{connectionStatusLabel(config?.configurationStatus, config?.enabled)}</span>{config?.isDefault && <span>الافتراضية</span>}</div>
             {eligibility && <div className="shipping-secure-note"><Icon name={eligibility.eligible ? 'check_circle' : 'warning'} ariaHidden /><span>{eligibility.grandfathered ? 'اتصالك الحالي محفوظ' : eligibility.eligible ? 'متاحة لمتجرك' : eligibility.reasons.map((reason: any) => reason.message || reason).join(' · ') || 'شركة الشحن غير جاهزة للربط بعد'}{eligibility.minimumMonthlyShipments > 0 && <>{' · '}الحد الأدنى {eligibility.minimumMonthlyShipments} شحنة شهريًا</>}</span></div>}
             <Button size="sm" variant="outline" onClick={() => setExpandedProvider((current) => current === provider.id ? null : provider.id)}>{expandedProvider === provider.id ? 'إخفاء التفاصيل' : 'عرض التفاصيل'}</Button>
             {provider.integrationType === 'manual' && <div className="shipping-secure-note"><Icon name="local_shipping" ariaHidden /><span>هذا الخيار لا يحتاج API أو حسابًا لدى شركة شحن. فعّله واضبط السعر، ثم سجّل بيانات التتبع يدويًا عند إرسال الشحنة.</span></div>}
             {provider.integrationType === 'api' && !isProviderLive(provider) && <div className="shipping-secure-note"><Icon name="schedule" ariaHidden /><span><strong>قريبًا:</strong> نعمل على محول API الرسمي لـ{provider.name}. الأسعار والمناطق قد تظهر في المتجر، لكن لا تُدخل مفتاح API ولا تعتمد الإنشاء التلقائي قبل أن تصبح الحالة «متصلة».</span></div>}
-            {provider.slug === 'bosta' && <p className="muted small">أدخل مفاتيح Bosta الخاصة بهذا المتجر فقط، ثم اختبر الاتصال. عنوان Webhook سيظهر بعد نجاح الحفظ.</p>}
-            {provider.slug === 'wasla' && <div className="shipping-secure-note"><Icon name="info" ariaHidden /><span><strong>إعداد مرة واحدة:</strong> وصلة تتطلب عنوان الفرع الذي ستستلم منه الشحنات عند إنشاء الطلب. احفظ عنوان استلام وصلة أدناه مرة واحدة للتاجر؛ لا يراه العميل ولا تعيد إدخاله في كل طلب. الأسعار والتغطية تأتيان من وصلة مباشرة.</span></div>}
-            {provider.slug === 'wasla' && <div className="shipping-secure-note"><Icon name="sync" ariaHidden /><span><strong>تحديث الحالة:</strong> العقد الحالي يدعم إنشاء الشحنة وجلب التتبع والحالات من وصلة، لكنه لا يوفر Webhook موثقًا أو إلغاء/AWB/مرتجع عبر API. لن يظهر رابط Webhook وهمي؛ استخدم «تحديث من الشركة» من تفاصيل الطلب لجلب آخر حالة.</span></div>}
-            {provider.slug === 'wasla' && config?.enabled && !isProviderReadyForAutomation(provider, config) && <div className="shipping-secure-note"><Icon name="schedule" ariaHidden /><span><strong>ينقص الإعداد:</strong> اختر عنوان استلام وصلة واحفظه. بعد ذلك تنشئ المنصة الشحنات تلقائيًا من هذا الفرع.</span></div>}
-            {expandedProvider === provider.id && config?.enabled && (() => {
-              const draft = platformDrafts[provider.id] || { fixedRate: String(config.fixedRate ?? ''), defaultPackageWeight: String(config.defaultPackageWeight ?? ''), codEnabled: config.codEnabled !== false, serviceCode: config.serviceCode || provider.services?.[0]?.code || '', rateMarkup: String(config.rateMarkup ?? ''), freeShippingThreshold: String(config.freeShippingThreshold ?? ''), waslaPickupLocationName: config.waslaPickupLocationName || '', waslaPickupContactPhone: config.waslaPickupContactPhone || '', waslaPickupAddressLine1: config.waslaPickupAddressLine1 || '', waslaPickupGovernorateId: String(config.waslaPickupGovernorateId || ''), waslaPickupCityId: String(config.waslaPickupCityId || '') }
-              return <div className="shipping-provider-config grid grid-2 mt-1">
-                {provider.services && provider.services.length > 0 && <label className="field"><span className="field-label">الخدمة</span><select className="input" value={draft.serviceCode} onChange={(e) => setPlatformDrafts((prev) => ({ ...prev, [provider.id]: { ...(prev[provider.id] || draft), serviceCode: (e.target as HTMLSelectElement).value } }))}>{provider.services.filter((service) => service.enabled !== false).map((service) => <option value={service.code} key={service.code}>{service.name}{service.estimatedMinHours || service.estimatedMaxHours ? ` · ${service.estimatedMinHours || '?'}–${service.estimatedMaxHours || '?'} ساعة` : ''}</option>)}</select></label>}
-                {provider.slug !== 'wasla' && provider.allowMerchantRateOverride && <Input label="السعر الثابت (ج.م)" type="number" value={draft.fixedRate} onChange={(value) => setPlatformDrafts((prev) => ({ ...prev, [provider.id]: { ...(prev[provider.id] || draft), fixedRate: value } }))} />}
-                <Input label="وزن الطرد الافتراضي (كجم)" type="number" value={draft.defaultPackageWeight} onChange={(value) => setPlatformDrafts((prev) => ({ ...prev, [provider.id]: { ...(prev[provider.id] || draft), defaultPackageWeight: value } }))} />
-                {provider.slug !== 'wasla' && <Input label="هامش السعر (ج.م)" type="number" value={draft.rateMarkup} onChange={(value) => setPlatformDrafts((prev) => ({ ...prev, [provider.id]: { ...(prev[provider.id] || draft), rateMarkup: value } }))} />}
-                {provider.slug !== 'wasla' && <Input label="حد الشحن المجاني (ج.م)" type="number" value={draft.freeShippingThreshold} onChange={(value) => setPlatformDrafts((prev) => ({ ...prev, [provider.id]: { ...(prev[provider.id] || draft), freeShippingThreshold: value } }))} />}
-                {provider.supportsCOD && <Toggle checked={draft.codEnabled} onChange={(value) => setPlatformDrafts((prev) => ({ ...prev, [provider.id]: { ...(prev[provider.id] || draft), codEnabled: value } }))} label="الدفع عند الاستلام" />}
-                <Toggle checked={config.isDefault === true} onChange={(value) => void savePlatformConfig(provider, config, { ...config, isDefault: value })} label="شركة الشحن الافتراضية" />
-                {provider.slug === 'bosta' && <div className="grid grid-2" style={{ gridColumn: '1 / -1' }}>
-                  <Input label="Bosta API Key" type="password" value={credentialDrafts[provider.id]?.apiKey || ''} placeholder={config.credential?.maskedCredentials?.apiKey || 'أدخل مفتاح API'} onChange={(value) => setCredentialDrafts((current) => ({ ...current, [provider.id]: { apiKey: value, webhookSecret: current[provider.id]?.webhookSecret || '' } }))} />
-                  <Input label="Webhook Authorization Key" type="password" value={credentialDrafts[provider.id]?.webhookSecret || ''} placeholder={config.credential?.maskedCredentials?.webhookSecret || 'مطلوب لتأمين Webhook'} onChange={(value) => setCredentialDrafts((current) => ({ ...current, [provider.id]: { apiKey: current[provider.id]?.apiKey || '', webhookSecret: value } }))} />
-                  <Button size="sm" variant="outline" loading={platformSaving === provider.id} onClick={() => saveCredentials(provider)}>حفظ بيانات الربط بأمان</Button>
-                </div>}
-                {provider.slug === 'wasla' && <div className="shipping-wasla-connection grid grid-2" style={{ gridColumn: '1 / -1' }}>
-                  <Input label="مفتاح API الخاص بحساب وصلة" type="password" value={credentialDrafts[provider.id]?.apiKey || ''} placeholder={config.credential?.maskedCredentials?.apiKey || 'أدخل مفتاح وصلة الخاص بمتجرك'} onChange={(value) => setCredentialDrafts((current) => ({ ...current, [provider.id]: { apiKey: value, webhookSecret: '' } }))} />
-                  <div className="shipping-provider-actions"><Button size="sm" variant="outline" loading={platformSaving === provider.id} onClick={() => saveCredentials(provider)}>حفظ المفتاح</Button><Button size="sm" variant="outline" loading={waslaLocationsLoading[provider.id] === true} onClick={() => loadWaslaLocations(provider)}>{waslaLocations[provider.id]?.length ? `تحديث مناطق وصلة (${waslaLocations[provider.id].length})` : 'تحميل مناطق وصلة'}</Button></div>
-                  <div className="shipping-provider-zone-summary" style={{ gridColumn: '1 / -1' }}><strong>عنوان استلام وصلة</strong><span className="muted small">عنوان الفرع/المخزن الذي تستلم منه وصلة الشحنات. يُحفظ للتاجر مرة واحدة ويُرسل تلقائيًا مع كل شحنة.</span></div>
-                  <Input label="اسم الفرع أو المخزن" value={draft.waslaPickupLocationName} placeholder="مثال: الفرع الرئيسي" onChange={(value) => setPlatformDrafts((prev) => ({ ...prev, [provider.id]: { ...(prev[provider.id] || draft), waslaPickupLocationName: value } }))} />
-                  <Input label="هاتف مسؤول الاستلام" value={draft.waslaPickupContactPhone} placeholder="01xxxxxxxxx" onChange={(value) => setPlatformDrafts((prev) => ({ ...prev, [provider.id]: { ...(prev[provider.id] || draft), waslaPickupContactPhone: value } }))} />
-                  <Input label="عنوان الفرع أو المخزن" value={draft.waslaPickupAddressLine1} placeholder="العنوان الذي تستلم منه وصلة الشحنات" onChange={(value) => setPlatformDrafts((prev) => ({ ...prev, [provider.id]: { ...(prev[provider.id] || draft), waslaPickupAddressLine1: value } }))} />
-                  {(() => {
-                    const locations = waslaLocations[provider.id] || []
-                    const selectedGovernorate = locations.find((location) => String(location.id) === draft.waslaPickupGovernorateId)
-                    return <>
-                      <label className="field"><span className="field-label">محافظة الفرع</span><select className="input" value={draft.waslaPickupGovernorateId} disabled={!locations.length} onChange={(e) => setPlatformDrafts((prev) => ({ ...prev, [provider.id]: { ...(prev[provider.id] || draft), waslaPickupGovernorateId: (e.target as HTMLSelectElement).value, waslaPickupCityId: '' } }))}><option value="">{locations.length ? 'اختر محافظة الفرع' : 'اضغط تحميل المناطق أولاً'}</option>{locations.filter((location) => location.pickupSupported !== false).map((location) => <option value={location.id} key={location.id}>{location.name}</option>)}</select></label>
-                      <label className="field"><span className="field-label">مدينة الفرع</span><select className="input" value={draft.waslaPickupCityId} disabled={!selectedGovernorate} onChange={(e) => setPlatformDrafts((prev) => ({ ...prev, [provider.id]: { ...(prev[provider.id] || draft), waslaPickupCityId: (e.target as HTMLSelectElement).value } }))}><option value="">{selectedGovernorate ? 'اختر مدينة الفرع' : 'اختر المحافظة أولاً'}</option>{(selectedGovernorate?.cities || []).map((city) => <option value={city.id} key={city.id}>{city.name}</option>)}</select></label>
-                    </>
-                  })()}
-                </div>}
-                {provider.slug === 'wasla' ? <div className="shipping-provider-zone-summary"><strong>أسعار وصلة</strong><span className="muted small">لا تُدخل سعرًا أو هامشًا هنا. عند إدخال العميل وجهته، تتأكد المنصة من التغطية ثم تجلب سعر وصلة الحقيقي قبل إتمام الطلب.</span></div> : <div className="shipping-provider-zone-summary"><strong>ملخص تسعير المنصة</strong>{provider.services?.find((service) => service.code === draft.serviceCode)?.zoneRules?.length ? provider.services.find((service) => service.code === draft.serviceCode)?.zoneRules?.map((zone) => <span key={zone.zoneId}>{zone.zoneName}: {zone.baseRate} ج.م · {zone.etaMin || '?'}–{zone.etaMax || '?'} {zone.etaUnit === 'days' ? 'يوم' : 'ساعة'}</span>) : <span className="muted small">لا توجد قواعد مناطق؛ استخدم السعر الثابت المعتمد.</span>}</div>}
-                <Button size="sm" className="shipping-provider-save" loading={platformSaving === provider.id} onClick={() => savePlatformConfig(provider, config, { serviceCode: draft.serviceCode, enabledServiceCodes: draft.serviceCode ? [draft.serviceCode] : [], fixedRate: Number(draft.fixedRate || 0), defaultPackageWeight: Number(draft.defaultPackageWeight || 0), codEnabled: draft.codEnabled, rateMarkup: Number(draft.rateMarkup || 0), freeShippingThreshold: Number(draft.freeShippingThreshold || 0), rateMode: provider.services?.find((service) => service.code === draft.serviceCode)?.rateMode || 'fixed', isDefault: config.isDefault === true, waslaPickupLocationName: draft.waslaPickupLocationName, waslaPickupContactPhone: draft.waslaPickupContactPhone, waslaPickupAddressLine1: draft.waslaPickupAddressLine1, waslaPickupGovernorateId: Number(draft.waslaPickupGovernorateId || 0), waslaPickupCityId: Number(draft.waslaPickupCityId || 0) })}>حفظ إعدادات الشركة</Button>
-              </div>
-            })()}
+            {config?.enabled && !ready && <div className="shipping-secure-note"><Icon name="schedule" ariaHidden /><span><strong>ينقص الإعداد:</strong> {entry.setupMessage || 'أكمل متطلبات إعداد شركة الشحن قبل إنشاء الشحنات تلقائيًا.'}</span></div>}
+            {expandedProvider === provider.id && config?.enabled && <><Toggle checked={config.isDefault === true} onChange={(value) => void savePlatformConfig(provider, config, { ...config, isDefault: value })} label="شركة الشحن الافتراضية" /><ShippingProviderSettings storeId={storeId} provider={provider} config={config} saving={platformSaving === provider.id} onSave={(changes) => void savePlatformConfig(provider, config, changes)} onSaveCredentials={(credentials) => void saveCredentials(provider, credentials)} /></>}
             <div className="shipping-provider-footer"><Button size="sm" loading={platformSaving === provider.id} disabled={!config?.enabled && !isProviderLive(provider)} title={!config?.enabled && !isProviderLive(provider) ? 'قيد التطوير: لا يمكن تفعيل الإنشاء عبر API قبل اكتمال المحول' : undefined} onClick={() => togglePlatformProvider(provider, config)}>{config?.enabled ? 'إيقاف الشركة' : isProviderLive(provider) ? 'تفعيل الشركة' : 'قريبًا'}</Button>{config?.enabled && <Button size="sm" variant="outline" disabled={provider.integrationType === 'manual' || !provider.adapterConfigured} title={provider.integrationType === 'manual' ? 'المزود اليدوي لا يحتاج اختبار API' : !provider.adapterConfigured ? 'قريبًا: يتاح الاختبار بعد إضافة محول API لهذه الشركة' : 'اختبار اتصال المزود'} onClick={() => testPlatformProvider(provider, config)}>اختبار الاتصال</Button>}</div>
-          </Card>)}
+          </Card> })}
         </div>}
       </Card>}
 

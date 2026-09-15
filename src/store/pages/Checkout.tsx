@@ -12,7 +12,6 @@ import { Textarea } from '../../shared/components/ui/Textarea'
 import { SmartImage } from '../../shared/components/ui/SmartImage'
 import { createOrderCallable, getPublicStoreCouponsCallable, getShippingOptionsCallable, quoteCouponCallable } from '../../shared/services/auth'
 import { EGYPT_CITIES_BY_GOVERNORATE, GOVER_EG } from '../../shared/utils/constants'
-import { isWaslaUnsupportedCity, waslaAliasTarget } from '../../shared/utils/waslaCityMapping'
 import { formatCurrency, todayKey } from '../../shared/utils/format'
 import { cartSubtotal, lineSubtotal, piecesLabel } from '../../shared/utils/pricing'
 import { Icon } from '../../shared/components/ui/Icon'
@@ -38,7 +37,7 @@ export const StoreCheckout: FunctionalComponent = () => {
   const [coupon, setCoupon] = useState<{ code: string; discount: number } | null>(null)
   const [platformCoupons, setPlatformCoupons] = useState<Array<{ code: string; type: 'percent' | 'fixed'; value: number; minOrder: number }>>([])
   const [done, setDone] = useState<{ orderNumber: string; phone: string } | null>(null)
-  const [shippingOptions, setShippingOptions] = useState<Array<{ providerId?: string; providerName?: string; serviceCode?: string; serviceName?: string; amount?: number; price?: number; currency?: string; etaMin?: number | null; etaMax?: number | null; etaUnit?: string; codAvailable?: boolean; trackingAvailable?: boolean; zoneId?: string | null; zoneName?: string | null }>>([])
+  const [shippingOptions, setShippingOptions] = useState<Array<{ providerId?: string; providerName?: string; serviceCode?: string; serviceName?: string; amount?: number; price?: number; currency?: string; etaMin?: number | null; etaMax?: number | null; etaUnit?: string; codAvailable?: boolean; trackingAvailable?: boolean; zoneId?: string | null; zoneName?: string | null; destinationDisplayName?: string; destinationOptions?: Array<{ id: string; name: string }>; destinationGuidance?: string }>>([])
   const [shippingUnavailableReason, setShippingUnavailableReason] = useState('')
   const [selectedShippingOption, setSelectedShippingOption] = useState('')
   const [bankTransferProof, setBankTransferProof] = useState<File | null>(null)
@@ -58,7 +57,7 @@ export const StoreCheckout: FunctionalComponent = () => {
     let cancelled = false
     void getShippingOptionsCallable({ storeId: store.id, destination: { governorate: form.governorate, city: form.city, area: form.area }, subtotal, packageWeightKg: 1 }).then((res) => {
       if (!cancelled) {
-        const options = ((res.data as any)?.options || []) as Array<{ providerId?: string; providerName?: string; serviceCode?: string; serviceName?: string; amount?: number; price?: number; currency?: string; etaMin?: number | null; etaMax?: number | null; etaUnit?: string; codAvailable?: boolean; trackingAvailable?: boolean; zoneId?: string | null; zoneName?: string | null }>
+        const options = ((res.data as any)?.options || []) as typeof shippingOptions
         setShippingOptions(options)
         setShippingUnavailableReason(String((res.data as any)?.unavailableReason || ''))
         setSelectedShippingOption((current) => current && options.some((option) => `${option.providerId || ''}:${option.serviceCode || ''}` === current) ? current : (options[0] ? `${options[0].providerId || ''}:${options[0].serviceCode || ''}` : ''))
@@ -112,12 +111,6 @@ export const StoreCheckout: FunctionalComponent = () => {
     }
     if (!quote.available) {
       toast.push('الشحن غير متوفر لهذه الوجهة', quote.unavailableReason || 'اختر محافظة مغطاة قبل المتابعة', 'error')
-      return
-    }
-    // Provider-specific city validation: if Wasla is selected and city is known unsupported, block early
-    const isWaslaSelected = String(providerQuote?.providerName || '').includes('وصلة') || String(providerQuote?.providerName || '').toLowerCase().includes('wasla')
-    if (isWaslaSelected && isWaslaUnsupportedCity(form.city)) {
-      toast.push('شركة الشحن لا تدعم هذه المدينة.', 'اختر مدينة بديلة ضمن نفس المحافظة', 'error')
       return
     }
     if (form.paymentMethod === 'bank') {
@@ -268,8 +261,7 @@ export const StoreCheckout: FunctionalComponent = () => {
             <div className="form-grid">
               <Select label="المحافظة" value={form.governorate} onChange={(v) => setForm({ ...form, governorate: v, city: '', area: '' })} placeholder="اختر المحافظة" options={GOVER_EG.map((g) => ({ value: g, label: g }))} />
               {form.governorate && EGYPT_CITIES_BY_GOVERNORATE[form.governorate]?.length ? <Select label="المدينة" value={form.city} onChange={(v) => setForm({ ...form, city: v, area: '' })} placeholder="اختر المدينة" options={EGYPT_CITIES_BY_GOVERNORATE[form.governorate].map((city) => ({ value: city, label: city }))} /> : <Input label="المدينة" value={form.city} onChange={(v) => setForm({ ...form, city: v })} required />}
-              {form.city && isWaslaUnsupportedCity(form.city) && shippingOptions.some((o) => String(o.providerName || '').includes('وصلة') || String(o.providerName || '').toLowerCase().includes('wasla')) && <p className="checkout-shipping-error" role="alert">شركة الشحن لا تدعم هذه المدينة مباشرة. اختر مدينة قريبة بديلة أو تواصل مع الدعم.</p>}
-              {form.city && waslaAliasTarget(form.city) && <p className="muted small">سيتم شحن طلبك إلى {waslaAliasTarget(form.city)} لدى شركة الشحن.</p>}
+              {providerQuote?.destinationGuidance && <p className="muted small">{providerQuote.destinationGuidance}</p>}
               <Input label="المنطقة / الحي (اختياري)" value={form.area} onChange={(v) => setForm({ ...form, area: v })} />
             </div>
             <Textarea label="العنوان بالتفصيل" value={form.address} onChange={(v) => setForm({ ...form, address: v })} rows={2} required />

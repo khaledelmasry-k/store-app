@@ -386,6 +386,19 @@ export const waslaAdapter: ShippingProviderAdapter = {
   },
   readConfig: waslaConfig,
   prepareConfig: waslaConfigWrite,
+  getSetupStatus(context) {
+    const config = waslaConfig(context.config)
+    const requirements: string[] = []
+    if (!String(config.waslaPickupLocationName || '').trim()) requirements.push('pickupLocation')
+    if (!String(config.waslaPickupAddressLine1 || '').trim()) requirements.push('pickupAddress')
+    if (!(Number(config.waslaPickupGovernorateId) > 0)) requirements.push('pickupGovernorate')
+    if (!(Number(config.waslaPickupCityId) > 0)) requirements.push('pickupCity')
+    return {
+      complete: requirements.length === 0,
+      requirements,
+      message: requirements.length ? 'أكمل بيانات عنوان الاستلام قبل إنشاء الشحنات.' : undefined,
+    }
+  },
   resolveTrackingNumber(input) { return waslaPublicTrackingCode(input.trackingNumber) || waslaPublicTrackingCode(input.providerShipmentId) },
   async testConnection(context) {
     const data = unwrap(await request(context, '/api/v1/merchant/me'))

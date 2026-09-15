@@ -173,6 +173,7 @@ export interface ShippingProviderDefinition extends Partial<FirestoreMeta> {
   canCreateShipment?: boolean
   canTrackShipment?: boolean
   canCancelShipment?: boolean
+  canGetDocument?: boolean
   lastTestedAt?: { seconds: number; nanoseconds: number } | null
   businessProfile?: { legalName?: string; displayName?: string; description?: string; websiteUrl?: string; supportUrl?: string; merchantPortalUrl?: string; apiDocsUrl?: string; publicContactEmail?: string; publicContactPhone?: string }
   branding?: { logoUrl?: string; logoStoragePath?: string; brandColor?: string }
@@ -263,6 +264,8 @@ export interface StoreShippingProviderConfig extends Partial<FirestoreMeta> {
   maskedAccountIdentifier?: string | null
   lastVerifiedAt?: { seconds: number; nanoseconds: number } | null
   isDefault?: boolean
+  /** Neutral, namespaced provider-owned configuration. Legacy provider fields remain readable. */
+  providerConfig?: Record<string, Record<string, unknown>>
   /** Wasla-specific pickup profile and destination name-to-ID mapping. */
   waslaPickupLocationType?: string
   waslaPickupLocationName?: string

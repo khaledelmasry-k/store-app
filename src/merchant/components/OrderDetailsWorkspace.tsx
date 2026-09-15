@@ -69,7 +69,7 @@ export const OrderDetailsWorkspace: FunctionalComponent<Props> = ({ id }) => {
   const [sheetOpen, setSheetOpen] = useState(false)
   const [pendingStatus, setPendingStatus] = useState<Order['status'] | null>(null)
   const [saving, setSaving] = useState(false)
-  const [shippingChoices, setShippingChoices] = useState<Array<{ provider: { id: string; name: string; slug?: string; canCreateShipment?: boolean; canTrackShipment?: boolean; canCancelShipment?: boolean }; config: { enabled?: boolean } | null }>>([])
+  const [shippingChoices, setShippingChoices] = useState<Array<{ provider: { id: string; name: string; integrationType?: 'api' | 'manual'; capabilities?: string[]; canCreateShipment?: boolean; canTrackShipment?: boolean; canCancelShipment?: boolean; canGetDocument?: boolean }; config: { enabled?: boolean } | null }>>([])
   const [shippingProviderId, setShippingProviderId] = useState('')
   const [shipmentAction, setShipmentAction] = useState<string | null>(null)
   const [nextManualShipmentStatus, setNextManualShipmentStatus] = useState('')
@@ -77,7 +77,7 @@ export const OrderDetailsWorkspace: FunctionalComponent<Props> = ({ id }) => {
   useEffect(() => {
     if (!tenantId) return
     void getMerchantShippingProvidersCallable({ storeId: tenantId }).then((result) => {
-      const rows = ((result.data as any)?.providers || []) as Array<{ provider: { id: string; name: string; slug?: string; canCreateShipment?: boolean; canTrackShipment?: boolean; canCancelShipment?: boolean }; config: { enabled?: boolean; isDefault?: boolean } | null }>
+      const rows = ((result.data as any)?.providers || []) as Array<{ provider: { id: string; name: string; integrationType?: 'api' | 'manual'; capabilities?: string[]; canCreateShipment?: boolean; canTrackShipment?: boolean; canCancelShipment?: boolean; canGetDocument?: boolean }; config: { enabled?: boolean; isDefault?: boolean } | null }>
       setShippingChoices(rows.filter((row) => row.config?.enabled))
       const preferred = rows.find((row) => row.config?.enabled && row.config?.isDefault) || rows.find((row) => row.config?.enabled)
       if (preferred) setShippingProviderId((current) => current || preferred.provider.id)
@@ -106,7 +106,9 @@ export const OrderDetailsWorkspace: FunctionalComponent<Props> = ({ id }) => {
   const stepIndex = PROGRESS.indexOf(order.status)
   const isTerminal = TERMINAL.includes(order.status)
   const statusLabel = STATUS_LABELS[order.status as keyof typeof STATUS_LABELS] || order.status
-  const isApiShipment = Boolean(shipment && (shipment.integrationType === 'api' || ['wasla', 'bosta'].includes(String(shipment.provider || shipment.providerId || '').toLowerCase())))
+  const shipmentProvider = shippingChoices.find((row) => row.provider.id === shipment?.providerId)?.provider
+  const shipmentIntegrationType = shipment?.integrationType || shipmentProvider?.integrationType || (shipment?.externalShipmentId ? 'api' : 'manual')
+  const isApiShipment = Boolean(shipment && shipmentIntegrationType === 'api')
   const shipmentTrackingCode = shipment ? (publicShipmentTrackingCode(shipment.provider || shipment.providerId, shipment.trackingNumber)
     || publicShipmentTrackingCode(shipment.provider || shipment.providerId, shipment.providerShipmentId)
     || shipment.trackingNumber || shipment.providerShipmentId || null) : null
@@ -116,14 +118,15 @@ export const OrderDetailsWorkspace: FunctionalComponent<Props> = ({ id }) => {
   const trackingShipmentStatus = currentShipmentStatus === 'SHIPPED' ? 'IN_TRANSIT' : currentShipmentStatus
   const shipmentProgress = ['CREATED', 'READY_FOR_PICKUP', 'PICKED_UP', 'IN_TRANSIT', 'OUT_FOR_DELIVERY', 'DELIVERED']
   const shipmentProgressIndex = shipmentProgress.indexOf(trackingShipmentStatus)
-  const shipmentProvider = shippingChoices.find((row) => row.provider.id === shipment?.providerId)?.provider
   const shipmentProviderName = (shipment as any)?.providerNameSnapshot || shipment?.providerName || (shipment as any)?.shippingCompanyName || shipmentProvider?.name || 'شركة الشحن'
   const shipmentProviderLogo = (shipment as any)?.providerLogoSnapshot || (shipment as any)?.providerLogoUrl || (shipmentProvider as any)?.logoUrl || null
   const shipmentServiceName = (shipment as any)?.serviceNameSnapshot || (shipment as any)?.serviceName || null
   const selectedProvider = shippingChoices.find((row) => row.provider.id === shippingProviderId)?.provider
   const hasExternalShipment = Boolean(isApiShipment && (shipment?.externalShipmentId || shipment?.providerShipmentId))
-  const canTrackShipment = Boolean(shipmentProvider?.canTrackShipment)
-  const canCancelShipment = Boolean(shipmentProvider?.canCancelShipment)
+  const hasCapability = (capability: string) => Boolean(shipmentProvider?.capabilities?.includes(capability))
+  const canTrackShipment = Boolean(shipmentProvider?.canTrackShipment || hasCapability('trackShipment'))
+  const canCancelShipment = Boolean(shipmentProvider?.canCancelShipment || hasCapability('cancelShipment'))
+  const canGetDocument = Boolean(shipmentProvider?.canGetDocument || hasCapability('getDocument'))
   const shipmentCancellationEligible = ['CREATED', 'READY_FOR_PICKUP', 'FAILED'].includes(currentShipmentStatus)
   const orderCancellationEligible = ['NEW', 'CONTACTED', 'PROCESSING'].includes(order.status)
   const visibleStatusLabel = currentShipmentStatus === 'FAILED' ? 'تعذر التسليم — يحتاج متابعة' : statusLabel
@@ -249,7 +252,7 @@ export const OrderDetailsWorkspace: FunctionalComponent<Props> = ({ id }) => {
       anchor.download = document.fileName || `shipment-${shipment.trackingNumber || shipment.id}.pdf`
       anchor.click()
       window.setTimeout(() => URL.revokeObjectURL(url), 30_000)
-      toast.push('تم تحميل مستند الشحنة من Bosta')
+      toast.push('تم تحميل مستند الشحنة')
     } catch (err: any) { toast.push('تعذر تحميل مستند الشحنة', err?.message || 'حاول مرة أخرى', 'error') }
     finally { setShipmentAction(null) }
   }
@@ -400,7 +403,7 @@ export const OrderDetailsWorkspace: FunctionalComponent<Props> = ({ id }) => {
               <div className="flex ods-shipment-actions" style={{ gap: 8 }}>
                 {shipment.trackingUrl && <a className="btn btn-outline btn-sm" href={shipment.trackingUrl} target="_blank" rel="noreferrer">تتبع</a>}
                 {isApiShipment && canTrackShipment && <Button size="sm" variant="outline" loading={shipmentAction === 'refresh'} disabled={shipmentAction !== null} onClick={refreshShipment}>تحديث الحالة</Button>}
-                {shipment.documentAvailable && <Button size="sm" variant="outline" loading={shipmentAction === 'document'} disabled={shipmentAction !== null} onClick={downloadShipmentDocument}>مستند الشحنة</Button>}
+                {shipment.documentAvailable && canGetDocument && <Button size="sm" variant="outline" loading={shipmentAction === 'document'} disabled={shipmentAction !== null} onClick={downloadShipmentDocument}>مستند الشحنة</Button>}
               </div>
               {!isApiShipment && manualShipmentChoices.length > 0 && <div className="stack-list">
                 <label className="field"><span className="field-label">المرحلة التالية للشحنة</span><select className="input" value={nextManualShipmentStatus} onChange={(event) => setNextManualShipmentStatus((event.target as HTMLSelectElement).value)}><option value="">اختر الحالة</option>{manualShipmentChoices.map((status) => <option key={status} value={status}>{SHIPMENT_STATUS_LABELS[status] || status}</option>)}</select></label>

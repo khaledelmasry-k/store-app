@@ -37,6 +37,8 @@ export interface ShippingProviderAdapter {
   readConfig?(config: Record<string, unknown> | null | undefined): Record<string, unknown>
   /** Produces the namespaced provider config and an optional legacy compatibility mirror. */
   prepareConfig?(input: Record<string, unknown>): ShippingProviderConfigWrite
+  /** Provider-owned setup requirements, exposed to generic merchant surfaces. */
+  getSetupStatus?(context: ShippingAdapterContext): { complete: boolean; requirements: string[]; message?: string }
   /** Provider-owned fallback for legacy tracking identities. */
   resolveTrackingNumber?(input: { providerShipmentId?: unknown; trackingNumber?: unknown }): string | null
   testConnection(context: ShippingAdapterContext): Promise<{ ok: boolean; message: string; account?: string | null }>
