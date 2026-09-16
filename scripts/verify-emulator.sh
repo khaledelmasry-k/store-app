@@ -29,12 +29,19 @@ cleanup_preview() {
 }
 trap cleanup_preview EXIT INT TERM
 
-for _ in $(seq 1 40); do
+for _ in $(seq 1 60); do
   if curl -sf "$PREVIEW_URL" >/dev/null 2>&1; then
     break
   fi
   sleep 1
 done
+
+if ! curl -sf "$PREVIEW_URL" >/dev/null 2>&1; then
+  echo "Preview failed to become ready on $PREVIEW_URL after 60s — aborting" >&2
+  exit 1
+fi
+# Give vite a moment to settle after first successful probe
+sleep 1
 
 echo "── Running Playwright (emulator config)..."
 
