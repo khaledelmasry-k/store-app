@@ -1,6 +1,8 @@
 import type { ShippingAdapterContext, ShippingProviderAdapter, CanonicalShipmentStatus, ShippingCapability } from './types'
 import { bostaAdapter } from './bosta'
 import { waslaAdapter } from './wasla'
+import { megaAdapter } from './mega'
+import { customCarrierXAdapter } from './adapters/customCarrierX'
 
 const manualAdapter: ShippingProviderAdapter = {
   slug: 'manual',
@@ -124,18 +126,33 @@ const manualAdapter: ShippingProviderAdapter = {
   },
 }
 
-const adapters: Record<string, ShippingProviderAdapter> = { manual: manualAdapter, bosta: bostaAdapter, wasla: waslaAdapter }
+const adapters: Record<string, ShippingProviderAdapter> = {
+  manual: manualAdapter,
+  bosta: bostaAdapter,
+  wasla: waslaAdapter,
+  mega: megaAdapter,
+  'custom-carrier-x': customCarrierXAdapter,
+  custom: customCarrierXAdapter,
+}
 
 export function getShippingAdapter(slug: string | undefined | null, integrationType?: string): ShippingProviderAdapter | null {
   const normalizedSlug = String(slug || '').trim().toLowerCase()
   if (integrationType === 'manual') return manualAdapter
+  // adapterKey takes precedence over slug; integrationFamily=mega with adapterKey=mega should resolve to mega adapter
+  // For legacy providers that only have slug, resolve by slug.
   return adapters[normalizedSlug] || null
 }
 
 /** Resolve the adapter from the provider record selected by providerId. */
 export function getShippingAdapterForProvider(provider: Record<string, unknown> | null | undefined): ShippingProviderAdapter | null {
   if (!provider) return null
-  return getShippingAdapter(String(provider.adapterKey || provider.slug || ''), String(provider.integrationType || 'manual'))
+  const integrationType = String(provider.integrationType || 'manual')
+  if (integrationType === 'manual') return manualAdapter
+  const adapterKey = String(provider.adapterKey || provider.slug || '').trim().toLowerCase()
+  // Handle mega family: both "mega" and "mega-v1"/"mega-v2" variants map to mega adapter
+  if (adapterKey.startsWith('mega')) return megaAdapter
+  if (adapterKey.startsWith('custom')) return customCarrierXAdapter
+  return getShippingAdapter(adapterKey, integrationType)
 }
 
 /** The only capability check shipping core should need. */

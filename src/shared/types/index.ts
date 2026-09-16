@@ -83,6 +83,9 @@ export interface ShippingCompany extends Partial<FirestoreMeta> {
 export type ShippingProviderStatus = 'active' | 'inactive' | 'draft'
 export type ShippingIntegrationType = 'api' | 'manual'
 export type ShippingCredentialMode = 'platform' | 'merchant' | 'hybrid'
+export type ShippingIntegrationFamily = 'manual' | 'direct_api' | 'mega' | 'custom'
+export type ShippingAdapterKey = 'manual' | 'wasla' | 'bosta' | 'mega' | 'custom' | string
+export type ShippingSystemType = 'manual' | 'mega' | 'custom'
 
 export interface ShippingEligibilityConfig {
   minimumMerchantMonthlyShipments?: number
@@ -159,6 +162,15 @@ export interface ShippingProviderDefinition extends Partial<FirestoreMeta> {
   status: ShippingProviderStatus
   integrationType: ShippingIntegrationType
   credentialMode: ShippingCredentialMode
+  /** Metadata for shared/custom integration systems — never branching on provider names. */
+  integrationFamily?: ShippingIntegrationFamily | string
+  /** Alias for integrationFamily, used as "نظام شركة الشحن" selector. */
+  systemType?: ShippingSystemType | string
+  adapterKey?: ShippingAdapterKey | string
+  /** Carrier identifier inside a shared system (e.g., Mega providerCode). */
+  providerCode?: string
+  /** Platform-controlled system configuration (baseUrl, apiVersion, etc). No secrets. */
+  systemConfig?: { baseUrl?: string; sandboxBaseUrl?: string; apiVersion?: string; providerCode?: string; accountMode?: string; locationMode?: string; webhookMode?: string; [key: string]: unknown }
   supportsCOD?: boolean
   supportsReturns?: boolean
   supportsTracking?: boolean
