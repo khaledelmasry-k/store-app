@@ -420,22 +420,71 @@ export const MerchantShipping: FunctionalComponent = () => {
         {settlementsRes.data.length > 0 && <p className="shipping-settlement-history muted small">آخر تسوية: {settlementsRes.data[0]?.providerName || 'شركة الشحن'} — {formatCurrency(settlementsRes.data[0]?.netMerchantDue || 0)} ({settlementsRes.data[0]?.shipmentCount || 0} شحنة).</p>}
       </Card>}
 
-      {tab === 'companies' && <Card title="شركات الشحن المتاحة من المنصة" className="mt-2">
-        {platformLoading ? <Loading /> : platformProviders.length === 0 ? <p className="muted">لم تُفعّل إدارة المنصة أي شركة شحن بعد.</p> : <div className="card-grid shipping-providers-grid">
-          {platformProviders.map((entry) => { const { provider, config, eligibility } = entry; const ready = isProviderReadyForAutomation(entry); return <Card key={provider.id} className="shipping-provider-card" title={provider.name} actions={<Badge tone={eligibility?.grandfathered || config?.enabled ? 'green' : eligibility?.eligible ? 'blue' : 'amber'}>{eligibility?.grandfathered ? 'اتصال حالي محفوظ' : eligibility?.eligible ? 'متاحة لمتجرك' : 'غير مناسبة حاليًا'}</Badge>}>
-            <div className="shipping-provider-intro">
-              <div><strong>{provider.integrationType === 'api' ? 'ربط مباشر مع شركة الشحن' : 'شحن يدوي من لوحة المتجر'}</strong><p className="muted small">{provider.description || 'شركة شحن مُدارة من منصة متجري'}</p></div>
-              <span className={`shipping-provider-connection ${ready ? 'is-ready' : config?.enabled ? 'is-pending' : ''}`}><Icon name={ready ? 'check_circle' : 'schedule'} ariaHidden />{ready ? 'جاهزة لإنشاء الشحنات' : config?.enabled ? 'تحتاج إكمال الإعداد' : 'غير مفعلة'}</span>
-            </div>
-            <div className="shipping-provider-summary"><span>{provider.supportsCOD ? 'الدفع عند الاستلام' : 'بدون COD'}</span><span>{provider.supportsTracking ? 'تتبع' : 'تتبع يدوي'}</span><span>{connectionStatusLabel(config?.configurationStatus, config?.enabled)}</span>{config?.isDefault && <span>الافتراضية</span>}</div>
-            {eligibility && <div className="shipping-secure-note"><Icon name={eligibility.eligible ? 'check_circle' : 'warning'} ariaHidden /><span>{eligibility.grandfathered ? 'اتصالك الحالي محفوظ' : eligibility.eligible ? 'متاحة لمتجرك' : eligibility.reasons.map((reason: any) => reason.message || reason).join(' · ') || 'شركة الشحن غير جاهزة للربط بعد'}{eligibility.minimumMonthlyShipments > 0 && <>{' · '}الحد الأدنى {eligibility.minimumMonthlyShipments} شحنة شهريًا</>}</span></div>}
-            <Button size="sm" variant="outline" onClick={() => setExpandedProvider((current) => current === provider.id ? null : provider.id)}>{expandedProvider === provider.id ? 'إخفاء التفاصيل' : 'عرض التفاصيل'}</Button>
-            {provider.integrationType === 'manual' && <div className="shipping-secure-note"><Icon name="local_shipping" ariaHidden /><span>هذا الخيار لا يحتاج API أو حسابًا لدى شركة شحن. فعّله واضبط السعر، ثم سجّل بيانات التتبع يدويًا عند إرسال الشحنة.</span></div>}
-            {provider.integrationType === 'api' && !isProviderLive(provider) && <div className="shipping-secure-note"><Icon name="schedule" ariaHidden /><span><strong>قريبًا:</strong> نعمل على محول API الرسمي لـ{provider.name}. الأسعار والمناطق قد تظهر في المتجر، لكن لا تُدخل مفتاح API ولا تعتمد الإنشاء التلقائي قبل أن تصبح الحالة «متصلة».</span></div>}
-            {config?.enabled && !ready && <div className="shipping-secure-note"><Icon name="schedule" ariaHidden /><span><strong>ينقص الإعداد:</strong> {entry.setupMessage || 'أكمل متطلبات إعداد شركة الشحن قبل إنشاء الشحنات تلقائيًا.'}</span></div>}
-            {expandedProvider === provider.id && config?.enabled && <><Toggle checked={config.isDefault === true} onChange={(value) => void savePlatformConfig(provider, config, { ...config, isDefault: value })} label="شركة الشحن الافتراضية" /><ShippingProviderSettings storeId={storeId} provider={provider} config={config} saving={platformSaving === provider.id} onSave={(changes) => void savePlatformConfig(provider, config, changes)} onSaveCredentials={(credentials) => void saveCredentials(provider, credentials)} /></>}
-            <div className="shipping-provider-footer"><Button size="sm" loading={platformSaving === provider.id} disabled={!config?.enabled && !isProviderLive(provider)} title={!config?.enabled && !isProviderLive(provider) ? 'قيد التطوير: لا يمكن تفعيل الإنشاء عبر API قبل اكتمال المحول' : undefined} onClick={() => togglePlatformProvider(provider, config)}>{config?.enabled ? 'إيقاف الشركة' : isProviderLive(provider) ? 'تفعيل الشركة' : 'قريبًا'}</Button>{config?.enabled && <Button size="sm" variant="outline" disabled={provider.integrationType === 'manual' || !provider.adapterConfigured} title={provider.integrationType === 'manual' ? 'المزود اليدوي لا يحتاج اختبار API' : !provider.adapterConfigured ? 'قريبًا: يتاح الاختبار بعد إضافة محول API لهذه الشركة' : 'اختبار اتصال المزود'} onClick={() => testPlatformProvider(provider, config)}>اختبار الاتصال</Button>}</div>
-          </Card> })}
+      {tab === 'companies' && <Card title="شركات الشحن" subtitle="كل الشركات النشطة تظهر هنا. الأهلية تتحكم في التفعيل فقط — لا تُخفي الشركات." className="mt-2">
+        {platformLoading ? <Loading /> : platformProviders.length === 0 ? <p className="muted">لم تُفعّل إدارة المنصة أي شركة شحن بعد.</p> : <div className="card-grid shipping-providers-grid" style={{ gridTemplateColumns: 'repeat(auto-fill, minmax(360px, 1fr))' }}>
+          {platformProviders
+            .filter((entry) => entry.provider.status === 'active' && (entry.provider.publicListing?.enabled !== false || entry.config?.enabled))
+            .map((entry) => {
+              const { provider, config, eligibility } = entry
+              const ready = isProviderReadyForAutomation(entry)
+              const logo = (provider as any).branding?.logoUrl || provider.logoUrl || null
+              const minimum = eligibility?.minimumMonthlyShipments ?? (provider.eligibilityConfig?.minimumMerchantMonthlyShipments || 0)
+              const effective = eligibility?.effectiveMonthlyVolume ?? eligibility?.merchantMonthlyVolume ?? 0
+              const isEligible = eligibility?.eligible === true
+              const isGrandfathered = eligibility?.grandfathered === true
+              const showIneligible = !isEligible && !isGrandfathered
+              const canEnable = isEligible || isGrandfathered
+              return (
+                <Card key={provider.id} className="shipping-provider-card">
+                  <div style={{ display: 'flex', gap: 12, alignItems: 'flex-start' }}>
+                    <div style={{ width: 56, height: 56, borderRadius: 12, background: '#f2f3fb', border: '1px solid #e5e7f2', display: 'grid', placeItems: 'center', overflow: 'hidden', flex: 'none' }}>
+                      {logo ? <img src={logo} alt={`${provider.name} logo`} style={{ width: '100%', height: '100%', objectFit: 'contain', padding: 6 }} /> : <Icon name="local_shipping" />}
+                    </div>
+                    <div style={{ flex: 1, minWidth: 0 }}>
+                      <strong style={{ display: 'block', fontSize: '1rem', lineHeight: 1.2 }}>{provider.name}</strong>
+                      <span className="muted small" style={{ display: 'block', marginTop: 4, lineHeight: 1.5 }}>{provider.publicListing?.shortDescription || provider.description || 'شركة شحن مُدارة من منصة متجري'}</span>
+                    </div>
+                    <Badge tone={isGrandfathered ? 'green' : isEligible ? 'blue' : 'amber'}>{isGrandfathered ? 'اتصال حالي محفوظ' : isEligible ? 'مؤهل' : 'غير مؤهل حاليًا'}</Badge>
+                  </div>
+                  <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10, marginTop: 14, background: '#f8f9ff', border: '1px solid #e8e9f7', borderRadius: 12, padding: '10px 12px' }}>
+                    <div><span className="muted small" style={{ display: 'block' }}>الحد الأدنى</span><strong style={{ fontSize: '.92rem' }}>{minimum} شحنة / شهر</strong></div>
+                    <div><span className="muted small" style={{ display: 'block' }}>حجم متجرك</span><strong style={{ fontSize: '.92rem' }}>{effective} شحنة / شهر</strong><span className="muted small" style={{ display: 'block' }}>فعلي {eligibility?.merchantMonthlyVolume ?? 0} · متوقع {eligibility?.expectedMonthlyVolume ?? 0}</span></div>
+                  </div>
+                  {showIneligible && <div className="shipping-secure-note" style={{ marginTop: 10 }}><Icon name="warning" ariaHidden /><span>هذه الشركة تشترط حدًا أدنى {minimum} شحنة شهريًا. حجم متجرك الحالي {effective} شحنة.</span></div>}
+                  {isGrandfathered && <div className="shipping-secure-note" style={{ marginTop: 10 }}><Icon name="check_circle" ariaHidden /><span>اتصالك الحالي محفوظ — يبقى مفعّلاً حتى لو تغيّر الحد الأدنى لاحقًا.</span></div>}
+                  <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', marginTop: 12 }}>
+                    <span className="muted small" style={{ background: provider.supportsCOD ? '#e6f7ec' : '#f1f2f6', padding: '4px 8px', borderRadius: 999 }}>{provider.supportsCOD ? 'COD ✓' : 'COD —'}</span>
+                    <span className="muted small" style={{ background: provider.supportsTracking ? '#e6f0ff' : '#f1f2f6', padding: '4px 8px', borderRadius: 999 }}>{provider.supportsTracking ? 'Tracking ✓' : 'Tracking —'}</span>
+                    <span className="muted small" style={{ background: provider.supportsReturns ? '#fff4e6' : '#f1f2f6', padding: '4px 8px', borderRadius: 999 }}>{provider.supportsReturns ? 'Returns ✓' : 'Returns —'}</span>
+                    <span className="muted small" style={{ background: provider.supportsPickup ? '#f3e8ff' : '#f1f2f6', padding: '4px 8px', borderRadius: 999 }}>{provider.supportsPickup ? 'Pickup ✓' : 'Pickup —'}</span>
+                    <span className="muted small" style={{ marginInlineStart: 'auto', padding: '4px 8px' }}><Icon name={ready ? 'check_circle' : 'schedule'} ariaHidden /> {ready ? 'جاهزة' : connectionStatusLabel(config?.configurationStatus, config?.enabled)}</span>
+                  </div>
+                  <div style={{ display: 'flex', gap: 10, alignItems: 'center', marginTop: 14, flexWrap: 'wrap' }}>
+                    <Toggle checked={config?.enabled === true} onChange={() => { if (!canEnable && !config?.enabled) { toast.push('لا يمكن التفعيل — الحد الأدنى غير مستوفى', `هذه الشركة تشترط ${minimum} شحنة وحجمك ${effective}.`, 'error'); return } void togglePlatformProvider(provider, config) }} label="تفعيل" />
+                    <label style={{ display: 'flex', alignItems: 'center', gap: 6, cursor: config?.enabled ? 'pointer' : 'not-allowed', opacity: config?.enabled ? 1 : 0.6 }}>
+                      <input type="radio" name="defaultProvider" checked={config?.isDefault === true} disabled={!config?.enabled} onChange={() => void savePlatformConfig(provider, config, { ...config, isDefault: true })} />
+                      <span className="small">الشركة الافتراضية</span>
+                    </label>
+                    <span style={{ marginInlineStart: 'auto', display: 'flex', gap: 8 }}>
+                      <Button size="sm" variant="ghost" onClick={() => setExpandedProvider((cur) => cur === provider.id ? null : provider.id)}>{expandedProvider === provider.id ? 'إخفاء' : 'إعدادات'}</Button>
+                      {config?.enabled && <Button size="sm" variant="outline" disabled={provider.integrationType === 'manual' || !provider.adapterConfigured} onClick={() => testPlatformProvider(provider, config)}>اختبار الاتصال</Button>}
+                    </span>
+                  </div>
+                  {config?.enabled && expandedProvider === provider.id && (
+                    <div style={{ marginTop: 14, paddingTop: 14, borderTop: '1px solid #eef0f7' }}>
+                      {(provider as any).systemType === 'manual' || provider.integrationType === 'manual' ? (
+                        <div className="shipping-secure-note" style={{ marginTop: 0 }}><Icon name="local_shipping" ariaHidden /><span>مزود يدوي — لا يحتاج نموذج اعتماد. احفظ الخدمة والأسعار من إعدادات الشركة.</span></div>
+                      ) : null}
+                      {(provider.integrationConfig?.requiredFields || []).filter((f: any) => f.scope === 'merchant').length === 0 && (provider as any).systemType !== 'manual' && provider.integrationType !== 'manual' ? (
+                        <div className="shipping-secure-note" style={{ marginTop: 0 }}><Icon name="info" ariaHidden /><span>لم يحدد مدير المنصة حقول ربط لهذه الشركة بعد. تواصل مع الدعم إن احتجت لربط حسابك.</span></div>
+                      ) : null}
+                      <ShippingProviderSettings storeId={storeId} provider={provider} config={config!} saving={platformSaving === provider.id} onSave={(changes) => void savePlatformConfig(provider, config, changes)} onSaveCredentials={(credentials) => void saveCredentials(provider, credentials)} />
+                    </div>
+                  )}
+                  {config?.enabled && !ready && <div className="shipping-secure-note"><Icon name="schedule" ariaHidden /><span>{entry.setupMessage || 'أكمل الإعداد قبل إنشاء الشحنات.'}</span></div>}
+                </Card>
+              )
+            })}
         </div>}
       </Card>}
 
