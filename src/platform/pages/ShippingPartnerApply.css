@@ -466,6 +466,25 @@ textarea.shipping-apply-input {
   .shipping-apply-cta { min-height: 50px; font-size: 14px; }
 }
 
+/* Header polish — use shared landing header system, balanced spacing, larger logo */
+.shipping-apply-page .landing-header { backdrop-filter: blur(16px); border-bottom: 1px solid var(--line, #e7eaf1); }
+.shipping-apply-page .stitch-header-inner { min-height: 72px; gap: 24px; justify-content: space-between; }
+.shipping-apply-page .landing-brand { flex: 0 0 auto; }
+.shipping-apply-page .landing-primary-logo { max-height: 44px; }
+.shipping-apply-page .landing-primary-logo .brand-logo-image { max-height: 44px; }
+.shipping-apply-page .landing-nav { gap: 8px; flex: 0 0 auto; }
+.shipping-apply-page .landing-nav-btn-primary { min-height: 42px; padding: 0 18px; font-weight: 800; }
+@media (max-width: 760px) { .shipping-apply-page .stitch-header-inner { min-height: 64px; gap: 12px; } .shipping-apply-page .landing-primary-logo { max-height: 36px; } }
+
+/* Footer — compact, professional */
+.shipping-apply-page .stitch-footer-band { padding: 28px 0 14px; }
+.shipping-apply-page .stitch-footer-grid { gap: 24px; grid-template-columns: 1.8fr repeat(3, minmax(0, 1fr)); }
+.shipping-apply-page .stitch-footer-grid p { margin-top: 10px; font-size: 12.5px; line-height: 1.7; max-width: 260px; }
+.shipping-apply-page .stitch-footer-grid h3 { margin: 4px 0 10px; font-size: 13px; }
+.shipping-apply-page .stitch-footer-grid a { margin: 6px 0; font-size: 12.5px; }
+.shipping-apply-page .stitch-footer-copy { margin-top: 20px; padding-top: 12px; font-size: 11.5px; }
+@media (max-width: 760px) { .shipping-apply-page .stitch-footer-band { padding: 24px 0 12px; } .shipping-apply-page .stitch-footer-grid { gap: 18px; } }
+
 /* Dark mode — tokens already handle most, but ensure panel shadow remains soft */
 html[data-theme='dark'] .shipping-apply-shell {
   background:
