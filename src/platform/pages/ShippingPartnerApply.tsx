@@ -300,8 +300,8 @@ export const ShippingPartnerApply: FunctionalComponent = () => {
       <footer className="stitch-footer-band">
         <div className="landing-container stitch-footer-grid">
           <div>
-            <BrandLogo className="landing-footer-logo" />
-            <p>منصة التجارة الإلكترونية المتكاملة.</p>
+            <BrandLogo className="landing-footer-logo" surface="dark" />
+            <p>منصة التجارة الإلكترونية المتكاملة — شحّن بثقة عبر شركاء متجري.</p>
           </div>
           <div>
             <h3>المنصة</h3>

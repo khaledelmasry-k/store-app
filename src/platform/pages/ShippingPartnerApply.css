@@ -476,13 +476,15 @@ textarea.shipping-apply-input {
 .shipping-apply-page .landing-nav-btn-primary { min-height: 42px; padding: 0 18px; font-weight: 800; }
 @media (max-width: 760px) { .shipping-apply-page .stitch-header-inner { min-height: 64px; gap: 12px; } .shipping-apply-page .landing-primary-logo { max-height: 36px; } }
 
-/* Footer — compact, professional */
+/* Footer — compact, professional, correct logo contrast (no filter hack) */
 .shipping-apply-page .stitch-footer-band { padding: 28px 0 14px; }
 .shipping-apply-page .stitch-footer-grid { gap: 24px; grid-template-columns: 1.8fr repeat(3, minmax(0, 1fr)); }
 .shipping-apply-page .stitch-footer-grid p { margin-top: 10px; font-size: 12.5px; line-height: 1.7; max-width: 260px; }
 .shipping-apply-page .stitch-footer-grid h3 { margin: 4px 0 10px; font-size: 13px; }
 .shipping-apply-page .stitch-footer-grid a { margin: 6px 0; font-size: 12.5px; }
 .shipping-apply-page .stitch-footer-copy { margin-top: 20px; padding-top: 12px; font-size: 11.5px; }
+.shipping-apply-page .landing-footer-logo { filter: none !important; opacity: 1 !important; max-width: 160px; }
+.shipping-apply-page .landing-footer-logo .brand-logo-image { filter: none !important; opacity: 1 !important; }
 @media (max-width: 760px) { .shipping-apply-page .stitch-footer-band { padding: 24px 0 12px; } .shipping-apply-page .stitch-footer-grid { gap: 18px; } }
 
 /* Dark mode — tokens already handle most, but ensure panel shadow remains soft */
