@@ -5603,6 +5603,40 @@ export const setShippingProviderStatus = onCall(async (request: CallableRequest<
   return { ok: true, provider: safeShippingProvider(providerId, { ...snap.data(), status }) }
 })
 
+export const saveShippingProviderBranding = onCall(async (request: CallableRequest<{ providerId?: string; logoUrl?: string; logoStoragePath?: string }>) => {
+  await assertPlatformAdmin(request)
+  const providerId = String(request.data?.providerId || '').trim()
+  const logoUrl = String(request.data?.logoUrl || '').trim()
+  const logoStoragePath = request.data?.logoStoragePath ? String(request.data.logoStoragePath).trim().slice(0, 500) : undefined
+  if (!providerId) throw new HttpsError('invalid-argument', 'providerId مطلوب')
+  if (!logoUrl || logoUrl.length > 2000) throw new HttpsError('invalid-argument', 'رابط الشعار غير صالح')
+  // Validate URL shape — must be https and from Firebase Storage or https domain
+  try {
+    const parsed = new URL(logoUrl)
+    if (parsed.protocol !== 'https:') throw new Error('protocol')
+    if (logoUrl.length < 10) throw new Error('short')
+  } catch {
+    throw new HttpsError('invalid-argument', 'رابط الشعار يجب أن يكون HTTPS صالح')
+  }
+  const ref = db.doc(`shippingProviders/${providerId}`)
+  const snap = await ref.get()
+  if (!snap.exists) throw new HttpsError('not-found', 'شركة الشحن غير موجودة')
+  const existing = snap.data() || {}
+  const branding = {
+    ...(existing.branding || {}),
+    logoUrl,
+    ...(logoStoragePath ? { logoStoragePath } : {}),
+  }
+  const update: Record<string, unknown> = {
+    logoUrl,
+    branding,
+    updatedAt: now(),
+  }
+  await ref.set(update, { merge: true })
+  const after = await ref.get()
+  return { provider: safeShippingProvider(providerId, after.data()) }
+})
+
 export const getPublicShippingPartners = onCall(async () => {
   const snap = await db.collection('shippingProviders').where('status', '==', 'active').get()
   return { partners: snap.docs.map((doc) => ({ id: doc.id, data: doc.data() })).filter(({ data }) => data?.partnership?.status === 'active' && data?.publicListing?.enabled === true && Boolean(data?.logoUrl || data?.branding?.logoUrl)).sort((a, b) => Number(a.data?.publicListing?.sortOrder || 0) - Number(b.data?.publicListing?.sortOrder || 0)).map(({ id, data }) => ({ id, name: String(data.name || ''), logoUrl: data.logoUrl || data.branding?.logoUrl || null, websiteUrl: data.businessProfile?.websiteUrl || null, shortDescription: data.publicListing?.shortDescription || data.description || '', ...(data.supportsTracking === true ? { supportsTracking: true } : {}), ...(data.supportsCOD === true ? { supportsCOD: true } : {}) })) }

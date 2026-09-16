@@ -167,6 +167,10 @@ export function saveShippingProviderCallable(input: Record<string, unknown>) {
   return httpsCallable(getFunctions(), 'saveShippingProvider')(input)
 }
 
+export function saveShippingProviderBrandingCallable(input: { providerId: string; logoUrl: string; logoStoragePath?: string }) {
+  return httpsCallable(getFunctions(), 'saveShippingProviderBranding')(input)
+}
+
 export function setShippingProviderStatusCallable(input: Record<string, unknown>) {
   return httpsCallable(getFunctions(), 'setShippingProviderStatus')(input)
 }

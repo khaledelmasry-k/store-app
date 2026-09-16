@@ -15,6 +15,7 @@ import { ConfirmDialog } from '../../shared/components/ui/ConfirmDialog'
 import { useCollection } from '../../shared/hooks/useCollection'
 import { useToast } from '../../shared/hooks/useToast'
 import {
+  saveShippingProviderBrandingCallable,
   saveShippingProviderCallable,
   setShippingProviderStatusCallable,
   testShippingConnectionCallable,
@@ -697,7 +698,7 @@ export const PlatformShippingCompanies: FunctionalComponent = () => {
                 placeholder="مثال: فاست إكسبرس"
               />
               <label className="field"><span className="field-label">شعار الشركة</span><input className="input" type="file" accept="image/*" disabled={!editingId || saving} onChange={async (event) => { const file = (event.target as HTMLInputElement).files?.[0]; if (!file || !editingId) return; try { const url = await uploadShippingProviderLogo(file, editingId); const nextDraft = { ...draft, logoUrl: url, branding: { ...draft.branding, logoUrl: url } }; setDraft(nextDraft);
-                    try { const result = await saveShippingProviderCallable({ providerId: editingId, provider: { ...nextDraft, logoUrl: url, branding: { ...nextDraft.branding, logoUrl: url } } }); const saved = (result.data as any)?.provider; if (saved) setDraft((cur) => ({ ...cur, ...saved, logoUrl: saved.logoUrl || saved.branding?.logoUrl || url, branding: { ...cur.branding, ...(saved.branding || {}), logoUrl: saved.logoUrl || saved.branding?.logoUrl || url } })); toast.push('تم رفع وحفظ الشعار') } catch (persistErr: any) { toast.push('تم رفع الشعار — تعذر الحفظ التلقائي', persistErr?.message || 'احفظ يدويًا', 'error') } } catch (error: any) { toast.push('تعذر رفع الشعار', error?.message || 'تحقق من الملف', 'error') } }} /><span className="field-hint">يُحفظ تلقائيًا بعد الرفع ويظهر للتجار فورًا.</span></label>
+                    try { const result = await saveShippingProviderBrandingCallable({ providerId: editingId, logoUrl: url }); const saved = (result.data as any)?.provider; if (saved) setDraft((cur) => ({ ...cur, ...saved, logoUrl: saved.logoUrl || (saved as any).branding?.logoUrl || url, branding: { ...cur.branding, ...(saved.branding || {}), logoUrl: saved.logoUrl || (saved as any).branding?.logoUrl || url } })); toast.push('تم رفع وحفظ الشعار') } catch (persistErr: any) { const msg = String(persistErr?.message || ''); toast.push('تم رفع الشعار — تعذر الحفظ التلقائي', msg || 'حاول مجددًا', 'error'); console.error('branding save failed', persistErr) } } catch (error: any) { toast.push('تعذر رفع الشعار', error?.message || 'تحقق من الملف', 'error') } }} /><span className="field-hint">يُحفظ تلقائيًا بعد الرفع ويظهر للتجار فورًا.</span></label>
               <Input
                 label="وصف مختصر للتاجر"
                 value={draft.publicListing.shortDescription || draft.description || ''}
