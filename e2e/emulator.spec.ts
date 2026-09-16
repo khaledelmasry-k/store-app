@@ -4,7 +4,21 @@ import { deleteApp, initializeApp } from 'firebase/app'
 import { connectAuthEmulator, getAuth, signInWithCustomToken } from 'firebase/auth'
 import { connectFunctionsEmulator, getFunctions, httpsCallable } from 'firebase/functions'
 import { readFileSync } from 'node:fs'
+import { createCipheriv, createHash, randomBytes } from 'node:crypto'
 import { dismissMerchantTourIfVisible, safeClickWithTourGuard } from './helpers/tour-guard'
+
+// Helper to create emulator vault envelope for API providers in E2E (merchant manual is store-level)
+function createEmulatorVaultEnvelope(credentials: Record<string, unknown>, identity: { storeId: string; provider: string; integrationType: string; keyVersion?: number }) {
+  const EMULATOR_KEY = 'mk-store-emulator-integration-vault-key-v1'
+  const key = createHash('sha256').update(EMULATOR_KEY, 'utf8').digest()
+  const keyVersion = identity.keyVersion || 1
+  const iv = randomBytes(12)
+  const aad = Buffer.from(`${identity.storeId}:${identity.integrationType}:${identity.provider}:v${keyVersion}`, 'utf8')
+  const cipher = createCipheriv('aes-256-gcm', key, iv)
+  cipher.setAAD(aad)
+  const ciphertext = Buffer.concat([cipher.update(JSON.stringify(credentials), 'utf8'), cipher.final()])
+  return { algorithm: 'aes-256-gcm' as const, ciphertext: ciphertext.toString('base64'), iv: iv.toString('base64'), authTag: cipher.getAuthTag().toString('base64'), keyVersion }
+}
 
 // Point the Admin SDK at the local emulators BEFORE importing firebase-admin.
 process.env.FIRESTORE_EMULATOR_HOST = 'localhost:8080'
@@ -770,39 +784,29 @@ test('merchant subscription page shows persisted usage (1020/1500) and countdown
 })
 
 test('shipping: canonical zone provider resolves fee at checkout and persists snapshot', async ({ page }) => {
-  // Reuse this project's flow store (created earlier in the run) so we never
-  // add an extra merchant row and overflow the platform merchants table.
+  // STALE FIXTURE PROVED: previous version created shippingProviders/manual as platform provider.
+  // Manual shipping is now merchant-owned (store.shipping + shipping zones), NOT a platform provider.
+  // This test now verifies MERCHANT MANUAL shipping (40 EGP zone) per current architecture.
   const { ref } = ctx()
   const storeName = `مقهى التدفق ${ctx().uniq}`
   const ensuredStore = await ensureFlowStore(ref, storeName)
   const store = (await storeBySlug(ref))!
-  // Canonical provider architecture: provider/service/zone data is the only
-  // runtime source; legacy `stores.shipping`/`shipping` documents are not
-  // used when a modern provider is enabled.
-  const providerId = `shipping-zone-${ctx().uniq}`
-  await db.doc(`shippingProviders/${providerId}`).set({
-    id: providerId, name: 'شحن القاهرة الكبرى', slug: 'manual', status: 'active',
-    integrationType: 'manual', credentialMode: 'platform', supportsCOD: true,
-    supportsTracking: false, supportsReturns: false, supportsWebhooks: false,
-    allowMerchantRateOverride: false,
-    services: [{
-      code: 'cairo-zone', name: 'القاهرة الكبرى', enabled: true, serviceType: 'standard',
-      rateMode: 'zone', fixedRate: 0, estimatedMinHours: 72, estimatedMaxHours: 120,
-      supportsCOD: true, supportsReturns: false, supportsPickup: false,
-      zoneRules: [{ zoneId: 'cairo-major', zoneName: 'القاهرة الكبرى', enabled: true,
-        governorates: ['القاهرة', 'الجيزة', 'القليوبية'], cities: [], areas: [],
-        baseRate: 40, codFee: 0, returnFee: 0, baseWeight: 1, extraKgRate: 0,
-        etaMin: 72, etaMax: 120, etaUnit: 'hours' }],
-    }],
-    createdAt: admin.firestore.FieldValue.serverTimestamp(), updatedAt: admin.firestore.FieldValue.serverTimestamp(),
-  })
-  await db.doc(`storeShippingProviders/${store.id}_${providerId}`).set({
-    id: `${store.id}_${providerId}`, storeId: store.id, providerId, enabled: true,
-    enabledServiceCodes: ['cairo-zone'], serviceCode: 'cairo-zone', rateMode: 'zone',
-    codEnabled: true, returnEnabled: false, defaultPackageWeight: 1,
-    rateMarkup: 0, fixedRate: 0, freeShippingThreshold: 0,
-    configurationStatus: 'ready', createdAt: admin.firestore.FieldValue.serverTimestamp(),
+  // Disable any API carriers for this store to isolate manual shipping
+  const existingConfigs = await db.collection('storeShippingProviders').where('storeId', '==', store.id).get()
+  await Promise.all(existingConfigs.docs.map((d) => d.ref.update({ enabled: false, updatedAt: admin.firestore.FieldValue.serverTimestamp() })))
+  // Configure merchant manual shipping (store-level) — the canonical manual model
+  await db.doc(`stores/${store.id}`).set({
+    shipping: { enabled: true, model: 'zones', flatFee: 0, freeAbove: 0, refusedPolicy: '', refusedPolicyEnabled: false, providers: [] },
     updatedAt: admin.firestore.FieldValue.serverTimestamp(),
+  }, { merge: true })
+  // Clean previous manual zones for this store to avoid overlap
+  const prevZones = await db.collection('shipping').where('storeId', '==', store.id).get()
+  await Promise.all(prevZones.docs.map((d) => d.ref.delete()))
+  const zoneRef = db.collection('shipping').doc()
+  await zoneRef.set({
+    id: zoneRef.id, storeId: store.id, name: 'القاهرة الكبرى', governorates: ['القاهرة', 'الجيزة', 'القليوبية'],
+    fee: 40, freeAbove: 0, estimatedDays: '3-5 أيام', active: true,
+    createdAt: admin.firestore.FieldValue.serverTimestamp(), updatedAt: admin.firestore.FieldValue.serverTimestamp(),
   })
 
   // The home page only renders explicitly featured cards.  Use the canonical
@@ -835,9 +839,9 @@ test('shipping: canonical zone provider resolves fee at checkout and persists sn
   expect(order.shippingFee).toBe(40)
   expect(order.shippingMethod).toBe('القاهرة الكبرى')
   expect(order.shippingSnapshot?.enabled).toBe(true)
-  expect(order.shippingSnapshot?.providerId).toBe(providerId)
-  expect(order.shippingSnapshot?.serviceCode).toBe('cairo-zone')
-  expect(order.shippingSnapshot?.zoneId).toBeTruthy()
+  // Manual shipping is merchant-owned — no platform providerId
+  expect(order.shippingSnapshot?.providerId == null).toBe(true)
+  expect(order.shippingSnapshot?.zoneId).toBe(zoneRef.id)
   expect(order.totalPrice).toBe(order.subtotal + 40)
 })
 
@@ -1341,22 +1345,32 @@ test('shipping: default provider honored (client+server) and refused-policy togg
   const providerId = `shipping-default-${ctx().uniq}`
   const configs = await db.collection('storeShippingProviders').where('storeId', '==', store.id).get()
   await Promise.all(configs.docs.map((doc) => doc.ref.update({ enabled: false, updatedAt: admin.firestore.FieldValue.serverTimestamp() })))
+  // API provider fixture — must be api-backed, not manual (manual is now store-level)
+  // Use fixed rate so it matches any governorate without zone-mismatch flakiness
   await db.doc(`shippingProviders/${providerId}`).set({
-    id: providerId, name: 'توصيل سريع', slug: 'manual', status: 'active', integrationType: 'manual',
-    credentialMode: 'merchant', supportsCOD: true, supportsTracking: false, supportsReturns: false, supportsWebhooks: false,
+    id: providerId, name: 'توصيل سريع', slug: `api-${providerId}`, status: 'active', integrationType: 'api', systemType: 'custom', adapterKey: 'custom', adapterStatus: 'production_ready',
+    credentialMode: 'platform', supportsCOD: true, supportsTracking: true, supportsReturns: false, supportsWebhooks: false,
     allowMerchantRateOverride: false,
     services: [{
-      code: 'fast-cairo', name: 'توصيل سريع', enabled: true, serviceType: 'express', rateMode: 'zone', fixedRate: 0,
+      code: 'fast-cairo', name: 'توصيل سريع', enabled: true, serviceType: 'express', rateMode: 'fixed', fixedRate: 25,
       estimatedMinHours: 24, estimatedMaxHours: 48, supportsCOD: true, supportsReturns: false, supportsPickup: false,
-      zoneRules: [{ zoneId: 'cairo-fast', zoneName: 'القاهرة', enabled: true, governorates: ['القاهرة'], cities: [], areas: [],
-        baseRate: 25, codFee: 0, returnFee: 0, baseWeight: 1, extraKgRate: 0, etaMin: 24, etaMax: 48, etaUnit: 'hours' }],
+      zoneRules: [],
     }],
     createdAt: admin.firestore.FieldValue.serverTimestamp(), updatedAt: admin.firestore.FieldValue.serverTimestamp(),
   })
   await db.doc(`storeShippingProviders/${store.id}_${providerId}`).set({
     id: `${store.id}_${providerId}`, storeId: store.id, providerId, enabled: true, enabledServiceCodes: ['fast-cairo'],
     serviceCode: 'fast-cairo', rateMode: 'zone', codEnabled: true, returnEnabled: false, defaultPackageWeight: 1,
-    rateMarkup: 0, fixedRate: 0, freeShippingThreshold: 0, configurationStatus: 'ready',
+    rateMarkup: 0, fixedRate: 0, freeShippingThreshold: 0, configurationStatus: 'CONNECTED',
+    createdAt: admin.firestore.FieldValue.serverTimestamp(), updatedAt: admin.firestore.FieldValue.serverTimestamp(),
+  })
+  // Create platform credential vault for API provider (required for getShippingOptions)
+  const vaultId = `${store.id}_shipping_api-${providerId}`
+  const envelope = createEmulatorVaultEnvelope({ apiKey: 'test-api-key-123' }, { storeId: store.id, provider: `api-${providerId}`, integrationType: 'shipping' })
+  await db.doc(`integrationCredentials/${vaultId}`).set({
+    id: vaultId, storeId: store.id, provider: `api-${providerId}`, providerId, integrationType: 'shipping',
+    envelope, keyVersion: 1, maskedCredentials: { apiKey: '************123' }, status: 'CONNECTED',
+    lastValidatedAt: admin.firestore.FieldValue.serverTimestamp(), lastValidationStatus: 'CONNECTED',
     createdAt: admin.firestore.FieldValue.serverTimestamp(), updatedAt: admin.firestore.FieldValue.serverTimestamp(),
   })
   await db.collection('stores').doc(store.id).update({
@@ -1380,6 +1394,7 @@ test('shipping: default provider honored (client+server) and refused-policy togg
 
   // Server recomputes the same default provider fee + policy.
   await page.getByRole('button', { name: 'تأكيد الطلب' }).click()
+  await expect.poll(async () => (await db.collection('orders').where('storeId', '==', store.id).orderBy('createdAt', 'desc').limit(1).get()).docs[0]?.data()?.shippingFee, { timeout: 30000 }).toBe(25)
   await expect(page.getByText('تم إنشاء طلبك بنجاح')).toBeVisible({ timeout: 30000 })
   const orderSnap = await db.collection('orders').where('storeId', '==', store.id).orderBy('createdAt', 'desc').limit(1).get()
   const order = orderSnap.docs[0].data() as any
@@ -1399,6 +1414,8 @@ test('shipping: default provider honored (client+server) and refused-policy togg
   await page.getByRole('button', { name: 'إتمام الطلب' }).click()
   await page.locator('.field', { hasText: 'المحافظة' }).locator('select').selectOption({ label: 'القاهرة' })
   await expect(page.getByText('الشحن (توصيل سريع)')).toBeVisible({ timeout: 15000 })
+  await page.getByRole('button', { name: 'تأكيد الطلب' }).click()
+  await expect.poll(async () => (await db.collection('orders').where('storeId', '==', store.id).orderBy('createdAt', 'desc').limit(1).get()).docs[0]?.data()?.shippingFee, { timeout: 30000 }).toBe(25)
   const again = await db.collection('orders').where('storeId', '==', store.id).orderBy('createdAt', 'desc').limit(1).get()
   expect((again.docs[0].data() as any).shippingFee).toBe(25)
 })

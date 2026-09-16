@@ -6128,7 +6128,9 @@ export const getShippingOptions = onCall({ region: SHIPPING_FUNCTION_REGION, sec
       const vault = provider.integrationType === 'api'
         ? await loadIntegrationCredentials(db, storeId, 'shipping', providerSlug).catch(() => null)
         : null
-      if (provider.integrationType === 'api' && !vault) {
+      // Only merchant-owned credentials are per-store vaults. Platform credentials are server-managed.
+      const requiresMerchantVault = provider.integrationType === 'api' && (provider.credentialMode === 'merchant' || provider.credentialMode === 'hybrid')
+      if (requiresMerchantVault && !vault) {
         unavailableReasons.push('أكمل التاجر حفظ واختبار بيانات اعتماد شركة الشحن أولاً')
         continue
       }
@@ -6189,24 +6191,10 @@ export const getShippingOptions = onCall({ region: SHIPPING_FUNCTION_REGION, sec
         destinationGuidance: rate.destinationGuidance ? String(rate.destinationGuidance) : null,
       })))
   }
-  // Manual shipping is store-level. If merchant has enabled manual shipping, offer it
-  // alongside API carriers (not as a provider). This keeps manual and API distinct.
-  const manualEnabled = !!storeSnap.data()?.shipping?.enabled
-  if (manualEnabled) {
-    const manualZonesSnap = await db.collection('shipping').where('storeId', '==', storeId).where('active', '==', true).get().catch(() => ({ docs: [] as any[] }))
-    const manualFallback = computeShippingFee(storeSnap.data()?.shipping, (manualZonesSnap as any).docs.map((doc: any) => ({ id: doc.id, ...doc.data() })), subtotal, String(destination.governorate))
-    if (manualFallback.available) {
-      // Avoid duplicating if fallback already added via legacy path below
-      const alreadyHasManual = options.some((o) => (o as any).legacy && (o as any).providerId == null)
-      if (!alreadyHasManual) {
-        options.push({ providerId: null, providerName: manualFallback.method || 'شحن يدوي', serviceCode: 'manual', serviceName: manualFallback.method || 'شحن يدوي', price: manualFallback.fee, amount: manualFallback.fee, currency: storeSnap.data()?.currency || 'EGP', estimatedDays: null, etaMin: null, etaMax: null, etaUnit: 'hours', codAvailable: true, trackingAvailable: false, legacy: true, manual: true })
-      }
-    }
-  }
   // Legacy zones are only a migration fallback for stores that have no
   // active canonical provider. A configured provider with no coverage must
   // stay unavailable; it must never silently fall back to a conflicting rate.
-  if (!options.length && !hasCanonicalProvider && !manualEnabled) {
+  if (!options.length && !hasCanonicalProvider) {
     const zonesSnap = await db.collection('shipping').where('storeId', '==', storeId).where('active', '==', true).get()
     const fallback = computeShippingFee(storeSnap.data()?.shipping, zonesSnap.docs.map((doc) => ({ id: doc.id, ...doc.data() })), subtotal, String(destination.governorate))
     if (fallback.available) options.push({ providerId: fallback.snapshot?.providerId || null, providerName: fallback.method, serviceCode: 'legacy', serviceName: fallback.method, price: fallback.fee, amount: fallback.fee, currency: storeSnap.data()?.currency || 'EGP', estimatedDays: null, etaMin: null, etaMax: null, etaUnit: 'hours', codAvailable: true, trackingAvailable: false, legacy: true })
