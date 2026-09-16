@@ -97,12 +97,13 @@ export const MerchantShipping: FunctionalComponent = () => {
   const cfg = store?.shipping || { enabled: false, model: 'flat' as const, flatFee: 0, freeAbove: 0, refusedPolicy: '', providers: [] }
   const providers = cfg.providers || []
   const isProviderLive = (provider: ShippingProviderDefinition) => provider.integrationType === 'manual' || provider.adapterConfigured === true
+  // Explicit separation: manual is operational but never automation-capable
   const isProviderOperational = (entry: typeof platformProviders[number]) => entry.config?.enabled === true && entry.setupComplete === true
   const isProviderAutomationCapable = (entry: typeof platformProviders[number]) => {
     const provider = entry.provider as any
     const config = entry.config
     if (!config?.enabled || !entry.setupComplete) return false
-    if (provider.integrationType !== 'api') return false
+    if (provider.integrationType !== 'api') return false // manual never qualifies
     if (!entry.provider.adapterConfigured) return false
     // adapter must support createShipment
     if (!entry.provider.canCreateShipment) return false
