@@ -306,6 +306,8 @@ const SHIPPING_PROVIDER_STATUSES = ['active', 'inactive', 'draft'] as const
 const SHIPPING_INTEGRATION_TYPES = ['api', 'manual'] as const
 const SHIPPING_CREDENTIAL_MODES = ['platform', 'merchant', 'hybrid'] as const
 const SHIPPING_RATE_MODES = ['api', 'fixed', 'zone', 'weight', 'hybrid'] as const
+const SHIPPING_INTEGRATION_FAMILIES = ['manual', 'direct_api', 'mega', 'custom'] as const
+const SHIPPING_SYSTEM_TYPES = ['manual', 'mega', 'custom'] as const
 
 function normalizeZoneRules(input: any) {
   if (!Array.isArray(input)) return []
@@ -400,8 +402,26 @@ function hasVerifiedWebhookContract(slug: unknown, integrationType: unknown): bo
   return Boolean(adapter?.parseWebhook && adapter?.verifyWebhookSignature && supportsShippingCapability(adapter, 'webhook'))
 }
 
+function resolveAdapterForProviderRecord(data: any) {
+  return getShippingAdapterForProvider({
+    id: data?.id,
+    slug: data?.slug,
+    adapterKey: data?.adapterKey || data?.slug,
+    integrationType: data?.integrationType,
+    integrationFamily: data?.integrationFamily || data?.systemType,
+    systemType: data?.systemType || data?.integrationFamily,
+  } as any)
+}
+
 function safeShippingProvider(id: string, data: any) {
-  const adapter = getShippingAdapter(data?.slug, data?.integrationType)
+  const adapter = getShippingAdapterForProvider({
+    id: data?.id || id,
+    slug: data?.slug,
+    adapterKey: data?.adapterKey || data?.slug,
+    integrationType: data?.integrationType,
+    integrationFamily: data?.integrationFamily || data?.systemType,
+    systemType: data?.systemType || data?.integrationFamily,
+  } as any)
   const capabilities = adapter?.capabilities || []
   const services = Array.isArray(data?.services) ? data.services.slice(0, 50).map((service: any) => ({
     code: String(service?.code || '').slice(0, 80),
@@ -421,15 +441,31 @@ function safeShippingProvider(id: string, data: any) {
     extraKgRate: Math.max(0, Number(service?.extraKgRate || 0)),
     zoneRules: normalizeZoneRules(service?.zoneRules),
   })) : []
+  // Canonical logo: prefer branding.logoUrl, fallback to legacy logoUrl.
+  const canonicalLogo = data?.branding?.logoUrl || data?.logoUrl || null
   return {
     id,
     name: String(data?.name || ''),
     slug: String(data?.slug || ''),
-    logoUrl: data?.logoUrl || null,
+    logoUrl: canonicalLogo,
+    branding: { logoUrl: canonicalLogo || undefined, logoStoragePath: data?.branding?.logoStoragePath || undefined, brandColor: data?.branding?.brandColor || undefined },
     description: String(data?.description || ''),
     status: SHIPPING_PROVIDER_STATUSES.includes(data?.status) ? data.status : 'draft',
     integrationType: SHIPPING_INTEGRATION_TYPES.includes(data?.integrationType) ? data.integrationType : 'manual',
     credentialMode: SHIPPING_CREDENTIAL_MODES.includes(data?.credentialMode) ? data.credentialMode : 'platform',
+    integrationFamily: SHIPPING_INTEGRATION_FAMILIES.includes(data?.integrationFamily) ? data.integrationFamily : (SHIPPING_SYSTEM_TYPES.includes(data?.systemType) ? (data.systemType === 'manual' ? 'manual' : data.systemType) : undefined),
+    systemType: SHIPPING_SYSTEM_TYPES.includes(data?.systemType) ? data.systemType : (SHIPPING_INTEGRATION_FAMILIES.includes(data?.integrationFamily) ? (data.integrationFamily === 'manual' ? 'manual' : data.integrationFamily === 'mega' ? 'mega' : data.integrationFamily === 'custom' ? 'custom' : undefined) : undefined),
+    adapterKey: data?.adapterKey ? String(data.adapterKey).toLowerCase().replace(/[^a-z0-9_-]/g, '-').slice(0, 80) : (data?.slug ? String(data.slug).toLowerCase() : undefined),
+    providerCode: data?.providerCode ? String(data.providerCode).slice(0, 120) : undefined,
+    systemConfig: data?.systemConfig && typeof data.systemConfig === 'object' ? {
+      baseUrl: data.systemConfig.baseUrl ? String(data.systemConfig.baseUrl).slice(0, 500) : undefined,
+      sandboxBaseUrl: data.systemConfig.sandboxBaseUrl ? String(data.systemConfig.sandboxBaseUrl).slice(0, 500) : undefined,
+      apiVersion: data.systemConfig.apiVersion ? String(data.systemConfig.apiVersion).slice(0, 40) : undefined,
+      providerCode: data.systemConfig.providerCode ? String(data.systemConfig.providerCode).slice(0, 120) : undefined,
+      accountMode: data.systemConfig.accountMode ? String(data.systemConfig.accountMode).slice(0, 40) : undefined,
+      locationMode: data.systemConfig.locationMode ? String(data.systemConfig.locationMode).slice(0, 40) : undefined,
+      webhookMode: data.systemConfig.webhookMode ? String(data.systemConfig.webhookMode).slice(0, 40) : undefined,
+    } : undefined,
     supportsCOD: data?.supportsCOD === true,
     supportsReturns: data?.supportsReturns === true,
     supportsTracking: data?.supportsTracking === true,
@@ -446,8 +482,7 @@ function safeShippingProvider(id: string, data: any) {
     canCancelShipment: Boolean(adapter?.cancelShipment && supportsShippingCapability(adapter, 'cancelShipment')),
     canGetDocument: Boolean(adapter?.getShipmentDocument && supportsShippingCapability(adapter, 'getDocument')),
     lastTestedAt: data?.lastTestedAt || null,
-    businessProfile: data?.businessProfile || undefined,
-    branding: data?.branding ? { logoUrl: data.branding.logoUrl || undefined, logoStoragePath: data.branding.logoStoragePath || undefined, brandColor: data.branding.brandColor || undefined } : undefined,
+    // Duplicated branding already set via canonicalLogo above; keep single source
     partnership: data?.partnership ? { status: data.partnership.status || 'draft', contractedAt: data.partnership.contractedAt || null, notes: data.partnership.notes || undefined } : undefined,
     publicListing: data?.publicListing ? { enabled: data.publicListing.enabled === true, sortOrder: Number(data.publicListing.sortOrder || 0), shortDescription: data.publicListing.shortDescription || undefined } : undefined,
     integrationConfig: data?.integrationConfig ? { authType: data.integrationConfig.authType || 'none', baseUrl: data.integrationConfig.baseUrl || undefined, sandboxBaseUrl: data.integrationConfig.sandboxBaseUrl || undefined, trackingUrlTemplate: data.integrationConfig.trackingUrlTemplate || undefined, webhookMode: data.integrationConfig.webhookMode || undefined, requiredFields: Array.isArray(data.integrationConfig.requiredFields) ? data.integrationConfig.requiredFields.map((f: any) => ({ key: String(f.key || ''), label: String(f.label || ''), type: String(f.type || 'text'), required: f.required === true, secret: f.secret === true, scope: f.scope === 'platform' ? 'platform' : 'merchant', placeholder: f.placeholder ? String(f.placeholder) : undefined, helpText: f.helpText ? String(f.helpText) : undefined, options: Array.isArray(f.options) ? f.options.map(String).slice(0, 20) : undefined })) : [] } : undefined,
@@ -464,7 +499,20 @@ function normalizeShippingProviderPayload(input: any) {
   const status = SHIPPING_PROVIDER_STATUSES.includes(input?.status) ? input.status : 'draft'
   const integrationType = SHIPPING_INTEGRATION_TYPES.includes(input?.integrationType) ? input.integrationType : 'manual'
   const credentialMode = SHIPPING_CREDENTIAL_MODES.includes(input?.credentialMode) ? input.credentialMode : 'platform'
-  const adapter = getShippingAdapter(slug, integrationType)
+  const integrationFamily = SHIPPING_INTEGRATION_FAMILIES.includes(input?.integrationFamily) ? input.integrationFamily : (SHIPPING_SYSTEM_TYPES.includes(input?.systemType) ? (input.systemType === 'mega' ? 'mega' : input.systemType === 'custom' ? 'custom' : 'manual') : undefined)
+  const systemType = SHIPPING_SYSTEM_TYPES.includes(input?.systemType) ? input.systemType : (integrationFamily === 'mega' ? 'mega' : integrationFamily === 'custom' ? 'custom' : integrationFamily === 'manual' ? 'manual' : integrationType === 'manual' ? 'manual' : undefined)
+  const adapterKey = input?.adapterKey ? String(input.adapterKey).trim().toLowerCase().replace(/[^a-z0-9_-]/g, '-').slice(0, 80) : slug
+  const providerCode = input?.providerCode ? String(input.providerCode).trim().slice(0, 120) : undefined
+  const systemConfig = input?.systemConfig && typeof input.systemConfig === 'object' ? {
+    baseUrl: input.systemConfig.baseUrl ? String(input.systemConfig.baseUrl).slice(0, 500) : undefined,
+    sandboxBaseUrl: input.systemConfig.sandboxBaseUrl ? String(input.systemConfig.sandboxBaseUrl).slice(0, 500) : undefined,
+    apiVersion: input.systemConfig.apiVersion ? String(input.systemConfig.apiVersion).slice(0, 40) : undefined,
+    providerCode: input.systemConfig.providerCode ? String(input.systemConfig.providerCode).slice(0, 120) : undefined,
+    accountMode: input.systemConfig.accountMode ? String(input.systemConfig.accountMode).slice(0, 40) : undefined,
+    locationMode: input.systemConfig.locationMode ? String(input.systemConfig.locationMode).slice(0, 40) : undefined,
+    webhookMode: input.systemConfig.webhookMode ? String(input.systemConfig.webhookMode).slice(0, 40) : undefined,
+  } : undefined
+  const adapter = getShippingAdapterForProvider({ id: 'new', slug, adapterKey, integrationType, integrationFamily, systemType } as any)
   if (adapter?.requiresMerchantCredentials && (integrationType !== 'api' || credentialMode !== 'merchant')) {
     throw new HttpsError('invalid-argument', 'This provider requires API integration with merchant-owned credentials')
   }
@@ -476,14 +524,26 @@ function normalizeShippingProviderPayload(input: any) {
   const publicListing = input?.publicListing && typeof input.publicListing === 'object' ? { enabled: input.publicListing.enabled === true, sortOrder: Math.max(0, Math.min(999, Number(input.publicListing.sortOrder || 0))), shortDescription: input.publicListing.shortDescription ? sanitizeSensitiveText(String(input.publicListing.shortDescription)).slice(0, 300) : undefined } : undefined
   const integrationConfig = input?.integrationConfig && typeof input.integrationConfig === 'object' ? { authType: ['none', 'api_key', 'bearer', 'basic', 'oauth2', 'custom'].includes(input.integrationConfig.authType) ? input.integrationConfig.authType : 'none', baseUrl: input.integrationConfig.baseUrl ? String(input.integrationConfig.baseUrl).slice(0, 500) : undefined, sandboxBaseUrl: input.integrationConfig.sandboxBaseUrl ? String(input.integrationConfig.sandboxBaseUrl).slice(0, 500) : undefined, trackingUrlTemplate: input.integrationConfig.trackingUrlTemplate ? String(input.integrationConfig.trackingUrlTemplate).slice(0, 500) : undefined, webhookMode: input.integrationConfig.webhookMode ? String(input.integrationConfig.webhookMode).slice(0, 100) : undefined, requiredFields: Array.isArray(input.integrationConfig.requiredFields) ? input.integrationConfig.requiredFields.slice(0, 30).map((f: any) => ({ key: sanitizeSensitiveText(String(f.key || '')).slice(0, 80), label: sanitizeSensitiveText(String(f.label || '')).slice(0, 120), type: String(f.type || 'text'), required: f.required === true, secret: f.secret === true, scope: f.scope === 'platform' ? 'platform' : 'merchant', placeholder: f.placeholder ? sanitizeSensitiveText(String(f.placeholder)).slice(0, 200) : undefined, helpText: f.helpText ? sanitizeSensitiveText(String(f.helpText)).slice(0, 300) : undefined, options: Array.isArray(f.options) ? f.options.map((x: any) => sanitizeSensitiveText(String(x)).slice(0, 100)).slice(0, 20) : undefined })) : [] } : undefined
   const eligibilityConfig = input?.eligibilityConfig && typeof input.eligibilityConfig === 'object' ? { enabled: input.eligibilityConfig.enabled !== false, minimumMerchantMonthlyShipments: Math.max(0, Math.floor(Number(input.eligibilityConfig.minimumMerchantMonthlyShipments || 0))) } : undefined
+  // Canonical logo persistence: keep both top-level and branding mirror in sync.
+  const canonicalLogo = input?.logoUrl || input?.branding?.logoUrl || null
+  const normalizedLogo = canonicalLogo ? String(canonicalLogo).slice(0, 2000) : null
+  const normalizedBranding = branding || normalizedLogo
+    ? { ...(branding || {}), ...(normalizedLogo ? { logoUrl: normalizedLogo } : {}) }
+    : undefined
   return {
     name,
     slug,
-    logoUrl: input?.logoUrl ? String(input.logoUrl).slice(0, 2000) : null,
+    logoUrl: normalizedLogo,
+    branding: normalizedBranding,
     description: String(input?.description || '').slice(0, 1000),
     status,
     integrationType,
     credentialMode,
+    ...(integrationFamily ? { integrationFamily } : {}),
+    ...(systemType ? { systemType } : {}),
+    adapterKey,
+    ...(providerCode ? { providerCode } : {}),
+    ...(systemConfig ? { systemConfig } : {}),
     supportsCOD: input?.supportsCOD === true,
     supportsReturns: input?.supportsReturns === true,
     supportsTracking: input?.supportsTracking === true,
@@ -496,7 +556,7 @@ function normalizeShippingProviderPayload(input: any) {
     defaultServiceCodes: Array.isArray(input?.defaultServiceCodes) ? input.defaultServiceCodes.map(String).slice(0, 100) : [],
     services,
     allowMerchantRateOverride: input?.allowMerchantRateOverride === true,
-    ...(businessProfile ? { businessProfile } : {}), ...(branding ? { branding } : {}), ...(partnership ? { partnership } : {}), ...(publicListing ? { publicListing } : {}), ...(integrationConfig ? { integrationConfig } : {}), ...(eligibilityConfig ? { eligibilityConfig } : {}),
+    ...(businessProfile ? { businessProfile } : {}), ...(partnership ? { partnership } : {}), ...(publicListing ? { publicListing } : {}), ...(integrationConfig ? { integrationConfig } : {}), ...(eligibilityConfig ? { eligibilityConfig } : {}),
     adapterStatus: ['not_implemented', 'implemented', 'testing', 'production_ready'].includes(input?.adapterStatus) ? input.adapterStatus : undefined,
   }
 }
