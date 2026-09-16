@@ -114,18 +114,22 @@ export const MerchantShipping: FunctionalComponent = () => {
   // Deprecated: old automation check incorrectly treated manual as API-ready
   const isProviderReadyForAutomation = isProviderOperational
   const hasEnabledLiveProvider = hasEnabledAutomationProvider
+  const isManualProviderEntry = (entry: typeof platformProviders[number]) => {
+    const p: any = entry.provider
+    return p.id === 'manual' || p.slug === 'manual' || p.integrationType === 'manual' || p.systemType === 'manual'
+  }
   const getCurrentProvider = (): typeof platformProviders[number] | null => {
-    if (!platformProviders.length) return null
-    const enabled = platformProviders.filter((e) => e.config?.enabled)
-    if (!enabled.length) return null
+    // Only real API carriers count as current/default. Manual is store-level, not a provider.
+    const apiEnabled = platformProviders.filter((e) => e.config?.enabled && !isManualProviderEntry(e))
+    if (!apiEnabled.length) return null
     // 1. enabled && isDefault
-    const withDefault = enabled.find((e) => e.config?.isDefault === true)
+    const withDefault = apiEnabled.find((e) => e.config?.isDefault === true)
     if (withDefault) return withDefault
     // 2. enabled && API && CONNECTED && setupComplete
-    const apiConnected = enabled.find((e) => isProviderAutomationCapable(e))
+    const apiConnected = apiEnabled.find((e) => isProviderAutomationCapable(e))
     if (apiConnected) return apiConnected
-    // 3. enabled && setupComplete (operational, includes manual)
-    const operational = enabled.find((e) => isProviderOperational(e))
+    // 3. enabled && setupComplete (API operational)
+    const operational = apiEnabled.find((e) => isProviderOperational(e))
     if (operational) return operational
     return null
   }
@@ -395,11 +399,16 @@ export const MerchantShipping: FunctionalComponent = () => {
 
   const zoneCount = zones.length
   const activeZones = zones.filter((z) => z.active).length
-  const activeProviders = platformProviders.filter((entry) => entry.config?.enabled).length
-  const enabledServiceCount = platformProviders.reduce((total, entry) => total + (entry.config?.enabled ? (entry.provider.services || []).filter((service) => service.enabled !== false).length : 0), 0)
-  const modernCoverageCount = platformProviders.reduce((total, entry) => total + (entry.config?.enabled ? (entry.provider.services || []).reduce((count, service) => count + (service.zoneRules?.filter((zone) => zone.enabled !== false).length || 0), 0) : 0), 0)
+  const isManualPlatformProvider = (p: ShippingProviderDefinition) => p.id === 'manual' || p.slug === 'manual' || p.integrationType === 'manual' || (p as any).systemType === 'manual'
+  const apiProviders = platformProviders.filter((entry) => !isManualPlatformProvider(entry.provider))
+  const activeApiProviders = apiProviders.filter((entry) => entry.config?.enabled).length
+  const activeProviders = activeApiProviders
+  const enabledServiceCount = apiProviders.reduce((total, entry) => total + (entry.config?.enabled ? (entry.provider.services || []).filter((service) => service.enabled !== false).length : 0), 0)
+  const modernCoverageCount = apiProviders.reduce((total, entry) => total + (entry.config?.enabled ? (entry.provider.services || []).reduce((count, service) => count + (service.zoneRules?.filter((zone) => zone.enabled !== false).length || 0), 0) : 0), 0)
   const legacyHasData = zones.length > 0 || providers.length > 0 || Number(cfg.flatFee || 0) > 0 || Number(cfg.freeAbove || 0) > 0 || cfg.model === 'zones'
   const legacyMode = !platformLoading && activeProviders === 0 && legacyHasData
+  // Manual shipping is store-level, not a platform provider. Legacy manual provider records are ignored.
+  const isManualEnabled = !!cfg.enabled
   const visibleTab = tab === 'overview' ? 'settings' : tab === 'zones' && !legacyMode ? 'settings' : tab
   return (
     <div data-tour="shipping-workspace" className="merchant-operations merchant-shipping-page shipping-page--stitch">
@@ -450,9 +459,10 @@ export const MerchantShipping: FunctionalComponent = () => {
         {settlementsRes.data.length > 0 && <p className="shipping-settlement-history muted small">آخر تسوية: {settlementsRes.data[0]?.providerName || 'شركة الشحن'} — {formatCurrency(settlementsRes.data[0]?.netMerchantDue || 0)} ({settlementsRes.data[0]?.shipmentCount || 0} شحنة).</p>}
       </Card>}
 
-      {tab === 'companies' && <Card title="شركات الشحن" subtitle="كل الشركات النشطة تظهر هنا. الأهلية تتحكم في التفعيل فقط — لا تُخفي الشركات." className="mt-2">
-        {platformLoading ? <Loading /> : platformProviders.length === 0 ? <p className="muted">لم تُفعّل إدارة المنصة أي شركة شحن بعد.</p> : <div className="card-grid shipping-providers-grid" style={{ gridTemplateColumns: 'repeat(auto-fill, minmax(360px, 1fr))' }}>
-          {platformProviders
+      {tab === 'companies' && <>
+        <Card title="شركات الشحن المتكاملة" subtitle="شركات الشحن المتعاقدة عبر API فقط — الشحن اليدوي يدار من قسم منفصل أدناه." className="mt-2">
+        {platformLoading ? <Loading /> : apiProviders.length === 0 ? <p className="muted">لم تُفعّل إدارة المنصة أي شركة شحن متكاملة بعد.</p> : <div className="card-grid shipping-providers-grid" style={{ gridTemplateColumns: 'repeat(auto-fill, minmax(360px, 1fr))' }}>
+          {apiProviders
             .filter((entry) => entry.provider.status === 'active' && (entry.provider.publicListing?.enabled !== false || entry.config?.enabled))
             .map((entry) => {
               const { provider, config, eligibility } = entry
@@ -521,7 +531,34 @@ export const MerchantShipping: FunctionalComponent = () => {
               )
             })}
         </div>}
-      </Card>}
+      </Card>
+        {/* MANUAL SHIPPING — store-level, not a platform provider */}
+        <Card title="الشحن اليدوي" subtitle="استخدم أسعار ومناطق شحن تحددها بنفسك بدون ربط API. الشحن اليدوي: مفعّل/غير مفعّل يظهر هنا منفصلاً." className="mt-2">
+          <div style={{ display: 'flex', gap: 12, alignItems: 'center', flexWrap: 'wrap' }}>
+            <Toggle checked={!!cfg.enabled} onChange={(value) => persistShipping({ enabled: value })} label="تفعيل الشحن اليدوي" />
+            <span className="muted small">{cfg.enabled ? 'الشحن اليدوي: مفعّل' : 'الشحن اليدوي: غير مفعّل'}</span>
+            <span className="muted small" style={{ marginInlineStart: 'auto' }}>{zoneCount} مناطق · {activeZones} نشطة</span>
+          </div>
+          {cfg.enabled && (
+            <div style={{ marginTop: 14 }}>
+              <p className="muted small">حدد المناطق/المحافظات، سعر الشحن، الشحن المجاني، وزمن التوصيل. لا يتطلب API أو شعار شركة.</p>
+              <div style={{ display: 'flex', gap: 8, marginTop: 12 }}>
+                <Button size="sm" icon="add" onClick={() => setZoneOpen(true)}>إضافة منطقة شحن</Button>
+                <Button size="sm" variant="ghost" onClick={() => setTab('overview')}>إدارة المناطق المتقدمة</Button>
+              </div>
+              {zones.length > 0 && (
+                <div style={{ marginTop: 14, border: '1px solid #e5e7f2', borderRadius: 12, overflow: 'hidden' }}>
+                  <table className="shipping-zone-table" style={{ minWidth: 'auto', width: '100%' }}>
+                    <thead><tr><th>المنطقة</th><th>المحافظات</th><th>السعر</th><th>الحالة</th></tr></thead>
+                    <tbody>{zones.slice(0,5).map((z)=> <tr key={z.id}><td>{z.name}</td><td>{z.governorates.slice(0,2).join('، ')}{z.governorates.length>2?'...':''}</td><td>{formatCurrency(z.fee||0)}</td><td><Badge tone={z.active?'green':'slate'}>{z.active?'نشطة':'موقوفة'}</Badge></td></tr>)}</tbody>
+                  </table>
+                  {zones.length>5 && <p className="muted small" style={{ padding: 8 }}>و {zones.length-5} مناطق أخرى — راجع نظرة عامة</p>}
+                </div>
+              )}
+            </div>
+          )}
+        </Card>
+      </>}
 
       {tab === 'overview' && <Tabs
         tabs={[

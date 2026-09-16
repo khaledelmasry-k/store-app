@@ -100,10 +100,10 @@ const emptyDraft: Draft = {
   description: '',
   logoUrl: '',
   status: 'draft',
-  integrationType: 'manual',
-  credentialMode: 'platform',
-  systemType: 'manual',
-  adapterKey: 'manual',
+  integrationType: 'api',
+  credentialMode: 'merchant',
+  systemType: 'mega',
+  adapterKey: 'mega',
   providerCode: '',
   systemConfig: {},
   supportsCOD: true,
@@ -738,22 +738,21 @@ export const PlatformShippingCompanies: FunctionalComponent = () => {
               <Input label="الاسم القانوني (اختياري)" value={draft.businessProfile.legalName || ''} onChange={(value) => setDraft({ ...draft, businessProfile: { ...draft.businessProfile, legalName: value } })} placeholder="الاسم المسجل قانونًا" />
               <Input label="الموقع الإلكتروني (اختياري)" value={draft.businessProfile.websiteUrl || ''} onChange={(value) => setDraft({ ...draft, businessProfile: { ...draft.businessProfile, websiteUrl: value } })} placeholder="https://..." />
             </div>
-            {/* System selector — describes the software, not a Mega company */}
+            {/* System selector — platform carriers are API-only. Manual belongs to merchant store. */}
             <div style={{ marginTop: 20 }}>
-              <span className="field-label">نظام شركة الشحن</span>
-              <p className="field-hint" style={{ margin: '4px 0 10px' }}>يصف البرنامج الخلفي الذي تستخدمه الشركة. لا ينشئ شركة شحن باسم Mega.</p>
+              <span className="field-label">نظام شركة الشحن المتكاملة</span>
+              <p className="field-hint" style={{ margin: '4px 0 10px' }}>شركات الشحن المتكاملة مع متجري — يجب أن تملك تكامل API حقيقي. الشحن اليدوي يُدار من إعدادات المتجر نفسه.</p>
               <div style={{ display: 'flex', gap: 10, flexWrap: 'wrap' }}>
                 {[
-                  { value: 'manual', label: 'يدوي', hint: 'بدون API' },
                   { value: 'mega', label: 'Mega Logistics', hint: 'نظام Mega المشترك' },
-                  { value: 'custom', label: 'نظام مخصص', hint: 'API خاص بالشركة' },
+                  { value: 'custom', label: 'نظام مخصص', hint: 'API خاص بالشركة (Wasla ضمن هذه الفئة)' },
                 ].map((opt) => (
-                  <button key={opt.value} type="button" onClick={() => setDraft({ ...draft, systemType: opt.value as any, adapterKey: opt.value === 'manual' ? 'manual' : opt.value === 'mega' ? 'mega' : draft.adapterKey || 'custom' })} style={{ flex: '1 1 160px', padding: '12px', borderRadius: 12, border: draft.systemType === opt.value ? '2px solid var(--mka-primary, #4f46e5)' : '1px solid var(--mka-border, #e5e7f2)', background: draft.systemType === opt.value ? 'var(--mka-primary-soft, #eef0ff)' : 'var(--mka-surface, #fff)', cursor: 'pointer', textAlign: 'start' }}>
+                  <button key={opt.value} type="button" onClick={() => setDraft({ ...draft, systemType: opt.value as any, adapterKey: opt.value === 'mega' ? 'mega' : draft.adapterKey === 'manual' ? 'custom' : draft.adapterKey || 'custom', integrationType: 'api' as const })} style={{ flex: '1 1 160px', padding: '12px', borderRadius: 12, border: draft.systemType === opt.value ? '2px solid var(--mka-primary, #4f46e5)' : '1px solid var(--mka-border, #e5e7f2)', background: draft.systemType === opt.value ? 'var(--mka-primary-soft, #eef0ff)' : 'var(--mka-surface, #fff)', cursor: 'pointer', textAlign: 'start' }}>
                     <strong style={{ display: 'block', fontSize: '.92rem' }}>{opt.label}</strong><span className="field-hint">{opt.hint}</span>
                   </button>
                 ))}
               </div>
-              {draft.systemType === 'manual' && <p className="field-hint" style={{ marginTop: 10 }}>الشحن اليدوي لا يحتاج API أو مفتاحًا. أضف فقط الخدمات ومناطق التغطية وأسعارها.</p>}
+              {draft.systemType === 'manual' && <div className="shipping-secure-note" style={{ marginTop: 10 }}><Icon name="info" ariaHidden /><span>تنبيه: هذا سجل يدوي قديم. الشحن اليدوي الحالي يُدار من متجر التاجر نفسه، وليس كشركة منصة. لا تنشئ شركات يدوية جديدة.</span></div>}
             </div>
             {/* Advanced — collapsed by default, contains technical noise */}
             <details style={{ marginTop: 18, border: '1px solid var(--mka-border, #e5e7f2)', borderRadius: 12, padding: '12px 14px', background: 'var(--mka-surface-soft, #f8f9ff)' }}>

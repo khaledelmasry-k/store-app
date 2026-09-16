@@ -524,6 +524,19 @@ function normalizeShippingProviderPayload(input: any) {
   const publicListing = input?.publicListing && typeof input.publicListing === 'object' ? { enabled: input.publicListing.enabled === true, sortOrder: Math.max(0, Math.min(999, Number(input.publicListing.sortOrder || 0))), shortDescription: input.publicListing.shortDescription ? sanitizeSensitiveText(String(input.publicListing.shortDescription)).slice(0, 300) : undefined } : undefined
   const integrationConfig = input?.integrationConfig && typeof input.integrationConfig === 'object' ? { authType: ['none', 'api_key', 'bearer', 'basic', 'oauth2', 'custom'].includes(input.integrationConfig.authType) ? input.integrationConfig.authType : 'none', baseUrl: input.integrationConfig.baseUrl ? String(input.integrationConfig.baseUrl).slice(0, 500) : undefined, sandboxBaseUrl: input.integrationConfig.sandboxBaseUrl ? String(input.integrationConfig.sandboxBaseUrl).slice(0, 500) : undefined, trackingUrlTemplate: input.integrationConfig.trackingUrlTemplate ? String(input.integrationConfig.trackingUrlTemplate).slice(0, 500) : undefined, webhookMode: input.integrationConfig.webhookMode ? String(input.integrationConfig.webhookMode).slice(0, 100) : undefined, requiredFields: Array.isArray(input.integrationConfig.requiredFields) ? input.integrationConfig.requiredFields.slice(0, 30).map((f: any) => ({ key: sanitizeSensitiveText(String(f.key || '')).slice(0, 80), label: sanitizeSensitiveText(String(f.label || '')).slice(0, 120), type: String(f.type || 'text'), required: f.required === true, secret: f.secret === true, scope: f.scope === 'platform' ? 'platform' : 'merchant', placeholder: f.placeholder ? sanitizeSensitiveText(String(f.placeholder)).slice(0, 200) : undefined, helpText: f.helpText ? sanitizeSensitiveText(String(f.helpText)).slice(0, 300) : undefined, options: Array.isArray(f.options) ? f.options.map((x: any) => sanitizeSensitiveText(String(x)).slice(0, 100)).slice(0, 20) : undefined })) : [] } : undefined
   const eligibilityConfig = input?.eligibilityConfig && typeof input.eligibilityConfig === 'object' ? { enabled: input.eligibilityConfig.enabled !== false, minimumMerchantMonthlyShipments: Math.max(0, Math.floor(Number(input.eligibilityConfig.minimumMerchantMonthlyShipments || 0))) } : undefined
+  // Platform carriers must be API-backed. Manual shipping belongs to merchant store, not a provider.
+  const isManualPayload = integrationType === 'manual' || systemType === 'manual' || integrationFamily === 'manual' || adapterKey === 'manual' || slug === 'manual'
+  if (isManualPayload && publicListing?.enabled === true) {
+    throw new HttpsError('failed-precondition', 'الشحن اليدوي لا يُنشر كشركة منصة. استخدم إعدادات الشحن اليدوي في متجر التاجر.')
+  }
+  if (isManualPayload && status === 'active' && publicListing?.enabled === true) {
+    throw new HttpsError('failed-precondition', 'لا يمكن تفعيل شركة شحن يدوية للعرض العام')
+  }
+  // For platform companies, require API integration and production-ready adapter when publishing
+  if (!isManualPayload && publicListing?.enabled === true) {
+    if (integrationType !== 'api') throw new HttpsError('failed-precondition', 'شركات المنصة يجب أن تكون تكامل API')
+    if (!adapter) throw new HttpsError('failed-precondition', 'المحول غير موجود لهذا المزود')
+  }
   // Canonical logo persistence: keep both top-level and branding mirror in sync.
   const canonicalLogo = input?.logoUrl || input?.branding?.logoUrl || null
   const normalizedLogo = canonicalLogo ? String(canonicalLogo).slice(0, 2000) : null
@@ -6099,6 +6112,10 @@ export const getShippingOptions = onCall({ region: SHIPPING_FUNCTION_REGION, sec
       unavailableReasons.push('شركة شحن مفعّلة لدى التاجر لم تعد متاحة من المنصة')
       continue
     }
+    // Legacy manual provider is store-level, not a platform carrier. Ignore for API quotes.
+    if (provider.id === 'manual' || provider.slug === 'manual' || provider.integrationType === 'manual' || (provider as any).systemType === 'manual') {
+      continue
+    }
     hasCanonicalProvider = true
     const adapter = getShippingAdapterForProvider(provider)
     if (!adapter || !adapter.getRates || !supportsShippingCapability(adapter, 'getRates')) {
@@ -6172,10 +6189,24 @@ export const getShippingOptions = onCall({ region: SHIPPING_FUNCTION_REGION, sec
         destinationGuidance: rate.destinationGuidance ? String(rate.destinationGuidance) : null,
       })))
   }
+  // Manual shipping is store-level. If merchant has enabled manual shipping, offer it
+  // alongside API carriers (not as a provider). This keeps manual and API distinct.
+  const manualEnabled = !!storeSnap.data()?.shipping?.enabled
+  if (manualEnabled) {
+    const manualZonesSnap = await db.collection('shipping').where('storeId', '==', storeId).where('active', '==', true).get().catch(() => ({ docs: [] as any[] }))
+    const manualFallback = computeShippingFee(storeSnap.data()?.shipping, (manualZonesSnap as any).docs.map((doc: any) => ({ id: doc.id, ...doc.data() })), subtotal, String(destination.governorate))
+    if (manualFallback.available) {
+      // Avoid duplicating if fallback already added via legacy path below
+      const alreadyHasManual = options.some((o) => (o as any).legacy && (o as any).providerId == null)
+      if (!alreadyHasManual) {
+        options.push({ providerId: null, providerName: manualFallback.method || 'شحن يدوي', serviceCode: 'manual', serviceName: manualFallback.method || 'شحن يدوي', price: manualFallback.fee, amount: manualFallback.fee, currency: storeSnap.data()?.currency || 'EGP', estimatedDays: null, etaMin: null, etaMax: null, etaUnit: 'hours', codAvailable: true, trackingAvailable: false, legacy: true, manual: true })
+      }
+    }
+  }
   // Legacy zones are only a migration fallback for stores that have no
   // active canonical provider. A configured provider with no coverage must
   // stay unavailable; it must never silently fall back to a conflicting rate.
-  if (!options.length && !hasCanonicalProvider) {
+  if (!options.length && !hasCanonicalProvider && !manualEnabled) {
     const zonesSnap = await db.collection('shipping').where('storeId', '==', storeId).where('active', '==', true).get()
     const fallback = computeShippingFee(storeSnap.data()?.shipping, zonesSnap.docs.map((doc) => ({ id: doc.id, ...doc.data() })), subtotal, String(destination.governorate))
     if (fallback.available) options.push({ providerId: fallback.snapshot?.providerId || null, providerName: fallback.method, serviceCode: 'legacy', serviceName: fallback.method, price: fallback.fee, amount: fallback.fee, currency: storeSnap.data()?.currency || 'EGP', estimatedDays: null, etaMin: null, etaMax: null, etaUnit: 'hours', codAvailable: true, trackingAvailable: false, legacy: true })
