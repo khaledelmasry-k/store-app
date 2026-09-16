@@ -1360,8 +1360,8 @@ test('shipping: default provider honored (client+server) and refused-policy togg
   })
   await db.doc(`storeShippingProviders/${store.id}_${providerId}`).set({
     id: `${store.id}_${providerId}`, storeId: store.id, providerId, enabled: true, enabledServiceCodes: ['fast-cairo'],
-    serviceCode: 'fast-cairo', rateMode: 'zone', codEnabled: true, returnEnabled: false, defaultPackageWeight: 1,
-    rateMarkup: 0, fixedRate: 0, freeShippingThreshold: 0, configurationStatus: 'CONNECTED',
+    serviceCode: 'fast-cairo', rateMode: 'fixed', codEnabled: true, returnEnabled: false, defaultPackageWeight: 1,
+    rateMarkup: 0, fixedRate: 25, freeShippingThreshold: 0, configurationStatus: 'CONNECTED',
     createdAt: admin.firestore.FieldValue.serverTimestamp(), updatedAt: admin.firestore.FieldValue.serverTimestamp(),
   })
   // Create platform credential vault for API provider (required for getShippingOptions)
@@ -1407,17 +1407,28 @@ test('shipping: default provider honored (client+server) and refused-policy togg
 
   // Changing only the legacy store fields cannot override the canonical quote.
   await db.collection('stores').doc(store.id).update({ 'shipping.flatFee': 1, 'shipping.refusedPolicyEnabled': true })
+  const beforeCount = (await db.collection('orders').where('storeId', '==', store.id).get()).size
+  const beforeLatestId = (await db.collection('orders').where('storeId', '==', store.id).orderBy('createdAt', 'desc').limit(1).get()).docs[0]?.id || null
   await page.goto(`/store/${ref}`, { waitUntil: 'domcontentloaded' })
   await page.locator('.store-card').first().click()
   await page.getByRole('button', { name: 'أضف إلى السلة' }).click()
   await page.goto(`/store/${ref}/cart`, { waitUntil: 'domcontentloaded' })
   await page.getByRole('button', { name: 'إتمام الطلب' }).click()
+  await page.locator('.field', { hasText: 'الاسم الكامل' }).locator('input').fill('عميل الشحن التلقائي')
+  await page.locator('.field', { hasText: 'رقم الهاتف' }).locator('input').fill('01099990011')
   await page.locator('.field', { hasText: 'المحافظة' }).locator('select').selectOption({ label: 'القاهرة' })
+  await fillCheckoutCity(page, 'مدينة نصر')
+  await page.locator('.field', { hasText: 'العنوان بالتفصيل' }).locator('textarea').fill('شارع 11')
   await expect(page.getByText('الشحن (توصيل سريع)')).toBeVisible({ timeout: 15000 })
   await page.getByRole('button', { name: 'تأكيد الطلب' }).click()
-  await expect.poll(async () => (await db.collection('orders').where('storeId', '==', store.id).orderBy('createdAt', 'desc').limit(1).get()).docs[0]?.data()?.shippingFee, { timeout: 30000 }).toBe(25)
-  const again = await db.collection('orders').where('storeId', '==', store.id).orderBy('createdAt', 'desc').limit(1).get()
-  expect((again.docs[0].data() as any).shippingFee).toBe(25)
+  await expect.poll(async () => (await db.collection('orders').where('storeId', '==', store.id).get()).size, { timeout: 30000 }).toBeGreaterThan(beforeCount)
+  const againSnap = await db.collection('orders').where('storeId', '==', store.id).orderBy('createdAt', 'desc').limit(1).get()
+  const againOrder = againSnap.docs[0].data() as any
+  expect(againSnap.docs[0].id).not.toBe(beforeLatestId)
+  expect(againOrder.shippingFee).toBe(25)
+  expect(againOrder.shippingMethod).toBe('توصيل سريع')
+  expect(againOrder.shippingSnapshot?.providerId).toBe(providerId)
+  expect(againOrder.shippingSnapshot?.serviceCode).toBe('fast-cairo')
 })
 
 // ─────────────────────────────────────────────────────────────
