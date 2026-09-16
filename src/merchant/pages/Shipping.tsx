@@ -97,8 +97,37 @@ export const MerchantShipping: FunctionalComponent = () => {
   const cfg = store?.shipping || { enabled: false, model: 'flat' as const, flatFee: 0, freeAbove: 0, refusedPolicy: '', providers: [] }
   const providers = cfg.providers || []
   const isProviderLive = (provider: ShippingProviderDefinition) => provider.integrationType === 'manual' || provider.adapterConfigured === true
-  const isProviderReadyForAutomation = (entry: typeof platformProviders[number]) => entry.config?.enabled === true && entry.setupComplete === true
-  const hasEnabledLiveProvider = platformProviders.some(isProviderReadyForAutomation)
+  const isProviderOperational = (entry: typeof platformProviders[number]) => entry.config?.enabled === true && entry.setupComplete === true
+  const isProviderAutomationCapable = (entry: typeof platformProviders[number]) => {
+    const provider = entry.provider as any
+    const config = entry.config
+    if (!config?.enabled || !entry.setupComplete) return false
+    if (provider.integrationType !== 'api') return false
+    if (!entry.provider.adapterConfigured) return false
+    // adapter must support createShipment
+    if (!entry.provider.canCreateShipment) return false
+    if (config.configurationStatus !== 'CONNECTED') return false
+    return true
+  }
+  const hasEnabledAutomationProvider = platformProviders.some(isProviderAutomationCapable)
+  // Deprecated: old automation check incorrectly treated manual as API-ready
+  const isProviderReadyForAutomation = isProviderOperational
+  const hasEnabledLiveProvider = hasEnabledAutomationProvider
+  const getCurrentProvider = (): typeof platformProviders[number] | null => {
+    if (!platformProviders.length) return null
+    const enabled = platformProviders.filter((e) => e.config?.enabled)
+    if (!enabled.length) return null
+    // 1. enabled && isDefault
+    const withDefault = enabled.find((e) => e.config?.isDefault === true)
+    if (withDefault) return withDefault
+    // 2. enabled && API && CONNECTED && setupComplete
+    const apiConnected = enabled.find((e) => isProviderAutomationCapable(e))
+    if (apiConnected) return apiConnected
+    // 3. enabled && setupComplete (operational, includes manual)
+    const operational = enabled.find((e) => isProviderOperational(e))
+    if (operational) return operational
+    return null
+  }
 
   const loadPlatformProviders = async () => {
     if (!storeId) return
@@ -426,7 +455,12 @@ export const MerchantShipping: FunctionalComponent = () => {
             .filter((entry) => entry.provider.status === 'active' && (entry.provider.publicListing?.enabled !== false || entry.config?.enabled))
             .map((entry) => {
               const { provider, config, eligibility } = entry
-              const ready = isProviderReadyForAutomation(entry)
+              const isOperational = isProviderOperational(entry)
+              const isAutomation = isProviderAutomationCapable(entry)
+              const ready = isOperational
+              const connLabel = (provider as any).systemType === 'manual' || provider.integrationType === 'manual'
+                ? (isOperational ? 'جاهز للشحن اليدوي' : connectionStatusLabel(config?.configurationStatus, config?.enabled))
+                : (isAutomation ? 'متصلة' : connectionStatusLabel(config?.configurationStatus, config?.enabled))
               const logo = (provider as any).branding?.logoUrl || provider.logoUrl || null
               const minimum = eligibility?.minimumMonthlyShipments ?? (provider.eligibilityConfig?.minimumMerchantMonthlyShipments || 0)
               const effective = eligibility?.effectiveMonthlyVolume ?? eligibility?.merchantMonthlyVolume ?? 0
@@ -457,7 +491,7 @@ export const MerchantShipping: FunctionalComponent = () => {
                     <span className="muted small" style={{ background: provider.supportsTracking ? '#e6f0ff' : '#f1f2f6', padding: '4px 8px', borderRadius: 999 }}>{provider.supportsTracking ? 'Tracking ✓' : 'Tracking —'}</span>
                     <span className="muted small" style={{ background: provider.supportsReturns ? '#fff4e6' : '#f1f2f6', padding: '4px 8px', borderRadius: 999 }}>{provider.supportsReturns ? 'Returns ✓' : 'Returns —'}</span>
                     <span className="muted small" style={{ background: provider.supportsPickup ? '#f3e8ff' : '#f1f2f6', padding: '4px 8px', borderRadius: 999 }}>{provider.supportsPickup ? 'Pickup ✓' : 'Pickup —'}</span>
-                    <span className="muted small" style={{ marginInlineStart: 'auto', padding: '4px 8px' }}><Icon name={ready ? 'check_circle' : 'schedule'} ariaHidden /> {ready ? 'جاهزة' : connectionStatusLabel(config?.configurationStatus, config?.enabled)}</span>
+                    <span className="muted small" style={{ marginInlineStart: 'auto', padding: '4px 8px' }}><Icon name={isOperational ? 'check_circle' : 'schedule'} ariaHidden /> {connLabel}</span>
                   </div>
                   <div style={{ display: 'flex', gap: 10, alignItems: 'center', marginTop: 14, flexWrap: 'wrap' }}>
                     <Toggle checked={config?.enabled === true} onChange={() => { if (!canEnable && !config?.enabled) { toast.push('لا يمكن التفعيل — الحد الأدنى غير مستوفى', `هذه الشركة تشترط ${minimum} شحنة وحجمك ${effective}.`, 'error'); return } void togglePlatformProvider(provider, config) }} label="تفعيل" />
@@ -504,7 +538,13 @@ export const MerchantShipping: FunctionalComponent = () => {
             <StatsCard title="الشحنات آخر 30 يومًا" value={platformLoading ? '—' : (platformProviders[0]?.eligibility?.merchantMonthlyVolume ?? shipmentsRes.data.length)} icon="local_shipping" tone="indigo" />
             <StatsCard title="الشحنات قيد التوصيل" value={shipmentsRes.data.filter((shipment) => !['DELIVERED', 'RETURNED', 'CANCELLED'].includes(shipment.status)).length} icon="local_shipping" tone="blue" />
           </div>
-          {platformProviders.find((entry) => entry.config?.enabled) && (() => { const current = platformProviders.find((entry) => entry.config?.enabled)!; return <Card title="شركة الشحن الحالية" className="mt-2"><div className="shipping-provider-summary"><strong>{current.provider.name}</strong><span>{connectionStatusLabel(current.config?.configurationStatus, true)}</span><span>{current.eligibility?.grandfathered ? 'اتصال حالي محفوظ' : 'متصلة'}</span><span>{current.provider.supportsCOD ? 'COD ✓' : 'بدون COD'}</span><span>{current.provider.supportsTracking ? 'تتبع ✓' : 'تتبع يدوي'}</span><span>{current.provider.supportsReturns ? 'مرتجعات ✓' : 'بدون مرتجعات'}</span></div></Card> })()}
+          {getCurrentProvider() && (() => {
+            const current = getCurrentProvider()!
+            const isManual = current.provider.integrationType === 'manual' || (current.provider as any).systemType === 'manual'
+            const isAutomation = isProviderAutomationCapable(current)
+            const connLabel = isManual ? (isProviderOperational(current) ? 'جاهز للشحن اليدوي' : connectionStatusLabel(current.config?.configurationStatus, true)) : (isAutomation ? 'متصلة' : connectionStatusLabel(current.config?.configurationStatus, true))
+            return <Card title="شركة الشحن الحالية" className="mt-2"><div className="shipping-provider-summary" style={{ display: 'flex', gap: 8, flexWrap: 'wrap', alignItems: 'center' }}><strong>{current.provider.name}</strong><Badge tone={current.config?.isDefault ? 'green' : 'slate'}>{current.config?.isDefault ? 'افتراضية' : 'مفعلة'}</Badge><span>الأهلية: {current.eligibility?.grandfathered ? 'اتصال حالي محفوظ' : current.eligibility?.eligible ? 'مؤهل' : 'غير مؤهل'}</span><span>الاتصال: {connLabel}</span><span>الإعداد: {current.setupComplete ? 'جاهز' : 'يحتاج إكمال'}</span><span>{current.provider.supportsCOD ? 'COD ✓' : 'بدون COD'}</span><span>{current.provider.supportsTracking ? 'تتبع ✓' : 'تتبع يدوي'}</span></div></Card>
+          })()}
 
           <div className="shipping-settings-grid">
             <div className="shipping-settings-main">
