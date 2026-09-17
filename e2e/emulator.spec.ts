@@ -1393,8 +1393,10 @@ test('shipping: default provider honored (client+server) and refused-policy togg
   await expect(page.getByText('الشحن (توصيل سريع)')).toBeVisible({ timeout: 15000 })
 
   // Server recomputes the same default provider fee + policy.
+  const beforeFirstCount = (await db.collection('orders').where('storeId', '==', store.id).get()).size
   await page.getByRole('button', { name: 'تأكيد الطلب' }).click()
-  await expect.poll(async () => (await db.collection('orders').where('storeId', '==', store.id).orderBy('createdAt', 'desc').limit(1).get()).docs[0]?.data()?.shippingFee, { timeout: 30000 }).toBe(25)
+  await expect.poll(async () => (await db.collection('orders').where('storeId', '==', store.id).get()).size, { timeout: 30000 }).toBeGreaterThan(beforeFirstCount)
+  await expect.poll(async () => (await db.collection('orders').where('storeId', '==', store.id).orderBy('createdAt', 'desc').limit(1).get()).docs[0]?.data()?.shippingFee, { timeout: 10000 }).toBe(25)
   await expect(page.getByText('تم إنشاء طلبك بنجاح')).toBeVisible({ timeout: 30000 })
   const orderSnap = await db.collection('orders').where('storeId', '==', store.id).orderBy('createdAt', 'desc').limit(1).get()
   const order = orderSnap.docs[0].data() as any
