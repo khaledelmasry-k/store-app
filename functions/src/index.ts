@@ -1686,10 +1686,15 @@ export const createOrder = onCall({ region: SHIPPING_FUNCTION_REGION, secrets: [
     selectedShippingProvider = { id: providerSnap.id, ...(providerSnap.data() || {}) }
     selectedShippingConfig = configSnap.data() || {}
     const adapter = getShippingAdapterForProvider(selectedShippingProvider)
-    if (selectedShippingProvider.integrationType === 'api' && supportsShippingCapability(adapter, 'getRates')) {
+    const requiresVault = selectedShippingProvider.integrationType === 'api' && supportsShippingCapability(adapter, 'getRates') && (selectedShippingProvider.credentialMode === 'merchant' || selectedShippingProvider.credentialMode === 'hybrid')
+    if (requiresVault) {
       const vault = await loadIntegrationCredentials(db, String(storeId), 'shipping', String(selectedShippingProvider.slug || '')).catch(() => null)
       if (!vault) throw new HttpsError('failed-precondition', 'أكمل التاجر حفظ بيانات اعتماد شركة الشحن واختبار الاتصال أولاً')
       selectedShippingCredentials = vault.credentials
+    } else if (selectedShippingProvider.integrationType === 'api' && supportsShippingCapability(adapter, 'getRates')) {
+      // Platform-credential providers use server-managed secrets; try to load but do not require per-store vault
+      const vault = await loadIntegrationCredentials(db, String(storeId), 'shipping', String(selectedShippingProvider.slug || '')).catch(() => null)
+      if (vault) selectedShippingCredentials = vault.credentials
     }
   }
 
