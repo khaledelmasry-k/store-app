@@ -1464,8 +1464,8 @@ test('checkout: shipping unavailable error is surfaced clearly', async ({ page }
   // Shipping should be unavailable for أسوان
   await expect(page.getByText('الشحن غير متوفر')).toBeVisible({ timeout: 15000 })
   const beforeCount = (await db.collection('orders').where('storeId', '==', store.id).get()).size
-  await page.getByRole('button', { name: 'تأكيد الطلب' }).click()
-  // Should surface clear Arabic error, stay on checkout, not create order, preserve form
+  // Button is disabled when shipping unavailable — verify disabled and error surfaced, no order created, form preserved
+  await expect(page.getByRole('button', { name: 'تأكيد الطلب' })).toBeDisabled()
   await expect(page.getByText('الشحن غير متوفر لهذه الوجهة')).toBeVisible({ timeout: 10000 })
   await expect.poll(async () => (await db.collection('orders').where('storeId', '==', store.id).get()).size, { timeout: 5000 }).toBe(beforeCount)
   await expect(page.locator('.field', { hasText: 'الاسم الكامل' }).locator('input')).toHaveValue('عميل خطأ')
