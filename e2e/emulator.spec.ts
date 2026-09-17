@@ -1434,6 +1434,44 @@ test('shipping: default provider honored (client+server) and refused-policy togg
 })
 
 // ─────────────────────────────────────────────────────────────
+// Checkout error surfacing: shipping failure must be visible, not silent
+// Verifies that failed-precondition / unavailable from createOrder is surfaced
+// via toast, keeps form data, stops loading, and does not create duplicate orders.
+// ─────────────────────────────────────────────────────────────
+test('checkout: shipping unavailable error is surfaced clearly', async ({ page }) => {
+  const { ref } = ctx()
+  const storeName = `مقهى الخطأ ${ctx().uniq}`
+  await ensureFlowStore(ref, storeName)
+  const store = (await storeBySlug(ref))!
+  // Isolate: disable any API carriers, use a manual zone that covers only القاهرة
+  const cfgs = await db.collection('storeShippingProviders').where('storeId', '==', store.id).get()
+  await Promise.all(cfgs.docs.map((d) => d.ref.update({ enabled: false })))
+  await db.doc(`stores/${store.id}`).set({ shipping: { enabled: true, model: 'zones', flatFee: 0, providers: [] }, updatedAt: admin.firestore.FieldValue.serverTimestamp() }, { merge: true })
+  const prevZones = await db.collection('shipping').where('storeId', '==', store.id).get()
+  await Promise.all(prevZones.docs.map((d) => d.ref.delete()))
+  const zoneRef = db.collection('shipping').doc()
+  await zoneRef.set({ id: zoneRef.id, storeId: store.id, name: 'القاهرة فقط', governorates: ['القاهرة'], fee: 30, active: true, createdAt: admin.firestore.FieldValue.serverTimestamp(), updatedAt: admin.firestore.FieldValue.serverTimestamp() })
+  await page.goto(`/store/${ref}/catalog`, { waitUntil: 'domcontentloaded' })
+  await page.locator('.store-card a[href*="/product/"]').first().click()
+  await page.getByRole('button', { name: 'أضف إلى السلة' }).click()
+  await page.goto(`/store/${ref}/cart`, { waitUntil: 'domcontentloaded' })
+  await page.getByRole('button', { name: 'إتمام الطلب' }).click()
+  await page.locator('.field', { hasText: 'الاسم الكامل' }).locator('input').fill('عميل خطأ')
+  await page.locator('.field', { hasText: 'رقم الهاتف' }).locator('input').fill('01099990002')
+  await page.locator('.field', { hasText: 'المحافظة' }).locator('select').selectOption({ label: 'أسوان' })
+  await fillCheckoutCity(page, 'أسوان')
+  await page.locator('.field', { hasText: 'العنوان بالتفصيل' }).locator('textarea').fill('شارع الخطأ')
+  // Shipping should be unavailable for أسوان
+  await expect(page.getByText('الشحن غير متوفر')).toBeVisible({ timeout: 15000 })
+  const beforeCount = (await db.collection('orders').where('storeId', '==', store.id).get()).size
+  await page.getByRole('button', { name: 'تأكيد الطلب' }).click()
+  // Should surface clear Arabic error, stay on checkout, not create order, preserve form
+  await expect(page.getByText('الشحن غير متوفر لهذه الوجهة')).toBeVisible({ timeout: 10000 })
+  await expect.poll(async () => (await db.collection('orders').where('storeId', '==', store.id).get()).size, { timeout: 5000 }).toBe(beforeCount)
+  await expect(page.locator('.field', { hasText: 'الاسم الكامل' }).locator('input')).toHaveValue('عميل خطأ')
+})
+
+// ─────────────────────────────────────────────────────────────
 // Merchant store LOGO (not the M&K platform mark): preset pick → upload →
 // persist in Firestore → render in public storefront Header+Footer without a
 // duplicated name → remove → name fallback. Exercises the full

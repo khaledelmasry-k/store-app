@@ -157,7 +157,20 @@ export const StoreCheckout: FunctionalComponent = () => {
       }
       toast.push('تم إرسال طلبك بنجاح')
     } catch (err: any) {
-      toast.push('تعذر إرسال الطلب', err?.message || 'تحقق من البيانات', 'error')
+      const raw = String(err?.message || '')
+      const isShippingError = /الشحن|شركة الشحن|التوصيل/i.test(raw)
+      const friendly = isShippingError
+        ? 'تعذر تأكيد خدمة الشحن حاليًا. راجع بيانات العنوان أو اختر طريقة شحن أخرى ثم حاول مرة أخرى.'
+        : ''
+      // Keep customer on checkout, preserve form data, stop loading, surface clear Arabic error
+      // Do not expose internal details beyond sanitized err.message
+      if (isShippingError) {
+        toast.push('تعذر تأكيد خدمة الشحن', friendly, 'error')
+        // Also surface server detail as secondary if different and safe
+        if (raw && raw !== friendly) toast.push('تفاصيل الشحن', raw, 'error')
+      } else {
+        toast.push('تعذر إرسال الطلب', raw || 'تحقق من البيانات', 'error')
+      }
     } finally {
       setLoading(false)
     }
