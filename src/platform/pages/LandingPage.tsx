@@ -72,7 +72,22 @@ export const LandingPage: FunctionalComponent = () => {
   return <div className="landing" dir="rtl">
     <header className="landing-header"><div className="landing-container landing-header-inner"><a href="/" className="landing-brand" aria-label="Matjari"><BrandLogo className="landing-primary-logo" /></a><button type="button" className="landing-menu-toggle" aria-label="القائمة" aria-expanded={menuOpen} onClick={() => setMenuOpen((open) => !open)}><Icon name={menuOpen ? 'close' : 'menu'} /></button><nav className={`landing-nav${menuOpen ? ' open' : ''}`} aria-label="التنقل الرئيسي">{NAV_LINKS.map((link) => <a key={link.label} href={link.href} className="landing-nav-link" onClick={goTo(link.href)}>{link.label}</a>)}<button type="button" className="landing-theme-toggle" aria-label="تبديل السمة" onClick={theme.toggle}><Icon name={theme.theme === 'dark' ? 'light_mode' : 'dark_mode'} /></button><Link href="/login" className="landing-nav-btn landing-nav-btn-ghost">تسجيل الدخول</Link><Link href="/register" className="landing-nav-btn landing-nav-btn-primary">ابدأ تجربة 3 أيام مجانًا</Link></nav></div></header>
     <main>
-      <section className="landing-hero stitch-hero" aria-labelledby="landing-title"><div className="landing-container landing-hero-inner"><div className="landing-hero-copy"><span className="landing-eyebrow stitch-release-pill">Commerce Operating System للتاجر العربي</span><h1 id="landing-title">شغّل تجارتك<br /><em>من مكان واحد</em></h1><p>منتج → بيع → طلب → عميل → شحن → متابعة → ربحية — دورة تشغيل واحدة بدل التنقل بين أدوات متفرقة.</p><div className="landing-hero-actions"><Link href="/register"><Button icon="arrow_back">ابدأ تجربة 3 أيام مجانًا</Button></Link><a href="#operating-flow" onClick={goTo('#operating-flow')}>شاهد دورة التشغيل <Icon name="arrow_downward" /></a></div></div><HeroCommerceVisual /></div></section>
+      <section className="landing-hero stitch-hero" aria-labelledby="landing-title">
+        <div className="landing-container landing-hero-inner">
+          <div className="landing-hero-text">
+            <span className="landing-eyebrow stitch-release-pill">Commerce Operating System للتاجر العربي</span>
+            <h1 id="landing-title">شغّل تجارتك<br /><em>من مكان واحد</em></h1>
+            <p>منتج → بيع → طلب → عميل → شحن → متابعة → ربحية — دورة تشغيل واحدة بدل التنقل بين أدوات متفرقة.</p>
+            <div className="landing-hero-actions">
+              <Link href="/register"><Button icon="arrow_back">ابدأ تجربة 3 أيام مجانًا</Button></Link>
+              <a href="#operating-flow" onClick={goTo('#operating-flow')}>شاهد دورة التشغيل <Icon name="arrow_downward" /></a>
+            </div>
+          </div>
+          <div className="landing-hero-image">
+            <HeroCommerceVisual />
+          </div>
+        </div>
+      </section>
       <section className="landing-stats" aria-label="حقائق عن متجري"><div className="landing-container landing-stats-grid">{[['3 أيام', 'تجربة لكل باقة جديدة'], ['4', 'باقات شهرية'], ['6', 'مراحل في دورة التشغيل'], ['1', 'لوحة تحكم موحدة']].map(([value, label]) => <div className="landing-stat" key={label}><strong>{value}</strong><span>{label}</span></div>)}</div></section>
       <OperatingJourney />
       <section id="features" className="landing-section landing-features"><div className="landing-container"><div className="landing-section-heading"><span>المميزات</span><h2>كل ما تحتاجه لإدارة متجرك</h2><p>منصة متكاملة تجمع عمليات البيع والإدارة في مكان واحد.</p></div><div className="landing-feature-grid">{FEATURES.map(([icon, title, description]) => <article className="landing-feature-card stitch-capability-card" key={title}><span className="landing-feature-icon stitch-capability-icon"><Icon name={icon} /></span><h3>{title}</h3><p>{description}</p></article>)}</div></div></section>
