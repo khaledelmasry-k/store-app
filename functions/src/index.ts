@@ -2256,6 +2256,17 @@ export const createProduct = onCall(async (request: CallableRequest<any>) => {
     throw new HttpsError('resource-exhausted', 'ميزة التسعير بالكمية غير متوفرة في باقتك الحالية — ارتقِ باقتك لتفعيلها.')
   }
 
+  if (Array.isArray(data.quantityTiers)) {
+    for (const tier of data.quantityTiers) {
+      if (typeof tier?.quantity !== 'number' || !Number.isInteger(tier.quantity) || tier.quantity < 1) {
+        throw new HttpsError('invalid-argument', 'كل مستوى سعري يجب أن يحتوي على عدد قطع صحيح أكبر من صفر')
+      }
+      if (typeof tier?.price !== 'number' || !Number.isFinite(tier.price) || tier.price < 0) {
+        throw new HttpsError('invalid-argument', 'كل مستوى سعري يجب أن يحتوي على سعر إجمالي صحيح أكبر من أو يساوي صفر')
+      }
+    }
+  }
+
   const productRef = db.doc(`products/${productId}`)
   await db.runTransaction(async (tx) => {
     const existing = await tx.get(productRef)
@@ -2307,6 +2318,16 @@ export const updateProduct = onCall(async (request: CallableRequest<any>) => {
   }
   if (data.price !== undefined && (typeof data.price !== 'number' || data.price < 0)) {
     throw new HttpsError('invalid-argument', 'السعر غير صالح')
+  }
+  if (Array.isArray(data.quantityTiers)) {
+    for (const tier of data.quantityTiers) {
+      if (typeof tier?.quantity !== 'number' || !Number.isInteger(tier.quantity) || tier.quantity < 1) {
+        throw new HttpsError('invalid-argument', 'كل مستوى سعري يجب أن يحتوي على عدد قطع صحيح أكبر من صفر')
+      }
+      if (typeof tier?.price !== 'number' || !Number.isFinite(tier.price) || tier.price < 0) {
+        throw new HttpsError('invalid-argument', 'كل مستوى سعري يجب أن يحتوي على سعر إجمالي صحيح أكبر من أو يساوي صفر')
+      }
+    }
   }
   const patch: Record<string, any> = { ...data }
   delete patch.id

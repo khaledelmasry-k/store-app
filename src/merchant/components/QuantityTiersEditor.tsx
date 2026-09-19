@@ -52,7 +52,7 @@ export const QuantityTiersEditor: FunctionalComponent<Props> = ({ tiers, onChang
               <Icon name="arrow_downward" />
             </button>
             <Input label="عدد القطع" type="number" value={t.quantity || ''} onChange={(v) => update(i, { quantity: Math.max(1, Math.round(Number(v) || 1)) })} />
-            <Input label="السعر الإجمالي" type="number" value={t.price || ''} onChange={(v) => update(i, { price: Number(v) })} />
+            <Input label="السعر الإجمالي" type="number" value={t.price || ''} min="0" onChange={(v) => { const n = Number(v); if (!isNaN(n) && n >= 0) update(i, { price: n }) }} />
             <button type="button" className="icon-btn icon-btn-danger" onClick={() => remove(i)} title="حذف المستوى">
               <Icon name="delete" />
             </button>

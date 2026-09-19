@@ -111,8 +111,6 @@ export const MerchantShipping: FunctionalComponent = () => {
     return true
   }
   const hasEnabledAutomationProvider = platformProviders.some(isProviderAutomationCapable)
-  // Deprecated: old automation check incorrectly treated manual as API-ready
-  const isProviderReadyForAutomation = isProviderOperational
   const hasEnabledLiveProvider = hasEnabledAutomationProvider
   const isManualProviderEntry = (entry: typeof platformProviders[number]) => {
     const p: any = entry.provider
@@ -301,10 +299,24 @@ export const MerchantShipping: FunctionalComponent = () => {
     requestAnimationFrame(() => el.focus())
   }
 
+  const validateZoneProvider = (providerId: string): { valid: boolean; reason?: string } => {
+    if (!providerId) return { valid: true }
+    const entry = platformProviders.find((e) => e.provider.id === providerId)
+    if (!entry) return { valid: false, reason: 'شركة الشحن المحددة غير موجودة' }
+    if (!entry.config?.enabled) return { valid: false, reason: 'شركة الشحن غير مفعلة للمتجر' }
+    if (!entry.setupComplete) return { valid: false, reason: 'إعداد شركة الشحن غير مكتمل' }
+    return { valid: true }
+  }
+
   const submitZone = async () => {
     if (!storeId) return
     if (!zoneForm.name) {
       toast.push('أدخل اسم المنطقة', undefined, 'error')
+      return
+    }
+    const providerValidation = validateZoneProvider(zoneForm.providerId || '')
+    if (!providerValidation.valid) {
+      toast.push('شركة شحن غير صالحة', providerValidation.reason, 'error')
       return
     }
     const data = {

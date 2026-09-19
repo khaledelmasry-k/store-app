@@ -69,6 +69,12 @@ export const PlatformStoreDetails: FunctionalComponent<Props> = ({ id }) => {
       patch.slug = slug
       patch.ref = slug
     }
+    // Synchronize publication fields: published (legacy) and storeStatus (canonical)
+    if (patch.published !== undefined) {
+      patch.storeStatus = patch.published === true ? 'published' : 'draft'
+    } else if (patch.storeStatus !== undefined) {
+      patch.published = patch.storeStatus === 'published'
+    }
     await storesService.update(store.id, patch)
     toast.push('تم حفظ التغييرات')
   }
