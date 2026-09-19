@@ -53,18 +53,22 @@ html[data-theme='dark'] .stitch-info-container p { color:var(--text-secondary); 
   0%, 100% { transform: translateY(0); }
   50% { transform: translateY(-7px); }
 }
-@keyframes landingBarRise {
-  from { opacity: .25; transform: scaleY(.08); }
-  to { opacity: 1; transform: scaleY(1); }
+/* First fold: hero + stats strip together fill 90vh and end exactly on the
+   strip. The hero absorbs all the slack, the strip keeps its natural height.
+   `svh` avoids the mobile-chrome overflow that plain `vh` causes; the `vh`
+   line above it is the fallback for browsers without `svh`. The constraint is
+   released below 760px, where the hero stacks and a forced height would only
+   stretch it. */
+.landing-hero-block {
+  display: flex;
+  flex-direction: column;
+  min-height: 90vh;
+  min-height: 90svh;
 }
-@keyframes landingFlowSweep {
-  from { transform: translateX(125%); opacity: 0; }
-  18%, 72% { opacity: .55; }
-  to { transform: translateX(-135%); opacity: 0; }
-}
-@keyframes landingNodePulse {
-  0%, 100% { box-shadow: 0 0 0 0 rgba(99, 102, 241, .08); }
-  50% { box-shadow: 0 0 0 9px rgba(99, 102, 241, .14); }
+.landing-hero-block > .landing-hero { flex: 1 1 auto; display: grid; align-content: center; }
+.landing-hero-block > .landing-stats { flex: 0 0 auto; }
+@media (max-width: 760px) {
+  .landing-hero-block { display: block; min-height: 0; }
 }
 .landing-hero { position: relative; isolation: isolate; }
 .landing-hero::before {
@@ -83,54 +87,40 @@ html[data-theme='dark'] .stitch-info-container p { color:var(--text-secondary); 
 .landing-hero-text h1 { animation: landingHeroReveal .62s .08s both; }
 .landing-hero-text > p { animation: landingHeroReveal .62s .18s both; }
 .landing-hero-text .landing-hero-actions { animation: landingHeroReveal .62s .28s both; }
-.landing-hero .landing-mockup,
+/* The entrance rise and the perpetual float both drive `transform`. Stacked in
+   a single `animation` list on one element the float wins outright and the rise
+   is silently discarded, so they are split: the wrapper plays the one-off
+   entrance, the figure owns the loop. `will-change` keeps the figure on its own
+   compositor layer, so the image drop-shadow is rasterized once instead of
+   being repainted on every frame of the float. */
+.landing-hero-image { animation: landingHeroReveal .78s .42s both; }
 .landing-hero-visual {
-  animation: landingHeroReveal .78s .42s both, landingMockFloat 6s 1.35s ease-in-out infinite;
+  animation: landingMockFloat 6s 1.35s ease-in-out infinite;
+  will-change: transform;
 }
-.landing-hero-visual-orbit--one { animation: landingOrbitDrift 9s ease-in-out infinite alternate; }
-.landing-hero-visual-orbit--two { animation: landingOrbitDrift 11s 1s ease-in-out infinite alternate-reverse; }
-@keyframes landingOrbitDrift {
-  from { transform: rotate(-6deg) translate3d(-4px, 0, 0); }
-  to { transform: rotate(8deg) translate3d(6px, -5px, 0); }
+/* Each orbit drifts around its OWN resting angle (-5deg and 8deg). One shared
+   keyframe used to hard-code rotate(-6deg) -> rotate(8deg), which overrode both
+   base transforms and swept the two rings through an identical arc — collapsing
+   the crossed-ellipse look into a single doubled ring. */
+.landing-hero-visual-orbit { will-change: transform; }
+.landing-hero-visual-orbit--one { animation: landingOrbitDriftOne 9s ease-in-out infinite alternate; }
+.landing-hero-visual-orbit--two { animation: landingOrbitDriftTwo 11s 1s ease-in-out infinite alternate-reverse; }
+@keyframes landingOrbitDriftOne {
+  from { transform: rotate(-7deg) translate3d(-4px, 1px, 0); }
+  to { transform: rotate(-3deg) translate3d(4px, -4px, 0); }
 }
-.landing-mockup-stats > div { animation: landingHeroReveal .45s .72s both; }
-.landing-mockup-stats > div:nth-child(2) { animation-delay: .82s; }
-.landing-mockup-stats > div:nth-child(3) { animation-delay: .92s; }
-.landing-chart-bars i {
-  transform-origin: bottom;
-  animation: landingBarRise .65s .82s cubic-bezier(.2,.8,.2,1) both;
+@keyframes landingOrbitDriftTwo {
+  from { transform: rotate(6deg) translate3d(4px, -1px, 0); }
+  to { transform: rotate(10deg) translate3d(-4px, 4px, 0); }
 }
-.landing-chart-bars i:nth-child(2) { animation-delay: .89s; }
-.landing-chart-bars i:nth-child(3) { animation-delay: .96s; }
-.landing-chart-bars i:nth-child(4) { animation-delay: 1.03s; }
-.landing-chart-bars i:nth-child(5) { animation-delay: 1.10s; }
-.landing-chart-bars i:nth-child(6) { animation-delay: 1.17s; }
-.landing-chart-bars i:nth-child(7) { animation-delay: 1.24s; }
-.landing-chart-bars i:nth-child(8) { animation-delay: 1.31s; }
-.landing-chart-bars i:nth-child(9) { animation-delay: 1.38s; }
-.landing-mockup-chart { overflow: hidden; }
-.landing-mockup-chart::after {
-  content: '';
-  position: absolute;
-  inset: 0;
-  width: 34%;
-  pointer-events: none;
-  background: linear-gradient(90deg, transparent, rgba(129, 140, 248, .16), transparent);
-  animation: landingFlowSweep 4.8s 1.55s ease-in-out infinite;
-}
-.landing-mockup-body aside b { animation: landingNodePulse 2.8s 1.25s ease-in-out infinite; }
 @media (prefers-reduced-motion: reduce) {
   .landing-hero-text .landing-eyebrow,
   .landing-hero-text h1,
   .landing-hero-text > p,
   .landing-hero-text .landing-hero-actions,
-  .landing-hero .landing-mockup,
+  .landing-hero-image,
   .landing-hero-visual,
-  .landing-hero-visual-orbit,
-  .landing-mockup-stats > div,
-  .landing-chart-bars i,
-  .landing-mockup-chart::after,
-  .landing-mockup-body aside b { animation: none !important; }
+  .landing-hero-visual-orbit { animation: none !important; will-change: auto; }
 }
 .landing-dashboard-showcase{margin:0;overflow:hidden;border:1px solid #dfe3f0;border-radius:24px;background:#fff;box-shadow:0 26px 70px #27316d1f;line-height:0}.landing-dashboard-showcase img{display:block;width:100%;height:auto;aspect-ratio:3/2;object-fit:cover}.landing.dark .landing-dashboard-showcase{border-color:#313b67;box-shadow:0 26px 70px #080d241f}
 .stitch-footer-band{margin-top:auto;padding:48px 0 20px;background:#141b38;color:#fff}.stitch-footer-grid{display:grid;grid-template-columns:2fr repeat(3,minmax(0,1fr));gap:32px;align-items:start}.stitch-footer-grid>div:first-child{min-width:0}.stitch-footer-grid .landing-footer-logo{display:block;max-width:150px;max-height:42px;filter:brightness(0) invert(1)}.stitch-footer-grid p{margin:14px 0 0;max-width:240px;color:#b7c0dc;font-size:13px;line-height:1.8}.stitch-footer-grid h3{margin:2px 0 14px;font-size:14px;color:#fff}.stitch-footer-grid a{display:block;margin:9px 0;color:#b7c0dc;font-size:13px;text-decoration:none;transition:color .2s ease}.stitch-footer-grid a:hover{color:#fff}.stitch-footer-copy{margin-top:36px;padding-top:16px;border-top:1px solid #ffffff1f;color:#8f9abf;font-size:12px;text-align:center}.stitch-info-container{min-height:480px}.landing-enterprise{position:relative;overflow:hidden;background:linear-gradient(120deg,#171f46 0%,#29327a 100%);box-shadow:0 24px 60px #18245b2b}.landing-enterprise::after{content:'';position:absolute;inset:auto -80px -120px auto;width:280px;height:280px;border-radius:50%;background:radial-gradient(circle,rgba(129,140,248,.45),transparent 70%);pointer-events:none}.landing-enterprise>div,.landing-enterprise-cta{position:relative;z-index:1}.landing-enterprise>div>span{color:#a5b4fc}.landing-enterprise h2{max-width:540px;line-height:1.35}.landing-enterprise-cta{min-width:150px;justify-self:end;box-shadow:0 10px 24px #080d242e}.landing-enterprise-cta:hover{background:#eef0ff}

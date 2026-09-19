@@ -314,7 +314,7 @@ export const MerchantSettings: FunctionalComponent = () => {
                 </div>
                 <div className="whatsapp-template-editor">
                   <div className="whatsapp-template-tabs" role="tablist" aria-label="رسائل واتساب">
-                    {DEFAULT_WHATSAPP_EVENTS.map((event) => <button type="button" className={selectedWhatsAppEvent === event ? 'is-active' : ''} onClick={() => setSelectedWhatsAppEvent(event)}>{WHATSAPP_EVENT_LABELS[event]}</button>)}
+                    {DEFAULT_WHATSAPP_EVENTS.map((event) => <button key={event} type="button" role="tab" aria-selected={selectedWhatsAppEvent === event} className={selectedWhatsAppEvent === event ? 'is-active' : ''} onClick={() => setSelectedWhatsAppEvent(event)}>{WHATSAPP_EVENT_LABELS[event]}</button>)}
                   </div>
                   <div className="settings-grid whatsapp-template-grid">
                     <div className="field">
