@@ -1,5 +1,5 @@
 import { FunctionalComponent } from 'preact'
-import { useEffect, useMemo, useState } from 'preact/hooks'
+import { useEffect, useMemo, useRef, useState } from 'preact/hooks'
 import { Link } from 'wouter'
 import { BrandLogo } from '../../shared/components/brand/BrandLogo'
 import { Button } from '../../shared/components/ui/Button'
@@ -11,6 +11,7 @@ import { useTheme } from '../../shared/hooks/useTheme'
 import { CANONICAL_PLANS } from '../../shared/plans/catalog'
 import type { SubscriptionPlan } from '../../shared/types'
 import { setSeo } from '../../shared/utils/seo'
+import { useScrollReveal } from '../../shared/hooks/useScrollReveal'
 import { getPublicPlatformConfigCallable, getPublicPromotionsCallable, getPublicShippingPartnersCallable } from '../../shared/services/auth'
 import heroCommerceVisual from '../../assets/brand/matjari-hero-commerce-v2.webp'
 import dashboardShowcase from '../../assets/brand/matjari-dashboard-showcase-v1.png'
@@ -23,6 +24,23 @@ const NAV_LINKS = [
   { href: '#pricing', label: 'الأسعار' }, { href: '#how-it-works', label: 'كيف تعمل' },
   { href: '#faq', label: 'الأسئلة الشائعة' }, { href: '#contact', label: 'تواصل معنا' },
 ]
+/** What rises into view on scroll. Excludes the hero, the stats strip and
+ *  the operating-journey section, which each animate themselves. */
+const REVEAL_SELECTOR = [
+  '.landing-section-heading',
+  '.landing-feature-card',
+  '.landing-step',
+  '.landing-value-copy',
+  '.landing-dashboard-showcase',
+  '.landing-plan-wrap',
+  '.landing-promotion-banner',
+  '.landing-special-offer',
+  '.landing-enterprise-offer',
+  '.landing-faq-list details',
+  '.landing-partner-cta',
+  '.landing-final-cta .landing-container',
+].join(',')
+
 const FEATURES = [
   ['storefront', 'متجرك وكتالوجك', 'أنشئ واجهة متجرك ونظّم المنتجات والمتغيرات والمخزون من لوحة واحدة.'],
   ['receipt_long', 'الطلبات من البداية للنهاية', 'استقبل الطلب، راجع تفاصيله، وحدّث حالته في مسار تشغيل واضح.'],
@@ -54,6 +72,7 @@ function HeroCommerceVisual() {
   </figure>
 }
 export const LandingPage: FunctionalComponent = () => {
+  const pageRef = useRef<HTMLDivElement>(null)
   const [menuOpen, setMenuOpen] = useState(false)
   const [enterpriseContact, setEnterpriseContact] = useState(() => resolveEnterpriseContact())
   const [promotions, setPromotions] = useState<any[]>([]); const [shippingPartners, setShippingPartners] = useState<any[]>([]); const theme = useTheme()
@@ -69,7 +88,12 @@ export const LandingPage: FunctionalComponent = () => {
   const plansRes = useCollection<SubscriptionPlan>('plans', {}); const plans = useMemo(() => CANONICAL_PLANS.map((canonical) => { const live = plansRes.data.find((plan) => plan.id === canonical.id || plan.name?.toLowerCase() === canonical.name.toLowerCase()); if (!live) return canonical; if (canonical.id !== 'plan-lifetime') return { ...live, ...canonical }; return { ...canonical, ...live, id: canonical.id, sortOrder: canonical.sortOrder } }), [plansRes.data])
   const subscriptionPlans = plans.filter((plan) => ['plan-basic', 'plan-starter', 'plan-growth', 'plan-pro'].includes(plan.id) && plan.billingModel !== 'one_time' && plan.active !== false && plan.isPurchasable !== false && plan.archived !== true); const lifetimeOffer = plans.find((plan) => plan.billingModel === 'one_time' && plan.isLaunchOffer !== false && plan.active !== false && plan.isPurchasable !== false && plan.archived !== true && offerIsPubliclyAvailable(plan)); const publicPromotion = promotions.find((p) => p.placement === 'pricing' && p.planId && p.promotionalPrice != null)
   const goTo = (href: string) => (event: MouseEvent) => { if (href.startsWith('#')) { event.preventDefault(); document.getElementById(href.slice(1))?.scrollIntoView({ behavior: 'smooth', block: 'start' }) }; setMenuOpen(false) }
-  return <div className="landing" dir="rtl">
+  // The hero runs its own scripted entrance and the stats strip closes the
+  // first fold, so both are left out — everything below them rises into view
+  // as the visitor scrolls. OperatingJourney drives its own timeline too.
+  useScrollReveal(pageRef, REVEAL_SELECTOR)
+
+  return <div className="landing" dir="rtl" ref={pageRef}>
     <header className="landing-header"><div className="landing-container landing-header-inner"><a href="/" className="landing-brand" aria-label="Matjari"><BrandLogo className="landing-primary-logo" /></a><button type="button" className="landing-menu-toggle" aria-label="القائمة" aria-expanded={menuOpen} onClick={() => setMenuOpen((open) => !open)}><Icon name={menuOpen ? 'close' : 'menu'} /></button><nav className={`landing-nav${menuOpen ? ' open' : ''}`} aria-label="التنقل الرئيسي">{NAV_LINKS.map((link) => <a key={link.label} href={link.href} className="landing-nav-link" onClick={goTo(link.href)}>{link.label}</a>)}<button type="button" className="landing-theme-toggle" aria-label="تبديل السمة" onClick={theme.toggle}><Icon name={theme.theme === 'dark' ? 'light_mode' : 'dark_mode'} /></button><Link href="/login" className="landing-nav-btn landing-nav-btn-ghost">تسجيل الدخول</Link><Link href="/register" className="landing-nav-btn landing-nav-btn-primary">ابدأ تجربة 3 أيام مجانًا</Link></nav></div></header>
     <main>
       {/* Hero + stats share one 90vh block so the first fold ends exactly on
