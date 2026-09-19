@@ -12,6 +12,7 @@ import { credentialSummary, encryptCredentials, sanitizeSensitiveText } from './
 import { emitIntegrationEvent } from './integrations/outbox'
 import { createShipmentForOrder, credentialDocumentId, loadIntegrationCredentials, publicWebhookUrl } from './shipping/service'
 import { ShippingProviderError } from './shipping/errors'
+import { lineTotalForItem, unitPriceForQty } from './pricing'
 
 admin.initializeApp()
 
@@ -147,106 +148,10 @@ function toMillis(value: any): number | null {
   return null
 }
 
-// Mirrors src/shared/utils/pricing.ts (client). Functions is a separate
-// package, so tier resolution is duplicated here on purpose and must stay in
-// sync. Never accept a client-supplied price.
-//
-// Model: a tier is a BUNDLE of exactly `quantity` pieces priced at a TOTAL
-// `price`. The line total is the tier's total price — it is NEVER multiplied
-// by the quantity again. Legacy tiers with `minQuantity`/`maxQuantity` keep
-// their old unit-price semantics and are detected automatically.
-function isBundleTier(t: any): boolean {
-  return typeof t?.quantity === 'number' && Number.isFinite(t.quantity)
-}
-
-/** Per-unit base price for remainder units: the qty:1 tier, else `fallback`. */
-function baseUnitPrice(tiers: any[] | null | undefined, fallback: number): number {
-  const t1 = (tiers || []).find((t: any) => isBundleTier(t) && t.quantity === 1)
-  if (t1 && typeof t1.price === 'number') return t1.price
-  return fallback || 0
-}
-
-/**
- * Total price for `qty` pieces under quantity (bundle) pricing.
- * Mirrors src/shared/utils/pricing.ts. For quantities beyond the highest
- * configured tier, `strategy` (default 'cap') decides the overflow behavior:
- *   - 'cap'    : highest bundle total + remainder at base unit price.
- *   - 'repeat' : repeat the highest bundle, remainder at base unit price.
- *   - 'last'   : always the highest bundle total once.
- */
-function quantityTotalPrice(
-  tiers: any[] | null | undefined,
-  qty: number,
-  strategy: string = 'cap',
-  fallbackBase = 0,
-): number | null {
-  const sorted = [...(tiers || [])]
-    .filter((t: any) => isBundleTier(t))
-    .sort((a: any, b: any) => Number(a.quantity) - Number(b.quantity))
-  if (sorted.length === 0 || qty < 1) return null
-  const base = baseUnitPrice(tiers, fallbackBase)
-  const highest = sorted[sorted.length - 1]
-  const exact = sorted.find((t: any) => t.quantity === qty)
-  const largestBelow = [...sorted].reverse().find((t: any) => t.quantity < qty) || null
-
-  if (strategy === 'last') {
-    if (exact) return exact.price
-    if (qty >= Number(highest.quantity)) return highest.price
-    if (largestBelow) return largestBelow.price + (qty - Number(largestBelow.quantity)) * base
-    return qty * base
-  }
-  if (strategy === 'repeat') {
-    let remaining = qty
-    let total = 0
-    while (remaining > 0) {
-      const t = [...sorted].reverse().find((x: any) => x.quantity <= remaining) || null
-      if (t) {
-        total += t.price
-        remaining -= t.quantity
-      } else {
-        total += base * remaining
-        remaining = 0
-      }
-    }
-    return total
-  }
-  // 'cap' (default)
-  if (exact) return exact.price
-  if (qty > Number(highest.quantity)) return highest.price + (qty - Number(highest.quantity)) * base
-  if (largestBelow) return largestBelow.price + (qty - Number(largestBelow.quantity)) * base
-  return qty * base
-}
-
-function tierForQuantity(tiers: any[] | null | undefined, qty: number): any | null {
-  if (!tiers || tiers.length === 0 || qty < 1) return null
-  const sorted = [...tiers].sort((a, b) => Number(isBundleTier(a) ? a.quantity : a.minQuantity || 0) - Number(isBundleTier(b) ? b.quantity : b.minQuantity || 0))
-  for (const t of sorted) {
-    if (isBundleTier(t)) {
-      if (qty === Number(t.quantity)) return t
-    } else if (qty >= Number(t.minQuantity) && (t.maxQuantity == null || qty <= Number(t.maxQuantity))) {
-      return t
-    }
-  }
-  const last = sorted[sorted.length - 1]
-  if (last && !isBundleTier(last) && last.maxQuantity != null && qty > Number(last.maxQuantity)) return last
-  return null
-}
-
-/** Total price for a quantity under bundle pricing, else null. */
-function tierTotalForQuantity(tiers: any[] | null | undefined, qty: number, strategy: string = 'cap'): number | null {
-  if (tiers && tiers.length > 0 && tiers.every(isBundleTier)) {
-    return quantityTotalPrice(tiers, qty, strategy, 0)
-  }
-  return null
-}
-
-function unitPriceForQty(basePrice: number, qty: number, pricingMode?: string | null, tiers?: any[] | null, strategy: string = 'cap'): number {
-  if (pricingMode === 'quantity') {
-    const total = quantityTotalPrice(tiers, qty, strategy, basePrice)
-    if (total != null) return total
-  }
-  return basePrice || 0
-}
+// Quantity-pricing engine lives in ./pricing so the order total is computed
+// by exactly one implementation on the server. It mirrors the client engine
+// in src/shared/utils/pricing.ts; scripts/verify-pricing-parity.mjs asserts
+// the two never drift.
 
 async function getUserRole(uid: string): Promise<string | null> {
   try {
@@ -1852,23 +1757,10 @@ export const createOrder = onCall({ region: SHIPPING_FUNCTION_REGION, secrets: [
       const basePrice = typeof matchedVariant?.price === 'number' ? matchedVariant.price : (Number(product.price) || 0)
       const pricingMode: string = product.pricingMode === 'quantity' ? 'quantity' : 'standard'
       const pricingStrategy: string = product.quantityPricingStrategy || 'cap'
-      let unit = basePrice
-      let lineTotal = 0
-      let quantityTier: { quantity: number; price: number } | null = null
-      if (pricingMode === 'quantity') {
-        const bundleTotal = tierTotalForQuantity(product.quantityTiers, qty, pricingStrategy)
-        if (bundleTotal != null) {
-          unit = bundleTotal / qty
-          lineTotal = bundleTotal
-          quantityTier = { quantity: qty, price: bundleTotal }
-        } else {
-          unit = unitPriceForQty(basePrice, qty, pricingMode, product.quantityTiers, pricingStrategy)
-          lineTotal = unit * qty
-        }
-      } else {
-        unit = unitPriceForQty(basePrice, qty, pricingMode, product.quantityTiers, pricingStrategy)
-        lineTotal = unit * qty
-      }
+      const priced = lineTotalForItem(basePrice, qty, pricingMode, product.quantityTiers, pricingStrategy)
+      const unit = priced.unit
+      const lineTotal = priced.lineTotal
+      const quantityTier = priced.bundleTotal != null ? { quantity: qty, price: priced.bundleTotal } : null
       subtotal += lineTotal
       const variantId = matchedVariant?.id || item.variantId
       const lineId = `${item.productId}-${variantId || `${item.color || ''}-${item.size || ''}`}`
@@ -1934,7 +1826,12 @@ export const createOrder = onCall({ region: SHIPPING_FUNCTION_REGION, secrets: [
         throw new HttpsError('failed-precondition', 'اكتمل استخدام كود الخصم')
       }
       if (Number(coupon.minOrder || 0) > subtotal) throw new HttpsError('failed-precondition', 'الطلب لا يحقق الحد الأدنى للكوبون')
+      // Mirror `quoteCoupon` exactly so the amount previewed at checkout is the
+      // amount actually applied. The discount is always capped at the subtotal.
       const value = Number(coupon.value || 0)
+      discount = coupon.type === 'fixed'
+        ? Math.min(subtotal, value)
+        : Math.min(subtotal, subtotal * Math.min(100, value) / 100)
       if (discount <= 0) throw new HttpsError('failed-precondition', 'قيمة كود الخصم غير صالحة')
       tx.update(couponRef!, { usedCount: FieldValue.increment(1), updatedAt: now() })
     }
