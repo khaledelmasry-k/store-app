@@ -44,8 +44,19 @@
 /* The SVG route and card grid use the same six equal columns. */
 .oj-route { position: relative; height: 96px; margin: 0 0 14px; }
 .oj-route-svg { display: block; width: 100%; height: 100%; overflow: visible; }
+/* No `vector-effect: non-scaling-stroke` here, deliberately. The route svg is
+   `preserveAspectRatio="none"` over a 1000-unit viewBox, so it stretches
+   horizontally (x1.18 at 1440px) while `.oj-route` pins the height to the
+   viewBox's own 96 units — the vertical scale is always exactly 1. Under
+   non-scaling-stroke the dash pattern that draws the progress is measured
+   along the *stretched* path while `pathLength="100"` normalises it against
+   the *unstretched* one, so the two disagree by the stretch factor and the
+   progress line stopped ~117px short of its node, never reaching it. Dropping
+   the vector-effect puts the dash back in the same space as pathLength; since
+   the vertical scale is 1 and the route is near-horizontal, the rendered
+   stroke thickness is unchanged (measured 5px before and after). */
 .oj-route-base,
-.oj-route-progress { fill: none; vector-effect: non-scaling-stroke; stroke-linecap: round; }
+.oj-route-progress { fill: none; stroke-linecap: round; }
 .oj-route-base { stroke: var(--oj-line); stroke-width: 3; }
 .oj-route-progress {
   stroke: url('#oj-route-gradient');

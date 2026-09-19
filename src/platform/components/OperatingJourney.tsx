@@ -12,6 +12,15 @@ const STEPS = [
   { icon: 'bar_chart', labelAr: 'التقارير', labelEn: 'Reports', subtitle: 'القرار والنمو', step: '06', x: 8.5, y: 46 },
 ] as const
 
+/**
+ * The route geometry, defined once and shared by the base line and the
+ * progress line. The two used to carry duplicate literal `d` strings, so
+ * editing one without the other would silently split the track in half.
+ * Its on-curve points sit at x = 915, 749, 583, 417, 251, 85 — i.e. the
+ * STEPS x percentages above, times 10 — so every node lands on the line.
+ */
+const ROUTE_D = 'M915 48 C860 48 805 36 749 38 S638 58 583 56 S472 38 417 40 S306 56 251 54 S140 44 85 44'
+
 const TRAVEL_MS = 1050
 const CHECKPOINT_PAUSE_MS = 700
 const REPORTS_PAUSE_MS = 1550
@@ -157,8 +166,8 @@ export const OperatingJourney: FunctionalComponent = () => {
                   <stop offset="100%" stopColor="#38bdf8" />
                 </linearGradient>
               </defs>
-              <path className="oj-route-base" d="M915 48 C860 48 805 36 749 38 S638 58 583 56 S472 38 417 40 S306 56 251 54 S140 44 85 44" pathLength="100" />
-              <path className="oj-route-progress" d="M915 48 C860 48 805 36 749 38 S638 58 583 56 S472 38 417 40 S306 56 251 54 S140 44 85 44" pathLength="100" style={{ strokeDasharray: `${progress} 100` }} />
+              <path className="oj-route-base" d={ROUTE_D} pathLength="100" />
+              <path className="oj-route-progress" d={ROUTE_D} pathLength="100" style={{ strokeDasharray: `${progress} 100` }} />
             </svg>
             <div className="oj-nodes">
               {STEPS.map((step, index) => {
