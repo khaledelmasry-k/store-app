@@ -12,7 +12,7 @@ import { credentialSummary, encryptCredentials, sanitizeSensitiveText } from './
 import { emitIntegrationEvent } from './integrations/outbox'
 import { createShipmentForOrder, credentialDocumentId, loadIntegrationCredentials, publicWebhookUrl } from './shipping/service'
 import { ShippingProviderError } from './shipping/errors'
-import { lineTotalForItem, unitPriceForQty } from './pricing'
+import { couponDiscount, lineTotalForItem, roundMoney } from './pricing'
 
 admin.initializeApp()
 
@@ -305,17 +305,6 @@ function normalizeProviderServices(input: any) {
 function hasVerifiedWebhookContract(slug: unknown, integrationType: unknown): boolean {
   const adapter = getShippingAdapter(String(slug || ''), String(integrationType || 'manual'))
   return Boolean(adapter?.parseWebhook && adapter?.verifyWebhookSignature && supportsShippingCapability(adapter, 'webhook'))
-}
-
-function resolveAdapterForProviderRecord(data: any) {
-  return getShippingAdapterForProvider({
-    id: data?.id,
-    slug: data?.slug,
-    adapterKey: data?.adapterKey || data?.slug,
-    integrationType: data?.integrationType,
-    integrationFamily: data?.integrationFamily || data?.systemType,
-    systemType: data?.systemType || data?.integrationFamily,
-  } as any)
 }
 
 function safeShippingProvider(id: string, data: any) {
@@ -739,13 +728,6 @@ const DEFAULT_WHATSAPP_TEMPLATES: Record<typeof WHATSAPP_AUTOMATION_EVENTS[numbe
 type WhatsAppAutomationEvent = typeof WHATSAPP_AUTOMATION_EVENTS[number]
 type MetaWhatsAppTemplate = { name: string; language: string }
 
-const DEFAULT_META_WHATSAPP_TEMPLATES: Record<WhatsAppAutomationEvent, MetaWhatsAppTemplate> = {
-  'order.created': { name: '', language: 'ar' },
-  'shipment.created': { name: '', language: 'ar' },
-  'shipment.delivered': { name: '', language: 'ar' },
-  'shipment.returned': { name: '', language: 'ar' },
-}
-
 // Meta accepts only a template name, not arbitrary merchant text. Keeping the
 // validation narrow prevents a malformed setting from ever reaching its API.
 function normalizeMetaWhatsAppTemplate(value: unknown): MetaWhatsAppTemplate {
@@ -1041,7 +1023,6 @@ async function auditLog(storeId: string | null, userId: string, action: string, 
 const DAY_MS = 86400000
 const PERIOD_DAYS = 30
 const YEAR_DAYS = 365
-const FREE_TRIAL_DAYS = 30
 const PUBLIC_PAID_PLAN_IDS = new Set(['plan-basic', 'plan-starter', 'plan-growth', 'plan-pro'])
 const PLAN_FEATURE_KEYS = [
   'quantityPricing', 'variantInventory', 'coupons', 'analytics', 'whatsappAutomation',
@@ -1283,101 +1264,6 @@ async function recordBillingSnapshot(storeId: string, snap: BillingSnapshotInput
 // Activates a subscription into a paid period. Shared by the legacy
 // approveSubscription path and the new manual-payment approval path so the
 // activation logic (price snapshots, period windows, counters) never forks.
-async function activateSubscription(
-  subId: string,
-  sub: any,
-  actorUid: string,
-  opts: { periodNumber?: number; reference?: string; launchUsed?: boolean; paymentRequestId?: string } = {},
-): Promise<{ store: any; user: any; normalPriceSnapshot: number; launchPriceSnapshot: number; periodNumber: number }> {
-  const storeSnap = await db.doc(`stores/${sub.storeId}`).get()
-  if (!storeSnap.exists) throw new HttpsError('not-found', 'المتجر غير موجود')
-  const store = storeSnap.data()!
-
-  const userSnap = await db.doc(`users/${store.ownerId}`).get()
-  const user = userSnap.exists ? userSnap.data()! : null
-
-  let plan: any = null
-  try {
-    const planSnap = await db.doc(`plans/${sub.planId}`).get()
-    plan = planSnap.exists ? planSnap.data() : null
-  } catch {
-    plan = null
-  }
-
-  const normalPriceSnapshot = Number(sub.normalPriceSnapshot ?? plan?.priceMonthly ?? 0)
-  const launchPriceSnapshot = Number(sub.launchPriceSnapshot ?? (plan?.launchEnabled && Number(plan.launchPrice) > 0 ? plan.launchPrice : normalPriceSnapshot) ?? normalPriceSnapshot)
-  const yearlyPriceSnapshot = Number(sub.yearlyPriceSnapshot ?? plan?.priceYearly ?? 0)
-
-  if (user) {
-    await auth.updateUser(store.ownerId, { disabled: false }).catch(() => {})
-    await db.doc(`users/${store.ownerId}`).update({ active: true }).catch(() => {})
-  }
-
-  const nowMs = Date.now()
-  const periodNumber = opts.periodNumber != null ? opts.periodNumber : Number(sub.periodNumber || 0) + 1
-  // Yearly subscriptions renew every 365 days; monthly every 30. The period window
-  // and price snapshot used for THIS period are taken from the subscription doc
-  // (never recomputed from the live plan, so historical billing is stable).
-  const periodDays = sub.billingCycle === 'yearly' ? YEAR_DAYS : PERIOD_DAYS
-
-  await db.doc(`subscriptions/${subId}`).update({
-    status: 'active',
-    approvedBy: actorUid,
-    adminEmail: user?.email || null,
-    activatedAt: tsFromDate(new Date(nowMs)),
-    currentPeriodStart: tsFromDate(new Date(nowMs)),
-    currentPeriodEnd: tsFromDate(new Date(nowMs + periodDays * DAY_MS)),
-    ordersUsed: 0,
-    periodNumber,
-    billingCycle: sub.billingCycle || 'monthly',
-    normalPriceSnapshot,
-    launchPriceSnapshot,
-    yearlyPriceSnapshot,
-    limitsSnapshot: {
-      orderLimitPerMonth: Number(plan?.orderLimitPerMonth || 0),
-      productLimit: Number(plan?.productLimit || 0),
-      landingPagesLimit: Number(plan?.landingPagesLimit || 0),
-      salesLinksLimit: Number(plan?.salesLinksLimit || 0),
-      staffLimit: Number(plan?.staffLimit || 0),
-      storageLimit: Number(plan?.storageLimit || 0),
-      ...(typeof plan?.unlimitedProducts === 'boolean' ? { unlimitedProducts: plan.unlimitedProducts } : {}),
-      ...(typeof plan?.unlimitedSalesLinks === 'boolean' ? { unlimitedSalesLinks: plan.unlimitedSalesLinks } : {}),
-    },
-    featuresSnapshot: Array.isArray(plan?.features) ? plan.features : [],
-    featureFlagsSnapshot: {
-    quantityPricing: plan?.quantityPricing === true,
-    variantInventory: plan?.variantInventory === true,
-    coupons: plan?.coupons === true,
-    analytics: plan?.analytics !== false,
-    whatsappAutomation: plan?.whatsappAutomation === true,
-    },
-    launchUsed: opts.launchUsed ?? (launchPriceSnapshot < normalPriceSnapshot && periodNumber <= 1),
-    trialStartedAt: FieldValue.delete(),
-    trialEndsAt: FieldValue.delete(),
-    ...(opts.paymentRequestId ? { lastPaymentRequestId: opts.paymentRequestId } : {}),
-    updatedAt: now(),
-  })
-  // Effective plan resolution is store-owned; do not duplicate an active pointer
-  // inside subscription documents.
-  await db.doc(`stores/${sub.storeId}`).update({ activeSubscriptionId: subId, updatedAt: now() })
-
-  await recordBillingSnapshot(sub.storeId, {
-    type: 'activation',
-    planId: sub.planId,
-    planName: sub.planName || plan?.name || sub.planId,
-    priceMonthly: normalPriceSnapshot,
-    priceYearly: yearlyPriceSnapshot,
-    orderLimitPerMonth: Number(plan?.orderLimitPerMonth || 0),
-    productLimit: Number(plan?.productLimit || 0),
-    storageLimitMB: Number(plan?.storageLimit || 0),
-    currency: store?.currency || 'SAR',
-    by: actorUid,
-    note: `تفعيل اشتراك (${sub.billingCycle === 'yearly' ? 'سنوي' : 'شهري'})`,
-  })
-
-  return { store, user, normalPriceSnapshot, launchPriceSnapshot, periodNumber }
-}
-
 /**
  * Compatibility path for merchant applications created under the former
  * approval-first policy. New registrations activate Free/start their SaaS
@@ -1826,12 +1712,9 @@ export const createOrder = onCall({ region: SHIPPING_FUNCTION_REGION, secrets: [
         throw new HttpsError('failed-precondition', 'اكتمل استخدام كود الخصم')
       }
       if (Number(coupon.minOrder || 0) > subtotal) throw new HttpsError('failed-precondition', 'الطلب لا يحقق الحد الأدنى للكوبون')
-      // Mirror `quoteCoupon` exactly so the amount previewed at checkout is the
-      // amount actually applied. The discount is always capped at the subtotal.
-      const value = Number(coupon.value || 0)
-      discount = coupon.type === 'fixed'
-        ? Math.min(subtotal, value)
-        : Math.min(subtotal, subtotal * Math.min(100, value) / 100)
+      // Same helper `quoteCoupon` uses, so the amount previewed at checkout is
+      // exactly the amount applied here.
+      discount = couponDiscount(coupon, subtotal)
       if (discount <= 0) throw new HttpsError('failed-precondition', 'قيمة كود الخصم غير صالحة')
       tx.update(couponRef!, { usedCount: FieldValue.increment(1), updatedAt: now() })
     }
@@ -1998,15 +1881,15 @@ export const createOrder = onCall({ region: SHIPPING_FUNCTION_REGION, secrets: [
       customerType,
       customerDocId,
       items: lineItems,
-      subtotal,
-      shippingFee: shipping.fee,
+      subtotal: roundMoney(subtotal),
+      shippingFee: roundMoney(shipping.fee),
       shippingMethod: shipping.method,
       shippingProviderId: selectedShippingProvider?.id || null,
       shippingProviderName: selectedShippingProvider?.name || null,
       shippingRate: shipping.fee,
       shippingSnapshot,
       discount,
-      totalPrice: subtotal + shipping.fee - discount,
+      totalPrice: roundMoney(subtotal + shipping.fee - discount),
       status: 'NEW',
       statusHistory: [{ status: 'NEW', at: Timestamp.now(), by: request.auth?.uid || 'guest' }],
       // createOrder deducts every accepted line in this same transaction.
@@ -2052,7 +1935,7 @@ export const createOrder = onCall({ region: SHIPPING_FUNCTION_REGION, secrets: [
         orderId,
         orderNumber,
         customerId: customerDocId,
-        totalPrice: subtotal + shipping.fee - discount,
+        totalPrice: roundMoney(subtotal + shipping.fee - discount),
         shippingProviderId: selectedShippingProvider?.id || null,
       },
     })
@@ -2065,7 +1948,7 @@ export const createOrder = onCall({ region: SHIPPING_FUNCTION_REGION, secrets: [
       body: `إجمالي ${subtotal + shipping.fee - discount} — ${lineItems.length} منتج`,
       orderId,
       orderNumber,
-      meta: { totalPrice: subtotal + shipping.fee - discount, items: lineItems.length, paymentMethod: paymentMethod || 'cod' },
+      meta: { totalPrice: roundMoney(subtotal + shipping.fee - discount), items: lineItems.length, paymentMethod: paymentMethod || 'cod' },
       createdBy: request.auth?.uid || 'guest',
     })
     if (!existingCustomerDoc) {
@@ -2103,7 +1986,7 @@ export const createOrder = onCall({ region: SHIPPING_FUNCTION_REGION, secrets: [
     // never overshoot the plan limit.
     tx.update(subRef, { ordersUsed: FieldValue.increment(1), updatedAt: now() })
 
-    return { orderId, orderNumber, totalPrice: subtotal + shipping.fee - discount, shippingFee: shipping.fee, discount, couponCode: requestedCouponCode || null, customerId: customerDocId }
+    return { orderId, orderNumber, totalPrice: roundMoney(subtotal + shipping.fee - discount), shippingFee: shipping.fee, discount, couponCode: requestedCouponCode || null, customerId: customerDocId }
   })
 
   await bumpAnalytics(storeId, { totalPrice: result.totalPrice, status: 'NEW', countOrder: true }).catch(() => {})
@@ -3722,7 +3605,6 @@ export const approvePaymentRequest = onCall(async (request: CallableRequest<{ pa
       if (sub.billingModel === 'one_time' && sub.lifetimeAccess === true) {
         throw new HttpsError('already-exists', 'المتجر مملوك بالفعل')
       }
-      const nowMs = Date.now()
       const txRef = db.collection('transactions').doc()
       tx.update(payRef, { status: 'approved', reviewedBy: request.auth!.uid, reviewedAt: now(), reviewNote: note || pay.reviewNote || null, updatedAt: now() })
       tx.update(subRef, {
@@ -3993,7 +3875,6 @@ export const rejectPaymentRequest = onCall(async (request: CallableRequest<{ pay
     const offerRef = purchaseData?.offerId ? db.doc(`plans/${purchaseData.offerId}`) : null
     const offerCurrent = offerRef ? await tx.get(offerRef) : null
     // Prepare coupon redemption cleanup if this payment had a subscription coupon reserved
-    const couponRedemptionId = String(current.data()?.couponRedemptionId || (current.data() as any)?.couponCode ? `${current.data()?.couponCode}_${current.data()?.storeId}` : '')
     const redemptionId = String((current.data() as any)?.couponRedemptionId || '')
     let redemptionRef: DocumentReference | null = null
     let redemptionSnap: FirebaseFirestore.DocumentSnapshot | null = null
@@ -4339,7 +4220,6 @@ export const replyTicket = onCall(async (request: CallableRequest<{ ticketId?: s
     updatedAt: now(),
   })
   await auditLog(storeId, request.auth.uid, 'ticket_replied', 'tickets', ticketId, { by: role })
-  const targetUserId = isPlatform ? ticket.createdBy : null
   // notify opposite side
   if (isPlatform && ticket.createdBy) {
     await db.collection('notifications').add({
@@ -4903,8 +4783,7 @@ export const quoteCoupon = onCall(async (request: CallableRequest<{ storeId?: st
     throw new HttpsError('failed-precondition', 'اكتمل استخدام كود الخصم')
   }
   if (Number(coupon.minOrder || 0) > amount) throw new HttpsError('failed-precondition', 'الطلب لا يحقق الحد الأدنى للكوبون')
-  const value = Number(coupon.value || 0)
-  const discount = coupon.type === 'fixed' ? Math.min(amount, value) : Math.min(amount, amount * Math.min(100, value) / 100)
+  const discount = couponDiscount(coupon, amount)
   if (discount <= 0) throw new HttpsError('failed-precondition', 'قيمة كود الخصم غير صالحة')
   return { code: normalized, discount, subtotal: amount }
 })
@@ -5958,7 +5837,7 @@ export const getShippingOptions = onCall({ region: SHIPPING_FUNCTION_REGION, sec
   const alias = (value: unknown) => String(value || '')
     .trim()
     .toLocaleLowerCase('ar-EG')
-    .replace(/[\s_\-]+/g, '')
+    .replace(/[\s_-]+/g, '')
   const unresolvedConfigs = enabledConfigDocs.filter((doc) => !providerById.has(String(doc.data()?.providerId || '')))
   if (unresolvedConfigs.length) {
     const activeProvidersSnap = await db.collection('shippingProviders').where('status', '==', 'active').get()
@@ -6236,7 +6115,6 @@ export const refreshShipmentTracking = onCall({ region: SHIPPING_FUNCTION_REGION
   if (!shipmentSnap.exists) throw new HttpsError('not-found', 'الشحنة غير موجودة')
   const shipment = shipmentSnap.data() || {}
   await assertStoreAccess(request, String(shipment.storeId || ''), 'orders:view')
-  const linkedOrderSnap = await db.doc(`orders/${String(shipment.orderId || '')}`).get()
   const [providerSnap, configSnap] = await Promise.all([db.doc(`shippingProviders/${shipment.providerId}`).get(), db.doc(`storeShippingProviders/${shipment.storeId}_${shipment.providerId}`).get()])
   if (!providerSnap.exists) throw new HttpsError('failed-precondition', 'مزود الشحن غير موجود')
   const provider = { id: providerSnap.id, ...(providerSnap.data() || {}) } as Record<string, any>
@@ -8127,7 +8005,6 @@ export const getCrmAnalytics = onCall(async (request: CallableRequest<any>) => {
   const orders = ordersSnap.docs.map((d) => d.data() as any)
   const totalCustomers = customers.length
   const nowMs = Date.now()
-  const weekAgo = nowMs - 7 * DAY_MS
   const monthAgo = nowMs - 30 * DAY_MS
   const newCustomers = customers.filter((c: any) => {
     const t = toMillis(c.createdAt) ?? 0

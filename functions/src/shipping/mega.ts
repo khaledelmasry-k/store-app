@@ -130,7 +130,6 @@ export const megaAdapter: ShippingProviderAdapter = {
     }).filter(Boolean) as any
   },
   async createShipment(context, input) {
-    const order: any = input.order || {}
     const provider: any = context.provider
     const code = providerCode(context)
     // Until real Mega docs are integrated, create a provider-neutral

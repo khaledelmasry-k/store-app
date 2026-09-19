@@ -14,8 +14,13 @@ backups/
 server/uploads
 *.tsbuildinfo
 firebase-debug.log
+firestore-debug.log
+ui-debug.log
 firebase-debug.*.log
 .vercel
 e2e/shots/
 test-results/
 playwright-report/
+
+# Firebase deploy cache — regenerated on every deploy, never reviewable.
+.firebase/

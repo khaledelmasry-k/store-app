@@ -415,12 +415,9 @@ export const MerchantShipping: FunctionalComponent = () => {
   const apiProviders = platformProviders.filter((entry) => !isManualPlatformProvider(entry.provider))
   const activeApiProviders = apiProviders.filter((entry) => entry.config?.enabled).length
   const activeProviders = activeApiProviders
-  const enabledServiceCount = apiProviders.reduce((total, entry) => total + (entry.config?.enabled ? (entry.provider.services || []).filter((service) => service.enabled !== false).length : 0), 0)
-  const modernCoverageCount = apiProviders.reduce((total, entry) => total + (entry.config?.enabled ? (entry.provider.services || []).reduce((count, service) => count + (service.zoneRules?.filter((zone) => zone.enabled !== false).length || 0), 0) : 0), 0)
   const legacyHasData = zones.length > 0 || providers.length > 0 || Number(cfg.flatFee || 0) > 0 || Number(cfg.freeAbove || 0) > 0 || cfg.model === 'zones'
   const legacyMode = !platformLoading && activeProviders === 0 && legacyHasData
   // Manual shipping is store-level, not a platform provider. Legacy manual provider records are ignored.
-  const isManualEnabled = !!cfg.enabled
   const visibleTab = tab === 'overview' ? 'settings' : tab === 'zones' && !legacyMode ? 'settings' : tab
   return (
     <div data-tour="shipping-workspace" className="merchant-operations merchant-shipping-page shipping-page--stitch">

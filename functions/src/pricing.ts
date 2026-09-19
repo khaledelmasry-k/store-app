@@ -18,6 +18,23 @@
  * their old unit-price semantics and are detected automatically.
  */
 
+/**
+ * Rounds a money amount to two decimals (piastres).
+ *
+ * Tier totals, percentage discounts and unit x quantity all produce binary
+ * floats: 10% of 333 lands on 33.300000000000004, and those tails then flow
+ * into the order document and every report built from it. Rounding at the
+ * line level — not only at the grand total — keeps each stored figure equal
+ * to what the customer was shown, and keeps the sum of the lines equal to
+ * the subtotal.
+ *
+ * The client and server engines MUST round identically; verified by
+ * scripts/verify-pricing-parity.mjs.
+ */
+export function roundMoney(value: number): number {
+  return Math.round((value + Number.EPSILON) * 100) / 100
+}
+
 /** True when a tier uses the bundle shape (`quantity`) rather than a legacy range. */
 export function isBundleTier(t: any): boolean {
   return typeof t?.quantity === 'number' && Number.isFinite(t.quantity)
@@ -132,8 +149,34 @@ export function lineTotalForItem(
 ): { unit: number; lineTotal: number; bundleTotal: number | null } {
   if (pricingMode === 'quantity') {
     const bundleTotal = tierTotalForQuantity(tiers, qty, strategy, basePrice)
-    if (bundleTotal != null) return { unit: bundleTotal / qty, lineTotal: bundleTotal, bundleTotal }
+    if (bundleTotal != null) {
+      const lineTotal = roundMoney(bundleTotal)
+      return { unit: roundMoney(lineTotal / qty), lineTotal, bundleTotal: lineTotal }
+    }
   }
   const unit = unitPriceForQty(basePrice, qty, pricingMode, tiers, strategy)
-  return { unit, lineTotal: unit * qty, bundleTotal: null }
+  return { unit: roundMoney(unit), lineTotal: roundMoney(unit * qty), bundleTotal: null }
+}
+
+/**
+ * Store-coupon discount for a subtotal, capped at the subtotal itself.
+ *
+ * Defined once because it is needed twice: `quoteCoupon` previews it at
+ * checkout and `createOrder` applies it when the order is written. Those two
+ * carried separate copies, and the copy in `createOrder` was lost entirely —
+ * `discount` stayed 0, so its own `discount <= 0` guard rejected every coupon
+ * order after the storefront had already shown the customer a valid discount.
+ * One implementation, called from both, is what keeps preview and charge in
+ * agreement.
+ */
+export function couponDiscount(
+  coupon: { type?: string; value?: unknown },
+  subtotal: number,
+): number {
+  const value = Number(coupon?.value || 0)
+  if (!Number.isFinite(value) || value <= 0 || !(subtotal > 0)) return 0
+  const raw = coupon?.type === 'fixed'
+    ? Math.min(subtotal, value)
+    : Math.min(subtotal, (subtotal * Math.min(100, value)) / 100)
+  return roundMoney(raw)
 }

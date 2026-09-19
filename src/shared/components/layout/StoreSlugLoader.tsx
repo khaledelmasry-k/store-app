@@ -2,7 +2,6 @@ import { FunctionalComponent } from 'preact'
 import { useEffect, useState } from 'preact/hooks'
 import { useLocation, useSearch } from 'wouter'
 import { StoreContext } from '../../contexts/store-context'
-import { useAuth } from '../../hooks/useAuth'
 import { Loading } from '../ui/Loading'
 import { EmptyState } from '../ui/EmptyState'
 import { recordStoreLinkVisitCallable, getPublicStoreStatusCallable, getPublicStoreCallable } from '../../services/auth'
@@ -19,7 +18,6 @@ export const StoreSlugLoader: FunctionalComponent<Props> = ({ children }) => {
   const [loc] = useLocation()
   const search = useSearch()
   const { slug, ref } = parseStoreLocation(loc + (search ? `?${search}` : ''))
-  const { user } = useAuth()
   const previewRequested = new URLSearchParams(search || '').get('preview') === '1'
   const [store, setStore] = useState<Store | null>(null)
   const [previewAuthorized, setPreviewAuthorized] = useState(false)

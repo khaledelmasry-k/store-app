@@ -13,6 +13,23 @@ import type { CartLine, OrderItem, Product, ProductVariant, QuantityPricingStrat
  * their old unit-price semantics and are detected automatically.
  */
 
+/**
+ * Rounds a money amount to two decimals (piastres).
+ *
+ * Tier totals, percentage discounts and unit x quantity all produce binary
+ * floats: 10% of 333 lands on 33.300000000000004, and those tails then flow
+ * into the order document and every report built from it. Rounding at the
+ * line level — not only at the grand total — keeps each stored figure equal
+ * to what the customer was shown, and keeps the sum of the lines equal to
+ * the subtotal.
+ *
+ * The client and server engines MUST round identically; verified by
+ * scripts/verify-pricing-parity.mjs.
+ */
+export function roundMoney(value: number): number {
+  return Math.round((value + Number.EPSILON) * 100) / 100
+}
+
 /** True when a tier uses the new exact-bundle shape (`quantity` field). */
 function isBundleTier(t: QuantityTier): boolean {
   return typeof t.quantity === 'number' && Number.isFinite(t.quantity)
@@ -155,15 +172,15 @@ export function lineSubtotal(line: CartLine): number {
   if (line.pricingMode === 'quantity' && line.quantityTiers && line.quantityTiers.length > 0) {
     const strategy = line.quantityPricingStrategy || 'cap'
     const total = quantityTotalPrice(line.quantityTiers, qty, strategy, line.price)
-    if (total != null) return total
+    if (total != null) return roundMoney(total)
     // Bundle tier snapshot lost — fall back to the computed total.
     const unit = unitPriceForQty(line.price, qty, line.pricingMode, line.quantityTiers, strategy)
-    return unit * qty
+    return roundMoney(unit * qty)
   }
   // Standard pricing: always recompute unit × qty. The stored `lineTotal`
   // snapshot would go stale when the quantity changes in the cart (only
   // `quantity` is mutated), so it must never be trusted here.
-  return (line.price || 0) * qty
+  return roundMoney((line.price || 0) * qty)
 }
 
 /** Cart subtotal = sum of line subtotals (uses quantity pricing). */

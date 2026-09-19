@@ -293,7 +293,7 @@ export const AppShell: FunctionalComponent<Props> = ({ navKey, brand, brandLogo,
   }, [])
 
   useEffect(() => {
-    setOpenGroups((prev) => {
+    setOpenGroups(() => {
       const activeGroup = visibleGroups.find((group) => group.items.some(isItemActive))
       return activeGroup ? { [activeGroup.id]: true } : {}
     })

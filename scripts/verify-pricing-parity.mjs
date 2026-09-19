@@ -76,6 +76,23 @@ const CASES = [
   ['legacy range tiers only', 100, 4, [{ minQuantity: 2, maxQuantity: 9, price: 80 }], 'cap'],
   ['no tiers at all', 100, 3, [], 'cap'],
   ['single unit, no tiers', 250, 1, null, 'cap'],
+  // Prices that do not divide cleanly — these are what produce float tails.
+  ['thirds of a pound', 33.33, 3, null, 'cap'],
+  ['tier total over odd qty', 100, 7, [{ quantity: 1, price: 99.99 }, { quantity: 3, price: 250.05 }], 'cap'],
+  ['repeat with odd remainder', 19.99, 5, [{ quantity: 2, price: 37.77 }], 'repeat'],
+]
+
+// Coupon amounts the storefront previews and the order then charges. The
+// preview (quoteCoupon) and the charge (createOrder) call one shared helper,
+// so this asserts that helper's arithmetic rather than comparing two copies.
+const COUPON_CASES = [
+  ['10% of 333', { type: 'percent', value: 10 }, 333, 33.3],
+  ['15% of 99.99', { type: 'percent', value: 15 }, 99.99, 15],
+  ['fixed 50 on 40 (capped)', { type: 'fixed', value: 50 }, 40, 40],
+  ['fixed 50 on 400', { type: 'fixed', value: 50 }, 400, 50],
+  ['over-100% clamped', { type: 'percent', value: 250 }, 200, 200],
+  ['zero value', { type: 'percent', value: 0 }, 200, 0],
+  ['negative value', { type: 'fixed', value: -10 }, 200, 0],
 ]
 
 const client = await loadEngine('src/shared/utils/pricing.ts', 'client')
@@ -92,8 +109,36 @@ for (const [name, price, qty, tiers, strategy] of CASES) {
   console.log(name.padEnd(36), String(cart).padStart(9), String(order).padStart(9), ok ? '✓' : '✗ MISMATCH')
 }
 
+// Money must never carry a binary-float tail into the order document.
+console.log('')
+let moneyBad = 0
+for (const [name, price, qty, tiers, strategy] of CASES) {
+  const v = server.lineTotalForItem(price, qty, 'quantity', tiers, strategy).lineTotal
+  const clean = Object.is(v, server.roundMoney(v))
+  if (!clean) { moneyBad++; console.log('float tail:'.padEnd(20), name, v) }
+}
+console.log(moneyBad === 0 ? 'No float tails in any line total.' : `${moneyBad} line total(s) carry a float tail.`)
+
+console.log('')
+console.log('coupon case'.padEnd(36), 'expected'.padStart(9), 'actual'.padStart(9))
+let couponBad = 0
+for (const [name, coupon, subtotal, expected] of COUPON_CASES) {
+  const actual = server.couponDiscount(coupon, subtotal)
+  const ok = Object.is(actual, expected)
+  if (!ok) couponBad++
+  console.log(name.padEnd(36), String(expected).padStart(9), String(actual).padStart(9), ok ? '✓' : '✗ MISMATCH')
+}
+
 rmSync(out, { recursive: true, force: true })
 
+if (couponBad > 0) {
+  console.error(`\n${couponBad} coupon case(s) wrong — checkout would preview or charge the wrong discount.`)
+  process.exit(1)
+}
+if (moneyBad > 0) {
+  console.error('\nLine totals carry float tails — round them before they reach the order document.')
+  process.exit(1)
+}
 if (failures > 0) {
   console.error(`\n${failures} case(s) disagree — the cart and the order would charge different amounts.`)
   console.error('Reconcile src/shared/utils/pricing.ts and functions/src/pricing.ts before shipping.')
