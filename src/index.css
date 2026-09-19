@@ -12527,8 +12527,8 @@ html.has-scroll-reveal [data-reveal] {
   opacity: 0;
   transform: translate3d(0, 18px, 0);
   transition:
-    opacity 0.62s cubic-bezier(0.22, 1, 0.36, 1) var(--reveal-delay, 0ms),
-    transform 0.62s cubic-bezier(0.22, 1, 0.36, 1) var(--reveal-delay, 0ms);
+    opacity 0.42s cubic-bezier(0.22, 1, 0.36, 1) var(--reveal-delay, 0ms),
+    transform 0.42s cubic-bezier(0.22, 1, 0.36, 1) var(--reveal-delay, 0ms);
 }
 
 html.has-scroll-reveal [data-reveal].is-revealed {

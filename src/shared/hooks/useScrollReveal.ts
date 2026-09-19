@@ -2,7 +2,7 @@ import { useEffect } from 'preact/hooks'
 import type { RefObject } from 'preact'
 
 /** Gap between neighbouring items in the same row/grid, in ms. */
-const STAGGER_MS = 70
+const STAGGER_MS = 45
 /** Cap the cascade so a long grid never keeps the last card waiting. */
 const MAX_STAGGER_STEPS = 5
 
