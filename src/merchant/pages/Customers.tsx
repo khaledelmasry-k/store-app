@@ -472,7 +472,7 @@ export const MerchantCustomers: FunctionalComponent = () => {
                       <div style={{ flex: 1 }}>
                         <span>المرحلة</span>
                         <div style={{ display: 'flex', gap: 6, marginTop: 6, alignItems: 'center' }}>
-                          <select value={normalizeCrmStage((detail as any).stage) || ''} onChange={(e) => handleStageChange((e.target as HTMLSelectElement).value)} style={{ flex: 1, padding: '6px 8px', borderRadius: 8, border: '1px solid var(--outline-variant)', background: 'var(--surface-container)' }}>
+                          <select aria-label="مرحلة العميل" value={normalizeCrmStage((detail as any).stage) || ''} onChange={(e) => handleStageChange((e.target as HTMLSelectElement).value)} style={{ flex: 1, padding: '6px 8px', borderRadius: 8, border: '1px solid var(--outline-variant)', background: 'var(--surface-container)' }}>
                             <option value="">بدون مرحلة</option>
                             {CRM_STAGE_OPTIONS.map((o) => <option key={o.value} value={o.value}>{o.label}</option>)}
                           </select>

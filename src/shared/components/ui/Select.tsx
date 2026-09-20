@@ -18,6 +18,14 @@ interface Props {
   disabled?: boolean
 }
 
+/**
+ * A wrapping <label> only names the control when it actually contains text.
+ * These render without a visible label all over the dashboard filters —
+ * placeholder-only — and a control with no accessible name is announced as
+ * nothing at all by a screen reader; axe flags it as critical. The
+ * `aria-label` falls back to the placeholder, then the field name, whenever
+ * there is no visible label to borrow.
+ */
 export const Select: FunctionalComponent<Props> = ({
   label,
   value,
@@ -33,6 +41,7 @@ export const Select: FunctionalComponent<Props> = ({
     {label && <span className="field-label">{label}</span>}
     <select
       className={clsx('input', error && 'input-error')}
+      aria-label={label ? undefined : placeholder || name}
       value={value}
       name={name}
       disabled={disabled}

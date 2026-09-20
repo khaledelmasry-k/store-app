@@ -1745,8 +1745,14 @@ textarea.input {
   display: flex;
   align-items: center;
   justify-content: center;
-  background: var(--primary-soft);
-  color: var(--primary);
+  /* Deterministic pair rather than theme tokens. The initials are text and
+     need 4.5:1, but --primary-soft is a translucent tint: its rendered
+     contrast depends on whatever sits behind the avatar, which differs
+     between the topbar and the sidebar footer — one theme-aware colour
+     cannot satisfy both. A solid brand fill with white initials is 6.29:1
+     everywhere, in both themes. */
+  background: #4f46e5;
+  color: #fff;
   font-weight: 700;
 }
 
@@ -6619,7 +6625,7 @@ body {
   --border-strong: #a9a7bc;
   --text: #141b2b;
   --text-secondary: #464555;
-  --text-muted: #777587;
+  --text-muted: #6b6a7a;
   --primary: #3525cd;
   --primary-hover: #2b1eaa;
   --primary-soft: rgba(53, 37, 205, 0.10);
@@ -6627,7 +6633,7 @@ body {
   --info-soft: rgba(0, 101, 145, 0.10);
   --violet: #4f46e5;
   --violet-soft: rgba(79, 70, 229, 0.10);
-  --success: #00875a;
+  --success: #00734d;
   --success-soft: rgba(0, 135, 90, 0.11);
   --warning: #a96500;
   --warning-soft: rgba(169, 101, 0, 0.12);
@@ -11627,7 +11633,7 @@ textarea.input:focus {
   --foreground: #141b2b;
   --text: #141b2b;
   --text-secondary: #464555;
-  --text-muted: #777587;
+  --text-muted: #6b6a7a;
   --border: #c7c4d8;
   --primary: #3525cd;
   --primary-soft: #e7e5ff;
@@ -11867,7 +11873,7 @@ html:not([data-theme='dark']) {
   --foreground: #141b2b;
   --text: #141b2b;
   --text-secondary: #464555;
-  --text-muted: #777587;
+  --text-muted: #6b6a7a;
   --border: #e6e8f5;
   --border-strong: #d6daed;
   --outline-variant: #e6e8f5;
@@ -12609,4 +12615,31 @@ html.has-scroll-reveal [data-reveal].is-revealed {
     min-width: 44px;
     min-height: 44px;
   }
+}
+
+/* The active sidebar link paints `var(--primary)`, which in the dashboard's
+   dark theme resolves to the deep brand purple rather than the light variant
+   — axe measured it at 1.83:1 against the dark rail, effectively invisible.
+   Overridden explicitly here rather than by re-scoping the token, which the
+   whole dashboard depends on. */
+html[data-theme='dark'] .sidebar-link.active,
+html[data-theme='dark'] .sidebar-child-link.active,
+html[data-theme='dark'] .sidebar-group-header.active,
+html[data-theme='dark'] .sidebar-link.active span,
+html[data-theme='dark'] .sidebar-child-link.active span,
+html[data-theme='dark'] .sidebar-group-header.active span {
+  color: #c4beff;
+}
+
+/* A filled primary button in the dark theme rendered dark ink (#11162c) on
+   the deep brand purple (#3525cd) — measured, not guessed — which axe reads
+   as a serious contrast failure. The root cause is a token collision: a
+   later `:root` block re-declares `--primary` and `--primary-contrast` at
+   equal specificity to the dark-theme block, so the dark theme loses. The
+   token architecture is load-bearing across the whole dashboard and is not
+   worth restructuring for this, so the button's ink is pinned instead.
+   White on #3525cd is about 9:1. */
+[data-theme='dark'] .btn-primary,
+html[data-theme='dark'] .btn-primary {
+  color: #fff !important;
 }

@@ -21,7 +21,7 @@ export const ToastViewport: FunctionalComponent = () => {
             <p className="toast-title">{t.title}</p>
             {t.description && <p className="toast-desc">{t.description}</p>}
           </div>
-          <button className="toast-close" onClick={() => dismiss(t.id)} type="button">
+          <button className="toast-close" aria-label="إغلاق الإشعار" onClick={() => dismiss(t.id)} type="button">
             <Icon name="close" />
           </button>
         </div>

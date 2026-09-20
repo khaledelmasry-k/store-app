@@ -242,38 +242,38 @@ export const MerchantSettings: FunctionalComponent = () => {
               </div>
               <div className="field">
                 <label className="field-label">اسم المتجر</label>
-                <input className="input" value={form.name ?? store?.name ?? ''} onChange={(e) => setForm({ ...form, name: (e.target as HTMLInputElement).value })} />
+                <input className="input" aria-label="اسم المتجر" value={form.name ?? store?.name ?? ''} onChange={(e) => setForm({ ...form, name: (e.target as HTMLInputElement).value })} />
               </div>
               <div className="grid grid-2">
                 <div className="field">
                   <label className="field-label">رقم الهاتف</label>
-                  <input className="input" value={form.phone ?? store?.phone ?? ''} onChange={(e) => setForm({ ...form, phone: (e.target as HTMLInputElement).value })} />
+                  <input className="input" aria-label="رقم الهاتف" value={form.phone ?? store?.phone ?? ''} onChange={(e) => setForm({ ...form, phone: (e.target as HTMLInputElement).value })} />
                 </div>
                 <div className="field">
                   <label className="field-label">العملة الافتراضية</label>
-                  <select className="input" value={form.currency ?? store?.currency ?? 'EGP'} onChange={(e) => setForm({ ...form, currency: (e.target as HTMLSelectElement).value })}>
+                  <select className="input" aria-label="العملة الافتراضية" value={form.currency ?? store?.currency ?? 'EGP'} onChange={(e) => setForm({ ...form, currency: (e.target as HTMLSelectElement).value })}>
                     {CURRENCIES.map((c) => <option key={c.value} value={c.value}>{c.label}</option>)}
                   </select>
                 </div>
               </div>
               <div className="field">
                 <label className="field-label">العنوان</label>
-                <input className="input" value={form.address ?? store?.address ?? ''} onChange={(e) => setForm({ ...form, address: (e.target as HTMLInputElement).value })} />
+                <input className="input" aria-label="العنوان" value={form.address ?? store?.address ?? ''} onChange={(e) => setForm({ ...form, address: (e.target as HTMLInputElement).value })} />
               </div>
               <div className="field">
                 <label className="field-label">وصف المتجر</label>
-                <textarea className="input settings-textarea" rows={3} value={form.description ?? store?.description ?? ''} onChange={(e) => setForm({ ...form, description: (e.target as HTMLTextAreaElement).value })} />
+                <textarea aria-label="وصف المتجر" className="input settings-textarea" rows={3} value={form.description ?? store?.description ?? ''} onChange={(e) => setForm({ ...form, description: (e.target as HTMLTextAreaElement).value })} />
               </div>
               <div className="settings-seo-box">
                 <h4><Icon name="search" ariaHidden /> تحسين محركات البحث (SEO)</h4>
                 <div className="field">
                   <label className="field-label small">عنوان الصفحة (Meta Title)</label>
-                  <input className="input" value={form.seoTitle ?? store?.seoTitle ?? ''} onChange={(e) => setForm({ ...form, seoTitle: (e.target as HTMLInputElement).value })} />
+                  <input aria-label="عنوان الصفحة (Meta Title)" className="input" value={form.seoTitle ?? store?.seoTitle ?? ''} onChange={(e) => setForm({ ...form, seoTitle: (e.target as HTMLInputElement).value })} />
                   <p className="settings-field-hint">يفضل ألا يتجاوز 60 حرفاً.</p>
                 </div>
                 <div className="field">
                   <label className="field-label small">وصف الصفحة (Meta Description)</label>
-                  <textarea className="input settings-textarea" rows={2} value={form.seoDescription ?? store?.seoDescription ?? ''} onChange={(e) => setForm({ ...form, seoDescription: (e.target as HTMLTextAreaElement).value })} />
+                  <textarea aria-label="وصف الصفحة (Meta Description)" className="input settings-textarea" rows={2} value={form.seoDescription ?? store?.seoDescription ?? ''} onChange={(e) => setForm({ ...form, seoDescription: (e.target as HTMLTextAreaElement).value })} />
                   <p className="settings-field-hint">يفضل ألا يتجاوز 160 حرفاً للحصول على أفضل ظهور في نتائج البحث.</p>
                 </div>
               </div>
@@ -293,15 +293,15 @@ export const MerchantSettings: FunctionalComponent = () => {
                 <p className="settings-field-hint">هنا تُجهّز الرسائل والأحداث فقط. لا يتم إرسال أي رسالة للعميل قبل اكتمال الربط الفعلي مع WhatsApp Business وMeta.</p>
                 <div className="field">
                   <label className="field-label">رقم واتساب التجاري للتحضير</label>
-                  <input className="input" value={whatsAppAutomation.senderNumber} placeholder="2010XXXXXXXX" onChange={(e) => setWhatsAppAutomation({ ...whatsAppAutomation, senderNumber: (e.target as HTMLInputElement).value.replace(/\D/g, '').slice(0, 15) })} />
+                  <input className="input" aria-label="رقم واتساب التجاري للتحضير" value={whatsAppAutomation.senderNumber} placeholder="2010XXXXXXXX" onChange={(e) => setWhatsAppAutomation({ ...whatsAppAutomation, senderNumber: (e.target as HTMLInputElement).value.replace(/\D/g, '').slice(0, 15) })} />
                   <p className="settings-field-hint">حفظ الرقم لا يعني اتصالًا، ولا يظهر هذا الرقم أو أي متغير للعميل.</p>
                 </div>
                 <div className="whatsapp-meta-connection">
                   <strong>ربط WhatsApp Business عبر Meta</strong>
                   <p>هذه بيانات الربط الفنية من لوحة Meta. تحفظ مشفّرة ولا تظهر مرة أخرى بعد الحفظ.</p>
                   <div className="settings-grid">
-                    <div className="field"><label className="field-label">Phone Number ID</label><input className="input" inputMode="numeric" value={metaConnectionDraft.phoneNumberId} placeholder={whatsAppAutomation.metaPhoneNumberIdMasked || 'مثال: 123456789012345'} onChange={(e) => setMetaConnectionDraft({ ...metaConnectionDraft, phoneNumberId: (e.target as HTMLInputElement).value.replace(/\D/g, '') })} /></div>
-                    <div className="field"><label className="field-label">Access Token من Meta</label><input className="input" type="password" value={metaConnectionDraft.accessToken} placeholder="الصقه هنا مرة واحدة" onChange={(e) => setMetaConnectionDraft({ ...metaConnectionDraft, accessToken: (e.target as HTMLInputElement).value })} /></div>
+                    <div className="field"><label className="field-label">Phone Number ID</label><input className="input" aria-label="Phone Number ID" inputMode="numeric" value={metaConnectionDraft.phoneNumberId} placeholder={whatsAppAutomation.metaPhoneNumberIdMasked || 'مثال: 123456789012345'} onChange={(e) => setMetaConnectionDraft({ ...metaConnectionDraft, phoneNumberId: (e.target as HTMLInputElement).value.replace(/\D/g, '') })} /></div>
+                    <div className="field"><label className="field-label">Access Token من Meta</label><input className="input" aria-label="Access Token من Meta" type="password" value={metaConnectionDraft.accessToken} placeholder="الصقه هنا مرة واحدة" onChange={(e) => setMetaConnectionDraft({ ...metaConnectionDraft, accessToken: (e.target as HTMLInputElement).value })} /></div>
                   </div>
                   <div className="flex flex-wrap" style={{ gap: 8 }}><Button size="sm" variant="outline" loading={metaSaving} onClick={saveMetaConnection}>حفظ بيانات Meta بأمان</Button><Button size="sm" loading={metaSaving} disabled={!whatsAppAutomation.metaPhoneNumberIdMasked} onClick={testMetaConnection}>اختبار الاتصال الفعلي</Button></div>
                   <small>لن يتم إرسال أي رسالة تجارية قبل اعتماد قوالب واتساب من Meta؛ الاختبار هنا يتحقق من أن الرقم والتوكن صحيحان فقط.</small>
@@ -319,16 +319,16 @@ export const MerchantSettings: FunctionalComponent = () => {
                   <div className="settings-grid whatsapp-template-grid">
                     <div className="field">
                       <label className="field-label">رسالة {WHATSAPP_EVENT_LABELS[selectedWhatsAppEvent]}</label>
-                      <textarea className="input settings-textarea whatsapp-template-textarea" rows={7} value={whatsAppAutomation.templates[selectedWhatsAppEvent]} onChange={(e) => updateWhatsAppTemplate((e.target as HTMLTextAreaElement).value)} />
+                      <textarea aria-label="نص رسالة واتساب للحدث المختار" className="input settings-textarea whatsapp-template-textarea" rows={7} value={whatsAppAutomation.templates[selectedWhatsAppEvent]} onChange={(e) => updateWhatsAppTemplate((e.target as HTMLTextAreaElement).value)} />
                       <p className="settings-field-hint">هذه رموز للتاجر داخل المحرر فقط: {'{{customer_name}}'}، {'{{order_number}}'}، {'{{tracking_number}}'}، {'{{tracking_url}}'}. تُستبدل ببيانات فعلية قبل الإرسال ولا تظهر للعميل نهائيًا.</p>
                       <div className="settings-grid" style={{ marginTop: 12 }}>
                         <div className="field">
                           <label className="field-label">اسم قالب Meta المعتمد</label>
-                          <input className="input" dir="ltr" value={whatsAppAutomation.metaTemplates[selectedWhatsAppEvent].name} placeholder="مثال: order_confirmation" onChange={(e) => updateMetaTemplate('name', (e.target as HTMLInputElement).value)} />
+                          <input className="input" aria-label="اسم قالب Meta المعتمد" dir="ltr" value={whatsAppAutomation.metaTemplates[selectedWhatsAppEvent].name} placeholder="مثال: order_confirmation" onChange={(e) => updateMetaTemplate('name', (e.target as HTMLInputElement).value)} />
                         </div>
                         <div className="field">
                           <label className="field-label">لغة القالب في Meta</label>
-                          <input className="input" dir="ltr" value={whatsAppAutomation.metaTemplates[selectedWhatsAppEvent].language} placeholder="ar أو ar_EG" onChange={(e) => updateMetaTemplate('language', (e.target as HTMLInputElement).value)} />
+                          <input className="input" aria-label="لغة القالب في Meta" dir="ltr" value={whatsAppAutomation.metaTemplates[selectedWhatsAppEvent].language} placeholder="ar أو ar_EG" onChange={(e) => updateMetaTemplate('language', (e.target as HTMLInputElement).value)} />
                         </div>
                       </div>
                       <p className="settings-field-hint">أنشئ واعتمد القالب بالاسم نفسه داخل Meta. متغيرات جسم القالب المطلوبة لهذا الحدث: {META_TEMPLATE_VARIABLES[selectedWhatsAppEvent]}.</p>
@@ -379,7 +379,7 @@ export const MerchantSettings: FunctionalComponent = () => {
                 <label className="field-label">رابط المتجر الحالي (Slug)</label>
                 <div className="settings-slug-input" dir="ltr">
                   <span className="settings-slug-prefix">{domain}/</span>
-                  <input className="settings-slug-field" value={slugField} onChange={(e) => setSlugField((e.target as HTMLInputElement).value)} />
+                  <input aria-label="رابط المتجر (المعرّف)" className="settings-slug-field" value={slugField} onChange={(e) => setSlugField((e.target as HTMLInputElement).value)} />
                 </div>
                 <p className="settings-field-hint">يتم توليد الرابط تلقائياً بناءً على اسم المتجر — أحرف إنجليزية وأرقام وشرطات فقط</p>
               </div>
