@@ -3120,6 +3120,36 @@ function normalizeDiscountType(raw: unknown, fallback: string = 'percentage'): '
   return fallback === 'fixed' ? 'fixed' : 'percentage'
 }
 
+// Sliding-window guard for the callables that answer without a sign-in.
+// Nothing else bounds how fast a script can probe them: a coupon quote tells
+// the caller whether a code exists, and the partner form writes a document per
+// call. Buckets are per-instance and lost on cold start — this slows
+// enumeration and scripted spam, it does not replace App Check.
+const publicCallBuckets = new Map<string, number[]>()
+
+function throttlePublicCall(key: string, maxPerWindow: number, windowMs = 60_000): boolean {
+  const nowMs = Date.now()
+  // Bound the map so a long-lived instance cannot accumulate one entry per
+  // caller forever.
+  if (publicCallBuckets.size > 5_000) {
+    for (const [bucketKey, times] of publicCallBuckets) {
+      if (!times.some((time) => nowMs - time < windowMs)) publicCallBuckets.delete(bucketKey)
+    }
+  }
+  const bucket = (publicCallBuckets.get(key) || []).filter((time) => nowMs - time < windowMs)
+  if (bucket.length >= maxPerWindow) return false
+  bucket.push(nowMs)
+  publicCallBuckets.set(key, bucket)
+  return true
+}
+
+/** Best-effort caller identity for throttling an unauthenticated callable. */
+function callerThrottleKey(request: CallableRequest<any>): string {
+  if (request.auth?.uid) return `uid:${request.auth.uid}`
+  const forwarded = String(request.rawRequest?.headers?.['x-forwarded-for'] || '').split(',')[0].trim()
+  return `ip:${forwarded || request.rawRequest?.ip || 'unknown'}`
+}
+
 function couponDateMillis(value: any): number | null {
   if (!value) return null
   if (typeof value.toMillis === 'function') return value.toMillis()
@@ -3162,6 +3192,12 @@ export const quoteSubscriptionCoupon = onCall(async (request: CallableRequest<{ 
   const billingCycle = request.data?.billingCycle === 'yearly' ? 'yearly' : 'monthly'
   const clientAmount = Number(request.data?.amount || 0)
   if (!code || !planId) throw new HttpsError('invalid-argument', 'بيانات الكوبون غير مكتملة')
+  // Registration quotes a code before the merchant has an account, so this
+  // cannot require a sign-in. Without a limit it is a free oracle for guessing
+  // platform discount codes — a valid code is worth real money.
+  if (!throttlePublicCall(`coupon:${callerThrottleKey(request)}`, 12)) {
+    throw new HttpsError('resource-exhausted', 'محاولات كثيرة — انتظر دقيقة ثم حاول مرة أخرى')
+  }
   const snap = await db.collection('subscriptionCoupons').where('code', '==', code).limit(1).get()
   if (snap.empty) throw new HttpsError('not-found', 'كود الخصم غير صحيح')
   const coupon = snap.docs[0].data() as SubscriptionCoupon
@@ -5499,6 +5535,11 @@ export const submitShippingPartnerApplication = onCall(async (request: CallableR
   const payload = request.data || {}
   if (payload.password || payload.apiKey || payload.secret || payload.token || payload.clientSecret) throw new HttpsError('invalid-argument', 'لا تُرسل أسراراً في الطلب')
   if (payload.consent !== true) throw new HttpsError('invalid-argument', 'الموافقة مطلوبة')
+  // Public form: every call writes a document, so an unbounded caller can fill
+  // the collection. A genuine applicant sends one.
+  if (!throttlePublicCall(`partner-application:${callerThrottleKey(request)}`, 3, 10 * 60_000)) {
+    throw new HttpsError('resource-exhausted', 'تم استلام طلبك بالفعل — سنتواصل معك قريباً')
+  }
   const ref = db.collection('shippingPartnerApplications').doc(); await ref.set(normalizePartnerApplication(payload)); return { ok: true, id: ref.id }
 })
 

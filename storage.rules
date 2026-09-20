@@ -102,6 +102,18 @@ service firebase.storage {
           || request.resource.contentType == 'application/pdf');
     }
 
+    // Merchant documents are only ever images or PDFs. Without this the path
+    // accepted any content type, so a tenant member could park HTML or SVG on
+    // the storage origin and hand another member a link to it.
+    function uploadedDocumentOk(storeId) {
+      return request.resource.metadata.storeId == storeId
+        && request.resource.size <= 10 * 1024 * 1024
+        && (request.resource.contentType == 'image/jpeg'
+          || request.resource.contentType == 'image/png'
+          || request.resource.contentType == 'image/webp'
+          || request.resource.contentType == 'application/pdf');
+    }
+
     function uploadedImageOk(storeId) {
       return request.resource.metadata.storeId == storeId
         && request.resource.contentType.matches('image/.*')
@@ -159,7 +171,7 @@ service firebase.storage {
     // the owning store's members and the platform admin may read (PII).
     match /documents/{storeId}/{allPaths=**} {
       allow read: if ownsTenant(storeId);
-      allow write: if canUploadStoreDocument(storeId) && request.resource.metadata.storeId == storeId;
+      allow write: if canUploadStoreDocument(storeId) && uploadedDocumentOk(storeId);
       allow delete: if ownsTenant(storeId);
     }
 

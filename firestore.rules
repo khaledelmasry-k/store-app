@@ -74,15 +74,6 @@ service cloud.firestore {
         || (isSignedIn() && !isSupportImpersonation() && get(/databases/$(database)/documents/users/$(request.auth.uid)).data.storeIds.hasAll([storeId])));
     }
 
-    function canAccessStoreOrAdmin(storeId) {
-      return canAccessStore(storeId) || isPlatformAdmin() || isStaff();
-    }
-
-    // True when the authenticated user is a merchant that is an OWNER of the store's tenant.
-    function isStoreOwner(storeId) {
-      return canAccessStore(storeId);
-    }
-
     function isSameUser(uid) {
       return isSignedIn() && request.auth.uid == uid;
     }
@@ -107,10 +98,6 @@ function hasAnyPermission(perms) {
   return isSignedIn() && (
     get(/databases/$(database)/documents/users/$(request.auth.uid)).data.permissions.hasAny(perms)
   );
-}
-
-function isStoreStaff(storeId) {
-  return isAdminOrStore(storeId) || isStaff();
 }
 
 function inStore(resource) {
