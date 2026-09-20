@@ -213,6 +213,23 @@ async function openMobileDrawer(page: Page, more: Locator) {
   await expect(page.locator('.sidebar-logout:visible').first()).toBeVisible({ timeout: 5000 })
 }
 
+// The login screen normalizes its own URL (adding ?role=…) shortly after
+// logout, so a navigation issued inside that window is cancelled by the SPA's
+// redirect rather than by anything the test did wrong. Retry instead of
+// failing — the same allowance login() in subscription.spec.ts already makes.
+async function gotoAfterLogout(page: Page, url: string) {
+  for (let attempt = 0; attempt < 3; attempt++) {
+    try {
+      await page.goto(url, { waitUntil: 'domcontentloaded' })
+      return
+    } catch (error) {
+      const message = String((error as Error)?.message || '')
+      if (attempt === 2 || !message.includes('interrupted by another navigation')) throw error
+      await page.waitForTimeout(200)
+    }
+  }
+}
+
 async function logout(page: Page) {
   // Pending merchants use the dedicated review screen, which has a plain
   // logout button instead of the dashboard sidebar action. Prefer the
@@ -460,7 +477,7 @@ test('registration trial invariants survive re-auth and duplicate registration i
   expect(afterReauth.trialConsumed).toBe(initial.trialConsumed)
 
   await logout(page)
-  await page.goto('/register', { waitUntil: 'domcontentloaded' })
+  await gotoAfterLogout(page, '/register')
   await page.locator('#reg-email').fill(email)
   await page.locator('#reg-password').fill(PASSWORD)
   await page.locator('#reg-name').fill('محاولة مكررة')
