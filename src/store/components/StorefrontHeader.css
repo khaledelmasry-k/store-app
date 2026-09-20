@@ -115,9 +115,17 @@
   border-bottom-color: var(--primary);
   background: transparent;
 }
+/* A storefront turns dark down two independent paths: the visitor's own
+   toggle, which adds `.store-dark` to the shell, and the platform theme,
+   which flips `--surface` under `[data-theme='dark']` and darkens this
+   header without touching the shell. Light ink under the second path
+   measured 3.41:1, so both selectors have to carry the override. */
 .store-dark .storefront-nav-link:hover,
 .store-dark .storefront-nav-link--active,
-.store-dark .storefront-nav-link--active:hover {
+.store-dark .storefront-nav-link--active:hover,
+[data-theme='dark'] .storefront-nav-link:hover,
+[data-theme='dark'] .storefront-nav-link--active,
+[data-theme='dark'] .storefront-nav-link--active:hover {
   color: var(--primary-ink-dark, var(--primary));
 }
 

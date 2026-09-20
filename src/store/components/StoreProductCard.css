@@ -239,15 +239,23 @@
 }
 
 /* Availability badge — Stitch: tertiary pill / error pill. */
+/* The pill's background is the brand's own translucent tint, so the label
+   sits on a surface only a little lighter than itself: the raw brand color
+   measured 2.88:1 here at 12px. `--primary-ink` is derived against this tint
+   as well as the page, so the pill reads at any brand color. */
 .spc-stock {
   flex: none;
   padding: 4px 8px;
   border-radius: 8px;
   font-size: 14px;
   font-weight: 500;
-  color: var(--primary);
+  color: var(--primary-ink, var(--primary));
   background: var(--primary-soft);
   white-space: nowrap;
+}
+.store-dark .spc-stock,
+[data-theme='dark'] .spc-stock {
+  color: var(--primary-ink-dark, var(--primary));
 }
 .spc-stock--out {
   color: var(--danger);

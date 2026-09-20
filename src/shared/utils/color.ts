@@ -85,13 +85,39 @@ export function contrastFor(hex: string): string {
  * clears, keeping the hue so the store still looks like its own brand.
  */
 export function readableOn(brand: string, background: string, target = 4.5): string {
-  if (contrastRatio(brand, background) >= target) return brand
-  const toward = luminance(background) > 0.5 ? '#000000' : '#ffffff'
+  return readableOnAll(brand, [background], target)
+}
+
+/**
+ * The same, for a color that has to read on more than one surface.
+ *
+ * Brand-colored text does not land on just the page: the stock pill puts it
+ * on `--primary-soft`, the brand's own translucent tint, which sits closer to
+ * the text than the page does and so is the harder surface of the two. Ink
+ * picked for the page alone measured 2.88:1 there. Clear every surface.
+ */
+export function readableOnAll(brand: string, backgrounds: string[], target = 4.5): string {
+  const clears = (color: string) => backgrounds.every((bg) => contrastRatio(color, bg) >= target)
+  if (clears(brand)) return brand
+  // Every surface in one set is light or all of them dark, so the direction
+  // is the same for all; take it from the first.
+  const toward = luminance(backgrounds[0]) > 0.5 ? '#000000' : '#ffffff'
   // 5% steps: fine enough that the result stays visibly on-brand, coarse
   // enough to settle in at most twenty iterations.
   for (let t = 0.05; t <= 1; t += 0.05) {
     const candidate = mix(brand, toward, t)
-    if (contrastRatio(candidate, background) >= target) return candidate
+    if (clears(candidate)) return candidate
   }
   return toward
+}
+
+/** The opaque color a translucent `hex` at `alpha` resolves to over `backdrop`. */
+export function overlay(hex: string, alpha: number, backdrop: string): string {
+  const f = parseHex(hex)
+  const b = parseHex(backdrop)
+  return toHex({
+    r: f.r * alpha + b.r * (1 - alpha),
+    g: f.g * alpha + b.g * (1 - alpha),
+    b: f.b * alpha + b.b * (1 - alpha),
+  })
 }
