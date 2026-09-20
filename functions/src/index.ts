@@ -2760,23 +2760,29 @@ export const onStorageFinalize = onObjectFinalized({ bucket: STORAGE_BUCKET }, a
   const storeId = storeIdFromObjectName(name)
   if (!storeId || size <= 0) return
   const storeRef = db.doc(`stores/${storeId}`)
-  const snap = await storeRef.get()
-  if (!snap.exists) return
-  const data = snap.data()!
-  const limit = Number(data?.storageLimitBytes || 0)
-  // Enforce the plan quota: reject (delete) objects that would push usage over.
-  if (limit > 0) {
+  // Reading the counter and adding to it has to be one atomic step. Two uploads
+  // finishing at the same moment would otherwise both read the same usage, both
+  // judge themselves inside the limit, and both increment — leaving the store
+  // over its quota with neither object rejected. The Storage rule's own quota
+  // check is only a fast client-side signal; this is the authoritative gate.
+  const outcome = await db.runTransaction(async (tx) => {
+    const snap = await tx.get(storeRef)
+    if (!snap.exists) return 'unknown-store'
+    const data = snap.data()!
+    const limit = Number(data?.storageLimitBytes || 0)
     const used = Number(data?.storageUsed || 0)
-    if (used + size > limit) {
-      try {
-        await admin.storage().bucket(event.data.bucket).file(name).delete()
-      } catch {
-        /* object may already be gone */
-      }
-      return
-    }
+    if (limit > 0 && used + size > limit) return 'over-quota'
+    tx.update(storeRef, { storageUsed: FieldValue.increment(size), updatedAt: now() })
+    return 'counted'
+  })
+  // An object belonging to no known store is left alone, exactly as before: it
+  // may be mid-creation, and deleting it would destroy a legitimate upload.
+  if (outcome !== 'over-quota') return
+  try {
+    await admin.storage().bucket(event.data.bucket).file(name).delete()
+  } catch {
+    /* object may already be gone */
   }
-  await storeRef.update({ storageUsed: FieldValue.increment(size), updatedAt: now() })
 })
 
 export const onStorageDelete = onObjectDeleted({ bucket: STORAGE_BUCKET }, async (event) => {

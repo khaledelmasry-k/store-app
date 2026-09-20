@@ -68,7 +68,11 @@ export const MerchantOnboardingTour: FunctionalComponent = () => {
 
   const persistMain = async (field: 'onboardingTourCompleted' | 'onboardingTourSkipped') => { if (!user || saving) return; setSaving(true); try { await usersService.update(user.uid, { [field]: true, onboardingTourVersion: VERSION }) } finally { setSaving(false) } }
   const close = async (field: 'onboardingTourCompleted' | 'onboardingTourSkipped') => { if (mode !== 'main') { localStorage.setItem(miniKey, '1'); activeTarget.current?.classList.remove('tour-target-active'); setMode('main'); setStep(-2); return }; if (!forceMain) await persistMain(field); setForceMain(false); activeTarget.current?.classList.remove('tour-target-active'); sessionStorage.removeItem(RESUME_KEY); setStep(-2) }
-  const highlight = (target: string) => { activeTarget.current?.classList.remove('tour-target-active'); const el = document.querySelector(`[data-tour="${target}"]`) as HTMLElement | null; activeTarget.current = el; el?.scrollIntoView({ block: 'center', behavior: 'smooth' }); el?.classList.add('tour-target-active') }
+  // Smooth scrolling keeps the page — and the card positioned from the target's
+  // rect — moving for the length of the animation. Honour the viewer's motion
+  // preference and jump straight there when they have asked for less movement.
+  const prefersReducedMotion = () => typeof window !== 'undefined' && window.matchMedia?.('(prefers-reduced-motion: reduce)').matches === true
+  const highlight = (target: string) => { activeTarget.current?.classList.remove('tour-target-active'); const el = document.querySelector(`[data-tour="${target}"]`) as HTMLElement | null; activeTarget.current = el; el?.scrollIntoView({ block: 'center', behavior: prefersReducedMotion() ? 'auto' : 'smooth' }); el?.classList.add('tour-target-active') }
   useEffect(() => {
     if (step < 0 || !steps[step] || window.innerWidth <= 768) return
     const recalc = () => {

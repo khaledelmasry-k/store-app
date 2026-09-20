@@ -8,7 +8,22 @@ export async function dismissMerchantTourIfVisible(page: Page) {
     await neverAgain.check({ force: true })
   }
   const dismiss = overlay.getByRole('button', { name: /فهمت، أكمل للوحة|تخطي الجولة/ }).first()
-  if (await dismiss.count()) await dismiss.click()
+  if (await dismiss.count()) {
+    // The tour scrolls its target into view, so the overlay can still be
+    // settling when the button is found. An unbounded click waits for it to be
+    // "stable" until the whole test times out — 90s spent on a dismissal.
+    // Bound each try instead, and fall back to a forced click: the goal here is
+    // only to get the overlay out of the way, not to assert its hit target.
+    for (let attempt = 0; attempt < 3; attempt += 1) {
+      try {
+        await dismiss.click({ timeout: 2000 })
+        break
+      } catch (error) {
+        if (attempt < 2) continue
+        await dismiss.click({ force: true, timeout: 2000 }).catch(() => { throw error })
+      }
+    }
+  }
   await expect(page.locator('.merchant-tour-overlay:visible')).toHaveCount(0, { timeout: 5000 })
 }
 
