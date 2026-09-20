@@ -52,7 +52,36 @@ if (target === 'production') {
 run('PRE_DEPLOY typecheck', 'npm', ['run', 'typecheck'])
 run('PRE_DEPLOY functions build', 'npm', ['--prefix', 'functions', 'run', 'build'])
 run('PRE_DEPLOY integration', 'npm', ['run', 'verify:integration'])
-run('PRE_DEPLOY E2E', 'npm', ['run', 'verify:e2e'])
+
+// The E2E gate needs a machine that can carry 11 emulator lifecycles. The
+// "Release gate" workflow runs the identical gate on CI, so a release may
+// consume that result instead of repeating it — but only for the exact commit
+// CI verified. The SHA must match HEAD and the tree must be clean, so a stale
+// or forgotten value can never let newer code through unverified.
+const ciVerifiedSha = String(process.env.E2E_VERIFIED_IN_CI || '').trim()
+if (ciVerifiedSha) {
+  const headSha = spawnSync('git', ['rev-parse', 'HEAD'], { encoding: 'utf8' }).stdout?.trim() || ''
+  const dirty = spawnSync('git', ['status', '--porcelain'], { encoding: 'utf8' }).stdout?.trim() || ''
+  if (!headSha) {
+    console.error('Refusing to skip the E2E gate: cannot resolve HEAD.')
+    console.error('RELEASE_BLOCKED')
+    process.exit(2)
+  }
+  if (!headSha.startsWith(ciVerifiedSha) || ciVerifiedSha.length < 7) {
+    console.error(`Refusing to skip the E2E gate: E2E_VERIFIED_IN_CI=${ciVerifiedSha} does not match HEAD ${headSha}.`)
+    console.error('RELEASE_BLOCKED')
+    process.exit(2)
+  }
+  if (dirty) {
+    console.error('Refusing to skip the E2E gate: the working tree has uncommitted changes, so HEAD does not describe what would ship.')
+    console.error('RELEASE_BLOCKED')
+    process.exit(2)
+  }
+  console.log(`PRE_DEPLOY E2E SKIPPED — consuming the CI release gate for ${headSha}.`)
+  console.log('Verify it is green: .github/workflows/release-e2e-isolation.yml → release-gate')
+} else {
+  run('PRE_DEPLOY E2E', 'npm', ['run', 'verify:e2e'])
+}
 // E2E intentionally writes an emulator bundle to dist/. Recreate the exact
 // Hosting artifact only after all emulator-backed validation has finished.
 if (target === 'production') {

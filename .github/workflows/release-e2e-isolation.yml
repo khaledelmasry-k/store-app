@@ -1,15 +1,67 @@
-name: Release E2E isolation
+name: Release gate
 
+# The same two gates scripts/deploy-safe.mjs runs before a production release,
+# on hardware that can actually carry 11 emulator lifecycles. A release can
+# consume a green run here instead of repeating it locally — see
+# E2E_VERIFIED_IN_CI in scripts/deploy-safe.mjs.
 on:
   push:
     branches:
-      - ci/release-e2e-isolation
+      - master
+      - 'claude/**'
+      - 'ci/**'
+  pull_request:
+    branches:
+      - master
   workflow_dispatch:
 
 permissions:
   contents: read
 
 jobs:
+  integration:
+    name: integration
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '21'
+      - name: Install application dependencies
+        run: npm ci
+      - name: Install Functions dependencies
+        run: npm ci --prefix functions
+      - name: Install Firebase CLI
+        run: npm install --global firebase-tools
+      - name: Install Playwright Chromium
+        run: npx playwright install --with-deps chromium
+      - name: Create emulator-only environment
+        run: |
+          cp .env.example .env.local
+          cat >> .env.local <<'EOF'
+          VITE_FIREBASE_PROJECT_ID=mk-store-app
+          VITE_FIREBASE_USE_EMULATOR=true
+          VITE_STORE_BASE_URL=http://127.0.0.1:4173
+          EOF
+      - name: Typecheck
+        run: npm run typecheck
+      - name: Run integration gate
+        run: npm run verify:integration
+      - name: Upload integration artifacts
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: release-integration
+          if-no-files-found: ignore
+          path: |
+            test-results/
+            playwright-report/
+
   release-e2e-group:
     name: ${{ matrix.group }}
     runs-on: ubuntu-latest
@@ -111,3 +163,24 @@ jobs:
           path: |
             test-results/
             playwright-report/
+
+
+  release-gate:
+    name: release-gate
+    runs-on: ubuntu-latest
+    needs: [integration, release-e2e-group, shipping-commercial]
+    if: always()
+    steps:
+      - name: Require every gate to be green
+        run: |
+          echo "integration:          ${{ needs.integration.result }}"
+          echo "release-e2e-group:    ${{ needs.release-e2e-group.result }}"
+          echo "shipping-commercial:  ${{ needs.shipping-commercial.result }}"
+          if [ "${{ needs.integration.result }}" != "success" ] \
+            || [ "${{ needs.release-e2e-group.result }}" != "success" ] \
+            || [ "${{ needs.shipping-commercial.result }}" != "success" ]; then
+            echo "RELEASE_GATE_FAIL"
+            exit 1
+          fi
+          echo "RELEASE_GATE_PASS for ${GITHUB_SHA}"
+          echo "Release this commit with: E2E_VERIFIED_IN_CI=${GITHUB_SHA}"
