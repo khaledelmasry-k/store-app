@@ -43,6 +43,7 @@ const arg = (name, fallback) => {
 const BASE = arg('base', 'http://localhost:4173').replace(/\/$/, '')
 const GROUP = arg('group', 'public')
 const SLUG = arg('slug', 'test-store-a')
+const PROJECT = arg('project', process.env.GCLOUD_PROJECT || 'mk-store-app')
 /** Set when the browser is not on Playwright's own download path. */
 const EXECUTABLE = process.env.PLAYWRIGHT_CHROMIUM_PATH || undefined
 
@@ -100,13 +101,49 @@ async function preflight(groupNames) {
 
   const down = []
   for (const [url, what, how] of checks) if (!(await reachable(url))) down.push([url, what, how])
-  if (!down.length) return
+  if (down.length) {
+    console.error('\nCannot audit — these are not running:\n')
+    for (const [url, what, how] of down) console.error(`  ${what} (${url})\n      start it with:  ${how}\n`)
+    if (needsFunctions && down.some((d) => d[1] === 'functions emulator')) {
+      console.error('  Without the functions emulator every /store/ route renders the')
+      console.error('  "store not found" card, so the audit would measure nothing real.\n')
+    }
+    process.exit(2)
+  }
 
-  console.error('\nCannot audit — these are not running:\n')
-  for (const [url, what, how] of down) console.error(`  ${what} (${url})\n      start it with:  ${how}\n`)
-  if (needsFunctions && down.some((d) => d[1] === 'functions emulator')) {
-    console.error('  Without the functions emulator every /store/ route renders the')
-    console.error('  "store not found" card, so the audit would measure nothing real.\n')
+  // Services being up is not the same as the data being there: the Firestore
+  // emulator starts empty and loses everything on restart, so a seeded run and
+  // a freshly restarted one look identical from the outside. Ask the same
+  // callable the storefront asks, and let its answer say which one this is.
+  if (!needsFunctions) return
+  const endpoint = `http://127.0.0.1:5001/${PROJECT}/us-central1/getPublicStore`
+  let status = 0
+  let payload = ''
+  try {
+    const res = await fetch(endpoint, {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({ data: { slug: SLUG } }),
+      signal: AbortSignal.timeout(20000),
+    })
+    status = res.status
+    payload = (await res.text()).slice(0, 200)
+  } catch (e) {
+    console.error(`\nCannot audit — getPublicStore did not answer at ${endpoint}\n      ${String(e.message).slice(0, 140)}\n`)
+    process.exit(2)
+  }
+  if (status === 200) return
+
+  console.error(`\nCannot audit — the store "${SLUG}" does not resolve.\n`)
+  if (/not-found|NOT_FOUND/.test(payload)) {
+    console.error('  The functions emulator answered, and said there is no store with')
+    console.error(`  that slug. The Firestore emulator is empty — it keeps nothing across`)
+    console.error('  restarts — so seed it, in a second terminal, while the first keeps')
+    console.error('  the emulators running:\n')
+    console.error('      npm run emulators:seed\n')
+    console.error(`  Then reload ${BASE}/store/${SLUG} to confirm before re-running.\n`)
+  } else {
+    console.error(`  getPublicStore returned HTTP ${status}: ${payload}\n`)
   }
   process.exit(2)
 }
