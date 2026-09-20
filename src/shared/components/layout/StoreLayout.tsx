@@ -6,7 +6,7 @@ import { setSeo } from '../../utils/seo'
 import { useStore } from '../../hooks/useStore'
 import { MerchantLogo } from '../brand/MerchantLogo'
 import { getTemplate } from '../../utils/themes'
-import { contrastFor, hexToRgba, shadeHex } from '../../utils/color'
+import { contrastFor, hexToRgba, readableOn, shadeHex } from '../../utils/color'
 import type { CSSProperties } from 'preact/compat'
 import { Icon } from '../ui/Icon'
 import { StorefrontHeader } from '../../../store/components/StorefrontHeader'
@@ -17,6 +17,15 @@ interface Props {
   children?: any
 }
 
+/**
+ * The surfaces brand-colored text actually lands on. Each is the harder of
+ * the two in its theme — the tinted page background rather than pure white,
+ * and the raised card rather than the darker page — so ink that clears here
+ * clears everywhere else in that theme too.
+ */
+const LIGHT_SURFACE = '#f9f9ff'
+const DARK_SURFACE = '#1a263c'
+
 export function themeStyleFor(primary?: string, secondary?: string): CSSProperties {
   if (!primary) return {}
   return {
@@ -24,6 +33,10 @@ export function themeStyleFor(primary?: string, secondary?: string): CSSProperti
     '--primary-hover': shadeHex(primary, -12),
     '--primary-soft': hexToRgba(primary, 0.12),
     '--primary-contrast': contrastFor(primary),
+    // Brand color as a fill is `--primary`; as text on the page it has to
+    // carry 4.5:1 on its own, which a mid-luminance brand color does not.
+    '--primary-ink': readableOn(primary, LIGHT_SURFACE),
+    '--primary-ink-dark': readableOn(primary, DARK_SURFACE),
     '--secondary': secondary || primary,
     '--store-accent': secondary || primary,
   } as CSSProperties

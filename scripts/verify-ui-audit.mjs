@@ -221,8 +221,27 @@ async function auditRoute(context, route, viewport, theme) {
       }
     }
     const uniq = (a) => [...new Set(a)].slice(0, 4)
+    // A truncated selector for the first node is not enough to fix anything:
+    // "article:nth-child(1) > .spc-body.spc-bod" names neither the element
+    // nor the colors. Carry each distinct node out with the measurements axe
+    // already made, so a contrast failure arrives as numbers to act on.
+    const detail = (node) => {
+      const d = node.any?.[0]?.data
+      const sel = node.target.join(' ')
+      if (!d || d.contrastRatio == null) return sel
+      return `${sel}  fg=${d.fgColor} bg=${d.bgColor} ratio=${d.contrastRatio} needs=${d.expectedContrastRatio} font=${d.fontSize}/${d.fontWeight}`
+    }
     return {
-      axe: axeRun.violations.map((v) => ({ id: v.id, impact: v.impact, n: v.nodes.length, target: v.nodes[0]?.target.join(' ').slice(0, 40) })),
+      axe: axeRun.violations.map((v) => {
+        // Cards repeat, so the same defect lands on every one of them. Group
+        // by the shape of the selector and report one example per shape.
+        const byShape = new Map()
+        for (const node of v.nodes) {
+          const shape = node.target.join(' ').replace(/:nth-child\(\d+\)/g, ':nth-child(n)')
+          if (!byShape.has(shape)) byShape.set(shape, detail(node))
+        }
+        return { id: v.id, impact: v.impact, n: v.nodes.length, nodes: [...byShape.values()].slice(0, 4) }
+      }),
       overflow: out.overflow, clipped: uniq(out.clipped), zoom: uniq(out.zoom), body: out.body,
     }
   }, { vw: viewport.width, touch: viewport.touch })
@@ -276,7 +295,8 @@ for (const groupName of groups) {
         layoutIssues += (r.overflow ? 1 : 0) + r.clipped.length + r.zoom.length
         for (const v of r.axe) {
           violations += v.n
-          notes.push(`[${v.impact}] ${v.id} x${v.n} (${v.target})`)
+          notes.push(`[${v.impact}] ${v.id} x${v.n}`)
+          for (const node of v.nodes) notes.push(`    ${node}`)
         }
         const tag = `${route} · ${viewport.name} · ${theme}`
         console.log(notes.length ? `  ✗ ${tag}\n      ${notes.join('\n      ')}` : `  ✓ ${tag}`)

@@ -8,6 +8,8 @@ interface Option {
 
 interface Props {
   label?: string
+  /** Names the control when there is no visible label and no placeholder. */
+  ariaLabel?: string
   value?: string
   onChange?: (value: string) => void
   options: Option[]
@@ -23,11 +25,14 @@ interface Props {
  * These render without a visible label all over the dashboard filters —
  * placeholder-only — and a control with no accessible name is announced as
  * nothing at all by a screen reader; axe flags it as critical. The
- * `aria-label` falls back to the placeholder, then the field name, whenever
- * there is no visible label to borrow.
+ * `aria-label` falls back to an explicit `ariaLabel`, then the placeholder,
+ * then the field name, whenever there is no visible label to borrow. Prefer
+ * `ariaLabel` where the placeholder is a value rather than a description —
+ * a filter reading "الكل" announces the option, not what it filters.
  */
 export const Select: FunctionalComponent<Props> = ({
   label,
+  ariaLabel,
   value,
   onChange,
   options,
@@ -41,7 +46,7 @@ export const Select: FunctionalComponent<Props> = ({
     {label && <span className="field-label">{label}</span>}
     <select
       className={clsx('input', error && 'input-error')}
-      aria-label={label ? undefined : placeholder || name}
+      aria-label={label ? undefined : ariaLabel || placeholder || name}
       value={value}
       name={name}
       disabled={disabled}

@@ -78,6 +78,7 @@ export const StoreCatalog: FunctionalComponent = () => {
           </div>
           <div className="toolbar-filters">
             <Select
+              ariaLabel="تصفية حسب الفئة"
               value={cat}
               onChange={(v) => { setCat(v); setPage(1) }}
               placeholder="الكل"
@@ -87,6 +88,7 @@ export const StoreCatalog: FunctionalComponent = () => {
               ]}
             />
             <Select
+              ariaLabel="ترتيب المنتجات"
               value={sort}
               onChange={(v) => { setSort(v); setPage(1) }}
               options={SORT_OPTIONS}

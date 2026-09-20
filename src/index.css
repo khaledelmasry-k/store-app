@@ -5974,6 +5974,16 @@ textarea.input {
   --bg: #0d1424; --surface: #141e31; --surface-elevated: #1a263c; --surface-muted: #202e46;
   --foreground: #f3f6fb; --text: #f3f6fb; --text-secondary: #c2ccdc; --text-muted: #94a4bc;
   --border: #30415c; --border-strong: #4b5f7f;
+  /* `--muted` and `--muted-foreground` have to be restated here, not left to
+     follow `--text-secondary`. dark-mode-v2.css aliases the second as
+     `--muted-foreground: var(--text-secondary)` on `:root`, and a custom
+     property resolves its var() references where it is *declared*: the value
+     that inherits into this shell is the literal light grey `:root` computed,
+     and overriding `--text-secondary` below does not revisit it. Unfixed,
+     product categories rendered #464555 on the #1a263c card — 1.61:1, where
+     4.5:1 is the floor — and the inactive nav links 3.04:1. */
+  --muted: #a8b4c8;
+  --muted-foreground: #94a4bc;
 }
 .store-shell.store-dark .storefront-header,
 .store-shell.store-dark .store-footer,
