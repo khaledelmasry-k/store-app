@@ -20,7 +20,7 @@ declare -A GROUP_SPECS=(
   # gets its own emulator lifecycle while the complete test coverage remains.
   [emulator-core-shipping]='e2e/emulator.spec.ts --grep=shipping:.*default'
   [emulator-core-hero]='e2e/emulator.spec.ts --grep=landing.*hero.*image'
-  [emulator-core-sales-link]='e2e/emulator.spec.ts --grep=^sales'
+  [emulator-core-sales-link]='e2e/emulator.spec.ts --grep=sales.*link'
   [subscription-activation]='e2e/subscription.spec.ts --grep=merchant.*activates.*trial'
 )
 
