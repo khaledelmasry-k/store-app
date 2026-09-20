@@ -94,7 +94,15 @@ async function signIn(context, creds) {
 
 async function auditRoute(context, route, viewport, theme) {
   const page = await context.newPage()
-  await page.goto(BASE + route, { waitUntil: 'domcontentloaded' }).catch(() => {})
+  // An empty page has several possible causes — the preview server not
+  // running, the app built without the emulator flag, a callable refusing —
+  // and they are indistinguishable from the rendered output alone. Collect
+  // the evidence so a failure names its own reason.
+  const consoleErrors = []
+  page.on('console', (m) => { if (m.type() === 'error') consoleErrors.push(m.text().slice(0, 110)) })
+  page.on('pageerror', (e) => consoleErrors.push(`uncaught: ${String(e.message).slice(0, 110)}`))
+  let navError = null
+  await page.goto(BASE + route, { waitUntil: 'domcontentloaded' }).catch((e) => { navError = String(e.message).split('\n')[0].slice(0, 110) })
   await page.evaluate((t) => document.documentElement.setAttribute('data-theme', t), theme)
   await page.waitForTimeout(2600)
   // Scroll-revealed content is invisible until it enters the viewport; reveal
@@ -138,8 +146,9 @@ async function auditRoute(context, route, viewport, theme) {
     }
   }, { vw: viewport.width, touch: viewport.touch })
 
+  const snippet = await page.evaluate(() => document.body.innerText.trim().replace(/\s+/g, ' ').slice(0, 90))
   await page.close()
-  return result
+  return { ...result, navError, consoleErrors: [...new Set(consoleErrors)].slice(0, 3), snippet }
 }
 
 const groups = GROUP === 'all' ? Object.keys(GROUPS) : [GROUP]
@@ -179,7 +188,12 @@ for (const groupName of groups) {
         audited += 1
 
         const notes = []
-        if (r.body < 60) notes.push('page looks empty — did a callable fail?')
+        if (r.body < 60) {
+          notes.push(`page looks empty (${r.body} chars)${r.snippet ? ` — showing: "${r.snippet}"` : ''}`)
+          if (r.navError) notes.push(`navigation failed: ${r.navError} — is the preview server up at ${BASE}?`)
+          for (const e of r.consoleErrors) notes.push(`console: ${e}`)
+          if (!r.navError && !r.consoleErrors.length) notes.push('no console errors — the page rendered this deliberately')
+        }
         if (r.overflow) notes.push(`horizontal overflow ${r.overflow}px`)
         if (r.clipped.length) notes.push(`clipped: ${r.clipped.join(', ')}`)
         if (r.zoom.length) notes.push(`iOS zoom: ${r.zoom.join(', ')}`)
