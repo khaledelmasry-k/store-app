@@ -108,6 +108,13 @@ async function preflight(groupNames) {
       console.error('  Without the functions emulator every /store/ route renders the')
       console.error('  "store not found" card, so the audit would measure nothing real.\n')
     }
+    // An emulator that has just been started is always empty, so the seed is
+    // part of starting it, not a separate thing to discover one run later.
+    if (down.some((d) => d[1].endsWith('emulator'))) {
+      console.error('  An emulator starts empty and keeps nothing across restarts, so once')
+      console.error('  it reports "All emulators ready", seed it in another terminal:\n')
+      console.error('      npm run emulators:seed\n')
+    }
     process.exit(2)
   }
 
