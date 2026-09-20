@@ -5806,7 +5806,11 @@ export const getShippingOptions = onCall({ region: SHIPPING_FUNCTION_REGION, sec
   const subtotal = Math.max(0, Number(request.data?.subtotal || 0))
   if (!storeId || !String(destination.governorate || '').trim()) throw new HttpsError('invalid-argument', 'بيانات الوجهة غير مكتملة')
   const storeSnap = await db.doc(`stores/${storeId}`).get()
-  if (!storeSnap.exists || storeSnap.data()?.active === false || storeSnap.data()?.published === false) throw new HttpsError('not-found', 'المتجر غير متاح')
+  // Use the same publication test as createOrder and quoteCoupon. Testing
+  // `published === false` let a draft store through — one that has neither
+  // `published` nor `storeStatus` set reads as not-false here but as 'draft'
+  // there, so checkout quoted shipping and then refused the order.
+  if (!storeSnap.exists || storeSnap.data()?.active === false || storePublicationStatus(storeSnap.data()) !== 'published') throw new HttpsError('not-found', 'المتجر غير متاح')
   // Some early merchant configuration documents were written before the
   // `enabled` field was normalized to a boolean.  The merchant dashboard
   // correctly treats the legacy string value as enabled, while the old

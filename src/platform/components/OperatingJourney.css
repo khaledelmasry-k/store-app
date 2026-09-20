@@ -128,7 +128,7 @@
   text-align: center;
   transition: transform 0.38s ease, border-color 0.38s ease, box-shadow 0.38s ease, background 0.38s ease;
 }
-.oj-card-step { position: absolute; top: 12px; right: 13px; color: #94a3b8; font-size: 11px; font-weight: 800; letter-spacing: 0.12em; }
+.oj-card-step { position: absolute; top: 12px; right: 13px; color: #64748b; font-size: 11px; font-weight: 800; letter-spacing: 0.12em; }
 .oj-card-node { display: none; }
 .oj-card-icon {
   display: grid;
@@ -144,7 +144,7 @@
   transition: color 0.35s ease, background 0.35s ease, border-color 0.35s ease, transform 0.35s ease;
 }
 .oj-card-copy { display: flex; min-width: 0; flex-direction: column; align-items: center; }
-.oj-card-en { color: #8993a8; font-size: 11px; font-weight: 700; letter-spacing: 0.06em; text-transform: uppercase; }
+.oj-card-en { color: #64748b; font-size: 11px; font-weight: 700; letter-spacing: 0.06em; text-transform: uppercase; }
 .oj-card-label { margin-top: 2px; color: var(--oj-ink); font-size: 15px; line-height: 1.35; }
 .oj-card-subtitle { margin-top: 3px; color: var(--oj-muted); font-size: 12px; line-height: 1.4; }
 .oj-card-check { position: absolute; top: 11px; left: 11px; display: grid; width: 19px; height: 19px; place-items: center; border-radius: 50%; background: #e0e7ff; color: var(--oj-brand); font-size: 11px; }
