@@ -1,5 +1,5 @@
 import { initializeApp, type FirebaseApp } from 'firebase/app'
-import { getAuth, connectAuthEmulator, type Auth } from 'firebase/auth'
+import { getAuth, connectAuthEmulator, signInWithCustomToken, signOut, type Auth } from 'firebase/auth'
 import { getFirestore, connectFirestoreEmulator, type Firestore } from 'firebase/firestore'
 import { getStorage, connectStorageEmulator, type FirebaseStorage } from 'firebase/storage'
 import { getFunctions, connectFunctionsEmulator, type Functions } from 'firebase/functions'
@@ -97,6 +97,17 @@ if (import.meta.env.VITE_FIREBASE_USE_EMULATOR === 'true') {
       authEmulatorConnected: Boolean(authEmulator),
     })
     if (!authEmulator) console.error('[firebase-emulator-config] Auth emulator was not connected before login')
+  }
+
+  // Emulator-only sign-in bridge for end-to-end tests. Browser tests need to
+  // authenticate as an arbitrary seeded uid, and the built preview bundle does
+  // not serve module source, so they cannot reach `auth` any other way. It is
+  // defined inside this block, which the emulator flag turns into dead code in
+  // any non-emulator build (scripts/verify-production-dist.mjs enforces that).
+  ;(window as unknown as { __mkEmulatorAuth?: unknown }).__mkEmulatorAuth = {
+    signInWithCustomToken: async (token: string) => (await signInWithCustomToken(auth, token)).user.uid,
+    signOut: () => signOut(auth),
+    currentUid: () => auth.currentUser?.uid ?? null,
   }
 }
 
