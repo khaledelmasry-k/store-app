@@ -612,7 +612,18 @@ match /orders/{id} {
       // uniqueness are enforced server-side before the document is written.
       allow create: if false;
       allow update: if canManage(resource.data.storeId, 'landing:manage')
-        && request.resource.data.storeId == resource.data.storeId;
+        && request.resource.data.storeId == resource.data.storeId
+        // Pages resolve by this slug across ALL stores on the shared
+        // `/landing/:slug` route, so it cannot be changed by a direct client
+        // update after createLandingPage guaranteed global uniqueness —
+        // otherwise a merchant could take over another store's public URL.
+        && request.resource.data.slug == resource.data.slug
+        // Views, delivered-order totals, and revenue are server-owned
+        // attribution data. Merchants can edit their page but must never be
+        // able to forge campaign analytics in the browser.
+        && !request.resource.data.diff(resource.data).affectedKeys().hasAny([
+          'views', 'ordersCount', 'totalRevenue', 'createdAt', 'createdBy'
+        ]);
       allow delete: if canManage(resource.data.storeId, 'landing:manage');
     }
 

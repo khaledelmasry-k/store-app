@@ -374,7 +374,16 @@ export const MerchantLandingPages: FunctionalComponent = () => {
       <Drawer open={open} onClose={() => setOpen(false)} title={form.id ? 'تعديل صفحة هبوط' : 'صفحة هبوط جديدة'} size="lg">
         <div className="grid grid-2">
           <Input label="عنوان الصفحة" value={form.title} onChange={(v) => setForm({ ...form, title: v })} required placeholder="مثال: عرض خاص على الشاي" />
-          <Input label="الرابط (slug)" value={form.slug} onChange={(v) => setForm({ ...form, slug: v })} hint="فارغ = يُنشأ تلقائياً من العنوان" />
+          {/* The slug is global across every store, so it is fixed once the
+              createLandingPage callable has claimed it. Editing it here would
+              only be rejected by the rules. "تكرار" makes a page with a new one. */}
+          <Input
+            label="الرابط (slug)"
+            value={form.slug}
+            onChange={(v) => setForm({ ...form, slug: v })}
+            disabled={Boolean(form.id)}
+            hint={form.id ? 'الرابط ثابت بعد الإنشاء — استخدم «تكرار» لصفحة برابط جديد' : 'فارغ = يُنشأ تلقائياً من العنوان'}
+          />
         </div>
         <div className="grid grid-2">
           <Select label="القالب" value={form.template} onChange={(v) => setForm({ ...form, template: v })} options={STORE_TEMPLATES.map((t) => ({ value: t.id, label: t.name }))} />
