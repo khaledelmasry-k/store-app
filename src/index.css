@@ -12545,3 +12545,44 @@ html.has-scroll-reveal [data-reveal].is-revealed {
     transition: none;
   }
 }
+
+/* ── Mobile input & touch polish ────────────────────────────────────────────
+   Measured with a browser audit across 360/375/390/768px on every public
+   route; each rule below fixes something that audit caught.
+   ------------------------------------------------------------------------ */
+
+/* iOS Safari zooms the whole page when a focused form control renders below
+   16px, and every form on the site was between 13.1px and 15.2px — so the
+   layout jumped on the first tap of login, registration, password reset and
+   the shipping-partner application. 16px is the threshold, not a preference;
+   it applies only at touch widths so the desktop type scale is untouched. */
+@media (max-width: 860px) {
+  input:not([type='checkbox']):not([type='radio']),
+  textarea,
+  select {
+    font-size: 16px;
+  }
+}
+
+/* Icon-only controls were 34x34 and 38x32 — under the 44px minimum for a
+   finger. Text links are left alone: an inline link inside a sentence is
+   exempt, and padding one out would break the line it sits in. */
+@media (hover: none) and (pointer: coarse) {
+  .auth-vis-toggle,
+  .landing-theme-toggle,
+  .landing-menu-toggle {
+    min-width: 44px;
+    min-height: 44px;
+  }
+
+  /* A 16px checkbox is a hard target; the label beside it stays the wider
+     hit area, but the box itself should be reachable on its own. */
+  input[type='checkbox'],
+  input[type='radio'] {
+    width: 20px;
+    height: 20px;
+  }
+}
+
+/* Component-specific mobile type sizes live in their own sheets, which load
+   after this one and would otherwise win on equal specificity. */

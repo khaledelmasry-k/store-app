@@ -128,7 +128,7 @@
   text-align: center;
   transition: transform 0.38s ease, border-color 0.38s ease, box-shadow 0.38s ease, background 0.38s ease;
 }
-.oj-card-step { position: absolute; top: 12px; right: 13px; color: #94a3b8; font-size: 10px; font-weight: 800; letter-spacing: 0.12em; }
+.oj-card-step { position: absolute; top: 12px; right: 13px; color: #94a3b8; font-size: 11px; font-weight: 800; letter-spacing: 0.12em; }
 .oj-card-node { display: none; }
 .oj-card-icon {
   display: grid;
@@ -144,9 +144,9 @@
   transition: color 0.35s ease, background 0.35s ease, border-color 0.35s ease, transform 0.35s ease;
 }
 .oj-card-copy { display: flex; min-width: 0; flex-direction: column; align-items: center; }
-.oj-card-en { color: #8993a8; font-size: 10px; font-weight: 700; letter-spacing: 0.06em; text-transform: uppercase; }
+.oj-card-en { color: #8993a8; font-size: 11px; font-weight: 700; letter-spacing: 0.06em; text-transform: uppercase; }
 .oj-card-label { margin-top: 2px; color: var(--oj-ink); font-size: 15px; line-height: 1.35; }
-.oj-card-subtitle { margin-top: 3px; color: var(--oj-muted); font-size: 11px; line-height: 1.4; }
+.oj-card-subtitle { margin-top: 3px; color: var(--oj-muted); font-size: 12px; line-height: 1.4; }
 .oj-card-check { position: absolute; top: 11px; left: 11px; display: grid; width: 19px; height: 19px; place-items: center; border-radius: 50%; background: #e0e7ff; color: var(--oj-brand); font-size: 11px; }
 .oj-card.is-done { background: rgba(249, 250, 255, 0.97); }
 .oj-card.is-done .oj-card-icon { border-color: #c7d2fe; background: #f3f4ff; }
@@ -180,7 +180,7 @@ html[data-theme='dark'] .oj-card.is-active .oj-card-label { color: #c7d2fe; }
   .oj-cards { gap: 8px; }
   .oj-card { min-height: 150px; padding-inline: 8px; }
   .oj-card-label { font-size: 14px; }
-  .oj-card-subtitle { font-size: 10px; }
+  .oj-card-subtitle { font-size: 12px; }
 }
 
 /* Phone composition: cards own the route so no detached whitespace exists. */
@@ -233,7 +233,7 @@ html[data-theme='dark'] .oj-card.is-active .oj-card-label { color: #c7d2fe; }
   .oj-card.is-active .oj-card-node { background: var(--oj-brand); box-shadow: 0 0 0 5px rgba(99, 102, 241, 0.13); }
   .oj-card-icon { width: 43px; height: 43px; flex: 0 0 43px; margin: 0; font-size: 20px; }
   .oj-card-copy { align-items: flex-start; text-align: right; }
-  .oj-card-en { font-size: 9px; }
+  .oj-card-en { font-size: 11px; }
   .oj-card-label { font-size: 15px; }
   .oj-card-subtitle { font-size: 11px; }
   .oj-card-check { top: auto; bottom: 11px; left: 13px; }

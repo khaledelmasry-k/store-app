@@ -1001,3 +1001,25 @@ html[data-theme='dark'] .auth-console .auth-panel-visual {
     font-size: 0.65rem;
   }
 }
+
+/* Touch sizing. iOS Safari zooms the page whenever a focused control renders
+   below 16px, and these inputs were 0.95rem (15.2px) — so every sign-in and
+   registration on an iPhone jumped on the first tap. The icon button and the
+   remember-me box were also under the 44px finger minimum. */
+@media (max-width: 860px) {
+  .auth-console .auth-input-wrap input {
+    font-size: 16px;
+  }
+}
+
+@media (hover: none) and (pointer: coarse) {
+  .auth-console .auth-vis-toggle {
+    width: 44px;
+    height: 44px;
+  }
+
+  .auth-console .auth-remember input {
+    width: 20px;
+    height: 20px;
+  }
+}

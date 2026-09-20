@@ -537,3 +537,16 @@ html[data-theme='dark'] .shipping-apply-input {
   .shipping-apply-panel { width: calc(100% - 12px); padding: 16px 12px; }
   .shipping-apply-grid { gap: 12px; }
 }
+
+/* Same iOS zoom threshold as the auth forms: these were 14px. */
+@media (max-width: 860px) {
+  .shipping-apply-input,
+  textarea.shipping-apply-input {
+    font-size: 16px;
+  }
+
+  .shipping-apply-hint,
+  .shipping-apply-label .optional {
+    font-size: 12px;
+  }
+}
