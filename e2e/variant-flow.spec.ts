@@ -422,3 +422,55 @@ test('backend rejects a manipulated order item naming a non-existent variant', a
   const prod = await db.doc(`products/${productId}`).get()
   expect(prod.data()?.variants.find((v: any) => v.id === 'black-m').stock).toBe(5)
 })
+
+// A cart holding more than one product is the ordinary storefront case, yet it
+// used to abort the whole checkout: createOrder read each product inside the
+// transaction *after* writing the previous product's stock, which Firestore
+// rejects ("all reads before all writes"). Every multi-product order failed
+// with a bare INTERNAL error. This also pins the duplicate-line behaviour —
+// two lines of the same product must decrement it once, by their total.
+test('a cart with several products checks out and decrements each product once', async () => {
+  const c = ctx()
+  const storeId = await ensureVariantStore(c.slug, c.email, `متجر المتغيرات ${c.uniq}`)
+  const variantProductId = await seedVariantProduct(storeId)
+
+  const plainRef = db.collection('products').doc()
+  await plainRef.set({
+    id: plainRef.id, storeId, name: 'منتج بسيط بدون متغيرات', price: 150, description: 'منتج تجريبي',
+    images: [], stock: 20, variants: [], colors: [], sizes: [], active: true,
+    createdAt: admin.firestore.FieldValue.serverTimestamp(),
+    updatedAt: admin.firestore.FieldValue.serverTimestamp(),
+  })
+
+  await signInMerchant(`variant-owner-${c.slug}`)
+  const createOrder = httpsCallable(clientFunctions, 'createOrder')
+  const response: any = await createOrder({
+    storeId,
+    items: [
+      { productId: variantProductId, variantId: 'black-m', color: 'Black', size: 'M', quantity: 2 },
+      { productId: plainRef.id, quantity: 3 },
+      // Same product again — the cart can legitimately produce this.
+      { productId: plainRef.id, quantity: 1 },
+    ],
+    customer: { name: 'عميل متعدد', phone: '01099988877', governorate: 'القاهرة', city: 'القاهرة', address: 'عنوان تجريبي' },
+    paymentMethod: 'cod',
+  })
+
+  const orderId = String(response?.data?.orderId || '')
+  expect(orderId).toBeTruthy()
+
+  const order = (await db.doc(`orders/${orderId}`).get()).data()!
+  expect(order.items).toHaveLength(3)
+  // 500×2 + 150×3 + 150×1
+  expect(order.subtotal).toBe(1600)
+
+  // Variant stock comes off the matched variant only; the flat `stock` field is
+  // the recomputed aggregate.
+  const variantProduct = (await db.doc(`products/${variantProductId}`).get()).data()!
+  expect(variantProduct.variants.find((v: any) => v.id === 'black-m').stock).toBe(3)
+  expect(variantProduct.stock).toBe(variantProduct.variants.reduce((s: number, v: any) => s + v.stock, 0))
+
+  // 20 − (3 + 1): both lines applied, neither overwritten by the other.
+  const plainProduct = (await db.doc(`products/${plainRef.id}`).get()).data()!
+  expect(plainProduct.stock).toBe(16)
+})

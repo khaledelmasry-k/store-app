@@ -1575,10 +1575,26 @@ export const createOrder = onCall({ region: SHIPPING_FUNCTION_REGION, secrets: [
     const orderNumber = `ORD-${String(seq).padStart(5, '0')}`
     const couponSnap = couponRef ? await tx.get(couponRef) : null
 
+    // Every product the cart references is read here, before the first stock
+    // write. Reading one product after writing another aborts the whole
+    // transaction ("all reads before all writes"), which broke checkout for
+    // any cart holding more than one product.
+    const productSnapsInTx = productIds.length
+      ? await tx.getAll(...productIds.map((id) => db.doc(`products/${id}`)))
+      : []
+    const productInTxById = new Map<string, any>()
+    for (const snap of productSnapsInTx) {
+      if (snap.exists) productInTxById.set(snap.id, snap.data()!)
+    }
+
+    // Stock is applied once per product after the loop, so several lines of the
+    // same product decrement it by their total instead of overwriting each other.
+    const variantStockDirty = new Set<string>()
+    const flatStockDecrement = new Map<string, number>()
+
     for (const item of items) {
-      const productSnap = await tx.get(db.doc(`products/${item.productId}`))
-      if (!productSnap.exists) throw new HttpsError('failed-precondition', `المنتج ${item.productId} غير موجود`)
-      const product = productSnap.data()!
+      const product = productInTxById.get(String(item.productId))
+      if (!product) throw new HttpsError('failed-precondition', `المنتج ${item.productId} غير موجود`)
 
       // Multi-tenancy guard: the product must belong to the order's store.
       if (product.storeId !== storeId) {
@@ -1620,11 +1636,10 @@ export const createOrder = onCall({ region: SHIPPING_FUNCTION_REGION, secrets: [
         }
         // Single source of truth: decrement ONLY the matched variant. The flat
         // `stock` field is a derived aggregate (sum of variant stock) for variant
-        // products — recompute it here rather than decrementing it independently,
-        // which would double-subtract the same units.
+        // products — recompute it after the loop rather than decrementing it
+        // independently, which would double-subtract the same units.
         matchedVariant.stock -= qty
-        const aggStock = product.variants.reduce((s: number, v: any) => s + (v.stock || 0), 0)
-        tx.update(db.doc(`products/${item.productId}`), { variants: product.variants, stock: aggStock })
+        variantStockDirty.add(String(item.productId))
       } else if (Array.isArray(product.variants) && product.variants.length > 0) {
         // The product defines variants but the submitted variantId / color+size
         // resolves to none. This is a manipulated or stale request — do NOT fall
@@ -1633,7 +1648,10 @@ export const createOrder = onCall({ region: SHIPPING_FUNCTION_REGION, secrets: [
         throw new HttpsError('failed-precondition', `المتغير غير موجود للمنتج ${product.name}`)
       } else {
         if ((product.stock || 0) < qty) throw new HttpsError('failed-precondition', `الكمية غير متوفرة لـ ${product.name}`)
-        tx.update(db.doc(`products/${item.productId}`), { stock: FieldValue.increment(-qty) })
+        // Keep the running total on the shared snapshot so a later line of the
+        // same product is checked against what is actually left.
+        product.stock = Number(product.stock || 0) - qty
+        flatStockDecrement.set(String(item.productId), (flatStockDecrement.get(String(item.productId)) || 0) + qty)
       }
 
       // Resolve pricing server-side. Quantity-tier pricing is recomputed
@@ -1693,6 +1711,18 @@ export const createOrder = onCall({ region: SHIPPING_FUNCTION_REGION, secrets: [
         size: (matchedVariant?.size ?? item.size) || '',
         ...(variantId ? { variantId } : {}),
       })
+    }
+
+    // First writes of the transaction — every read above is already done.
+    for (const productId of variantStockDirty) {
+      const product = productInTxById.get(productId)!
+      tx.update(db.doc(`products/${productId}`), {
+        variants: product.variants,
+        stock: product.variants.reduce((sum: number, variant: any) => sum + (variant.stock || 0), 0),
+      })
+    }
+    for (const [productId, decrement] of flatStockDecrement) {
+      tx.update(db.doc(`products/${productId}`), { stock: FieldValue.increment(-decrement) })
     }
 
     if (couponSnap) {
