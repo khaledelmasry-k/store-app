@@ -12642,4 +12642,9 @@ html[data-theme='dark'] .sidebar-group-header.active span {
 [data-theme='dark'] .btn-primary,
 html[data-theme='dark'] .btn-primary {
   color: #fff !important;
+  /* The fill is pinned too. `--primary` resolves differently per page
+     because of the token collision described above — #3525cd inside the
+     dashboard, #6366f1 on the landing page — and white on the latter is
+     4.46:1, just under the floor. #5457e0 is 5.5:1 and matches both. */
+  background: #5457e0 !important;
 }

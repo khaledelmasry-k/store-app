@@ -305,3 +305,20 @@ html[data-theme='dark'] .landing-enterprise-offer .landing-enterprise-cta:hover 
    therefore takes over at 860px, not at the 760px used by the rest of the
    layout, which is fine two-column down to 760. */
 @media (max-width:860px){.landing-menu-toggle{display:grid;place-items:center}.landing-nav{display:none;position:absolute;inset-inline:16px;top:72px;flex-direction:column;align-items:stretch;padding:12px;border:1px solid var(--line);border-radius:14px;background:#fff;box-shadow:0 20px 40px #202a5a1a}.landing-nav.open{display:flex}.landing-nav-link,.landing-nav-btn,.landing-theme-toggle{width:100%;text-align:center}}
+
+/* Contrast fixes found by auditing at 390px, where the type scale drops below
+   the "large text" threshold and the 3:1 allowance no longer applies. */
+
+/* The step numbers were #b4baf4 on white: 1.86:1, under 3:1 even as large
+   text. #7e88e0 reaches 3.24:1 and still reads as a soft accent. */
+.landing-step strong { color: #7e88e0; }
+
+/* `--brand` is a deep purple and the dark theme never overrides it, so every
+   accent built from it sat on a near-black surface. The stat figures measured
+   2.52:1. These two surfaces get explicit dark-theme colours rather than a
+   token change, because --brand is also a button *fill*, where a lighter
+   value would break the white label sitting on it. */
+html[data-theme='dark'] .landing-stat strong { color: #9aa2ff; }
+html[data-theme='dark'] .landing-plan-link,
+html[data-theme='dark'] .landing-special-cta,
+html[data-theme='dark'] .landing-nav-btn-primary { background: #5457e0; }

@@ -21,6 +21,7 @@
     "verify:shipping-provider-neutral": "npm --prefix functions run build && node scripts/verify-shipping-provider-neutral.mjs",
     "verify:shipping-commercial": "node scripts/verify-shipping-commercial.mjs",
     "verify:pricing-parity": "node scripts/verify-pricing-parity.mjs",
+    "verify:ui-audit": "node scripts/verify-ui-audit.mjs",
     "verify:coupon-checkout": "npm --prefix functions run build && firebase emulators:exec --project mk-store-app --only auth,firestore,functions,storage \"node scripts/verify-coupon-checkout.mjs\"",
     "verify:production-runtime": "node scripts/verify-production-runtime.mjs",
     "verify:production-dist": "node scripts/verify-production-dist.mjs",
