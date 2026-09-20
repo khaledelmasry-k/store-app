@@ -74,6 +74,50 @@ const VIEWPORTS = [
   { name: 'desktop', width: 1280, height: 900, touch: false },
 ]
 
+/**
+ * A refused connection is the most common reason a run produces nothing
+ * useful, and finding out twenty audited pages later wastes a round trip.
+ * Check the services this group actually needs, up front, and name the
+ * terminal that starts whichever one is down.
+ */
+async function reachable(url) {
+  try {
+    await fetch(url, { signal: AbortSignal.timeout(2500) })
+    return true
+  } catch (e) {
+    // Any HTTP answer at all means something is listening; only a refused
+    // or unreachable socket means the service is not running.
+    return !/ECONNREFUSED|EHOSTUNREACH|ENOTFOUND|timed out|aborted/i.test(String(e.cause?.code || e.message))
+  }
+}
+
+async function preflight(groupNames) {
+  const needsEmulators = groupNames.some((g) => g !== 'public')
+  const needsFunctions = groupNames.includes('storefront')
+  const checks = [[BASE, 'preview server', 'npm run build -- --mode emulator && npx vite preview --port 4173']]
+  if (needsEmulators) checks.push(['http://127.0.0.1:8080', 'firestore emulator', 'npm run emulators'])
+  if (needsFunctions) checks.push(['http://127.0.0.1:5001', 'functions emulator', 'npm run emulators   (make sure "functions" is in the list it prints)'])
+
+  const down = []
+  for (const [url, what, how] of checks) if (!(await reachable(url))) down.push([url, what, how])
+  if (!down.length) return
+
+  console.error('\nCannot audit — these are not running:\n')
+  for (const [url, what, how] of down) console.error(`  ${what} (${url})\n      start it with:  ${how}\n`)
+  if (needsFunctions && down.some((d) => d[1] === 'functions emulator')) {
+    console.error('  Without the functions emulator every /store/ route renders the')
+    console.error('  "store not found" card, so the audit would measure nothing real.\n')
+  }
+  process.exit(2)
+}
+
+const groups = GROUP === 'all' ? Object.keys(GROUPS) : [GROUP]
+if (groups.some((g) => !GROUPS[g])) {
+  console.error(`Unknown group. Pick one of: ${Object.keys(GROUPS).join(', ')}, all`)
+  process.exit(2)
+}
+await preflight(groups)
+
 const browser = await chromium.launch({ executablePath: EXECUTABLE })
 let violations = 0
 let layoutIssues = 0
@@ -151,11 +195,6 @@ async function auditRoute(context, route, viewport, theme) {
   return { ...result, navError, consoleErrors: [...new Set(consoleErrors)].slice(0, 3), snippet }
 }
 
-const groups = GROUP === 'all' ? Object.keys(GROUPS) : [GROUP]
-if (groups.some((g) => !GROUPS[g])) {
-  console.error(`Unknown group. Pick one of: ${Object.keys(GROUPS).join(', ')}, all`)
-  process.exit(2)
-}
 
 for (const groupName of groups) {
   const group = GROUPS[groupName]
