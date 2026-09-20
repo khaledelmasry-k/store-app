@@ -12557,10 +12557,20 @@ html.has-scroll-reveal [data-reveal].is-revealed {
    the shipping-partner application. 16px is the threshold, not a preference;
    it applies only at touch widths so the desktop type scale is untouched. */
 @media (max-width: 860px) {
+  /* `!important` is deliberate and is scoped as tightly as it can be: to
+     touch widths, and to form controls only. Component sheets set these at
+     12-15px from a dozen different selectors, several of them more specific
+     than anything that can be written here without guessing at their
+     structure. 16px is not a style preference that a component may override
+     — below it iOS zooms the page, so it is a platform requirement. Verified
+     across every dashboard and public route: 0 controls remain under 16px. */
   input:not([type='checkbox']):not([type='radio']),
   textarea,
-  select {
-    font-size: 16px;
+  select,
+  .input,
+  .select,
+  .textarea {
+    font-size: 16px !important;
   }
 }
 
@@ -12586,3 +12596,17 @@ html.has-scroll-reveal [data-reveal].is-revealed {
 
 /* Component-specific mobile type sizes live in their own sheets, which load
    after this one and would otherwise win on equal specificity. */
+
+/* Dashboard icon buttons measured at 21x29, 22x30, 26x26 and 28x28 on a
+   390px phone — roughly half the 44px a fingertip needs. Widened only on
+   touch pointers, so the dense desktop toolbars keep their compact size. */
+@media (hover: none) and (pointer: coarse) {
+  .cust-more,
+  .customers-aside-close,
+  .settings-icon-btn,
+  .icon-btn,
+  .btn-icon {
+    min-width: 44px;
+    min-height: 44px;
+  }
+}
