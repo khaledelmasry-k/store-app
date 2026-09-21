@@ -24,6 +24,7 @@ import {
   permanentlyDeleteMerchantCallable,
   reactivateMerchantCallable,
   suspendMerchantCallable,
+  suspendFreePlanSubscriptionsCallable,
   startImpersonation,
   type MerchantDeletionPreview,
 } from '../../shared/services/auth'
@@ -88,6 +89,8 @@ export const PlatformMerchants: FunctionalComponent = () => {
   const [deleting, setDeleting] = useState(false)
   const [deletePreview, setDeletePreview] = useState<MerchantDeletionPreview | null>(null)
   const [previewLoading, setPreviewLoading] = useState(false)
+  const [freePlanConfirmOpen, setFreePlanConfirmOpen] = useState(false)
+  const [suspendingFreePlans, setSuspendingFreePlans] = useState(false)
 
   const hasLimit = (r: PlatformMerchantRow) => r.orderLimit > 0
 
@@ -181,6 +184,25 @@ export const PlatformMerchants: FunctionalComponent = () => {
       toast.push(`فشل ${label} التاجر`, err?.message || 'حدث خطأ غير متوقع', 'error')
     } finally {
       setBusyId(null)
+    }
+  }
+
+  const handleSuspendFreePlans = async () => {
+    setSuspendingFreePlans(true)
+    try {
+      const res = await suspendFreePlanSubscriptionsCallable()
+      const count = Number((res.data as { suspendedCount?: number })?.suspendedCount || 0)
+      toast.push(
+        count > 0 ? 'تم إيقاف الباقات المجانية' : 'لا توجد باقات مجانية نشطة',
+        count > 0 ? `تم إيقاف ${count} اشتراك مجاني فورًا. سيُطلب من هؤلاء التجار الاشتراك في باقة مدفوعة.` : undefined,
+        'success',
+      )
+      setFreePlanConfirmOpen(false)
+      await refresh()
+    } catch (err: any) {
+      toast.push('فشل إيقاف الباقات المجانية', err?.message || 'حدث خطأ غير متوقع', 'error')
+    } finally {
+      setSuspendingFreePlans(false)
     }
   }
 
@@ -283,10 +305,28 @@ export const PlatformMerchants: FunctionalComponent = () => {
             >
               حذف المحدد ({selectedTestCount})
             </Button>
+            <Button variant="outline" icon="block" onClick={() => setFreePlanConfirmOpen(true)}>
+              إيقاف الباقات المجانية
+            </Button>
             <Button icon="add" onClick={() => setOpen(true)}>إضافة متجر</Button>
             </div>
           }
         />
+
+      <Modal open={freePlanConfirmOpen} onClose={() => (suspendingFreePlans ? null : setFreePlanConfirmOpen(false))} title="إيقاف الباقات المجانية">
+        <p className="muted">
+          هذا الإجراء سيوقف فورًا كل اشتراك على الباقة المجانية (Free) بحالة نشطة، ويطلب من هؤلاء التجار الاشتراك
+          في باقة مدفوعة لاستكمال الخدمة. لن يتأثر التجار المشتركون بالفعل في باقات مدفوعة.
+        </p>
+        <div className="flex" style={{ justifyContent: 'flex-end', gap: 8, marginTop: 16 }}>
+          <Button variant="outline" onClick={() => setFreePlanConfirmOpen(false)} disabled={suspendingFreePlans}>
+            إلغاء
+          </Button>
+          <Button onClick={handleSuspendFreePlans} disabled={suspendingFreePlans}>
+            {suspendingFreePlans ? 'جاري الإيقاف...' : 'تأكيد الإيقاف'}
+          </Button>
+        </div>
+      </Modal>
 
       {error && (
         <Card className="mb-2">

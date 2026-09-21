@@ -498,6 +498,11 @@ export function reactivateMerchantCallable(input: { merchantId: string }) {
   return httpsCallable(functions, 'reactivateMerchant')(input)
 }
 
+export function suspendFreePlanSubscriptionsCallable() {
+  const functions = getFunctions()
+  return httpsCallable(functions, 'suspendFreePlanSubscriptions')({})
+}
+
 export interface MerchantDeletionPreview {
   status: 'ready' | 'deletion_failed' | 'deleting' | 'already_deleted'
   merchantId: string

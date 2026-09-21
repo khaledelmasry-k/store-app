@@ -13,7 +13,12 @@ export const MerchantShell: FunctionalComponent = ({ children }) => {
   const { store, setStoreId } = useStore()
 
   useEffect(() => {
-    if (!user || store?.id || !user.storeIds?.length) return
+    if (!user || !user.storeIds?.length) return
+    // A store cached from a previous account state (localStorage) can point at
+    // a store the merchant no longer owns. Only trust it once it's confirmed
+    // to still be one of the merchant's own stores; otherwise fall back to the
+    // merchant's current first store so the dashboard never renders stale data.
+    if (store?.id && user.storeIds.includes(store.id)) return
     setStoreId(user.storeIds[0])
   }, [user?.uid, user?.storeIds, store?.id, setStoreId])
 

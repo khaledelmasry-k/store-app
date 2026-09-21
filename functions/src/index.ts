@@ -5103,6 +5103,48 @@ export const reactivateMerchant = onCall(PLATFORM_ADMIN_APPCHECK_OPTIONS, async 
   return { ok: true, merchantId, status: 'active' }
 })
 
+// The Free plan is deprecated: it accepts no new registrations (see
+// PUBLIC_PAID_PLAN_IDS) but existing Free subscriptions were left running
+// indefinitely because they carry no currentPeriodEnd/expiresAt for the
+// normal expiry check to act on. This lets platform admin end them all in
+// one deliberate action instead of waiting on a scheduled sweep.
+export const suspendFreePlanSubscriptions = onCall(PLATFORM_ADMIN_APPCHECK_OPTIONS, async (request: CallableRequest<{}>) => {
+  assertPlatformAdminAppCheck(request)
+  await assertPlatformAdmin(request)
+  const snap = await db
+    .collection('subscriptions')
+    .where('planId', '==', 'plan-free')
+    .where('status', 'in', ['active', 'trialing'])
+    .get()
+  if (snap.empty) return { ok: true, suspendedCount: 0, storeIds: [] }
+
+  const storeIds: string[] = []
+  const BATCH_LIMIT = 400
+  for (let i = 0; i < snap.docs.length; i += BATCH_LIMIT) {
+    const batch = db.batch()
+    for (const doc of snap.docs.slice(i, i + BATCH_LIMIT)) {
+      batch.update(doc.ref, { status: 'suspended', suspendedReason: 'free_plan_deprecated', updatedAt: now() })
+      const storeId = String(doc.data()?.storeId || '')
+      if (storeId) storeIds.push(storeId)
+    }
+    await batch.commit()
+  }
+
+  for (const doc of snap.docs) {
+    const storeId = String(doc.data()?.storeId || '')
+    if (!storeId) continue
+    await createBillingNotification(
+      storeId,
+      null,
+      'الباقة المجانية لم تعد متاحة',
+      'تم إيقاف الباقة المجانية لهذا المتجر. رجاءً اشترك في إحدى الباقات المدفوعة لاستمرار الخدمة.',
+    ).catch(() => {})
+    await auditLog(storeId, request.auth!.uid, 'free_subscription_suspended', 'subscriptions', doc.id, {}).catch(() => {})
+  }
+
+  return { ok: true, suspendedCount: snap.docs.length, storeIds }
+})
+
 export const getMerchantDeletionPreview = onCall(async (request: CallableRequest<{ merchantId?: string }>) => {
   await assertPlatformAdmin(request)
   const merchantId = String(request.data?.merchantId || '').trim()

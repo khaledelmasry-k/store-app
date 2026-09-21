@@ -74,6 +74,12 @@ export const MerchantShipping: FunctionalComponent = () => {
   const storeId = store?.id || ''
   const shippingRes = useCollection<ShippingZone>('shipping', { storeId })
   const shipmentsRes = useCollection<Shipment>('shipments', { storeId }, Boolean(storeId))
+  // Client-side fallback only: the server-computed `merchantMonthlyVolume`
+  // (30-day windowed) is preferred whenever it's available.
+  const last30DayShipmentCount = shipmentsRes.data.filter((shipment) => {
+    const createdAtMs = shipment.createdAt?.seconds ? shipment.createdAt.seconds * 1000 : 0
+    return createdAtMs >= Date.now() - 30 * 24 * 60 * 60 * 1000
+  }).length
   const settlementsRes = useCollection<ShippingSettlement>('shippingSettlements', { storeId }, Boolean(storeId))
   const zones = shippingRes.data
   const toast = useToast()
@@ -427,7 +433,7 @@ export const MerchantShipping: FunctionalComponent = () => {
         <div className="grid grid-2">
           <div><Input label="حجم الشحن الشهري المتوقع" type="number" value={expectedVolume} onChange={setExpectedVolume} /><Button size="sm" onClick={() => void saveShippingProfile()}>حفظ الاحتياجات</Button></div>
           <div><span className="field-label">المحافظات المستهدفة</span><div className="shipping-governorate-picker">{GOVER_EG.map((governorate) => <label key={governorate}><input type="checkbox" checked={targetGovernorates.includes(governorate)} onChange={() => setTargetGovernorates((current) => current.includes(governorate) ? current.filter((value) => value !== governorate) : [...current, governorate])} /> {governorate}</label>)}</div></div>
-          <div className="shipping-secure-note"><Icon name="info" ariaHidden /><span>الحجم الفعلي آخر 30 يوم: {platformProviders[0]?.eligibility?.merchantMonthlyVolume ?? shipmentsRes.data.length} شحنة · المتوقع: {expectedVolume || 0}</span></div>
+          <div className="shipping-secure-note"><Icon name="info" ariaHidden /><span>الحجم الفعلي آخر 30 يوم: {platformProviders[0]?.eligibility?.merchantMonthlyVolume ?? last30DayShipmentCount} شحنة · المتوقع: {expectedVolume || 0}</span></div>
         </div>
       </Card>}
       {tab === 'overview' && <div className="shipping-page-context">
@@ -470,7 +476,7 @@ export const MerchantShipping: FunctionalComponent = () => {
 
       {tab === 'companies' && <>
         <Card title="شركات الشحن المتكاملة" subtitle="شركات الشحن المتعاقدة عبر API فقط — الشحن اليدوي يدار من قسم منفصل أدناه." className="mt-2">
-        {platformLoading ? <Loading /> : apiProviders.length === 0 ? <p className="muted">لم تُفعّل إدارة المنصة أي شركة شحن متكاملة بعد.</p> : <div className="card-grid shipping-providers-grid" style={{ gridTemplateColumns: 'repeat(auto-fill, minmax(360px, 1fr))' }}>
+        {platformLoading ? <Loading /> : apiProviders.length === 0 ? <p className="muted">لم تُفعّل إدارة المنصة أي شركة شحن متكاملة بعد.</p> : <div className="card-grid shipping-providers-grid">
           {apiProviders
             .filter((entry) => entry.provider.status === 'active' && (entry.provider.publicListing?.enabled !== false || entry.config?.enabled))
             .map((entry) => {
@@ -582,8 +588,8 @@ export const MerchantShipping: FunctionalComponent = () => {
         <div className="mt-2">
           <div className="stats-grid">
             <StatsCard title="شركات الشحن المتاحة" value={platformLoading ? '—' : platformProviders.length} icon="local_shipping" tone="primary" />
-            <StatsCard title="الشحنات آخر 30 يومًا" value={platformLoading ? '—' : (platformProviders[0]?.eligibility?.merchantMonthlyVolume ?? shipmentsRes.data.length)} icon="local_shipping" tone="indigo" />
-            <StatsCard title="الشحنات قيد التوصيل" value={shipmentsRes.data.filter((shipment) => !['DELIVERED', 'RETURNED', 'CANCELLED'].includes(shipment.status)).length} icon="local_shipping" tone="blue" />
+            <StatsCard title="الشحنات آخر 30 يومًا" value={platformLoading ? '—' : (platformProviders[0]?.eligibility?.merchantMonthlyVolume ?? last30DayShipmentCount)} icon="local_shipping" tone="indigo" />
+            <StatsCard title="الشحنات قيد التوصيل" value={shipmentsRes.data.filter((shipment) => ['PICKED_UP', 'IN_TRANSIT', 'OUT_FOR_DELIVERY'].includes(shipment.status)).length} icon="local_shipping" tone="blue" />
           </div>
           {getCurrentProvider() && (() => {
             const current = getCurrentProvider()!
