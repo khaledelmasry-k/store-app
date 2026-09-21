@@ -75,6 +75,13 @@ export const PlatformShippingCompanyDetails: FunctionalComponent<{ id: string }>
     <div id="capabilities" className="platform-detail-grid">
       <Card title="قدرات الشركة"><div className="shipping-capability-list">{[['supportsCOD', 'الدفع عند الاستلام'], ['supportsTracking', 'التتبع'], ['supportsReturns', 'المرتجعات'], ['supportsWebhooks', 'Webhooks'], ['supportsPickup', 'استلام الشحنات']].map(([key, label]) => <span className={company[key as keyof ShippingProviderDefinition] ? 'is-on' : ''} key={key}>{company[key as keyof ShippingProviderDefinition] ? '✓' : '—'} {label}</span>)}</div></Card>
       <Card title={merchantManagedApi ? 'طريقة الربط' : 'الإعدادات الآمنة'}>{merchantManagedApi ? <p className="muted">تُتاح {company.name} للتجار من لوحة الشحن. يضيف كل تاجر مفتاح API الخاص به ويختبره هناك؛ لا تُحفظ مفاتيح التجار أو تُعرض في لوحة المنصة.</p> : <dl className="shipping-provider-dl"><div><dt>Provider key</dt><dd>{company.slug}</dd></div><div><dt>مصدر الاعتماد</dt><dd>{company.credentialMode}</dd></div><div><dt>البلدان</dt><dd>{company.supportedCountries?.join('، ') || 'غير محددة'}</dd></div><div><dt>الأسرار</dt><dd>لا تُعرض في المتصفح</dd></div></dl>}</Card>
+      <Card title="الملف التجاري">
+        <dl className="shipping-provider-dl">
+          <div><dt>الاسم القانوني</dt><dd>{company.businessProfile?.legalName || 'غير محدد'}</dd></div>
+          <div><dt>الموقع الإلكتروني</dt><dd>{company.businessProfile?.websiteUrl ? <a href={company.businessProfile.websiteUrl} target="_blank" rel="noreferrer">{company.businessProfile.websiteUrl}</a> : 'غير محدد'}</dd></div>
+          <div><dt>توثيق API</dt><dd>{company.businessProfile?.apiDocsUrl ? <a href={company.businessProfile.apiDocsUrl} target="_blank" rel="noreferrer">فتح التوثيق</a> : 'غير محدد'}</dd></div>
+        </dl>
+      </Card>
     </div>
     <Card title="الخدمات والأسعار"><div className="stack-list">{company.services?.filter((service) => service.enabled !== false).map((service) => <div className="list-row" key={service.code}><div><strong>{service.name}</strong> <span className="muted small">({service.code}) · {service.rateMode === 'zone' ? 'حسب المنطقة' : `${service.fixedRate || 0} ج.م`}</span>{service.zoneRules?.length ? <div className="muted small">{service.zoneRules.map((zone) => `${zone.zoneName}: ${zone.baseRate} ج.م · ${zone.etaMin || '?'}–${zone.etaMax || '?'} ${zone.etaUnit === 'days' ? 'يوم' : 'ساعة'}`).join('، ')}</div> : null}</div><span className="muted small">{service.estimatedMinHours || '?'}–{service.estimatedMaxHours || '?'} ساعة</span></div>) || <p className="muted">لم تُعرّف خدمات بعد.</p>}</div></Card>
     </>}
