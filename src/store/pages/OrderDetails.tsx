@@ -11,6 +11,7 @@ import { OrderTimeline } from '../../shared/components/order/OrderTimeline'
 import { Icon } from '../../shared/components/ui/Icon'
 import { Loading } from '../../shared/components/ui/Loading'
 import type { Order } from '../../shared/types'
+import './OrderDetails.css'
 
 interface Props {
   id: string
@@ -43,7 +44,7 @@ export const StoreOrderDetails: FunctionalComponent<Props> = ({ id }) => {
   const statusTone = visibleOrderStatusTone(order)
 
   return (
-    <div className="storefront-page storefront-order-details">
+    <div className="storefront-page storefront-order-details storefront-order-details--stitch">
       <nav className="store-crumb" aria-label="خيط البيان">
         <Link href={`/store/${store?.slug}`}>الرئيسية</Link>
         <Icon name="chevron_left" ariaHidden />
@@ -127,9 +128,6 @@ export const StoreOrderDetails: FunctionalComponent<Props> = ({ id }) => {
           <div className="order-actions">
             <Link href={`/store/${store?.slug}/account?tab=orders`}><Button variant="outline" block><Icon name="arrow_back" ariaHidden /> العودة لطلباتي</Button></Link>
             <Link href={`/store/${store?.slug}/track`}><Button variant="outline" block><Icon name="local_shipping" ariaHidden /> تتبع الشحنة</Button></Link>
-            {order.status === 'DELIVERED' && (
-              <Button block><Icon name="rate_review" ariaHidden /> تقييم الطلب</Button>
-            )}
           </div>
         </aside>
       </div>

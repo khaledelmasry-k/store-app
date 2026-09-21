@@ -1,0 +1,170 @@
+.storefront-order-details--stitch {
+  max-width: 1220px;
+  margin-inline: auto;
+}
+
+.storefront-order-details--stitch .order-details-grid {
+  display: grid;
+  grid-template-columns: minmax(0, 1.8fr) minmax(300px, .9fr);
+  gap: 28px;
+  align-items: start;
+  margin-block-start: 20px;
+}
+
+.storefront-order-details--stitch .order-main,
+.storefront-order-details--stitch .order-sidebar {
+  display: grid;
+  gap: 16px;
+  min-width: 0;
+}
+
+.storefront-order-details--stitch .order-header-card,
+.storefront-order-details--stitch .order-items-section,
+.storefront-order-details--stitch .order-summary-card,
+.storefront-order-details--stitch .order-info-card,
+.storefront-order-details--stitch .order-shipping-card,
+.storefront-order-details--stitch .order-notes-card {
+  padding: 18px 20px;
+  border: 1px solid var(--outline-variant, #c7c4d8);
+  border-radius: 14px;
+  background: var(--surface, #fff);
+}
+
+.storefront-order-details--stitch .order-header-top {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 12px;
+  margin-block-end: 16px;
+}
+
+.storefront-order-details--stitch .order-number {
+  margin: 0;
+  font-size: 20px;
+}
+
+.storefront-order-details--stitch .order-date {
+  margin: 4px 0 0;
+  font-size: 13px;
+}
+
+.storefront-order-details--stitch .section-title {
+  margin: 0 0 14px;
+  font-size: 17px;
+}
+
+.storefront-order-details--stitch .order-items {
+  display: grid;
+  gap: 12px;
+}
+
+.storefront-order-details--stitch .order-item {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 12px 14px;
+  border: 1px solid var(--outline-variant, #c7c4d8);
+  border-radius: 12px;
+  background: var(--surface-container-low, #f1f3ff);
+}
+
+.storefront-order-details--stitch .order-item-name {
+  margin: 0 0 6px;
+  font-size: 15px;
+}
+
+.storefront-order-details--stitch .order-item-meta {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.storefront-order-details--stitch .meta-tag {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  font-size: 12px;
+  color: var(--muted, #6b7280);
+}
+
+.storefront-order-details--stitch .order-item-price {
+  flex: 0 0 auto;
+  white-space: nowrap;
+}
+
+.storefront-order-details--stitch .summary-rows {
+  display: grid;
+  gap: 8px;
+}
+
+.storefront-order-details--stitch .summary-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  font-size: 14px;
+}
+
+.storefront-order-details--stitch .summary-row.total {
+  margin-block-start: 8px;
+  padding-block-start: 10px;
+  border-top: 1px solid var(--outline-variant, #c7c4d8);
+  font-size: 16px;
+}
+
+.storefront-order-details--stitch .order-info-list,
+.storefront-order-details--stitch .shipping-address {
+  margin: 0;
+  font-size: 14px;
+  line-height: 1.9;
+}
+
+.storefront-order-details--stitch .info-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+}
+
+.storefront-order-details--stitch .info-row dt {
+  color: var(--muted, #6b7280);
+}
+
+.storefront-order-details--stitch .info-row dd {
+  margin: 0;
+}
+
+.storefront-order-details--stitch .shipping-address {
+  font-style: normal;
+  color: var(--foreground, #1f1f29);
+}
+
+.storefront-order-details--stitch .order-notes {
+  margin: 0;
+  font-size: 14px;
+  color: var(--muted, #6b7280);
+}
+
+.storefront-order-details--stitch .order-actions {
+  display: grid;
+  gap: 10px;
+}
+
+.storefront-order-details--stitch .auth-required {
+  display: grid;
+  justify-items: center;
+  gap: 12px;
+  text-align: center;
+  padding: 60px 20px;
+}
+
+.storefront-order-details--stitch .auth-icon {
+  font-size: 48px;
+  color: var(--muted, #6b7280);
+}
+
+@media (max-width: 768px) {
+  .storefront-order-details--stitch .order-details-grid {
+    grid-template-columns: 1fr;
+  }
+}

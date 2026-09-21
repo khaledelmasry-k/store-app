@@ -273,6 +273,16 @@
 .app-shell--platform .platform-customers-page .table-wrap { overflow: auto; }
 .app-shell--platform .platform-products-page .stats-grid,
 .app-shell--platform .platform-customers-page .stats-grid { grid-template-columns: repeat(4, minmax(0, 1fr)); }
+/* Same specificity as the unconditional rule above, so it still wins under
+   1024px — that rule otherwise defeats index.css's .stats-grid breakpoints. */
+@media (max-width: 1024px) {
+  .app-shell--platform .platform-products-page .stats-grid,
+  .app-shell--platform .platform-customers-page .stats-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+}
+@media (max-width: 480px) {
+  .app-shell--platform .platform-products-page .stats-grid,
+  .app-shell--platform .platform-customers-page .stats-grid { grid-template-columns: minmax(0, 1fr); }
+}
 .app-shell--platform .platform-orders-page .orders-toolbar,
 .app-shell--platform .platform-customers-page .filter-bar { border-radius: 12px; background: var(--mka-surface-soft); padding: 12px; }
 .app-shell--platform .platform-order-details-page .order-detail-grid,

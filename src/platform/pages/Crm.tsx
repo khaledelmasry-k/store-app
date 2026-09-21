@@ -15,7 +15,8 @@ import { Modal } from '../../shared/components/ui/Modal'
 import { Textarea } from '../../shared/components/ui/Textarea'
 import { Input } from '../../shared/components/ui/Input'
 import { useToast } from '../../shared/hooks/useToast'
-import { getPlatformCrmDashboardCallable, listPlatformCrmMerchantsCallable, getPlatformMerchant360Callable, updatePlatformMerchantCrmCallable, addPlatformMerchantNoteCallable, upsertPlatformMerchantFollowUpCallable } from '../../shared/services/auth'
+import { getPlatformCrmDashboardCallable, listPlatformCrmMerchantsCallable, getPlatformMerchant360Callable, updatePlatformMerchantCrmCallable, addPlatformMerchantNoteCallable, upsertPlatformMerchantFollowUpCallable, listPlatformMerchantNotesCallable, listPlatformMerchantFollowUpsCallable } from '../../shared/services/auth'
+import { formatDateTime } from '../../shared/utils/format'
 
 const STAGES = ['lead', 'contacted', 'trial', 'onboarding', 'active', 'at_risk', 'renewal_due', 'churned', 'lost']
 
@@ -33,7 +34,17 @@ export const PlatformCrm: FunctionalComponent = () => {
   const [noteBody, setNoteBody] = useState('')
   const [followOpen, setFollowOpen] = useState(false)
   const [followTitle, setFollowTitle] = useState('')
+  const [notes, setNotes] = useState<any[]>([])
+  const [followUps, setFollowUps] = useState<any[]>([])
   const toast = useToast()
+  const loadNotesAndFollowUps = async (merchantId: string) => {
+    const [notesRes, followUpsRes] = await Promise.all([
+      listPlatformMerchantNotesCallable({ merchantId }).catch((): null => null),
+      listPlatformMerchantFollowUpsCallable({ merchantId }).catch((): null => null),
+    ])
+    setNotes((notesRes?.data as any)?.notes || [])
+    setFollowUps((followUpsRes?.data as any)?.followUps || [])
+  }
   const load = async () => {
     setLoading(true); setError('')
     try {
@@ -45,17 +56,30 @@ export const PlatformCrm: FunctionalComponent = () => {
   if (loading) return <Loading message="جارٍ تحميل CRM المنصة…" />
   if (error) return <ErrorState title="تعذر تحميل CRM المنصة" description={error} onRetry={() => void load()} />
   const filtered = merchants.filter((m) => (!query || `${m.storeName} ${m.ownerName} ${m.email}`.toLowerCase().includes(query.toLowerCase())) && (!stage || m.stage === stage) && (!plan || m.plan === plan) && (!subscriptionStatus || m.subscriptionStatus === subscriptionStatus))
-  const openMerchant = async (merchant: any) => { try { const result = await getPlatformMerchant360Callable({ merchantId: merchant.id }); setSelected((result as any).data) } catch { toast.push('تعذر تحميل ملف التاجر', undefined, 'error') } }
+  const openMerchant = async (merchant: any) => {
+    try {
+      const result = await getPlatformMerchant360Callable({ merchantId: merchant.id })
+      setSelected((result as any).data)
+      await loadNotesAndFollowUps(merchant.id)
+    } catch { toast.push('تعذر تحميل ملف التاجر', undefined, 'error') }
+  }
   const saveStage = async (value: string) => { if (!selected?.merchantId) return; await updatePlatformMerchantCrmCallable({ merchantId: selected.merchantId, stage: value }); setSelected({ ...selected, profile: { ...(selected.profile || {}), stage: value } }); toast.push('تم تحديث مرحلة التاجر') }
   const handleAddNote = async () => {
     if (!noteBody.trim() || !selected?.merchantId) return
     await addPlatformMerchantNoteCallable({ merchantId: selected.merchantId, body: noteBody.trim() })
     setNoteBody(''); setNoteOpen(false); toast.push('تمت إضافة الملاحظة')
+    await loadNotesAndFollowUps(selected.merchantId)
   }
   const handleAddFollowUp = async () => {
     if (!followTitle.trim() || !selected?.merchantId) return
     await upsertPlatformMerchantFollowUpCallable({ merchantId: selected.merchantId, title: followTitle.trim(), status: 'open' })
     setFollowTitle(''); setFollowOpen(false); toast.push('تم إنشاء المتابعة')
+    await loadNotesAndFollowUps(selected.merchantId)
+  }
+  const toggleFollowUpDone = async (followUp: any) => {
+    if (!selected?.merchantId) return
+    await upsertPlatformMerchantFollowUpCallable({ merchantId: selected.merchantId, id: followUp.id, title: followUp.title, status: followUp.status === 'done' ? 'open' : 'done' })
+    await loadNotesAndFollowUps(selected.merchantId)
   }
   const planOptions = Array.from(new Set(merchants.map((m) => m.plan).filter(Boolean))) as string[]
   const statusOptions = Array.from(new Set(merchants.map((m) => m.subscriptionStatus).filter(Boolean))) as string[]
@@ -99,7 +123,34 @@ export const PlatformCrm: FunctionalComponent = () => {
         />
       )}
     </Card>
-    {selected && <Card title={`Merchant 360 — ${selected.store?.name || selected.user?.email || ''}`}><div className="crm-detail-grid"><p>البريد: {selected.user?.email || '—'}</p><p>التحقق: {selected.user?.emailVerified ? 'تم' : 'غير مؤكد'}</p><p>المنتجات: {selected.productsCount}</p><p>الطلبات: {selected.totalOrders}</p><p>GMV: {selected.gmv}</p><p>التذاكر المفتوحة: {selected.openTickets}</p></div><Select label="مرحلة CRM" value={selected.profile?.stage || ''} onChange={(v) => void saveStage(v)} options={STAGES.map((s) => ({ value: s, label: s }))} /><div className="button-row" style={{ display: 'flex', gap: 8, flexWrap: 'wrap', marginTop: 12 }}><Button onClick={() => setNoteOpen(true)}>إضافة ملاحظة</Button><Button variant="outline" onClick={() => setFollowOpen(true)}>إضافة متابعة</Button><Button variant="ghost" onClick={() => setSelected(null)}>إغلاق</Button></div></Card>}
+    {selected && <Card title={`Merchant 360 — ${selected.store?.name || selected.user?.email || ''}`}>
+      <div className="crm-detail-grid"><p>البريد: {selected.user?.email || '—'}</p><p>التحقق: {selected.user?.emailVerified ? 'تم' : 'غير مؤكد'}</p><p>المنتجات: {selected.productsCount}</p><p>الطلبات: {selected.totalOrders}</p><p>GMV: {selected.gmv}</p><p>التذاكر المفتوحة: {selected.openTickets}</p></div>
+      <Select label="مرحلة CRM" value={selected.profile?.stage || ''} onChange={(v) => void saveStage(v)} options={STAGES.map((s) => ({ value: s, label: s }))} />
+      <div className="button-row" style={{ display: 'flex', gap: 8, flexWrap: 'wrap', marginTop: 12 }}><Button onClick={() => setNoteOpen(true)}>إضافة ملاحظة</Button><Button variant="outline" onClick={() => setFollowOpen(true)}>إضافة متابعة</Button><Button variant="ghost" onClick={() => setSelected(null)}>إغلاق</Button></div>
+      <div style={{ marginTop: 16 }}>
+        <h4>المتابعات</h4>
+        {followUps.length === 0 ? <p className="muted small">لا توجد متابعات بعد.</p> : (
+          <ul className="stack-list">
+            {followUps.map((f) => (
+              <li key={f.id} className="list-row">
+                <span className={f.status === 'done' ? 'muted' : ''} style={{ textDecoration: f.status === 'done' ? 'line-through' : 'none' }}>{f.title}</span>
+                <Button size="sm" variant="ghost" onClick={() => void toggleFollowUpDone(f)}>{f.status === 'done' ? 'إعادة فتح' : 'تمّت'}</Button>
+              </li>
+            ))}
+          </ul>
+        )}
+      </div>
+      <div style={{ marginTop: 16 }}>
+        <h4>الملاحظات</h4>
+        {notes.length === 0 ? <p className="muted small">لا توجد ملاحظات بعد.</p> : (
+          <ul className="stack-list">
+            {notes.map((n) => (
+              <li key={n.id} className="list-row"><span>{n.body}</span><span className="muted small">{formatDateTime(n.createdAt)}</span></li>
+            ))}
+          </ul>
+        )}
+      </div>
+    </Card>}
 
     <Modal open={noteOpen} onClose={() => setNoteOpen(false)} title="ملاحظة جديدة" footer={<><Button variant="ghost" onClick={() => setNoteOpen(false)}>إلغاء</Button><Button onClick={handleAddNote} disabled={!noteBody.trim()}>حفظ</Button></>}>
       <Textarea label="نص الملاحظة" value={noteBody} onChange={setNoteBody} rows={3} placeholder="اكتب ملاحظة المتابعة..." />
