@@ -415,9 +415,6 @@ export const PlatformMerchants: FunctionalComponent = () => {
                     {r.subStatus && (
                       <div className="mt-1"><Badge tone={SUBSCRIPTION_STATUS_TONES[r.subStatus] || 'slate'}>{SUBSCRIPTION_STATUS_LABELS[r.subStatus]}</Badge></div>
                     )}
-                    {(r.currentPeriodEnd || r.subExpiresAt) && (
-                      <div className="muted small mt-1">ينتهي: {formatDate(r.currentPeriodEnd || r.subExpiresAt)}</div>
-                    )}
                   </div>
                 ),
               },
@@ -464,8 +461,17 @@ export const PlatformMerchants: FunctionalComponent = () => {
               },
               {
                 key: 'expiry',
-                header: 'انتهاء الاشتراك',
-                render: (r) => <span className="muted">{formatDate(r.subExpiresAt)}</span>,
+                header: 'مدة الاشتراك',
+                render: (r) => {
+                  const starts = r.currentPeriodStart || r.activatedAt || r.subStartedAt
+                  const ends = r.currentPeriodEnd || r.subExpiresAt
+                  return (
+                    <div className="muted small">
+                      <div>من: {starts ? formatDate(starts) : '—'}</div>
+                      <div>إلى: {ends ? formatDate(ends) : '—'}</div>
+                    </div>
+                  )
+                },
               },
               {
                 key: 'published',

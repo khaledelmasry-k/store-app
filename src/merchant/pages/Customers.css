@@ -297,7 +297,7 @@
 }
 .merchant-customers-page .customer-detail-tabs { display: flex; gap: 4px; padding: 8px 12px; border-bottom: 1px solid var(--outline-variant); background: var(--surface-container-lowest); }
 .merchant-customers-page .customer-detail-tabs button { flex: 1; min-height: 36px; padding: 6px 8px; border: 0; border-radius: 8px; background: transparent; color: var(--text-on-surface-variant); font: inherit; font-size: 12px; cursor: pointer; }
-.merchant-customers-page .customer-detail-tabs button.is-active { background: var(--primary); color: var(--on-primary); }
+.merchant-customers-page .customer-detail-tabs button.is-active { background: var(--primary); color: #fff; }
 .merchant-customers-page .customers-aside-stats {
   display: grid;
   grid-template-columns: 1fr 1fr;
