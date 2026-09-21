@@ -9,8 +9,6 @@ import { Badge } from '../../shared/components/ui/Badge'
 import { Button } from '../../shared/components/ui/Button'
 import { FilterBar } from '../../shared/components/ui/FilterBar'
 import { useCollection } from '../../shared/hooks/useCollection'
-import { useToast } from '../../shared/hooks/useToast'
-import { approveSubscriptionCallable, rejectSubscriptionCallable } from '../../shared/services/auth'
 import { resolveSubscriptionStatus } from '../../shared/services/subscription'
 import { formatDate, formatNumber, timeAgo } from '../../shared/utils/format'
 import { SUBSCRIPTION_STATUS_LABELS, SUBSCRIPTION_STATUS_TONES } from '../../shared/utils/constants'
@@ -21,41 +19,13 @@ export const PlatformSubscriptions: FunctionalComponent = () => {
   const subs = subsRes.data
   const storesRes = useCollection('stores', {})
   const stores = storesRes.data
-  const toast = useToast()
   const [status, setStatus] = useState('')
-  const [approvingId, setApprovingId] = useState<string | null>(null)
-  const [rejectingId, setRejectingId] = useState<string | null>(null)
 
   const resolved = subs.map((s) => ({ ...s, _status: resolveSubscriptionStatus(s) }))
-
-  const handleApprove = async (subId: string) => {
-    setApprovingId(subId)
-    try {
-      await approveSubscriptionCallable({ subscriptionId: subId })
-      toast.push('تمت الموافقة على الاشتراك', 'حساب التاجر أصبح نشطاً الآن', 'success')
-    } catch (err: any) {
-      toast.push('فشلت الموافقة', err?.message || 'حدث خطأ غير متوقع', 'error')
-    } finally {
-      setApprovingId(null)
-    }
-  }
-
-  const handleReject = async (subId: string) => {
-    setRejectingId(subId)
-    try {
-      await rejectSubscriptionCallable({ subscriptionId: subId })
-      toast.push('تم رفض الاشتراك', 'تم إرسال إشعار للتاجر', 'success')
-    } catch (err: any) {
-      toast.push('فشل الرفض', err?.message || 'حدث خطأ غير متوقع', 'error')
-    } finally {
-      setRejectingId(null)
-    }
-  }
 
   const counts = {
     active: resolved.filter((s) => s._status === 'active').length,
     trialing: resolved.filter((s) => s._status === 'trialing').length,
-    pending: resolved.filter((s) => s._status === 'pending').length,
     expired: resolved.filter((s) => s._status === 'expired').length,
     suspended: resolved.filter((s) => s._status === 'suspended').length,
     cancelled: resolved.filter((s) => s._status === 'cancelled').length,
@@ -79,7 +49,7 @@ export const PlatformSubscriptions: FunctionalComponent = () => {
       <div className="stats-grid">
         <StatsCard title="نشط" value={counts.active} icon="check_circle" tone="green" />
         <StatsCard title="تجربة مجانية" value={counts.trialing} icon="hourglass_top" tone="blue" />
-        <StatsCard title="بانتظار الموافقة" value={counts.pending} icon="hourglass" tone="amber" />
+        <StatsCard title="معلّق" value={counts.suspended} icon="pause_circle" tone="amber" />
         <StatsCard title="منتهي" value={counts.expired} icon="schedule" tone="slate" />
       </div>
       <FilterBar
@@ -87,7 +57,6 @@ export const PlatformSubscriptions: FunctionalComponent = () => {
           { label: 'الكل', value: '' },
           { label: 'نشط', value: 'active' },
           { label: 'تجربة مجانية', value: 'trialing' },
-          { label: 'قيد الانتظار', value: 'pending' },
           { label: 'منتهي', value: 'expired' },
           { label: 'معلق', value: 'suspended' },
           { label: 'ملغي', value: 'cancelled' },
@@ -108,15 +77,7 @@ export const PlatformSubscriptions: FunctionalComponent = () => {
               key: 'actions',
               header: 'الإجراءات',
               render: (s: Subscription & { _status: string }) => (
-                <div className="flex flex-gap-sm">
-                  <Link href={`/platform/subscriptions/${s.id}`}><Button size="sm" variant="ghost" icon="visibility">تفاصيل</Button></Link>
-                  {s._status === 'pending' && (
-                    <>
-                      <Button size="sm" icon="check" loading={approvingId === s.id} onClick={() => handleApprove(s.id)}>تفعيل</Button>
-                      <Button size="sm" variant="ghost" icon="close" loading={rejectingId === s.id} onClick={() => handleReject(s.id)}>رفض</Button>
-                    </>
-                  )}
-                </div>
+                <Link href={`/platform/subscriptions/${s.id}`}><Button size="sm" variant="ghost" icon="visibility">تفاصيل</Button></Link>
               ),
             },
           ]}
