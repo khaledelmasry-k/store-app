@@ -91,9 +91,6 @@
   font-weight: 600;
   color: var(--on-surface);
 }
-.merchant-product-form-canonical .product-editor-publish-toggle .toggle-track {
-  background: var(--primary);
-}
 
 /* ── Section cards ────────────────────────────────────────────────────────── */
 .merchant-product-form-canonical .product-form-section {
