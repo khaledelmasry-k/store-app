@@ -2341,7 +2341,10 @@ export const registerMerchant = onCall(async (request: CallableRequest<any>) => 
     throw new HttpsError('failed-precondition', 'الباقة المطلوبة غير متاحة حالياً')
   }
   const canonicalTarget = CANONICAL_PLANS.find((candidate) => candidate.id === targetPlanId)!
-  const plan = { ...targetPlanSnap.data(), ...canonicalTarget } as any
+  // Firestore is the live, admin-editable source of truth (Plans.tsx); the
+  // hardcoded catalog is only a fallback default for fields a plan doc
+  // doesn't have yet, never an override of what an admin actually saved.
+  const plan = { ...canonicalTarget, ...targetPlanSnap.data() } as any
   const resolvedPlanId = targetPlanId
   const planName = plan.name || targetPlanId
   const cycle = 'monthly'
@@ -2627,7 +2630,7 @@ export const changeSubscriptionPlan = onCall(async (request: CallableRequest<{ s
   const currentPlan = currentPlanSnap.exists ? effectivePlanForSubscription(entry.data, currentPlanSnap.data()) : { name: entry.data.planName || entry.data.planId }
 
   const canonicalPlan = CANONICAL_PLANS.find((candidate) => candidate.id === planId)
-  const newPlan = { ...planSnap.data(), ...(canonicalPlan || {}) } as any
+  const newPlan = { ...(canonicalPlan || {}), ...planSnap.data() } as any
   const cycle = billingCycle === 'yearly' ? 'yearly' : 'monthly'
   const quotedAmount = cycle === 'yearly'
     ? Number(newPlan?.priceYearly || newPlan?.priceMonthly || 0)
@@ -3296,7 +3299,7 @@ export const quoteSubscriptionCoupon = onCall(async (request: CallableRequest<{ 
     const planSnap = await db.doc(`plans/${planId}`).get()
     const planData = planSnap.exists ? planSnap.data() : null
     const canonical = CANONICAL_PLANS.find((c) => c.id === planId) as any
-    const merged = canonical ? { ...planData, ...canonical } : planData
+    const merged = canonical ? { ...canonical, ...planData } : planData
     const monthly = Number(merged?.priceMonthly || 0)
     const yearly = Number(merged?.priceYearly || 0)
     canonicalAmount = billingCycle === 'yearly' ? (yearly || monthly * 10 || clientAmount) : monthly || clientAmount
@@ -3582,7 +3585,7 @@ export const submitPaymentRequest = onCall(async (request: CallableRequest<{ sub
     const liveSnap = await db.doc(`plans/${sub.planId}`).get()
     livePlan = liveSnap.exists ? liveSnap.data() : null
     const canonical = CANONICAL_PLANS.find((c) => c.id === sub.planId)
-    if (canonical) livePlan = { ...livePlan, ...canonical }
+    if (canonical) livePlan = { ...canonical, ...livePlan }
   } catch { livePlan = null }
   const liveMonthly = Number(livePlan?.priceMonthly || 0)
   const liveYearly = Number(livePlan?.priceYearly || liveMonthly * 10 || 0)
@@ -3839,8 +3842,8 @@ export const approvePaymentRequest = onCall(async (request: CallableRequest<{ pa
     // Historical snapshots are kept as audit history, but new transactions use
     // the live canonical price (lower wins to never raise price).
     const canonicalLive = CANONICAL_PLANS.find((c: any) => c.id === targetPlanId) as any
-    const liveMonthlyCan = Number(canonicalLive?.priceMonthly ?? plan.priceMonthly ?? 0)
-    const liveYearlyCan = Number(canonicalLive?.priceYearly ?? plan.priceYearly ?? (liveMonthlyCan * 10)) || 0
+    const liveMonthlyCan = Number(plan.priceMonthly ?? canonicalLive?.priceMonthly ?? 0)
+    const liveYearlyCan = Number(plan.priceYearly ?? canonicalLive?.priceYearly ?? (liveMonthlyCan * 10)) || 0
     let expectedAmount: number
     if (changeSnap?.exists) {
       expectedAmount = cycle === 'yearly' ? (liveYearlyCan || liveMonthlyCan) : liveMonthlyCan
@@ -7902,6 +7905,27 @@ export const listAdCampaigns = onCall(async (request: CallableRequest<any>) => {
   return { campaigns: snap.docs.map((d) => ({ id: d.id, ...d.data(), costPerOrder: Number(d.data().attributedOrders || 0) > 0 ? Number(d.data().totalSpend || 0) / Number(d.data().attributedOrders) : null })) }
 })
 
+async function notifyEligibleMerchantsOfPromotion(promotionId: string, p: any) {
+  // The admin's "إشعار" placement checkbox has to actually gate this, or
+  // picking e.g. "pricing" placement only still spams every eligible
+  // merchant with a notification they were never supposed to get.
+  if (Array.isArray(p.placement) && !p.placement.includes('notification')) return
+  const users = await db.collection('users').where('role', '==', 'merchant').get()
+  const targetedStoreIds = new Set<string>()
+  if (p.audienceType === 'selected_plans') {
+    const subs = await db.collection('subscriptions').where('planId', 'in', (p.targetPlanIds || []).slice(0, 10)).get()
+    subs.docs.forEach((s) => { const sid = s.data()?.storeId; if (sid) targetedStoreIds.add(sid) })
+  }
+  const batch = db.batch()
+  for (const u of users.docs) {
+    const ud = u.data(); const eligible = p.audienceType === 'all_merchants' || (p.audienceType === 'selected_merchants' ? (p.targetMerchantIds || []).includes(u.id) : (ud.storeIds || []).some((sid: string) => targetedStoreIds.has(sid)))
+    if (!eligible) continue
+    const n = db.collection('notifications').doc(`${promotionId}-${u.id}`)
+    batch.set(n, { id: n.id, userId: u.id, merchantId: u.id, title: p.title, body: p.message || '', type: 'platform_promotion', promotionId, read: false, createdAt: now() }, { merge: true })
+  }
+  await batch.commit()
+}
+
 export const createPlatformPromotion = onCall(async (request: CallableRequest<any>) => {
   await assertPlatformAdmin(request)
   const d = request.data || {}
@@ -7918,6 +7942,7 @@ export const createPlatformPromotion = onCall(async (request: CallableRequest<an
   const payload = { id: ref.id, title: String(d.title).slice(0, 160), message: String(d.message || '').slice(0, 2000), type: d.type, status, audienceType: d.audienceType, targetPlanIds: Array.isArray(d.targetPlanIds) ? d.targetPlanIds.slice(0, 20) : [], targetMerchantIds: Array.isArray(d.targetMerchantIds) ? d.targetMerchantIds.slice(0, 100) : [], placement: Array.isArray(d.placement) ? d.placement : ['dashboard_banner', 'notification'], ctaLabel: d.ctaLabel || '', ctaType: d.ctaType || '', ctaTarget: d.ctaTarget || '', startsAt, endsAt, planId: d.planId || null, discountType: d.discountType || null, discountValue: Math.max(0, Number(d.discountValue || 0)), promotionalPrice: promoPrice, allowCouponStacking: d.allowCouponStacking === true, createdBy: request.auth!.uid, createdAt: now(), updatedAt: now() }
   await ref.set(payload)
   await auditLog('__platform__', request.auth!.uid, 'promotion_created', 'platformPromotions', ref.id, { audienceType: payload.audienceType, planId: payload.planId }).catch(() => {})
+  if (status === 'active') await notifyEligibleMerchantsOfPromotion(ref.id, payload).catch(() => {})
   return { ok: true, promotionId: ref.id, status }
 })
 
@@ -7945,20 +7970,7 @@ export const setPlatformPromotionStatus = onCall(async (request: CallableRequest
   await auditLog('__platform__', request.auth!.uid, status === 'active' ? 'promotion_activated' : 'promotion_stopped', 'platformPromotions', promotionId, {}).catch(() => {})
   if (status === 'active') {
     const p = (await db.doc(`platformPromotions/${promotionId}`).get()).data() || {}
-    const users = await db.collection('users').where('role', '==', 'merchant').get()
-    const targetedStoreIds = new Set<string>()
-    if (p.audienceType === 'selected_plans') {
-      const subs = await db.collection('subscriptions').where('planId', 'in', (p.targetPlanIds || []).slice(0, 10)).get()
-      subs.docs.forEach((s) => { const sid = s.data()?.storeId; if (sid) targetedStoreIds.add(sid) })
-    }
-    const batch = db.batch()
-    for (const u of users.docs) {
-      const ud = u.data(); const eligible = p.audienceType === 'all_merchants' || (p.audienceType === 'selected_merchants' ? (p.targetMerchantIds || []).includes(u.id) : (ud.storeIds || []).some((sid: string) => targetedStoreIds.has(sid)))
-      if (!eligible) continue
-      const n = db.collection('notifications').doc(`${promotionId}-${u.id}`)
-      batch.set(n, { id: n.id, userId: u.id, merchantId: u.id, title: p.title, body: p.message || '', type: 'platform_promotion', promotionId, read: false, createdAt: now() }, { merge: true })
-    }
-    await batch.commit()
+    await notifyEligibleMerchantsOfPromotion(promotionId, p).catch(() => {})
   }
   return { ok: true }
 })

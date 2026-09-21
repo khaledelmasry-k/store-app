@@ -15,10 +15,9 @@ import { formatCurrency, formatNumber, isLowStock, isOutOfStock, timeAgo } from 
 import { getPlanLimit, isPlanLimitUnlimited, usageFrom } from '../../shared/services/subscription'
 import { orderItemRevenue } from '../../shared/utils/pricing'
 import { storePublicUrl } from '../../shared/utils/store-url'
-import { STATUS_LABELS } from '../../shared/utils/constants'
 import { visibleOrderStatus, visibleOrderStatusLabel } from '../../shared/utils/order-status'
 import { setStorePublishedCallable, getEligiblePromotionsCallable, getMerchantShippingProvidersCallable } from '../../shared/services/auth'
-import type { LandingPage, Order, Product, ProductCost, Shipment, StoreLink } from '../../shared/types'
+import type { Customer, LandingPage, Order, Product, ProductCost, Shipment, StoreLink } from '../../shared/types'
 import { Icon } from '../../shared/components/ui/Icon'
 import { CountdownTimer } from '../../shared/components/subscription/CountdownTimer'
 
@@ -87,7 +86,7 @@ export const MerchantDashboard: FunctionalComponent = () => {
   const ordersRes = useCollectionOnce<Order>('orders', { storeId, orderBy: { field: 'createdAt' } }, secondaryReady && canOrders)
   const productsRes = useCollectionOnce<Product>('products', { storeId }, secondaryReady && canProducts)
   const costsRes = useCollectionOnce<ProductCost>('productCosts', { storeId }, secondaryReady && canProducts)
-  const customersRes = useCollectionOnce('customers', { storeId }, secondaryReady && canCustomers)
+  const customersRes = useCollectionOnce<Customer>('customers', { storeId }, secondaryReady && canCustomers)
   // Shipping is live so the dashboard reflects carrier updates without a reload.
   const shipmentsRes = useCollection<Shipment>('shipments', { storeId }, secondaryReady && canOrders)
   const salesLinksRes = useCollectionOnce<StoreLink>('storeLinks', { storeId }, secondaryReady && canAnalytics)
@@ -116,6 +115,12 @@ export const MerchantDashboard: FunctionalComponent = () => {
     return d >= dayStart && d <= dayEnd
   })
   const todayRevenue = todayOrders.filter((o) => o.status === 'DELIVERED').reduce((s, o) => s + o.totalPrice, 0)
+  const newCustomersToday = customers.filter((c) => {
+    const ts = c.createdAt?.seconds
+    if (!ts) return false
+    const d = new Date(ts * 1000)
+    return d >= dayStart && d <= dayEnd
+  }).length
   const lowStock = products.filter((p) => isLowStock(p) && p.active)
 
   const costByProduct = new Map(costsRes.data.map((c) => [c.id, c.costPrice]))
@@ -248,7 +253,7 @@ export const MerchantDashboard: FunctionalComponent = () => {
           <div className="dashboard-kpi-value-row">
             <span className="dashboard-kpi-value">{formatCurrency(todayRevenue)}</span>
           </div>
-          <div className="dashboard-kpi-caption">اليوم مقارنة بالأمس</div>
+          <div className="dashboard-kpi-caption">إجمالي اليوم</div>
         </div>
       )}
       {canOrders && (
@@ -260,7 +265,7 @@ export const MerchantDashboard: FunctionalComponent = () => {
           <div className="dashboard-kpi-value-row">
             <span className="dashboard-kpi-value">{formatNumber(todayOrders.length)}</span>
           </div>
-          <div className="dashboard-kpi-caption">اليوم مقارنة بالأمس</div>
+          <div className="dashboard-kpi-caption">إجمالي اليوم</div>
         </div>
       )}
       {canOrders && (
@@ -295,9 +300,9 @@ export const MerchantDashboard: FunctionalComponent = () => {
             <span className="dashboard-kpi-icon"><Icon name="group" ariaHidden /></span>
           </div>
           <div className="dashboard-kpi-value-row">
-            <span className="dashboard-kpi-value">{formatNumber(customers.length)}</span>
+            <span className="dashboard-kpi-value">{formatNumber(newCustomersToday)}</span>
           </div>
-          <div className="dashboard-kpi-caption">عملاء جدد اليوم</div>
+          <div className="dashboard-kpi-caption">عملاء جدد اليوم · {formatNumber(customers.length)} إجمالي العملاء</div>
         </div>
       )}
       {canOrders && (
@@ -530,7 +535,7 @@ export const MerchantDashboard: FunctionalComponent = () => {
 
   return (
     <div className="merchant-dashboard-canonical">
-      {primaryPromotion && promotionMinutes > 0 && <div className="dashboard-promotion-banner"><strong>{primaryPromotion.title}</strong><span>{primaryPromotion.message}</span><CountdownTimer endsAt={primaryPromotion.endsAt} label="ينتهي خلال" />{primaryPromotion.ctaTarget && <a href={primaryPromotion.ctaTarget}>{primaryPromotion.ctaLabel || 'استفد من العرض'}</a>}</div>}
+      {primaryPromotion && (!primaryPromotion.endsAt || promotionMinutes > 0) && <div className="dashboard-promotion-banner"><strong>{primaryPromotion.title}</strong><span>{primaryPromotion.message}</span>{primaryPromotion.endsAt && <CountdownTimer endsAt={primaryPromotion.endsAt} label="ينتهي خلال" />}{primaryPromotion.ctaTarget && <a href={primaryPromotion.ctaTarget}>{primaryPromotion.ctaLabel || 'استفد من العرض'}</a>}</div>}
       {checklistDone < checklist.length && <section data-tour="onboarding-checklist" className="dashboard-onboarding-checklist" aria-label="خطوات بدء المتجر">
         <div className="dashboard-checklist-head"><div><h3>ابدأ متجرك خطوة بخطوة</h3><span>{checklistDone} من {checklist.length} مكتملة</span></div><div className="dashboard-checklist-progress"><i style={{ width: `${(checklistDone / checklist.length) * 100}%` }} /></div></div>
         <div className="dashboard-checklist-items">{checklist.map((item) => <Link key={item.label} href={item.href} className={`dashboard-checklist-item${item.done ? ' is-done' : ''}`}><span className="dashboard-checklist-box">{item.done ? '✓' : ''}</span><span><span>{item.label}</span>{!item.done && item.reason && <small className="muted">{item.reason}</small>}</span></Link>)}</div>
@@ -722,7 +727,8 @@ export const MerchantDashboard: FunctionalComponent = () => {
               ) : (
                 <div className="dashboard-mobile-order-list">
                   {latestOrders.map((o, i) => {
-                    const pill = STATUS_PILLS[o.status] || { cls: 'order-pill-new' }
+                    const displayStatus = visibleOrderStatus(o)
+                    const pill = STATUS_PILLS[displayStatus] || { cls: 'order-pill-new' }
                     return (
                       <Link key={o.id} href={`/dashboard/orders/${o.id}`} className="dashboard-mobile-order-card">
                         <div className="dashboard-mobile-order-main">
@@ -733,7 +739,7 @@ export const MerchantDashboard: FunctionalComponent = () => {
                           </div>
                         </div>
                         <div className="dashboard-mobile-order-side">
-                          <span className={`order-pill ${pill.cls}`}>{STATUS_LABELS[o.status as keyof typeof STATUS_LABELS] || o.status}</span>
+                          <span className={`order-pill ${pill.cls}`}>{visibleOrderStatusLabel(o)}</span>
                           <span className="dashboard-mobile-order-amount">{formatCurrency(o.totalPrice)}</span>
                         </div>
                       </Link>

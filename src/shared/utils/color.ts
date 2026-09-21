@@ -74,6 +74,18 @@ export function contrastFor(hex: string): string {
 }
 
 /**
+ * White or near-black text color safe across a gradient/mixed background —
+ * picks whichever ink has the higher *worst-case* contrast across both fill
+ * colors, so it stays readable at either end of a two-stop gradient instead
+ * of only where one endpoint happens to land.
+ */
+export function contrastForPair(a: string, b: string): string {
+  const whiteMin = Math.min(contrastRatio('#ffffff', a), contrastRatio('#ffffff', b))
+  const darkMin = Math.min(contrastRatio('#0f172a', a), contrastRatio('#0f172a', b))
+  return whiteMin >= darkMin ? '#ffffff' : '#0f172a'
+}
+
+/**
  * A version of `brand` that reaches `target` contrast against `background`,
  * for brand-colored *text* rather than brand-colored fills.
  *

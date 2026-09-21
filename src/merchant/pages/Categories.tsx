@@ -14,6 +14,7 @@ import { useStore } from '../../shared/hooks/useStore'
 import { useCollection } from '../../shared/hooks/useCollection'
 import { useToast } from '../../shared/hooks/useToast'
 import { categoriesService } from '../../shared/services/categories'
+import { updateProductCallable } from '../../shared/services/auth'
 import { slugify } from '../../shared/utils/format'
 import type { Category, Product } from '../../shared/types'
 import { Icon } from '../../shared/components/ui/Icon'
@@ -83,12 +84,30 @@ export const MerchantCategories: FunctionalComponent = () => {
   const remove = async () => {
     if (!deleteTarget) return
     try {
+      // Deleting a category must not leave products pointing at a
+      // now-nonexistent categoryId — clear it on every affected product first.
+      const affected = products.filter((p) => p.categoryId === deleteTarget.id)
+      await Promise.all(affected.map((p) => updateProductCallable({ storeId, productId: p.id, data: { categoryId: null } }).catch(() => {})))
       await categoriesService.remove(deleteTarget.id)
-      toast.push('تم حذف الفئة')
+      toast.push('تم حذف الفئة', affected.length > 0 ? `تم إلغاء تصنيف ${affected.length} منتج كانت مرتبطة بها.` : undefined)
     } catch (err: any) {
       toast.push('تعذر حذف الفئة', err?.message || 'حدث خطأ غير متوقع', 'error')
     }
     setDeleteTarget(null)
+  }
+
+  const move = async (index: number, dir: -1 | 1) => {
+    const target = filtered[index]
+    const swapWith = filtered[index + dir]
+    if (!target || !swapWith) return
+    try {
+      await Promise.all([
+        categoriesService.update(target.id, { order: swapWith.order ?? 0 }),
+        categoriesService.update(swapWith.id, { order: target.order ?? 0 }),
+      ])
+    } catch (err: any) {
+      toast.push('تعذر إعادة الترتيب', err?.message || 'حدث خطأ غير متوقع', 'error')
+    }
   }
 
   if (categoriesRes.loading) return <Loading variant="screen" message="جارٍ تحميل الفئات..." />
@@ -117,7 +136,7 @@ export const MerchantCategories: FunctionalComponent = () => {
         <EmptyState icon="category" title={query ? 'لا توجد نتائج' : 'لا توجد فئات'} description={query ? 'جرّب بحثاً آخر.' : 'أضف أول فئة لتنظيم منتجاتك.'} action={!query && <Button icon="add" onClick={openCreate}>فئة جديدة</Button>} />
       ) : (
         <div className="category-list">
-          {filtered.map((c) => (
+          {filtered.map((c, index) => (
             <div key={c.id} className="category-row">
               <span className="category-icon"><Icon name="category" ariaHidden /></span>
               <span className="category-main">
@@ -126,6 +145,12 @@ export const MerchantCategories: FunctionalComponent = () => {
               </span>
               <Badge tone={c.active ? 'green' : 'slate'}>{c.active ? 'نشطة' : 'مخفية'}</Badge>
               <span className="category-actions">
+                {!query && (
+                  <span className="category-reorder">
+                    <button className="icon-btn" disabled={index === 0} onClick={() => move(index, -1)} title="نقل لأعلى"><Icon name="arrow_upward" /></button>
+                    <button className="icon-btn" disabled={index === filtered.length - 1} onClick={() => move(index, 1)} title="نقل لأسفل"><Icon name="arrow_downward" /></button>
+                  </span>
+                )}
                 <Toggle checked={c.active} onChange={(v) => toggleActive(c, v)} />
                 <button className="icon-btn" onClick={() => openEdit(c)} title="تعديل"><Icon name="edit" /></button>
                 <button className="icon-btn icon-btn-danger" onClick={() => setDeleteTarget(c)} title="حذف"><Icon name="delete" /></button>

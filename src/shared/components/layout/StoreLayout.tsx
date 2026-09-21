@@ -6,7 +6,7 @@ import { setSeo } from '../../utils/seo'
 import { useStore } from '../../hooks/useStore'
 import { MerchantLogo } from '../brand/MerchantLogo'
 import { getTemplate } from '../../utils/themes'
-import { contrastFor, hexToRgba, overlay, readableOnAll, shadeHex } from '../../utils/color'
+import { contrastFor, contrastForPair, hexToRgba, overlay, readableOnAll, shadeHex } from '../../utils/color'
 import type { CSSProperties } from 'preact/compat'
 import { Icon } from '../ui/Icon'
 import { StorefrontHeader } from '../../../store/components/StorefrontHeader'
@@ -42,6 +42,12 @@ export function themeStyleFor(primary?: string, secondary?: string): CSSProperti
     '--primary-ink': readableOnAll(primary, [LIGHT_SURFACE, overlay(primary, SOFT_ALPHA, LIGHT_CARD)]),
     '--primary-ink-dark': readableOnAll(primary, [DARK_SURFACE, overlay(primary, SOFT_ALPHA, DARK_SURFACE)]),
     '--secondary': secondary || primary,
+    '--secondary-contrast': contrastFor(secondary || primary),
+    // Safe text color for surfaces that gradient/mix primary and secondary
+    // (or primary and white) together — readable at either end, not just
+    // wherever a single-color contrastFor happened to be computed for.
+    '--cta-ink': contrastForPair(primary, secondary || primary),
+    '--cta-ink-on-light': contrastForPair(primary, '#ffffff'),
     '--store-accent': secondary || primary,
   } as CSSProperties
 }
