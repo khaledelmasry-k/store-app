@@ -347,6 +347,10 @@
     white-space: normal;
   }
   .settings-grid { grid-template-columns: minmax(0, 1fr); gap: 16px; }
+  /* The phone/currency field pair (a bare .grid-2, no page-scoped rule
+     existed for it) stayed 2-up on every phone width and cramped both
+     fields into ~half the screen each. */
+  .merchant-settings-page .grid-2 { grid-template-columns: minmax(0, 1fr); }
   .settings-side { gap: 16px; }
   .settings-card { border-radius: 14px; min-width: 0; }
   .settings-card-head { padding: 16px; }

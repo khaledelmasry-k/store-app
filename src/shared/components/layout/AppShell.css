@@ -246,7 +246,11 @@
   vertical-align: middle;
 }
 .app-shell--platform .platform-stat-grid {
-  grid-template-columns: repeat(6, minmax(0, 1fr));
+  /* Auto-fit instead of a hardcoded 6 columns — a fixed count clipped the
+     last card at ordinary desktop widths (~1440px) once the sidebar and
+     content padding are subtracted; this settles on however many 160px+
+     cards actually fit instead of forcing all of them into the track. */
+  grid-template-columns: repeat(auto-fit, minmax(160px, 1fr));
   gap: 12px;
 }
 .app-shell--platform .platform-stat-grid > * {
@@ -297,15 +301,8 @@
 .app-shell--platform .platform-shipping-companies-page .shipping-company-card,
 .app-shell--platform .platform-store-details-page .store-overview-card { border-radius: 14px; }
 
-@media (max-width: 1180px) {
-  .app-shell--platform .platform-stat-grid { grid-template-columns: repeat(3, minmax(0, 1fr)); }
-}
-@media (max-width: 640px) {
-  .app-shell--platform .platform-stat-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
-}
-@media (max-width: 420px) {
-  .app-shell--platform .platform-stat-grid { grid-template-columns: minmax(0, 1fr); }
-}
+/* auto-fit above already collapses this down to 1 column on narrow phones —
+   no fixed breakpoints needed. */
 
 @media (max-width: 768px) {
   .app-shell .shell-content { padding: 20px 16px 88px; }
