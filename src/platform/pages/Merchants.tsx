@@ -415,6 +415,9 @@ export const PlatformMerchants: FunctionalComponent = () => {
                     {r.subStatus && (
                       <div className="mt-1"><Badge tone={SUBSCRIPTION_STATUS_TONES[r.subStatus] || 'slate'}>{SUBSCRIPTION_STATUS_LABELS[r.subStatus]}</Badge></div>
                     )}
+                    {(r.currentPeriodEnd || r.subExpiresAt) && (
+                      <div className="muted small mt-1">ينتهي: {formatDate(r.currentPeriodEnd || r.subExpiresAt)}</div>
+                    )}
                   </div>
                 ),
               },
