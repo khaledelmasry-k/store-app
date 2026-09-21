@@ -115,12 +115,28 @@ export function truncate(str: string, n = 40): string {
   return str.length > n ? str.slice(0, n - 1) + '…' : str
 }
 
-type StockLike = { stock?: number; lowStockThreshold?: number }
+type StockLike = { stock?: number; lowStockThreshold?: number; variants?: { stock?: number }[] }
+
+/** Variant products are low/out of stock per-combo; a flat aggregate hides a
+ *  single sold-out size/color. Every low-stock/out-of-stock check in the app
+ *  (Dashboard alerts, Products table, Analytics) must go through these so
+ *  they agree with each other. */
+export function isLowStock(p: StockLike): boolean {
+  const threshold = p.lowStockThreshold ?? 5
+  const variantStocks = (p.variants || []).map((v) => v.stock || 0)
+  if (variantStocks.length > 0) return variantStocks.some((s) => s <= threshold)
+  return (p.stock ?? 0) <= threshold
+}
+
+export function isOutOfStock(p: StockLike): boolean {
+  const variantStocks = (p.variants || []).map((v) => v.stock || 0)
+  if (variantStocks.length > 0) return variantStocks.every((s) => s === 0)
+  return (p.stock ?? 0) === 0
+}
 
 export function stockTone(p: StockLike): 'red' | 'amber' | 'green' {
-  const stock = p.stock ?? 0
-  if (stock === 0) return 'red'
-  if (stock <= (p.lowStockThreshold ?? 5)) return 'amber'
+  if (isOutOfStock(p)) return 'red'
+  if (isLowStock(p)) return 'amber'
   return 'green'
 }
 

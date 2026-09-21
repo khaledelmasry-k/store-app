@@ -18,9 +18,8 @@ import { useCollection } from '../../shared/hooks/useCollection'
 import { useSubscription } from '../../shared/hooks/useSubscription'
 import { useToast } from '../../shared/hooks/useToast'
 import { productsService } from '../../shared/services/products'
-import { deleteProductCallable, updateProductCallable } from '../../shared/services/auth'
-import { formatCurrency } from '../../shared/utils/format'
-import { stockTone } from '../../shared/utils/format'
+import { adjustProductStockCallable, deleteProductCallable, updateProductCallable } from '../../shared/services/auth'
+import { formatCurrency, isLowStock, isOutOfStock, stockTone } from '../../shared/utils/format'
 import { lineProfit } from '../../shared/utils/pricing'
 import { variantStock } from '../../shared/utils/product-variants'
 import { variantLabel } from '../../shared/types'
@@ -134,19 +133,7 @@ export const MerchantProducts: FunctionalComponent = () => {
     return matchesQuery && matchesStatus && matchesCategory && matchesFeatured
   })
 
-  const isLow = (p: Product) => {
-    const threshold = p.lowStockThreshold ?? 5
-    const vs = (p.variants || []).map((v) => v.stock || 0)
-    // Variant products: low if ANY size is at/below the threshold (amber or out).
-    if (vs.length > 0) return vs.some((s) => s <= threshold)
-    return (p.stock ?? 0) <= threshold
-  }
-
-  const isOutOfStock = (p: Product) => {
-    const vs = (p.variants || []).map((v) => v.stock || 0)
-    if (vs.length > 0) return vs.every((s) => s === 0)
-    return (p.stock ?? 0) === 0
-  }
+  const isLow = isLowStock
 
   const inventoryFiltered = products.filter((p) => {
     const matchesQuery = (p.name || "").includes(stockQuery) || (p.sku || "").includes(stockQuery)
@@ -193,9 +180,8 @@ export const MerchantProducts: FunctionalComponent = () => {
       openEdit(adjusting)
       return
     }
-    const newStock = Math.max(0, (adjusting.stock ?? 0) + delta)
     try {
-      await productsService.update(adjusting.id, { stock: newStock })
+      await adjustProductStockCallable({ storeId: store?.id || adjusting.storeId, productId: adjusting.id, delta })
       toast.push(`تم تحديث مخزون "${adjusting.name}"`)
     } catch (err: any) {
       toast.push('تعذر تحديث المخزون', err?.message || 'حدث خطأ غير متوقع', 'error')

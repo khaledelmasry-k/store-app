@@ -15,11 +15,12 @@ const wishlist = 'wishlist'
 const settings = 'settings'
 
 export const notificationsService = {
-  list: (storeId?: string, userId?: string) =>
+  list: (storeId?: string, userId?: string, limit = 200) =>
     listDocs<Notification>(notifications, {
       storeId,
       userId,
       orderBy: { field: 'createdAt' },
+      limit,
     }),
   create: (data: Omit<Notification, 'id'>) => createDoc<Notification>(notifications, data),
   update: (id: string, data: Record<string, unknown>) => updateDocById(notifications, id, data),

@@ -245,6 +245,17 @@ export const NOTIFICATION_TONES: Record<string, string> = {
   system: 'violet',
   billing: 'amber',
   ticket: 'indigo',
+  team: 'slate',
+  platform_promotion: 'green',
+}
+
+export const NOTIFICATION_TYPE_LABELS: Record<string, string> = {
+  order: 'الطلبات',
+  system: 'النظام',
+  billing: 'الفوترة',
+  ticket: 'الدعم',
+  team: 'الفريق',
+  platform_promotion: 'عروض المنصة',
 }
 
 export const TICKET_STATUS_TONES: Record<string, string> = {

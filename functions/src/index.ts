@@ -2039,6 +2039,17 @@ export const createOrder = onCall({ region: SHIPPING_FUNCTION_REGION, secrets: [
 
   await auditLog(storeId, request.auth?.uid || 'guest', 'create_order', 'orders', result.orderId, { orderNumber: result.orderNumber, totalPrice: result.totalPrice })
 
+  await db.collection('notifications').add({
+    storeId,
+    userId: null,
+    title: 'طلب جديد',
+    body: `وصل طلب جديد #${result.orderNumber} بقيمة ${result.totalPrice} من ${customer?.name || 'عميل'}`,
+    type: 'order',
+    read: false,
+    createdAt: now(),
+    createdBy: 'system',
+  }).catch(() => {})
+
   return result
 })
 
@@ -2164,6 +2175,34 @@ export const updateProduct = onCall(async (request: CallableRequest<any>) => {
   await productRef.update(patch)
   await auditLog(storeId, request.auth!.uid, 'update_product', 'products', productId, { name: data.name || existingSnap.data()?.name })
   return { id: productId }
+})
+
+// The merchant's quick stock-adjust control used to compute the new value
+// client-side from a snapshot that can go stale (two tabs, or a sale landing
+// mid-edit) and overwrite it with a plain updateDoc. Route the delta through
+// a transaction instead so concurrent adjustments and concurrent orders
+// never lose an update.
+export const adjustProductStock = onCall(async (request: CallableRequest<{ storeId?: string; productId?: string; delta?: number }>) => {
+  await assertStoreAccess(request, request.data?.storeId || '', ['products:edit', 'products:create'])
+  const { storeId, productId } = request.data || {}
+  const delta = Number(request.data?.delta)
+  if (!storeId || !productId) throw new HttpsError('invalid-argument', 'بيانات المنتج غير مكتملة')
+  if (!Number.isFinite(delta) || !Number.isInteger(delta) || delta === 0) {
+    throw new HttpsError('invalid-argument', 'قيمة التعديل غير صالحة')
+  }
+  const productRef = db.doc(`products/${productId}`)
+  const newStock = await db.runTransaction(async (tx) => {
+    const snap = await tx.get(productRef)
+    if (!snap.exists || snap.data()?.storeId !== storeId) throw new HttpsError('not-found', 'المنتج غير موجود ضمن هذا المتجر')
+    if (Array.isArray(snap.data()?.variants) && snap.data()!.variants.length > 0) {
+      throw new HttpsError('failed-precondition', 'عدّل مخزون كل مقاس/لون من صفحة تعديل المنتج')
+    }
+    const next = Math.max(0, Number(snap.data()?.stock || 0) + delta)
+    tx.update(productRef, { stock: next, updatedAt: now() })
+    return next
+  })
+  await auditLog(storeId, request.auth!.uid, 'adjust_product_stock', 'products', productId, { delta, newStock }).catch(() => {})
+  return { id: productId, stock: newStock }
 })
 
 // Deletes a product and its now-orphaned private media through the server.
@@ -6645,6 +6684,24 @@ async function applySystemShipmentStatus(shipmentId: string, normalizedStatus: s
         ...(['DELIVERED', 'RETURNED'].includes(normalizedStatus) ? { completedAt: now() } : {}),
         ...(normalizedStatus === 'CANCELLED' ? { cancelledAt: now(), cancellationSource: providerOrigin ? 'PROVIDER' : 'MERCHANT', cancellationState: 'CONFIRMED', cancellationError: null } : {}),
       })
+      const shipmentNotificationTitle: Record<string, string> = {
+        DELIVERED: 'تم توصيل شحنة بنجاح',
+        RETURNED: 'شحنة مرتجعة',
+        CANCELLED: 'تم إلغاء شحنة',
+        FAILED: 'فشل توصيل شحنة',
+      }
+      if (shipmentNotificationTitle[normalizedStatus]) {
+        tx.set(db.doc(`notifications/shipment-${shipmentId}-${normalizedStatus}`), {
+          storeId: shipment.storeId,
+          userId: null,
+          title: shipmentNotificationTitle[normalizedStatus],
+          body: `الشحنة الخاصة بالطلب #${order.orderNumber || shipment.orderId} — الحالة: ${normalizedStatus}`,
+          type: 'order',
+          read: false,
+          createdAt: now(),
+          createdBy: 'system',
+        })
+      }
     }
     // Shipment status is always mirrored to the order. Some carrier statuses
     // (notably FAILED and CANCELLED) intentionally do not force an order

@@ -1191,7 +1191,7 @@ export interface Notification extends Partial<FirestoreMeta> {
   userId?: string
   title: string
   body: string
-  type: 'order' | 'system' | 'billing' | 'ticket'
+  type: 'order' | 'system' | 'billing' | 'ticket' | 'team' | 'platform_promotion'
   read: boolean
 }
 

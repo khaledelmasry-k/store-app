@@ -458,6 +458,12 @@ export function deleteProductCallable(input: { storeId: string; productId: strin
   return fn(input)
 }
 
+export function adjustProductStockCallable(input: { storeId: string; productId: string; delta: number }) {
+  const functions = getFunctions()
+  const fn = httpsCallable(functions, 'adjustProductStock')
+  return fn(input)
+}
+
 export function createSalesLinkCallable(input: Record<string, unknown>) {
   const functions = getFunctions()
   const fn = httpsCallable(functions, 'createSalesLink')

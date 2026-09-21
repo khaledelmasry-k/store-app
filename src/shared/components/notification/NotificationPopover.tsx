@@ -10,8 +10,8 @@ import type { Notification } from '../../types'
 export const NotificationPopover: FunctionalComponent<{ storeId?: string; href: string }> = ({ storeId, href }) => {
   const [open, setOpen] = useState(false)
   const rootRef = useRef<HTMLDivElement>(null)
-  const res = useRealtimeCollection<Notification>('notifications', { storeId, orderBy: { field: 'createdAt' } }, Boolean(storeId))
-  const notifications = res.data.slice(-20).reverse()
+  const res = useRealtimeCollection<Notification>('notifications', { storeId, orderBy: { field: 'createdAt' }, limit: 20 }, Boolean(storeId))
+  const notifications = res.data
   const unread = notifications.filter((n) => !n.read).length
 
   useEffect(() => {

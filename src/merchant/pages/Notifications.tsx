@@ -17,6 +17,8 @@ const TYPE_CHIPS: Record<string, { label: string; tone: 'secondary' | 'tertiary'
   system: { label: 'النظام', tone: 'tertiary' },
   billing: { label: 'الفوترة', tone: 'tertiary' },
   ticket: { label: 'الدعم', tone: 'tertiary' },
+  team: { label: 'الفريق', tone: 'tertiary' },
+  platform_promotion: { label: 'عروض المنصة', tone: 'secondary' },
 }
 
 type Filter = 'all' | 'unread' | 'read'

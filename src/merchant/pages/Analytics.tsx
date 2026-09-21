@@ -16,7 +16,7 @@ import { useAuth } from '../../shared/hooks/useAuth'
 import { useCollection } from '../../shared/hooks/useCollection'
 import { useToast } from '../../shared/hooks/useToast'
 import { STATUS_LABELS, STATUS_COLORS } from '../../shared/utils/constants'
-import { formatCurrency, formatDateTime, formatNumber, downloadFile, deliveredRevenue } from '../../shared/utils/format'
+import { formatCurrency, formatDateTime, formatNumber, downloadFile, deliveredRevenue, isLowStock, isOutOfStock } from '../../shared/utils/format'
 import { orderItemRevenue } from '../../shared/utils/pricing'
 import { csvEscape } from '../../shared/utils/validators'
 import { timestampToMillis } from '../../shared/utils/timestamp'
@@ -140,7 +140,7 @@ export const MerchantAnalytics: FunctionalComponent = () => {
   }, [orders])
 
   const topProducts = useMemo(() => [...productRevenue.entries()].sort((a, b) => b[1].revenue - a[1].revenue).slice(0, 5), [productRevenue])
-  const stockByProduct = useMemo(() => new Map(products.map((p) => [p.id, p.stock ?? 0])), [products])
+  const stockByProduct = useMemo(() => new Map(products.map((p) => [p.id, p])), [products])
 
   const margin = revenue > 0 && hasAnyCost ? Math.max(0, Math.min(100, (deliveredProfit / revenue) * 100)) : 0
   const aov = orders.length ? revenue / orders.length : 0
@@ -286,9 +286,10 @@ export const MerchantAnalytics: FunctionalComponent = () => {
                 { key: 'orders', header: 'الكمية المباعة', render: (p: any) => <span className="monospace" dir="ltr">{p.orders}</span> },
                 { key: 'revenue', header: 'الإيرادات', render: (p: any) => <span className="font-semibold" dir="ltr">{formatCurrency(p.revenue)}</span> },
                 { key: 'stock', header: 'حالة المخزون', render: (p: any) => {
-                  const stock = stockByProduct.get(p.id)
-                  const out = typeof stock === 'number' && stock <= 0
-                  return <Badge tone={out ? 'red' : 'green'}>{out ? 'نفذ المخزون' : 'متوفر'}</Badge>
+                  const product = stockByProduct.get(p.id)
+                  const out = product ? isOutOfStock(product) : false
+                  const low = product ? isLowStock(product) : false
+                  return <Badge tone={out ? 'red' : low ? 'amber' : 'green'}>{out ? 'نفذ المخزون' : low ? 'مخزون منخفض' : 'متوفر'}</Badge>
                 } },
               ]}
               rows={topProducts.map(([productId, p]) => ({ id: productId, name: p.name, orders: p.orders, revenue: p.revenue }))}

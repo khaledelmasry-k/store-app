@@ -8,7 +8,7 @@ import { Loading } from '../ui/Loading'
 import { useToast } from '../../hooks/useToast'
 import { notificationsService } from '../../services/system'
 import { formatDateTime } from '../../utils/format'
-import { NOTIFICATION_TONES } from '../../utils/constants'
+import { NOTIFICATION_TONES, NOTIFICATION_TYPE_LABELS } from '../../utils/constants'
 import type { Notification } from '../../types'
 
 interface Props {
@@ -86,7 +86,7 @@ export const NotificationsTable: FunctionalComponent<Props> = ({
         }}
         columns={[
           { key: 'title', header: 'العنوان', render: (n: Notification) => <span className={n.read ? 'muted' : 'font-semibold'}>{n.title}</span> },
-          { key: 'type', header: 'النوع', render: (n: Notification) => <Badge tone={(NOTIFICATION_TONES[n.type] as any) || 'slate'}>{n.type}</Badge> },
+          { key: 'type', header: 'النوع', render: (n: Notification) => <Badge tone={(NOTIFICATION_TONES[n.type] as any) || 'slate'}>{NOTIFICATION_TYPE_LABELS[n.type] || n.type}</Badge> },
           { key: 'read', header: 'الحالة', render: (n: Notification) => <Badge tone={n.read ? 'green' : 'amber'}>{n.read ? 'مقروء' : 'جديد'}</Badge> },
           { key: 'createdAt', header: 'التاريخ', render: (n: Notification) => <span className="muted">{formatDateTime(n.createdAt)}</span> },
         ]}

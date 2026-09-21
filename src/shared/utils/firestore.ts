@@ -173,6 +173,7 @@ export function subscribeCollection<T>(
     }
   }
   if (params.orderBy) constraints.push(orderBy(params.orderBy.field, params.orderBy.dir || 'desc'))
+  if (params.limit) constraints.push(limitQuery(params.limit))
   return onSnapshot(query(collection(db, path), ...constraints), {
     next: (snap) => onData(snapshotList<T>(snap)),
     error: onError,

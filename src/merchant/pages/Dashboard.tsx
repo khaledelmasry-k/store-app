@@ -11,7 +11,7 @@ import { useSubscription } from '../../shared/hooks/useSubscription'
 import { useToast } from '../../shared/hooks/useToast'
 import './Dashboard.css'
 import { EmptyState } from '../../shared/components/ui/EmptyState'
-import { formatCurrency, formatNumber, timeAgo } from '../../shared/utils/format'
+import { formatCurrency, formatNumber, isLowStock, isOutOfStock, timeAgo } from '../../shared/utils/format'
 import { getPlanLimit, isPlanLimitUnlimited, usageFrom } from '../../shared/services/subscription'
 import { orderItemRevenue } from '../../shared/utils/pricing'
 import { storePublicUrl } from '../../shared/utils/store-url'
@@ -116,7 +116,7 @@ export const MerchantDashboard: FunctionalComponent = () => {
     return d >= dayStart && d <= dayEnd
   })
   const todayRevenue = todayOrders.filter((o) => o.status === 'DELIVERED').reduce((s, o) => s + o.totalPrice, 0)
-  const lowStock = products.filter((p) => p.stock <= (p.lowStockThreshold ?? 5) && p.active)
+  const lowStock = products.filter((p) => isLowStock(p) && p.active)
 
   const costByProduct = new Map(costsRes.data.map((c) => [c.id, c.costPrice]))
   const hasAnyCost = [...costByProduct.values()].some((c) => typeof c === 'number' && c >= 0)
@@ -466,8 +466,8 @@ export const MerchantDashboard: FunctionalComponent = () => {
                 <span className="dashboard-inventory-thumb"><Icon name="inventory_2" ariaHidden /></span>
                 <span className="dashboard-inventory-name">{p.name}</span>
               </div>
-              <span className={`dashboard-inventory-pill${p.stock === 0 ? ' is-empty' : ''}`}>
-                {p.stock === 0 ? 'نفد من المخزون' : 'مخزون منخفض'}
+              <span className={`dashboard-inventory-pill${isOutOfStock(p) ? ' is-empty' : ''}`}>
+                {isOutOfStock(p) ? 'نفد من المخزون' : 'مخزون منخفض'}
               </span>
             </div>
           ))}

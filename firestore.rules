@@ -232,8 +232,11 @@ match /products/{id} {
          && request.resource.data.storeId == resource.data.storeId
          // Product content (variants and quantity-pricing fields) is written
          // by the updateProduct callable, where the server checks entitlements.
-         // Direct client edits are limited to operational stock/publication flags.
-         && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['active', 'stock', 'updatedAt']);
+         // Stock is written only by the adjustProductStock callable and the
+         // order-lifecycle transactions (all Admin SDK, exempt from these
+         // rules) so concurrent adjustments can never lose an update; direct
+         // client edits are limited to the publication flag.
+         && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['active', 'updatedAt']);
        allow delete: if canWriteProducts(resource.data.storeId);
      }
 
