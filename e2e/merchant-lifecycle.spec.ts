@@ -1,9 +1,11 @@
 import { test, expect } from '@playwright/test'
 import admin from 'firebase-admin'
 import { initializeApp } from 'firebase/app'
+import { CustomProvider, initializeAppCheck } from 'firebase/app-check'
 import { connectAuthEmulator, getAuth, signInWithCustomToken } from 'firebase/auth'
 import { connectFunctionsEmulator, getFunctions, httpsCallable } from 'firebase/functions'
 import { connectFirestoreEmulator, deleteDoc, doc, getFirestore } from 'firebase/firestore'
+import { createEmulatorAppCheckToken } from '../src/shared/firebase/appCheckPolicy'
 
 process.env.FIRESTORE_EMULATOR_HOST = 'localhost:8080'
 process.env.FIREBASE_AUTH_EMULATOR_HOST = 'localhost:9099'
@@ -22,6 +24,15 @@ const clientApp = initializeApp({
 }, `merchant-lifecycle-${process.pid}`)
 const clientAuth = getAuth(clientApp)
 connectAuthEmulator(clientAuth, 'http://localhost:9099', { disableWarnings: true })
+initializeAppCheck(clientApp, {
+  provider: new CustomProvider({
+    getToken: async () => ({
+      token: createEmulatorAppCheckToken('mk-store-app'),
+      expireTimeMillis: Date.now() + 60 * 60 * 1000,
+    }),
+  }),
+  isTokenAutoRefreshEnabled: true,
+})
 const clientFunctions = getFunctions(clientApp)
 connectFunctionsEmulator(clientFunctions, 'localhost', 5001)
 const clientDb = getFirestore(clientApp)

@@ -26,6 +26,22 @@ const db = admin.firestore()
 const auth = admin.auth()
 const integrationVaultKey = defineSecret('INTEGRATION_VAULT_KEY')
 const SHIPPING_FUNCTION_REGION = 'us-central1'
+const PLATFORM_ADMIN_APPCHECK_OPTIONS = { enforceAppCheck: true } as const
+
+function assertPlatformAdminAppCheck(request: CallableRequest) {
+  const appId = String(request.app?.appId || '')
+  if (!appId) throw new HttpsError('unauthenticated', 'App Check token غير صالح')
+  // The Functions emulator deliberately skips cryptographic token verification.
+  // Require the explicit local provider identity there so malformed/arbitrary
+  // headers cannot masquerade as the test token. Production never takes this
+  // branch and continues to rely on Firebase's signature verification.
+  if (process.env.FUNCTIONS_EMULATOR === 'true') {
+    const projectId = process.env.GCLOUD_PROJECT || 'mk-store-app'
+    if (appId !== `${projectId}-emulator-web`) {
+      throw new HttpsError('unauthenticated', 'App Check emulator token غير صالح')
+    }
+  }
+}
 
 function storePublicationStatus(data: any): 'draft' | 'published' | 'suspended' {
   if (data?.storeStatus === 'suspended' || data?.status === 'suspended') return 'suspended'
@@ -4584,7 +4600,8 @@ async function markMerchantLifecycle(context: MerchantDeletionContext, status: '
   await batch.commit()
 }
 
-export const suspendMerchant = onCall(async (request: CallableRequest<{ merchantId?: string }>) => {
+export const suspendMerchant = onCall(PLATFORM_ADMIN_APPCHECK_OPTIONS, async (request: CallableRequest<{ merchantId?: string }>) => {
+  assertPlatformAdminAppCheck(request)
   await assertPlatformAdmin(request)
   const merchantId = String(request.data?.merchantId || '').trim()
   if (!merchantId) throw new HttpsError('invalid-argument', 'merchantId مطلوب')
@@ -4594,7 +4611,8 @@ export const suspendMerchant = onCall(async (request: CallableRequest<{ merchant
   return { ok: true, merchantId, status: 'suspended' }
 })
 
-export const reactivateMerchant = onCall(async (request: CallableRequest<{ merchantId?: string }>) => {
+export const reactivateMerchant = onCall(PLATFORM_ADMIN_APPCHECK_OPTIONS, async (request: CallableRequest<{ merchantId?: string }>) => {
+  assertPlatformAdminAppCheck(request)
   await assertPlatformAdmin(request)
   const merchantId = String(request.data?.merchantId || '').trim()
   if (!merchantId) throw new HttpsError('invalid-argument', 'merchantId مطلوب')

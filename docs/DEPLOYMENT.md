@@ -153,9 +153,23 @@ each account; the same value is stored through the merchant credential vault.
 
 The frontend is compatible with reCAPTCHA Enterprise App Check when the public
 `VITE_FIREBASE_APPCHECK_SITE_KEY` is supplied. Register each deployed web app,
-observe App Check request metrics, and only then enable callable enforcement.
+observe App Check request metrics, and only then deploy callable enforcement.
 Leaving the site key empty keeps token attachment disabled; it does not weaken
 the tenant and credential authorization already enforced by Functions.
+
+For emulator builds, `npm run verify:build` explicitly sets
+`VITE_FIREBASE_USE_EMULATOR=true`. The client then uses an unsigned, local-only
+CustomProvider token accepted only because the Functions emulator skips token
+signature verification. Emulator mode takes precedence over `import.meta.env.PROD`
+and over any site key in the shell, so local E2E never starts real reCAPTCHA.
+Production continues to use `ReCaptchaEnterpriseProvider` only when its public
+site key is configured; the local token is rejected by production verification.
+
+Run `npm run verify:app-check` before the emulator release gate. Phase 1 begins
+with App Check enforcement only on the reversible Platform Admin merchant
+lifecycle mutations `suspendMerchant` and `reactivateMerchant`. Storefront,
+Checkout, registration, order tracking, and all other public callables remain
+exempt until their own token-delivery verification is complete.
 
 ## Smoke checklist after staging deployment
 

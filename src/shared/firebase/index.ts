@@ -3,7 +3,8 @@ import { getAuth, connectAuthEmulator, type Auth } from 'firebase/auth'
 import { getFirestore, connectFirestoreEmulator, type Firestore } from 'firebase/firestore'
 import { getStorage, connectStorageEmulator, type FirebaseStorage } from 'firebase/storage'
 import { getFunctions, connectFunctionsEmulator, type Functions } from 'firebase/functions'
-import { initializeAppCheck, ReCaptchaEnterpriseProvider, type AppCheck } from 'firebase/app-check'
+import { CustomProvider, initializeAppCheck, ReCaptchaEnterpriseProvider, type AppCheck } from 'firebase/app-check'
+import { createEmulatorAppCheckToken, resolveAppCheckStrategy } from './appCheckPolicy'
 
 const config = {
   apiKey: import.meta.env.VITE_FIREBASE_API_KEY || 'AIzaSyASSp0drLChc2gRDBUk32DGMndHYRezET0',
@@ -20,20 +21,36 @@ export const db: Firestore = getFirestore(app)
 export const storage: FirebaseStorage = getStorage(app, config.storageBucket)
 export const functions: Functions = getFunctions(app)
 const appCheckSiteKey = String(import.meta.env.VITE_FIREBASE_APPCHECK_SITE_KEY || '').trim()
-// App Check remains opt-in until the production Firebase app is registered and
-// metrics have been reviewed. Once a site key is supplied, callable requests
-// automatically carry App Check tokens and are ready for server enforcement.
-export const appCheck: AppCheck | null = import.meta.env.PROD && appCheckSiteKey
-  ? initializeAppCheck(app, {
-      provider: new ReCaptchaEnterpriseProvider(appCheckSiteKey),
-      isTokenAutoRefreshEnabled: true,
+const useEmulator = import.meta.env.VITE_FIREBASE_USE_EMULATOR === 'true'
+const appCheckStrategy = resolveAppCheckStrategy({
+  isProduction: import.meta.env.PROD,
+  useEmulator,
+  siteKey: appCheckSiteKey,
+})
+
+// Production remains opt-in until its public site key is supplied. Emulator
+// builds use a local CustomProvider so protected callables can be exercised by
+// E2E without contacting reCAPTCHA or introducing a production bypass.
+const appCheckProvider = appCheckStrategy === 'emulator'
+  ? new CustomProvider({
+      getToken: async () => ({
+        token: createEmulatorAppCheckToken(config.projectId),
+        expireTimeMillis: Date.now() + 60 * 60 * 1000,
+      }),
     })
+  : appCheckStrategy === 'recaptcha-enterprise'
+    ? new ReCaptchaEnterpriseProvider(appCheckSiteKey)
+    : null
+
+export const appCheck: AppCheck | null = appCheckProvider
+  ? initializeAppCheck(app, { provider: appCheckProvider, isTokenAutoRefreshEnabled: true })
   : null
 export const firebaseRuntime = {
   mode: import.meta.env.MODE,
-  useEmulator: import.meta.env.VITE_FIREBASE_USE_EMULATOR === 'true',
+  useEmulator,
   projectId: config.projectId,
   appCheckEnabled: Boolean(appCheck),
+  appCheckStrategy,
   // Keep emulator endpoints out of production configuration and bundles.
   // The connection block below is enabled only when the explicit emulator
   // flag is true (local development).
@@ -75,7 +92,7 @@ export const persistDevAuthDiagnostic = (patch: Partial<DevAuthDiagnostic>) => {
   }
 }
 
-if (import.meta.env.VITE_FIREBASE_USE_EMULATOR === 'true') {
+if (useEmulator) {
   connectAuthEmulator(auth, 'http://localhost:9099', { disableWarnings: true })
   connectFirestoreEmulator(db, 'localhost', 8080)
   connectStorageEmulator(storage, 'localhost', 9199)
