@@ -104,7 +104,7 @@ export const PlatformStoreDetails: FunctionalComponent<Props> = ({ id }) => {
   }
 
   return (
-    <div>
+    <div className="platform-operations platform-store-details-page">
       <Breadcrumb items={[{ label: 'التجار والمتاجر', href: '/platform/merchants' }, { label: store.name }]} />
       <PageHeader
         title={store.name}

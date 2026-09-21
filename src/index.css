@@ -11711,7 +11711,7 @@ body {
   font: inherit;
   cursor: pointer;
 }
-.catalog-category-rail button.active { background: var(--primary, #3525cd); border-color: var(--primary, #3525cd); color: #fff; }
+.catalog-category-rail button.active { background: var(--primary, #3525cd); border-color: var(--primary, #3525cd); color: var(--primary-contrast, #fff); }
 .catalog-toolbar-wrap {
   display: grid;
   grid-template-columns: auto 1fr;
@@ -11787,7 +11787,7 @@ body {
 .checkout-stepper .complete { color: var(--primary, #3525cd); font-weight: 700; }
 .cart-stepper .active b,
 .checkout-stepper .active b,
-.checkout-stepper .complete b { background: var(--primary, #3525cd); color: #fff; }
+.checkout-stepper .complete b { background: var(--primary, #3525cd); color: var(--primary-contrast, #fff); }
 .cart-stepper i,
 .checkout-stepper i { width: 48px; height: 1px; background: var(--outline-variant, #c7c4d8); }
 .checkout-hero { display: block; }

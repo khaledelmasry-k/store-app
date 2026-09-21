@@ -2,6 +2,7 @@ import { FunctionalComponent } from 'preact'
 import { Link, useLocation } from 'wouter'
 import { useStore } from '../../shared/hooks/useStore'
 import { useAuth } from '../../shared/hooks/useAuth'
+import { useCart } from '../../shared/hooks/useCart'
 import { useCollection } from '../../shared/hooks/useCollection'
 import { useToast } from '../../shared/hooks/useToast'
 import { wishlistService } from '../../shared/services/system'
@@ -30,6 +31,7 @@ interface Props {
 export const StoreProductCard: FunctionalComponent<Props> = ({ product, categoryName }) => {
   const { store } = useStore()
   const { user } = useAuth()
+  const cart = useCart()
   const [, navigate] = useLocation()
   const toast = useToast()
   const wishlistRes = useCollection<WishlistItem>('wishlist', { where: { userId: { value: user?.uid || '__none__' } } }, user?.role === 'customer' && !!user.uid)
@@ -52,6 +54,32 @@ export const StoreProductCard: FunctionalComponent<Props> = ({ product, category
   const goto = `/store/${store?.slug}/product/${product.id}`
   const cardVariant = getTemplate(store?.theme?.template).layout.productCard
 
+  // Products with color/size variants need that choice made on the product
+  // page — quick-add here only ever applies to the single default variant,
+  // which silently guesses wrong. Route those to the product page instead.
+  const quickAdd = (event: Event) => {
+    event.preventDefault()
+    event.stopPropagation()
+    if (!inStock) return
+    if (hasVariants) {
+      navigate(goto)
+      return
+    }
+    cart.add({
+      productId: product.id,
+      name: product.name,
+      price: product.price,
+      image: product.images?.[0],
+      quantity: 1,
+      pricingMode: product.pricingMode,
+      quantityTiers: product.quantityTiers,
+      quantityPricingStrategy: product.quantityPricingStrategy,
+      lineTotal: product.price,
+      maxQty: stock,
+    })
+    toast.push('تمت الإضافة إلى السلة')
+  }
+
   return (
     <article className={`spc-card store-card spc-card--${cardVariant}${!inStock ? ' spc-card--out' : ''}`} data-template-card={cardVariant}>
       <Link href={goto} className="spc-media" aria-label={product.name}>
@@ -60,7 +88,7 @@ export const StoreProductCard: FunctionalComponent<Props> = ({ product, category
         {discount > 0 && <span className="spc-badge spc-badge--sale">-{discount}%</span>}
         {!inStock && <span className="spc-badge spc-badge--out">نفد</span>}
         <div className="spc-quick-add">
-          <button type="button" className="spc-add-btn" aria-label={`أضف ${product.name} للسلة`}>
+          <button type="button" className="spc-add-btn" aria-label={`أضف ${product.name} للسلة`} onClick={quickAdd} disabled={!inStock}>
             <Icon name="add_shopping_cart" ariaHidden />
             أضف للسلة
           </button>
@@ -118,7 +146,7 @@ export const StoreProductCard: FunctionalComponent<Props> = ({ product, category
             {inStock ? (lowCount > 0 ? `آخر ${lowCount} قطعة` : 'متوفر') : 'نفد'}
           </span>
         </div>
-        <button type="button" className={`spc-add-btn spc-add-btn--mobile spc-add-btn--${cardVariant}`} aria-label={`أضف ${product.name} للسلة`}>
+        <button type="button" className={`spc-add-btn spc-add-btn--mobile spc-add-btn--${cardVariant}`} aria-label={`أضف ${product.name} للسلة`} onClick={quickAdd} disabled={!inStock}>
           <Icon name="add_shopping_cart" ariaHidden />
           أضف للسلة
         </button>

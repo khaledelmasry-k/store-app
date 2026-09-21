@@ -21,6 +21,7 @@ import { Icon } from '../../shared/components/ui/Icon'
 import { EmptyState } from '../../shared/components/ui/EmptyState'
 import { Loading } from '../../shared/components/ui/Loading'
 import type { Order, Product, WishlistItem } from '../../shared/types'
+import './Account.css'
 
 const NAV_ITEMS = [
   { id: 'overview', label: 'نظرة عامة', icon: 'dashboard' },

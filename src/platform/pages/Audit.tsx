@@ -16,34 +16,57 @@ import './PlatformCorePages.css'
 
 const ACTION_LABELS: Record<string, string> = {
   production_test_data_cleanup: 'تم تنظيف بيانات الاختبار', canonical_plans_synced: 'تمت مزامنة الباقات الأساسية',
-  subscription_change_requested: 'تم طلب تغيير الباقة', plan_changed: 'تم تغيير الباقة', promotion_created: 'تم إنشاء عرض',
-  promotion_activated: 'تم تفعيل العرض', promotion_stopped: 'تم إيقاف العرض', merchant_suspended: 'تم إيقاف التاجر',
-  merchant_reactivated: 'تم إعادة تفعيل التاجر', payment_submitted: 'تم إرسال طلب دفع', payment_approved: 'تم اعتماد الدفع',
-  payment_rejected: 'تم رفض الدفع', saas_trial_started_on_registration: 'بدأت الفترة التجريبية', store_published: 'تم نشر المتجر',
-  store_suspended: 'تم إيقاف المتجر',
+  subscription_change_requested: 'تم طلب تغيير الباقة', subscription_change_approved: 'تمت الموافقة على تغيير الباقة',
+  plan_changed: 'تم تغيير الباقة', plan_created: 'تم إنشاء باقة', plan_deactivated: 'تم إيقاف باقة',
+  promotion_created: 'تم إنشاء عرض', promotion_activated: 'تم تفعيل العرض', promotion_stopped: 'تم إيقاف العرض',
+  merchant_suspended: 'تم إيقاف التاجر', merchant_reactivated: 'تم إعادة تفعيل التاجر',
+  merchant_permanently_deleted: 'تم حذف التاجر نهائياً', delete_test_merchant: 'تم حذف تاجر اختباري',
+  delete_selected_test_merchants: 'تم حذف تجار اختباريين محددين', approve_merchant_application: 'تمت الموافقة على طلب التاجر',
+  payment_submitted: 'تم إرسال طلب دفع', payment_approved: 'تم اعتماد الدفع', payment_rejected: 'تم رفض الدفع',
+  reject_subscription: 'تم رفض الاشتراك', subscription_expired: 'انتهى الاشتراك', trial_suspended: 'تم إيقاف التجربة المجانية',
+  free_subscription_suspended: 'تم إيقاف اشتراك مجاني', launch_pricing_expired: 'انتهى سعر الإطلاق',
+  one_time_purchase_requested: 'تم طلب شراء لمرة واحدة', one_time_purchase_approved: 'تمت الموافقة على شراء لمرة واحدة',
+  saas_trial_started_on_registration: 'بدأت الفترة التجريبية', store_published: 'تم نشر المتجر', store_unpublished: 'تم إلغاء نشر المتجر',
+  create_order: 'تم إنشاء طلب', update_order_status: 'تم تحديث حالة الطلب', cancel_order_and_shipment: 'تم إلغاء الطلب والشحنة', claim_order: 'تمت مطالبة بطلب',
+  create_product: 'تم إنشاء منتج', update_product: 'تم تعديل منتج', delete_product: 'تم حذف منتج', adjust_product_stock: 'تم تعديل مخزون منتج',
+  create_landing_page: 'تم إنشاء صفحة هبوط', create_sales_link: 'تم إنشاء رابط بيع',
+  coupon_created: 'تم إنشاء كوبون', coupon_updated: 'تم تعديل كوبون', coupon_deleted: 'تم حذف كوبون',
+  invite_staff: 'تمت دعوة عضو فريق',
+  create_ticket: 'تم إنشاء تذكرة', ticket_replied: 'تم الرد على تذكرة', ticket_status_changed: 'تم تغيير حالة تذكرة',
+  ticket_assigned: 'تم تعيين تذكرة', ticket_closed: 'تم إغلاق تذكرة', ticket_reopened: 'تم إعادة فتح تذكرة',
+  update_customer_crm: 'تم تحديث بيانات CRM للعميل', add_customer_note: 'تمت إضافة ملاحظة عميل',
+  crm_stage_changed: 'تم تغيير مرحلة CRM', crm_tags_changed: 'تم تعديل وسوم CRM', crm_assignment_changed: 'تم تغيير المسؤول',
+  crm_note_added: 'تمت إضافة ملاحظة', crm_followup_created: 'تم إنشاء متابعة', crm_followup_updated: 'تم تحديث متابعة', crm_followup_completed: 'تمت المتابعة',
 }
 const ENTITY_LABELS: Record<string, string> = {
   subscriptions: 'الاشتراك', subscriptionChangeRequests: 'طلب تغيير الباقة', plans: 'الباقات', platformPromotions: 'العروض',
   users: 'المستخدم', stores: 'المتجر', subscriptionPayments: 'الدفع', orders: 'الطلب', products: 'المنتج', shipping: 'الشحن',
-  merchants: 'التاجر', system: 'النظام',
+  merchants: 'التاجر', system: 'النظام', landingPages: 'صفحة الهبوط', storeLinks: 'رابط البيع', coupons: 'الكوبون',
+  tickets: 'التذكرة', customers: 'العميل', platformMerchantCrm: 'CRM التاجر',
 }
 const ACTION_TONES: Record<string, string> = {
-  payment_approved: 'green', merchant_reactivated: 'green', store_published: 'green', subscription_change_requested: 'amber',
-  saas_trial_started_on_registration: 'amber', promotion_stopped: 'amber', merchant_suspended: 'red', payment_rejected: 'red',
-  permanently_deleted: 'red', merchant_deleted: 'red',
+  payment_approved: 'green', merchant_reactivated: 'green', store_published: 'green', promotion_activated: 'green',
+  one_time_purchase_approved: 'green', approve_merchant_application: 'green', subscription_change_approved: 'green',
+  subscription_change_requested: 'amber', saas_trial_started_on_registration: 'amber', promotion_stopped: 'amber',
+  trial_suspended: 'amber', launch_pricing_expired: 'amber', subscription_expired: 'amber',
+  merchant_suspended: 'red', payment_rejected: 'red', reject_subscription: 'red', delete_product: 'red',
+  merchant_permanently_deleted: 'red', delete_test_merchant: 'red', delete_selected_test_merchants: 'red',
+  free_subscription_suspended: 'red', cancel_order_and_shipment: 'red', coupon_deleted: 'red', store_unpublished: 'red',
 }
 const FILTERS = [
   { value: 'all', label: 'كل الإجراءات' }, { value: 'merchants', label: 'التجار' }, { value: 'subscriptions', label: 'الاشتراكات' },
   { value: 'payments', label: 'المدفوعات' }, { value: 'promotions', label: 'العروض' }, { value: 'plans', label: 'الباقات' },
-  { value: 'stores', label: 'المتاجر' }, { value: 'orders', label: 'الطلبات' }, { value: 'system', label: 'النظام' },
+  { value: 'stores', label: 'المتاجر' }, { value: 'orders', label: 'الطلبات' }, { value: 'products', label: 'المنتجات' },
+  { value: 'crm', label: 'CRM والتذاكر' }, { value: 'marketing', label: 'التسويق' }, { value: 'system', label: 'النظام' },
 ]
 function valueText(value: unknown): string { if (value == null) return ''; if (typeof value === 'string' || typeof value === 'number') return String(value); return String(value) }
 function actionLabel(action: string): string { return ACTION_LABELS[action] || action.replace(/[_-]+/g, ' ').replace(/^./, (c) => c.toUpperCase()) }
 function actorFor(log: AuditLog, users: User[]): User | undefined { return users.find((u) => u.id === log.userId || u.uid === log.userId) }
 function entityCategory(log: AuditLog): string {
   const text = `${log.resource} ${log.action}`.toLowerCase()
-  if (/payment/.test(text)) return 'payments'; if (/promotion|coupon/.test(text)) return 'promotions'; if (/subscription|trial/.test(text)) return 'subscriptions'
-  if (/plan/.test(text)) return 'plans'; if (/order/.test(text)) return 'orders'; if (/store|publish/.test(text)) return 'stores'; if (/merchant|user/.test(text)) return 'merchants'; return 'system'
+  if (/payment/.test(text)) return 'payments'; if (/promotion|coupon|sales_link|landing/.test(text)) return 'marketing'; if (/subscription|trial/.test(text)) return 'subscriptions'
+  if (/plan/.test(text)) return 'plans'; if (/order/.test(text)) return 'orders'; if (/product/.test(text)) return 'products'
+  if (/ticket|crm|customer/.test(text)) return 'crm'; if (/store|publish/.test(text)) return 'stores'; if (/merchant|user|staff/.test(text)) return 'merchants'; return 'system'
 }
 function detailsFor(log: AuditLog): string {
   const meta = log.meta || {}; const from = meta.fromPlan || meta.previousPlan || meta.oldPlan; const to = meta.toPlan || meta.newPlan || meta.plan

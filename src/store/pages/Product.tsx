@@ -33,6 +33,11 @@ export const StoreProduct: FunctionalComponent<Props> = ({ id }) => {
   const { user } = useAuth()
   const [, navigate] = useLocation()
   const wishlistRes = useCollection<WishlistItem>('wishlist', { where: { userId: { value: user?.uid || '__none__' } } }, user?.role === 'customer' && !!user.uid)
+  const relatedRes = useCollection<Product>(
+    store?.id ? `publicStores/${store.id}/products` : 'publicStores/__none__/products',
+    { where: { categoryId: { value: product?.categoryId || '__none__' } }, limit: 9 },
+    Boolean(store?.id && product?.categoryId),
+  )
   const [qty, setQty] = useState(1)
   const [color, setColor] = useState('')
   const [size, setSize] = useState('')
@@ -156,7 +161,7 @@ export const StoreProduct: FunctionalComponent<Props> = ({ id }) => {
     toast.push('تمت الإضافة إلى السلة')
   }
 
-  const related: Product[] = []
+  const related = relatedRes.data.filter((p) => p.id !== product?.id).slice(0, 4)
   const wishlistItem = wishlistRes.data.find((item) => item.productId === product.id && (!item.storeId || item.storeId === store?.id))
 
   const toggleWishlist = async () => {

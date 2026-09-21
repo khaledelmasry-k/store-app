@@ -7,7 +7,7 @@ import { Loading } from '../../shared/components/ui/Loading'
 import { Table } from '../../shared/components/ui/Table'
 import { BarChart } from '../../shared/components/charts/BarChart'
 import { DonutChart } from '../../shared/components/charts/DonutChart'
-import { useCollection } from '../../shared/hooks/useCollection'
+import { useCollectionOnce } from '../../shared/hooks/useCollectionOnce'
 import { STATUS_LABELS, STATUS_COLORS } from '../../shared/utils/constants'
 import { deliveredRevenue, formatCurrency } from '../../shared/utils/format'
 import type { Order } from '../../shared/types'
@@ -15,9 +15,12 @@ import type { Order } from '../../shared/types'
 const STATUS_ORDER = ['NEW', 'CONTACTED', 'PROCESSING', 'SHIPPED', 'DELIVERED', 'CANCELLED', 'RETURNED']
 
 export const PlatformReports: FunctionalComponent = () => {
-  const ordersRes = useCollection<Order>('orders', { orderBy: { field: 'createdAt' } })
+  // A report doesn't need live updates, and the platform's full orders/stores
+  // collections can grow without bound — a live listener with no page size
+  // cap re-runs client-side aggregation on every write, platform-wide.
+  const ordersRes = useCollectionOnce<Order>('orders', { orderBy: { field: 'createdAt' }, limit: 3000 })
   const orders = ordersRes.data
-  const storesRes = useCollection('stores', {})
+  const storesRes = useCollectionOnce('stores', { limit: 1000 })
   const stores = storesRes.data
 
   if (ordersRes.loading || storesRes.loading) return <Loading />

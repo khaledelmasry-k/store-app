@@ -1,0 +1,293 @@
+.storefront-account--stitch {
+  display: grid;
+  grid-template-columns: 260px minmax(0, 1fr);
+  gap: 24px;
+  align-items: start;
+  max-width: 1180px;
+  margin-inline: auto;
+}
+
+.storefront-account--stitch .account-sidebar {
+  position: sticky;
+  top: 20px;
+  padding: 20px;
+  border: 1px solid var(--outline-variant, #dfe2f1);
+  border-radius: 16px;
+  background: var(--surface, #fff);
+}
+
+.storefront-account--stitch .account-header {
+  display: grid;
+  gap: 4px;
+  justify-items: center;
+  text-align: center;
+  padding-block-end: 16px;
+  margin-block-end: 16px;
+  border-bottom: 1px solid var(--outline-variant, #dfe2f1);
+}
+
+.storefront-account--stitch .account-nav {
+  display: grid;
+  gap: 4px;
+}
+
+.storefront-account--stitch .account-nav-item {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 10px 12px;
+  border: 0;
+  border-radius: 10px;
+  background: transparent;
+  color: inherit;
+  font-size: 14px;
+  cursor: pointer;
+  text-align: start;
+}
+
+.storefront-account--stitch .account-nav-item:hover {
+  background: var(--surface-container-low, #f1f3ff);
+}
+
+.storefront-account--stitch .account-nav-item.active {
+  background: var(--primary-soft, #eef0ff);
+  color: var(--primary, #4f46e5);
+  font-weight: 600;
+}
+
+.storefront-account--stitch .account-nav-item.danger {
+  color: var(--danger, #dc2626);
+  margin-block-start: 8px;
+  padding-block-start: 14px;
+  border-top: 1px solid var(--outline-variant, #dfe2f1);
+}
+
+.storefront-account--stitch .account-content {
+  display: grid;
+  gap: 20px;
+  min-width: 0;
+}
+
+.storefront-account--stitch .account-section {
+  padding: 20px;
+  border: 1px solid var(--outline-variant, #dfe2f1);
+  border-radius: 16px;
+  background: var(--surface, #fff);
+}
+
+.storefront-account--stitch .section-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  margin-block-end: 12px;
+}
+
+.storefront-account--stitch .section-viewall {
+  font-size: 13px;
+  color: var(--primary, #4f46e5);
+}
+
+.storefront-account--stitch .stats-grid {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 12px;
+  margin-block-end: 20px;
+}
+
+.storefront-account--stitch .stat-card {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 14px;
+  border: 1px solid var(--outline-variant, #dfe2f1);
+  border-radius: 12px;
+  background: var(--surface-container-low, #f1f3ff);
+}
+
+.storefront-account--stitch .stat-icon {
+  display: grid;
+  place-items: center;
+  width: 36px;
+  height: 36px;
+  border-radius: 10px;
+  background: var(--primary-soft, #eef0ff);
+  color: var(--primary, #4f46e5);
+}
+
+.storefront-account--stitch .stat-label {
+  display: block;
+  font-size: 12px;
+  color: var(--muted, #6b7280);
+}
+
+.storefront-account--stitch .stat-value {
+  font-size: 18px;
+}
+
+.storefront-account--stitch .orders-list {
+  display: grid;
+  gap: 8px;
+}
+
+.storefront-account--stitch .order-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 12px 14px;
+  border: 1px solid var(--outline-variant, #dfe2f1);
+  border-radius: 12px;
+  color: inherit;
+}
+
+.storefront-account--stitch .order-row-info {
+  display: grid;
+  gap: 2px;
+}
+
+.storefront-account--stitch .order-row-status {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.storefront-account--stitch .orders-table {
+  width: 100%;
+  overflow-x: auto;
+  display: block;
+}
+
+.storefront-account--stitch .orders-table table {
+  width: 100%;
+  border-collapse: collapse;
+}
+
+.storefront-account--stitch .orders-table th,
+.storefront-account--stitch .orders-table td {
+  padding: 10px 12px;
+  text-align: start;
+  border-bottom: 1px solid var(--outline-variant, #dfe2f1);
+  white-space: nowrap;
+}
+
+.storefront-account--stitch .addresses-list {
+  display: grid;
+  gap: 12px;
+  margin-block-end: 20px;
+}
+
+.storefront-account--stitch .address-card {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 14px;
+  border: 1px solid var(--outline-variant, #dfe2f1);
+  border-radius: 12px;
+  flex-wrap: wrap;
+}
+
+.storefront-account--stitch .address-header {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-block-end: 6px;
+}
+
+.storefront-account--stitch .address-text {
+  font-style: normal;
+  font-size: 13px;
+  line-height: 1.8;
+  color: var(--muted, #6b7280);
+}
+
+.storefront-account--stitch .address-actions {
+  display: flex;
+  gap: 8px;
+  flex-shrink: 0;
+}
+
+.storefront-account--stitch .add-address-form {
+  padding-block-start: 16px;
+  border-top: 1px solid var(--outline-variant, #dfe2f1);
+  display: grid;
+  gap: 12px;
+}
+
+.storefront-account--stitch .form-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 12px;
+}
+
+.storefront-account--stitch .checkbox-label {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 14px;
+}
+
+.storefront-account--stitch .wishlist-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(160px, 1fr));
+  gap: 14px;
+}
+
+.storefront-account--stitch .wishlist-card {
+  display: grid;
+  gap: 6px;
+  color: inherit;
+}
+
+.storefront-account--stitch .wishlist-card-image {
+  aspect-ratio: 1;
+  border-radius: 12px;
+  overflow: hidden;
+  object-fit: cover;
+  width: 100%;
+}
+
+.storefront-account--stitch .wishlist-card-name {
+  font-size: 13px;
+}
+
+.storefront-account--stitch .wishlist-card-price {
+  font-size: 13px;
+  font-weight: 600;
+}
+
+.storefront-account--stitch .security-options {
+  display: grid;
+  gap: 12px;
+}
+
+.storefront-account--stitch .security-card {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 14px;
+  border: 1px solid var(--outline-variant, #dfe2f1);
+  border-radius: 12px;
+  flex-wrap: wrap;
+}
+
+@media (max-width: 900px) {
+  .storefront-account--stitch {
+    grid-template-columns: 1fr;
+  }
+  .storefront-account--stitch .account-sidebar {
+    position: static;
+  }
+  .storefront-account--stitch .account-nav {
+    grid-auto-flow: column;
+    overflow-x: auto;
+  }
+  .storefront-account--stitch .stats-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+  .storefront-account--stitch .form-grid {
+    grid-template-columns: 1fr;
+  }
+}
