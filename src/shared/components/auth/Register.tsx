@@ -3,7 +3,7 @@ import { useEffect, useState } from 'preact/hooks'
 import { Link, useLocation } from 'wouter'
 import { Button } from '../ui/Button'
 import { AuthShell } from './AuthShell'
-import { login, registerMerchant, sendVerificationEmail, quoteSubscriptionCouponCallable } from '../../services/auth'
+import { login, registerMerchant, sendVerificationEmail, quoteSubscriptionCouponCallable, getPublicPlatformConfigCallable } from '../../services/auth'
 import { useToast } from '../../hooks/useToast'
 import { useCollection } from '../../hooks/useCollection'
 import { formatCurrency } from '../../utils/format'
@@ -32,6 +32,14 @@ const PUBLIC_SUBSCRIPTION_PLAN_IDS = new Set(['plan-basic', 'plan-starter', 'pla
 export const Register:FunctionalComponent = () => {
   useEffect(() => {
     document.title = 'Matjari | إنشاء حساب'
+  }, [])
+  const [registrationClosed, setRegistrationClosed] = useState<'registration' | 'maintenance' | null>(null)
+  useEffect(() => {
+    getPublicPlatformConfigCallable().then((res: any) => {
+      const cfg = res?.data || {}
+      if (cfg.maintenanceMode) setRegistrationClosed('maintenance')
+      else if (cfg.registrationEnabled === false) setRegistrationClosed('registration')
+    }).catch(() => {})
   }, [])
   const [loc, navigate] = useLocation()
   const params = new URLSearchParams(loc.split('?')[1] || window.location.search)
@@ -170,6 +178,27 @@ export const Register:FunctionalComponent = () => {
   }
 
   const strength = PASSWORD_RULES.reduce((n, r) => n + (r.test(form.password) ? 1 : 0), 0)
+
+  if (registrationClosed) {
+    return (
+      <AuthShell variant="brand">
+        <div className="auth-card" dir="rtl">
+          <div className="auth-status-card">
+            <div className="auth-status-icon"><Icon name={registrationClosed === 'maintenance' ? 'settings' : 'lock'} /></div>
+            <h1 className="auth-title">
+              {registrationClosed === 'maintenance' ? 'المنصة في وضع الصيانة' : 'التسجيل متوقف مؤقتاً'}
+            </h1>
+            <p className="auth-subtitle">
+              {registrationClosed === 'maintenance'
+                ? 'نجري بعض التحديثات حالياً. تفضل بالعودة بعد قليل.'
+                : 'تسجيل التجار الجدد متوقف مؤقتاً. تفضل بالعودة لاحقاً أو تواصل معنا.'}
+            </p>
+            <Link href="/login"><Button variant="outline" block>تسجيل الدخول</Button></Link>
+          </div>
+        </div>
+      </AuthShell>
+    )
+  }
 
   return (
     <AuthShell variant="brand">

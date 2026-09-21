@@ -2287,6 +2287,14 @@ export const registerMerchant = onCall(async (request: CallableRequest<any>) => 
   const { email, password, name, phone, storeName, storeRef, planId, couponCode } = request.data || {}
   if (!email || !password || !name || !storeName) throw new HttpsError('invalid-argument', 'بيانات التسجيل غير مكتملة')
 
+  const platformSettings = await db.doc('settings/platform').get().catch(() => null)
+  if (platformSettings?.data()?.registrationEnabled === false) {
+    throw new HttpsError('failed-precondition', 'تسجيل تجار جدد متوقف مؤقتاً — حاول لاحقاً')
+  }
+  if (platformSettings?.data()?.maintenanceMode === true) {
+    throw new HttpsError('failed-precondition', 'المنصة في وضع الصيانة حالياً — حاول لاحقاً')
+  }
+
   const uid = db.collection('users').doc().id
   const storeId = db.collection('stores').doc().id
   const baseSlug = (storeRef || storeName).toLowerCase().replace(/[^\w\s-]/g, '').replace(/[\s_-]+/g, '-').replace(/^-+|-+$/g, '') || 'store'
@@ -2916,7 +2924,12 @@ export const getMerchantPaymentInfo = onCall(async (request: CallableRequest) =>
 // admin-only.
 export const getPublicPlatformConfig = onCall(async (_request: CallableRequest) => {
   const snap = await db.doc('settings/platform').get().catch(() => null)
-  return safeEnterpriseWhatsAppConfig(snap?.exists ? snap.data() : {})
+  const data = snap?.exists ? snap.data() : {}
+  return {
+    ...safeEnterpriseWhatsAppConfig(data),
+    maintenanceMode: data?.maintenanceMode === true,
+    registrationEnabled: data?.registrationEnabled !== false,
+  }
 })
 
 export const saveEnterpriseWhatsAppSettings = onCall(async (request: CallableRequest<{ number?: string; enabled?: boolean; message?: string }>) => {

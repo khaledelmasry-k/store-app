@@ -11,6 +11,7 @@ import type { CSSProperties } from 'preact/compat'
 import { Icon } from '../ui/Icon'
 import { StorefrontHeader } from '../../../store/components/StorefrontHeader'
 import { storeBaseUrl } from '../../utils/store-url'
+import { getPublicPlatformConfigCallable } from '../../services/auth'
 import './StorefrontShell.css'
 
 interface Props {
@@ -100,6 +101,27 @@ export const StorefrontShell: FunctionalComponent<Props> = ({ children }) => {
     new URLSearchParams(window.location.search).get('preview') === '1'
       && !!user
       && (user.role === 'superAdmin' || (user.role === 'merchant' || user.role === 'staff') && (user.storeIds || []).includes(store?.id || ''))
+
+  const [platformMaintenance, setPlatformMaintenance] = useState(false)
+  useEffect(() => {
+    getPublicPlatformConfigCallable().then((res: any) => {
+      setPlatformMaintenance(Boolean(res?.data?.maintenanceMode))
+    }).catch(() => {})
+  }, [])
+
+  // Platform-wide maintenance blocks every storefront for shoppers; platform
+  // admins keep browsing so they can verify things and turn it back off.
+  if (platformMaintenance && user?.role !== 'superAdmin') {
+    return (
+      <div className={`storefront-shell store-shell store-shell--v3 ${templateClass}${storeDark}`}>
+        <div className="store-coming-soon">
+          <Icon name="settings" className="store-brand-mark" />
+          <h1>المنصة في وضع الصيانة</h1>
+          <p>نجري بعض التحديثات حالياً. تفضل بالعودة بعد قليل.</p>
+        </div>
+      </div>
+    )
+  }
 
   // Unpublished stores show a coming-soon page to everyone except the owner,
   // store staff, and platform admins. Purchases are rejected server-side too.
