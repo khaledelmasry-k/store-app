@@ -17,6 +17,7 @@ import { PERMISSION_GROUPS, PERMISSION_LABELS, type Permission } from '../../sha
 import { formatDate } from '../../shared/utils/format'
 import type { RoleDef } from '../../shared/types'
 import { Icon } from '../../shared/components/ui/Icon'
+import './Roles.css'
 
 export const RolesTab: FunctionalComponent = () => {
   const { store } = useStore()
@@ -25,9 +26,13 @@ export const RolesTab: FunctionalComponent = () => {
   const roles = rolesRes.data
   const toast = useToast()
   const [open, setOpen] = useState(false)
+  const [editing, setEditing] = useState<RoleDef | null>(null)
   const [deleteTarget, setDeleteTarget] = useState<RoleDef | null>(null)
   const [saving, setSaving] = useState(false)
   const [form, setForm] = useState<{ name: string; permissions: string[] }>({ name: '', permissions: [] })
+
+  const openCreate = () => { setEditing(null); setForm({ name: '', permissions: [] }); setOpen(true) }
+  const openEdit = (role: RoleDef) => { setEditing(role); setForm({ name: role.name, permissions: role.permissions || [] }); setOpen(true) }
 
   const togglePermission = (perm: string) => {
     setForm((prev) => ({
@@ -43,12 +48,18 @@ export const RolesTab: FunctionalComponent = () => {
     }
     setSaving(true)
     try {
-      await rolesService.create(storeId, { name: form.name, permissions: form.permissions })
-      toast.push('تم إضافة الدور')
+      if (editing) {
+        await rolesService.update(editing.id, { name: form.name, permissions: form.permissions })
+        toast.push('تم تحديث الدور', 'سيُطبَّق التغيير فورًا على كل أعضاء الفريق الحاملين لهذا الدور.')
+      } else {
+        await rolesService.create(storeId, { name: form.name, permissions: form.permissions })
+        toast.push('تم إضافة الدور')
+      }
       setOpen(false)
+      setEditing(null)
       setForm({ name: '', permissions: [] })
     } catch (err: any) {
-      toast.push('تعذر إضافة الدور', err?.message || 'حدث خطأ غير متوقع', 'error')
+      toast.push(editing ? 'تعذر تحديث الدور' : 'تعذر إضافة الدور', err?.message || 'حدث خطأ غير متوقع', 'error')
     } finally {
       setSaving(false)
     }
@@ -72,7 +83,7 @@ export const RolesTab: FunctionalComponent = () => {
       <Card
         title="الأدوار"
         subtitle={`${roles.length} دور`}
-        actions={<Button icon="add" size="sm" onClick={() => setOpen(true)}>دور جديد</Button>}
+        actions={<Button icon="add" size="sm" onClick={openCreate}>دور جديد</Button>}
       >
         {roles.length === 0 ? (
           <EmptyState icon="shield" title="لا توجد أدوار" description="أنشئ أدواراً مخصصة لتحكم بصلاحيات فريقك." />
@@ -93,14 +104,14 @@ export const RolesTab: FunctionalComponent = () => {
                 ),
               },
               { key: 'createdAt', header: 'التاريخ', render: (r: RoleDef) => <span className="muted">{formatDate(r.createdAt)}</span> },
-              { key: 'actions', header: '', render: (r: RoleDef) => <button className="icon-btn" onClick={() => setDeleteTarget(r)} title="حذف"><Icon name="delete" /></button> },
+              { key: 'actions', header: '', render: (r: RoleDef) => <div className="flex" style={{ gap: 4 }}><button className="icon-btn" onClick={() => openEdit(r)} title="تعديل"><Icon name="edit" /></button><button className="icon-btn" onClick={() => setDeleteTarget(r)} title="حذف"><Icon name="delete" /></button></div> },
             ]}
             rows={roles}
           />
         )}
       </Card>
 
-      <Modal open={open} onClose={() => setOpen(false)} title="دور جديد" size="md" footer={<Fragment><Button variant="ghost" onClick={() => setOpen(false)}>إلغاء</Button><Button onClick={submit} loading={saving} icon="check">حفظ الدور</Button></Fragment>}>
+      <Modal open={open} onClose={() => { setOpen(false); setEditing(null) }} title={editing ? `تعديل دور «${editing.name}»` : 'دور جديد'} size="md" footer={<Fragment><Button variant="ghost" onClick={() => { setOpen(false); setEditing(null) }}>إلغاء</Button><Button onClick={submit} loading={saving} icon="check">حفظ الدور</Button></Fragment>}>
         <Input label="اسم الدور" value={form.name} onChange={(v) => setForm({ ...form, name: v })} required />
         <div className="field">
           <label className="field-label">الصلاحيات</label>

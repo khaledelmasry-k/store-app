@@ -102,6 +102,31 @@ export const projectProductPublicData = onDocumentWritten('products/{productId}'
   return ref.set(publicProductData(after.data())!, { merge: true })
 })
 
+// Staff permissions are copied onto users/{uid}.permissions once, at invite
+// time (inviteStaff). Without this, editing a role's permission set would
+// never reach staff already invited into it — the only way to change their
+// access would be deleting and re-inviting them (which also rotates their
+// Auth UID/password). Re-sync every active team member on that role whenever
+// its permissions array actually changes.
+export const propagateRolePermissions = onDocumentWritten('roles/{roleId}', async (event) => {
+  const after = event.data?.after
+  if (!after?.exists) return
+  const roleId = event.params.roleId
+  const before = event.data?.before.data()
+  const afterData = after.data()
+  const beforePerms = JSON.stringify((before?.permissions || []).slice().sort())
+  const afterPerms = JSON.stringify((afterData?.permissions || []).slice().sort())
+  if (beforePerms === afterPerms) return
+  const teamSnap = await db.collection('team').where('role', '==', roleId).where('active', '==', true).get()
+  if (teamSnap.empty) return
+  const batch = db.batch()
+  for (const doc of teamSnap.docs) {
+    const userId = doc.data()?.userId
+    if (userId) batch.update(db.doc(`users/${userId}`), { permissions: afterData?.permissions || [], updatedAt: now() })
+  }
+  await batch.commit()
+})
+
 export const projectCategoryPublicData = onDocumentWritten('categories/{categoryId}', async (event) => {
   const after = event.data?.after
   const before = event.data?.before.data()
@@ -1206,12 +1231,15 @@ function effectivePlanForSubscription(sub: any, livePlan: any): any {
  * The owner occupies one team seat; all other counters are server-derived from
  * the same store and subscription snapshot used by entitlement checks. */
 async function merchantResourceUsage(storeId: string, sub: any, plan: any, store: any) {
-  const [products, team, landingPages, salesLinks] = await Promise.all([
+  const [products, team, landingPages, salesLinksAgg] = await Promise.all([
     countWhere(storeId, 'products'),
     countWhere(storeId, 'team'),
     countWhere(storeId, 'landingPages'),
-    countWhere(storeId, 'storeLinks'),
+    // Match createSalesLink's quota check exactly: archived links don't
+    // count against the limit, so they shouldn't count as "used" here either.
+    db.collection('storeLinks').where('storeId', '==', storeId).where('archived', '==', false).count().get(),
   ])
+  const salesLinks = Number(salesLinksAgg.data()?.count || 0)
   const metric = (used: number, limit: number | null) => ({
     used,
     limit: limit == null ? 0 : Math.max(0, limit),

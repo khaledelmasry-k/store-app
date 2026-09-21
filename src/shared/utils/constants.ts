@@ -36,6 +36,8 @@ export const PERMISSIONS = [
   'settings:edit',
   'coupons:manage',
   'landing:manage',
+  'billing:view',
+  'billing:edit',
 ] as const
 
 export type Permission = (typeof PERMISSIONS)[number]
@@ -76,6 +78,8 @@ export const PERMISSION_LABELS: Record<Permission, string> = {
   'settings:edit': 'تعديل الإعدادات',
   'coupons:manage': 'إدارة الكوبونات',
   'landing:manage': 'إدارة صفحات الهبوط',
+  'billing:view': 'عرض الفوترة والاشتراك',
+  'billing:edit': 'إدارة الفوترة والتسويات',
 }
 
 export const PERMISSION_GROUPS: Record<
@@ -125,6 +129,7 @@ export const PERMISSION_GROUPS: Record<
   },
   coupons: { label: 'الكوبونات', icon: 'sell', permissions: ['coupons:manage'] },
   landing: { label: 'صفحات الهبوط', icon: 'web', permissions: ['landing:manage'] },
+  billing: { label: 'الفوترة والاشتراك', icon: 'payments', permissions: ['billing:view', 'billing:edit'] },
 }
 
 export const ROUTE_PERMISSIONS: Record<string, Permission> = {

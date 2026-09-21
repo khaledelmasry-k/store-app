@@ -18,6 +18,8 @@ import { themeStyleFor } from '../../shared/components/layout/StoreLayout'
 import type { LandingPage, LandingSection, Product, Store } from '../../shared/types'
 import { visitEventId } from '../../shared/utils/visit-event'
 import { Icon } from '../../shared/components/ui/Icon'
+import { setSeo } from '../../shared/utils/seo'
+import { storeBaseUrl } from '../../shared/utils/store-url'
 
 interface Props {
   slug: string
@@ -185,6 +187,18 @@ export const StoreLanding: FunctionalComponent<Props> = ({ slug }) => {
     if (first && qty !== first.quantity) setQty(first.quantity)
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [product?.id, product?.pricingMode, product?.quantityTiers?.length])
+
+  useEffect(() => {
+    if (!landing || !store?.name) return
+    setSeo({
+      title: landing.seo?.title || `${landing.title} | ${store.name}`,
+      description: landing.seo?.description || landing.hero?.subtitle || `تسوق من ${store.name} على منصة متجري`,
+      type: 'website',
+      url: `${storeBaseUrl()}/landing/${landing.slug}`,
+      image: landing.hero?.image || store.logo || null,
+    })
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [landing?.id, landing?.seo?.title, landing?.seo?.description, store?.name, store?.logo])
 
   // Attribution + analytics once the landing and its store are resolved.
   useEffect(() => {

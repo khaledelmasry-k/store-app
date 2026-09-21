@@ -235,8 +235,8 @@ export const MerchantSettings: FunctionalComponent = () => {
             <div className="settings-card-body">
               <div className="settings-status-row">
                 <div>
-                  <h4>حالة المتجر</h4>
-                  <p>تفعيل أو إيقاف المتجر مؤقتاً للزوار.</p>
+                  <h4>حالة المبيعات</h4>
+                  <p>إيقافها يمنع إتمام أي طلبات جديدة، لكن المتجر يبقى مرئيًا للزوار — للإخفاء الكامل استخدم زر "إيقاف نشر المتجر" بالأسفل.</p>
                 </div>
                 <Toggle checked={form.active ?? store?.active ?? true} onChange={(v) => setForm({ ...form, active: v })} />
               </div>

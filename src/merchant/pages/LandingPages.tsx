@@ -458,7 +458,7 @@ export const MerchantLandingPages: FunctionalComponent = () => {
       </Drawer>
 
       <Drawer open={!!performanceTarget} onClose={() => setPerformanceTarget(null)} title={`أداء ${performanceTarget?.title || 'صفحة الهبوط'}`} size="md">
-        {performanceTarget && <div className="storelinks-performance-grid">
+        {performanceTarget && <div className="stats-grid">
           <StatsCard title="الزيارات" value={performanceTarget.views || 0} icon="visibility" tone="blue" />
           <StatsCard title="الطلبات" value={performanceTarget.ordersCount || 0} icon="shopping_bag" tone="green" />
           <StatsCard title="معدل التحويل" value={`${conversionRate(performanceTarget)}%`} icon="monitoring" tone="indigo" />
