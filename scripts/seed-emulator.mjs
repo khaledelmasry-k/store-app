@@ -7,15 +7,15 @@
 import admin from 'firebase-admin'
 import { dirname, join } from 'node:path'
 import { fileURLToPath } from 'node:url'
-import { readFileSync } from 'node:fs'
+import { existsSync, readFileSync } from 'node:fs'
 
 process.env.FIRESTORE_EMULATOR_HOST = 'localhost:8080'
 process.env.FIREBASE_AUTH_EMULATOR_HOST = 'localhost:9099'
 
 const __dirname = dirname(fileURLToPath(import.meta.url))
 const envPath = join(__dirname, '..', '.env.local')
-const envRaw = readFileSync(envPath, 'utf8')
-const projectId = envRaw.match(/VITE_FIREBASE_PROJECT_ID=(\S+)/)?.[1] || 'mk-store-app'
+const envRaw = existsSync(envPath) ? readFileSync(envPath, 'utf8') : ''
+const projectId = process.env.GCLOUD_PROJECT || envRaw.match(/VITE_FIREBASE_PROJECT_ID=(\S+)/)?.[1] || 'mk-store-app'
 
 admin.initializeApp({ projectId })
 const db = admin.firestore()
