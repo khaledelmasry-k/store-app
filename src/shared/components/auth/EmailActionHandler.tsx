@@ -17,7 +17,7 @@ const copy: Record<Exclude<ActionState, 'LOADING' | 'RESET_FORM'>, { title: stri
   EXPIRED: { title: 'انتهت صلاحية رابط التحقق', body: 'اطلب رابط تحقق جديدًا من شاشة التحقق من البريد.', icon: 'schedule' },
   INVALID: { title: 'رابط التحقق غير صالح', body: 'اطلب رابط تحقق جديدًا وتأكد من فتح أحدث رسالة.', icon: 'link_off' },
   ERROR: { title: 'تعذر إكمال التحقق الآن', body: 'حاول مرة أخرى بعد قليل أو اطلب رابط تحقق جديدًا.', icon: 'error' },
-  RESET_SUCCESS: { title: 'تم تغيير كلمة المرور بنجاح', body: 'يمكنك الآن تسجيل الدخول بكلمة المرور الجديدة.', icon: 'lock_reset' },
+  RESET_SUCCESS: { title: 'تم تغيير كلمة المرور بنجاح', body: 'يمكنك الآن تسجيل الدخول بكلمة المرور الجديدة.', icon: 'lock' },
 }
 
 const actionError = (error: unknown, checked: boolean): ActionState => {
@@ -133,7 +133,7 @@ export const EmailActionHandler: FunctionalComponent = () => {
               </div>
             </div>
             {resetError && <p className="field-error">{resetError}</p>}
-            <Button type="submit" block loading={resetLoading} icon="lock_reset">
+            <Button type="submit" block loading={resetLoading} icon="lock">
               تعيين كلمة المرور
             </Button>
           </form>
