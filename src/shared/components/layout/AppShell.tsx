@@ -532,7 +532,7 @@ export const AppShell: FunctionalComponent<Props> = ({ navKey, brand, brandLogo,
                 <Dropdown
                   align="left"
                   trigger={
-                    <button type="button" className="btn btn-outline btn-sm">
+                    <button type="button" className="btn btn-outline btn-sm topbar-store-switch-btn">
                       <Icon name="store" style={{ fontSize: 16 }} />
                       <span>{(stores.find((s) => s.id === storeSwitcher?.currentId)?.name || brand)}</span>
                     </button>

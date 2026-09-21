@@ -1,5 +1,6 @@
 .merchant-shell { min-height: 100vh; width: 100%; }
 .merchant-shell .merchant-chrome { min-height: 100vh; }
 .merchant-shell .sidebar-child-link,
-.merchant-shell .sidebar-group-header { opacity: 1; }
+.merchant-shell .sidebar-group-header,
+.merchant-shell .sidebar-link { opacity: 1; }
 

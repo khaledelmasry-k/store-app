@@ -114,7 +114,10 @@
   .console-shell .console-mobile-nav { display: grid; position: fixed; inset-inline: 0; inset-block-end: 0; width: 100%; max-width: 100%; box-sizing: border-box; z-index: 45; }
   .console-shell .console-drawer-overlay { display: block; position: fixed; inset: 0; z-index: 80; width: 100%; max-width: 100%; }
   .console-shell .console-drawer { width: min( min(88vw, 360px), 100% ); max-width: 100%; box-sizing: border-box; }
-  .console-shell .console-shell-content { padding-bottom: calc(52px + env(safe-area-inset-bottom)); }
+  /* Must clear .mobile-bottom-nav's real min-height (68px, index.css) — this
+     used to be 52px, leaving ~16px of content hidden behind the nav between
+     769-1024px (phones in landscape, small tablets). */
+  .console-shell .console-shell-content { padding-bottom: calc(72px + env(safe-area-inset-bottom)); }
 }
 
 @media (max-width: 420px) {
