@@ -60,8 +60,11 @@ export const PlatformPlans: FunctionalComponent = () => {
   const [syncing, setSyncing] = useState(false)
 
   const [showArchived, setShowArchived] = useState(false)
+  // Any plan that dropped out of the sellable list above (active === false)
+  // belongs here too, not only ones explicitly archived — otherwise a paused
+  // plan becomes invisible in both lists with no way to find it and reactivate.
   const archivedPlans = [...plansRes.data]
-    .filter((p) => (p as any).archived === true || ((p as any).active === false && (p as any).isPurchasable === false))
+    .filter((p) => (p as any).archived === true || (p as any).active === false)
     .sort((a, b) => (a.sortOrder ?? 0) - (b.sortOrder ?? 0))
 
   const recommendedId = [...subscriptionPlans].sort((a, b) => a.priceMonthly - b.priceMonthly)[Math.max(0, Math.floor((subscriptionPlans.length - 1) / 2))]?.id
@@ -138,6 +141,7 @@ export const PlatformPlans: FunctionalComponent = () => {
   }
 
   const toggleActive = async (p: SubscriptionPlan) => {
+    if (p.active && !window.confirm(`إيقاف باقة "${p.name}"؟ لن تظهر بعدها للتجار الجدد كخيار اشتراك.`)) return
     try {
       await savePlanCallable({ planId: p.id, plan: { ...p, active: !p.active } })
       toast.push(p.active ? 'تم إيقاف الباقة' : 'تم تفعيل الباقة')
@@ -324,11 +328,13 @@ export const PlatformPlans: FunctionalComponent = () => {
           </div>
           {showArchived && (
             <div className="plan-grid" style={{ opacity: 0.85 }}>
-              {archivedPlans.map((p) => (
+              {archivedPlans.map((p) => {
+                const isArchived = (p as any).archived === true
+                return (
                 <div key={p.id} className="plan-pricing-card plan-pricing-card--archived" style={{ border: '1px dashed #cbd5e1' }}>
                   <div className="plan-pricing-head">
                     <h3 className="plan-pricing-name">{p.name} <span className="muted small">({p.id})</span></h3>
-                    <Badge tone="slate">مؤرشفة</Badge>
+                    <Badge tone="slate">{isArchived ? 'مؤرشفة' : 'متوقفة'}</Badge>
                   </div>
                   {p.description && <p className="plan-pricing-desc">{p.description}</p>}
                   <div className="plan-pricing-price">
@@ -341,9 +347,17 @@ export const PlatformPlans: FunctionalComponent = () => {
                     <li><Icon name="group_add" />حتى {p.staffLimit || 1} عضو</li>
                     <li><Icon name="database" />{storageLabel(p.storageLimit)}</li>
                   </ul>
-                  <p className="muted small">غير متاحة للبيع — بيانات تاريخية فقط</p>
+                  {isArchived ? (
+                    <p className="muted small">غير متاحة للبيع — بيانات تاريخية فقط</p>
+                  ) : (
+                    <div className="plan-pricing-actions">
+                      <Button variant="soft" size="sm" icon="edit" onClick={() => openEdit(p)}>تعديل</Button>
+                      <Button variant="outline" size="sm" icon="check" onClick={() => toggleActive(p)}>تفعيل</Button>
+                    </div>
+                  )}
                 </div>
-              ))}
+                )
+              })}
             </div>
           )}
         </Card>
