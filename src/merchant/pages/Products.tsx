@@ -143,6 +143,7 @@ export const MerchantProducts: FunctionalComponent = () => {
 
   const lowCount = products.filter(isLow).length
   const outCount = products.filter(isOutOfStock).length
+  const totalStockUnits = products.reduce((sum, p) => sum + (Number(p.stock) || 0), 0)
 
   const remove = async () => {
     if (!deleteTarget) return
@@ -354,6 +355,7 @@ rows={filtered}
         <Fragment>
           <div className="stat-grid">
             <InventoryKpi label="إجمالي المنتجات" icon="inventory_2" value={products.length} caption="منتجات كتالوجك" />
+            <InventoryKpi label="إجمالي وحدات المخزون" icon="layers" value={totalStockUnits} caption="مجموع الكميات عبر كل المنتجات" />
             <InventoryKpi label="منخفض المخزون" icon="warning" value={lowCount} caption="تحتاج إعادة تعبئة" />
             <InventoryKpi label="نفد المخزون" icon="cancel" value={outCount} caption="غير متاحة للشراء حالياً" />
           </div>
