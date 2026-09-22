@@ -1,5 +1,5 @@
 import { FunctionalComponent } from "preact"
-import { useState } from 'preact/hooks'
+import { useEffect, useState } from 'preact/hooks'
 import { Link } from 'wouter'
 import { PageHeader } from '../../shared/components/ui/PageHeader'
 import { StatsCard } from '../../shared/components/ui/StatsCard'
@@ -19,7 +19,7 @@ import { useCollection } from '../../shared/hooks/useCollection'
 import { useSubscription } from '../../shared/hooks/useSubscription'
 import { useToast } from '../../shared/hooks/useToast'
 import { storeLinksService } from '../../shared/services/system'
-import { createSalesLinkCallable } from '../../shared/services/auth'
+import { createSalesLinkCallable, listAdCampaignsCallable } from '../../shared/services/auth'
 import { getPlanLimit, isPlanLimitUnlimited } from '../../shared/services/subscription'
 import { formatCurrency, formatDate, timeAgo } from '../../shared/utils/format'
 import { storeBaseUrl } from '../../shared/utils/store-url'
@@ -45,6 +45,7 @@ type Draft = {
   destinationId: string
   source: string
   campaign: string
+  campaignId: string
   content: string
   active: boolean
   archived: boolean
@@ -72,8 +73,14 @@ export const MerchantStoreLinks: FunctionalComponent = () => {
   const [deleteTarget, setDeleteTarget] = useState<StoreLink | null>(null)
   const [performanceTarget, setPerformanceTarget] = useState<StoreLink | null>(null)
   const [form, setForm] = useState<Draft>({
-    name: '', code: '', sellerName: '', destinationType: 'home', destinationId: '', source: '', campaign: '', content: '', active: true, archived: false,
+    name: '', code: '', sellerName: '', destinationType: 'home', destinationId: '', source: '', campaign: '', campaignId: '', content: '', active: true, archived: false,
   })
+  const [adCampaigns, setAdCampaigns] = useState<any[]>([])
+
+  useEffect(() => {
+    if (!storeId) return
+    listAdCampaignsCallable({ storeId }).then((r: any) => setAdCampaigns(r.data?.campaigns || [])).catch(() => setAdCampaigns([]))
+  }, [storeId])
 
   const links = allLinks.filter((l) => !l.archived)
 
@@ -94,9 +101,9 @@ export const MerchantStoreLinks: FunctionalComponent = () => {
       return
     }
     if (l) {
-      setForm({ id: l.id, name: l.name, code: l.code, sellerName: l.sellerName || '', destinationType: l.destinationType, destinationId: l.destinationId || '', source: l.source || '', campaign: l.campaign || '', content: l.content || '', active: l.active ?? true, archived: false })
+      setForm({ id: l.id, name: l.name, code: l.code, sellerName: l.sellerName || '', destinationType: l.destinationType, destinationId: l.destinationId || '', source: l.source || '', campaign: l.campaign || '', campaignId: l.campaignId || '', content: l.content || '', active: l.active ?? true, archived: false })
     } else {
-      setForm({ name: '', code: '', sellerName: '', destinationType: 'home', destinationId: '', source: '', campaign: '', content: '', active: true, archived: false })
+      setForm({ name: '', code: '', sellerName: '', destinationType: 'home', destinationId: '', source: '', campaign: '', campaignId: '', content: '', active: true, archived: false })
     }
     setOpen(true)
   }
@@ -121,6 +128,7 @@ export const MerchantStoreLinks: FunctionalComponent = () => {
       destinationId: form.destinationId || undefined,
       source: form.source.trim() || undefined,
       campaign: form.campaign.trim() || undefined,
+      campaignId: form.campaignId || null,
       content: form.content.trim() || undefined,
       active: form.active ?? true,
       archived: false,
@@ -354,6 +362,15 @@ export const MerchantStoreLinks: FunctionalComponent = () => {
               <Input label="اسم الحملة (Campaign)" value={form.campaign} onChange={(v) => setForm({ ...form, campaign: v })} placeholder="رمضان" />
               <Input label="المحتوى (Content)" value={form.content} onChange={(v) => setForm({ ...form, content: v })} placeholder="ad-1" />
             </div>
+            {adCampaigns.length > 0 && (
+              <Select
+                label="ربط بحملة إعلانية (لحساب تكلفة الطلب تلقائياً)"
+                value={form.campaignId}
+                onChange={(v) => setForm({ ...form, campaignId: v })}
+                options={[{ value: '', label: 'بدون ربط' }, ...adCampaigns.map((c) => ({ value: c.id, label: `${c.name} — ${c.platform}` }))]}
+                hint="اختر حملة من صفحة التحليلات ← تكلفة الإعلان عشان تظهر هنا. الطلبات اللي تيجي من الرابط ده هتتحسب تلقائياً ضمن أداء الحملة."
+              />
+            )}
           </Card>
 
           <SectionHeader title="الوجهة" />

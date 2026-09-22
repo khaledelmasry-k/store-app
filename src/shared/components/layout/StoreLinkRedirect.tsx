@@ -15,6 +15,7 @@ export interface ResolvedLink {
   destinationType?: string
   destinationId?: string | null
   title?: string
+  campaignId?: string | null
 }
 
 function destinationPath(type?: string, id?: string | null): string {
@@ -55,13 +56,17 @@ export const StoreLinkRedirect: FunctionalComponent<Props> = ({ code }) => {
         const base = storeBaseUrl()
         const path = destinationPath(data.destinationType, data.destinationId)
         const qs = encodeURIComponent(code)
+        // Carried through so StoreSlugLoader can persist it for checkout —
+        // ties the eventual order back to this link's ad campaign, not just
+        // the raw link code, for accurate spend/revenue attribution.
+        const campaignQs = data.campaignId ? `&campaignId=${encodeURIComponent(data.campaignId)}` : ''
         // Landing pages render on the standalone top-level `/landing/:slug` route
         // (the page resolves its own store from landingPage.storeId), while all
         // other destinations live under the storefront shell.
         const url =
           data.destinationType === 'landing' && data.destinationId
-            ? `${base}/landing/${encodeURIComponent(data.destinationId)}?ref=${qs}`
-            : `${base}/store/${encodeURIComponent(data.storeSlug)}${path}?ref=${qs}`
+            ? `${base}/landing/${encodeURIComponent(data.destinationId)}?ref=${qs}${campaignQs}`
+            : `${base}/store/${encodeURIComponent(data.storeSlug)}${path}?ref=${qs}${campaignQs}`
         // Full page navigation so the storefront loads fresh and the SPA route
         // is treated as a first-class visit.
         window.location.assign(url)

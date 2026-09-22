@@ -37,13 +37,19 @@ export const StoreSlugLoader: FunctionalComponent<Props> = ({ children }) => {
     // store B (cross-tenant attribution).
     sessionStorage.setItem(`mk_sales_ref_${store.id}`, ref)
 
+    // The link's ad campaign (if any) rides along as a `campaignId` query
+    // param from StoreLinkRedirect — persist it the same way so Checkout can
+    // read it later and orders get attributed back to real ad spend.
+    const campaignId = new URLSearchParams(search || '').get('campaignId')
+    if (campaignId) sessionStorage.setItem(`mk_campaign_${store.id}`, campaignId)
+
     recordStoreLinkVisitCallable({ storeId: store.id, code: ref, eventId: visitEventId(`sales_${store.id}_${ref}`) })
       .then(() => {})
       .catch(() => {
         // Never break the storefront because of an analytics call.
       })
 
-  }, [slug, ref, store?.id])
+  }, [slug, ref, store?.id, search])
 
   useEffect(() => {
     if (!slug) {

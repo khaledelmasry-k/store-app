@@ -4591,6 +4591,14 @@ export const createSalesLink = onCall(async (request: CallableRequest<any>) => {
    if (!grant) throw new HttpsError('failed-precondition', 'الاشتراك غير نشط — لا يمكن إنشاء روابط بيع الآن')
 
    const salesLinksLimit = resolvedLimit(grant.plan, 'salesLinksLimit', 'unlimitedSalesLinks')
+  // A campaignId is only trusted once verified to belong to the same store —
+  // otherwise a merchant could attribute their clicks/orders to another
+  // tenant's ad-spend record.
+  let campaignId: string | null = null
+  if (data.campaignId) {
+    const campaignSnap = await db.doc(`adCampaigns/${String(data.campaignId)}`).get()
+    if (campaignSnap.exists && campaignSnap.data()?.storeId === storeId) campaignId = campaignSnap.id
+  }
   const ref = db.collection('storeLinks').doc()
   await db.runTransaction(async (tx) => {
     const count = await tx.get(db.collection('storeLinks').where('storeId', '==', storeId).where('archived', '==', false))
@@ -4607,6 +4615,7 @@ export const createSalesLink = onCall(async (request: CallableRequest<any>) => {
       destinationId: data.destinationId || null,
       source: data.source || null,
       campaign: data.campaign || null,
+      campaignId,
       content: data.content || null,
       staffId: data.staffId || null,
       active: data.active ?? true,
@@ -7572,6 +7581,7 @@ export const resolveStoreLink = onCall(async (request: CallableRequest<{ code?: 
     destinationType: linkData.destinationType || 'home',
     destinationId: linkData.destinationId || null,
     title: linkData.title || linkData.name || '',
+    campaignId: linkData.campaignId || null,
   }
 })
 

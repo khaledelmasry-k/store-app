@@ -1324,6 +1324,10 @@ export interface StoreLink extends Partial<FirestoreMeta> {
   source?: string
   campaign?: string
   content?: string
+  /** Links this sales link to a structured adCampaigns/{id} record so ad
+   *  spend and attributed revenue (see Analytics) can be tied to real
+   *  orders, not just this free-text `campaign` label. */
+  campaignId?: string | null
   createdBy: string
 }
 
