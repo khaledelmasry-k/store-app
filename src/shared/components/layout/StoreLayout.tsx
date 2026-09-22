@@ -2,7 +2,7 @@ import { FunctionalComponent } from 'preact'
 import { useEffect, useState } from 'preact/hooks'
 import { Link, useLocation } from 'wouter'
 import { useAuth } from '../../hooks/useAuth'
-import { setSeo } from '../../utils/seo'
+import { setSeo, setCustomHeadScript } from '../../utils/seo'
 import { useStore } from '../../hooks/useStore'
 import { MerchantLogo } from '../brand/MerchantLogo'
 import { getTemplate } from '../../utils/themes'
@@ -96,6 +96,12 @@ export const StorefrontShell: FunctionalComponent<Props> = ({ children }) => {
       image: store.logo || store.heroImage || store.hero || null,
     })
   }, [store?.name, store?.slug, store?.seoTitle, store?.seoDescription, store?.description, store?.logo, store?.heroImage, store?.hero])
+
+  // Merchant-supplied tracking snippet (Google Tag Manager, Meta Pixel, ...).
+  useEffect(() => {
+    setCustomHeadScript(store?.customHeadScript)
+    return () => setCustomHeadScript(null)
+  }, [store?.id, store?.customHeadScript])
 
   const canPreview =
     new URLSearchParams(window.location.search).get('preview') === '1'

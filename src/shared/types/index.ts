@@ -433,6 +433,9 @@ export interface Store extends Partial<FirestoreMeta> {
   address?: string
   seoTitle?: string
   seoDescription?: string
+  /** Raw tracking snippet (Google Tag Manager, Meta Pixel, etc.) the merchant
+   * pastes in; injected into the storefront's <head> verbatim. */
+  customHeadScript?: string
   theme: StoreTheme
   shipping?: StoreShipping
   /** Bytes of uploaded assets currently used by this store (maintained server-side). */

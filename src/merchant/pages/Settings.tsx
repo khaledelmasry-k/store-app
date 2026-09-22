@@ -277,6 +277,26 @@ export const MerchantSettings: FunctionalComponent = () => {
                   <p className="settings-field-hint">يفضل ألا يتجاوز 160 حرفاً للحصول على أفضل ظهور في نتائج البحث.</p>
                 </div>
               </div>
+              <div className="settings-seo-box">
+                <h4><Icon name="code" ariaHidden /> كود تتبع مخصص (Google Tag Manager / Meta Pixel)</h4>
+                <div className="field">
+                  <label className="field-label small">كود التتبع</label>
+                  <textarea
+                    aria-label="كود تتبع مخصص"
+                    className="input settings-textarea ltr-text"
+                    dir="ltr"
+                    rows={5}
+                    maxLength={5000}
+                    placeholder={'<script>\n  ...\n</script>'}
+                    value={form.customHeadScript ?? store?.customHeadScript ?? ''}
+                    onChange={(e) => setForm({ ...form, customHeadScript: (e.target as HTMLTextAreaElement).value })}
+                  />
+                  <p className="settings-field-hint">
+                    الصق كود التثبيت (Installation snippet) اللي بتديهولك Google Tag Manager أو أي أداة تتبع تانية —
+                    هيتحط تلقائيًا في صفحة متجرك العامة. أنت مسؤول عن صحة الكود اللي بتلصقه هنا.
+                  </p>
+                </div>
+              </div>
             </div>
           </section>
 
