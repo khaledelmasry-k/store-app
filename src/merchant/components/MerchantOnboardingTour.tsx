@@ -119,7 +119,7 @@ export const MerchantOnboardingTour: FunctionalComponent = () => {
       else setStep(-1)
     } finally { transitionLock.current = false; setTransitioning(false) }
   }
-  const dismissWelcome = () => { if (hideWelcome) localStorage.setItem(WELCOME_DISMISS_KEY, '1'); setWelcomeVisible(false) }
+  const dismissWelcome = () => { localStorage.setItem(WELCOME_DISMISS_KEY, '1'); setWelcomeVisible(false) }
   const startFullGuide = () => { setWelcomeVisible(false); setForceMain(true); setMode('main'); setReady(true); void showStep(0) }
   useEffect(() => () => activeTarget.current?.classList.remove('tour-target-active'), [])
   if (user?.role !== 'merchant') return null
