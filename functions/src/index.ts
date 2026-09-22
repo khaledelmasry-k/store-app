@@ -5642,6 +5642,29 @@ export const setShippingProviderStatus = onCall(async (request: CallableRequest<
   return { ok: true, provider: safeShippingProvider(providerId, { ...snap.data(), status }) }
 })
 
+export const deleteShippingProvider = onCall(async (request: CallableRequest<{ providerId?: string }>) => {
+  await assertPlatformAdmin(request)
+  const providerId = String(request.data?.providerId || '').trim()
+  if (!providerId) throw new HttpsError('invalid-argument', 'providerId مطلوب')
+  const ref = db.doc(`shippingProviders/${providerId}`)
+  const snap = await ref.get()
+  if (!snap.exists) throw new HttpsError('not-found', 'شركة الشحن غير موجودة')
+  // Refuse to delete a provider any store has enabled or has shipment history
+  // with — that would orphan storeShippingProviders/shipments references.
+  // Deactivating (status: inactive) is the safe path for providers still
+  // referenced anywhere; deletion is only for ones truly never used.
+  const [storeConfigsSnap, shipmentsSnap] = await Promise.all([
+    db.collection('storeShippingProviders').where('providerId', '==', providerId).limit(1).get(),
+    db.collection('shipments').where('providerId', '==', providerId).limit(1).get(),
+  ])
+  if (!storeConfigsSnap.empty || !shipmentsSnap.empty) {
+    throw new HttpsError('failed-precondition', 'شركة الشحن مستخدمة من تاجر واحد أو أكثر أو لها شحنات سابقة — أوقفها بدلاً من حذفها')
+  }
+  await ref.delete()
+  await db.doc(`shippingProviderCommercialAgreements/${providerId}`).delete().catch(() => {})
+  return { ok: true }
+})
+
 export const saveShippingProviderBranding = onCall(async (request: CallableRequest<{ providerId?: string; logoUrl?: string; logoStoragePath?: string }>) => {
   await assertPlatformAdmin(request)
   const providerId = String(request.data?.providerId || '').trim()

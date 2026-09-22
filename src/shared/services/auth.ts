@@ -175,6 +175,10 @@ export function setShippingProviderStatusCallable(input: Record<string, unknown>
   return httpsCallable(getFunctions(), 'setShippingProviderStatus')(input)
 }
 
+export function deleteShippingProviderCallable(input: { providerId: string }) {
+  return httpsCallable(getFunctions(), 'deleteShippingProvider')(input)
+}
+
 export function getPublicShippingPartnersCallable() { return httpsCallable(getFunctions(), 'getPublicShippingPartners')({}) }
 export function submitShippingPartnerApplicationCallable(input: Record<string, unknown>) { return httpsCallable(getFunctions(), 'submitShippingPartnerApplication')(input) }
 export function listShippingPartnerApplicationsCallable() { return httpsCallable(getFunctions(), 'listShippingPartnerApplications')({}) }

@@ -15,6 +15,7 @@ import { ConfirmDialog } from '../../shared/components/ui/ConfirmDialog'
 import { useCollection } from '../../shared/hooks/useCollection'
 import { useToast } from '../../shared/hooks/useToast'
 import {
+  deleteShippingProviderCallable,
   saveShippingProviderBrandingCallable,
   saveShippingProviderCallable,
   setShippingProviderStatusCallable,
@@ -224,6 +225,8 @@ export const PlatformShippingCompanies: FunctionalComponent = () => {
     serviceCode?: string
     index: number
   } | null>(null)
+  const [deleteProviderTarget, setDeleteProviderTarget] = useState<ShippingProviderDefinition | null>(null)
+  const [deletingProvider, setDeletingProvider] = useState(false)
   const filtered = useMemo(
     () =>
       providers.data.filter(
@@ -532,6 +535,19 @@ export const PlatformShippingCompanies: FunctionalComponent = () => {
       toast.push(provider.status === 'active' ? 'تم إيقاف المزود' : 'تم تفعيل المزود')
     } catch (err: any) {
       toast.push('تعذر تغيير الحالة', err?.message || 'حاول مرة أخرى', 'error')
+    }
+  }
+  const deleteProvider = async () => {
+    if (!deleteProviderTarget) return
+    setDeletingProvider(true)
+    try {
+      await deleteShippingProviderCallable({ providerId: deleteProviderTarget.id })
+      toast.push('تم حذف شركة الشحن')
+      setDeleteProviderTarget(null)
+    } catch (err: any) {
+      toast.push('تعذر حذف شركة الشحن', err?.message || 'حاول مرة أخرى', 'error')
+    } finally {
+      setDeletingProvider(false)
     }
   }
   const testConnection = async () => {
@@ -1189,6 +1205,13 @@ export const PlatformShippingCompanies: FunctionalComponent = () => {
                 <Button size="sm" variant="ghost" onClick={() => toggleStatus(provider)}>
                   {provider.status === 'active' ? 'إيقاف' : 'تفعيل'}
                 </Button>
+                <Button
+                  size="sm"
+                  variant="ghost"
+                  onClick={() => setDeleteProviderTarget(provider)}
+                >
+                  حذف
+                </Button>
               </div>
             </div>
           ))}
@@ -1574,6 +1597,15 @@ export const PlatformShippingCompanies: FunctionalComponent = () => {
             ? 'سيتم حذف الخدمة وقواعد مناطقها من هذا المزود.'
             : 'سيتم حذف قاعدة المنطقة من هذه الخدمة.'
         }
+        confirmLabel="حذف"
+      />
+      <ConfirmDialog
+        open={!!deleteProviderTarget}
+        onCancel={() => setDeleteProviderTarget(null)}
+        onConfirm={deleteProvider}
+        loading={deletingProvider}
+        title="تأكيد حذف شركة الشحن"
+        description={`سيتم حذف "${deleteProviderTarget?.name || ''}" نهائيًا. لو أي تاجر مفعّلها أو لها شحنات سابقة هيتم رفض الحذف — أوقفها بدلاً من ذلك في هذه الحالة.`}
         confirmLabel="حذف"
       />
     </div>
