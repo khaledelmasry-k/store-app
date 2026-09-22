@@ -1,5 +1,5 @@
 import { FunctionalComponent } from 'preact'
-import { useEffect, useState } from 'preact/hooks'
+import { useEffect, useRef, useState } from 'preact/hooks'
 import { Link } from 'wouter'
 import { useStore } from '../../shared/hooks/useStore'
 import { useCart } from '../../shared/hooks/useCart'
@@ -13,6 +13,7 @@ import { SmartImage } from '../../shared/components/ui/SmartImage'
 import { createOrderCallable, getPublicStoreCouponsCallable, getShippingOptionsCallable, quoteCouponCallable } from '../../shared/services/auth'
 import { EGYPT_CITIES_BY_GOVERNORATE, GOVER_EG } from '../../shared/utils/constants'
 import { formatCurrency, todayKey } from '../../shared/utils/format'
+import { trackBeginCheckout, trackPurchase } from '../../shared/utils/analytics'
 import { cartSubtotal, lineSubtotal, piecesLabel } from '../../shared/utils/pricing'
 import { Icon } from '../../shared/components/ui/Icon'
 import { EmptyState } from '../../shared/components/ui/EmptyState'
@@ -42,6 +43,14 @@ export const StoreCheckout: FunctionalComponent = () => {
   const [selectedShippingOption, setSelectedShippingOption] = useState('')
   const [bankTransferProof, setBankTransferProof] = useState<File | null>(null)
   const subtotal = cartSubtotal(cart.items)
+  const beginCheckoutTracked = useRef(false)
+
+  useEffect(() => {
+    if (beginCheckoutTracked.current || !store?.currency || cart.items.length === 0) return
+    beginCheckoutTracked.current = true
+    trackBeginCheckout(cart.items.map((i) => ({ item_id: i.productId, item_name: i.name, price: i.price, quantity: i.quantity, item_variant: i.variantId })), subtotal, store.currency)
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [store?.currency, cart.items.length])
 
   useEffect(() => {
     if (!store?.id) return
@@ -149,6 +158,15 @@ export const StoreCheckout: FunctionalComponent = () => {
         utmCampaign,
       })
       const data = res.data as any
+      if (store?.currency) {
+        trackPurchase({
+          transactionId: data.orderId || data.orderNumber,
+          value: Number(data.totalPrice || 0),
+          currency: store.currency,
+          shipping: Number(data.shippingFee || 0),
+          items: cart.items.map((i) => ({ item_id: i.productId, item_name: i.name, price: i.price, quantity: i.quantity, item_variant: i.variantId })),
+        })
+      }
       setDone({ orderNumber: data.orderNumber, phone: form.phone })
       cart.clear()
       if (store?.id) {

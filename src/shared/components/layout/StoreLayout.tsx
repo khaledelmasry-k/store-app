@@ -3,6 +3,7 @@ import { useEffect, useState } from 'preact/hooks'
 import { Link, useLocation } from 'wouter'
 import { useAuth } from '../../hooks/useAuth'
 import { setSeo, setCustomHeadScript } from '../../utils/seo'
+import { trackPageView } from '../../utils/analytics'
 import { useStore } from '../../hooks/useStore'
 import { MerchantLogo } from '../brand/MerchantLogo'
 import { getTemplate } from '../../utils/themes'
@@ -102,6 +103,13 @@ export const StorefrontShell: FunctionalComponent<Props> = ({ children }) => {
     setCustomHeadScript(store?.customHeadScript)
     return () => setCustomHeadScript(null)
   }, [store?.id, store?.customHeadScript])
+
+  // The SPA never reloads between storefront pages, so this is the only
+  // signal a merchant's tracking setup gets for in-app navigation.
+  useEffect(() => {
+    if (!store?.name) return
+    trackPageView(location)
+  }, [location, store?.name])
 
   const canPreview =
     new URLSearchParams(window.location.search).get('preview') === '1'

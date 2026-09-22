@@ -13,6 +13,7 @@ import { SmartImage } from '../../shared/components/ui/SmartImage'
 import { formatCurrency } from '../../shared/utils/format'
 import { findVariant, imageIndexForColor, sizeInStock, variantPrice, variantStock } from '../../shared/utils/product-variants'
 import { productUnitPrice, nextTierQuantity, tierForQuantity, offerSavings, piecesLabel } from '../../shared/utils/pricing'
+import { trackAddToCart, trackViewItem } from '../../shared/utils/analytics'
 import { setSeo } from '../../shared/utils/seo'
 import type { Product, WishlistItem } from '../../shared/types'
 import { Icon } from '../../shared/components/ui/Icon'
@@ -64,6 +65,11 @@ export const StoreProduct: FunctionalComponent<Props> = ({ id }) => {
     })
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [product?.id, product?.name, product?.description, product?.price, product?.images, store?.name, store?.slug, store?.currency, store?.logo])
+
+  useEffect(() => {
+    if (!product || !store?.currency) return
+    trackViewItem({ item_id: product.id, item_name: product.name, price: product.price || 0 }, store.currency)
+  }, [product?.id, product?.name, product?.price, store?.currency])
 
   if (loading) return <Loading variant="screen" message="جارٍ تحميل المنتج..." />
 
@@ -158,6 +164,9 @@ export const StoreProduct: FunctionalComponent<Props> = ({ id }) => {
       lineTotal: product.pricingMode === 'quantity' ? unitPrice : unitPrice * qty,
       maxQty: Math.max(selectedStock, 0),
     })
+    if (store?.currency) {
+      trackAddToCart({ item_id: product.id, item_name: product.name, price: unitPrice, quantity: qty, item_variant: variant?.id }, store.currency)
+    }
     toast.push('تمت الإضافة إلى السلة')
   }
 
