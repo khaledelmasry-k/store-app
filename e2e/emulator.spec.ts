@@ -303,9 +303,12 @@ async function registerStore(
 // asserting on fields the collapsed view never renders (e.g. usage bars).
 async function expandIfCollapsed(row: Locator) {
   const toggle = row.locator('.card-table-toggle')
-  if ((await toggle.count()) > 0 && !(await row.evaluate((el) => el.classList.contains('is-expanded')))) {
-    await toggle.click()
-  }
+  if ((await toggle.count()) === 0) return row
+  if (await row.evaluate((el) => el.classList.contains('is-expanded'))) return row
+  await toggle.click()
+  // The click only queues a state update; wait for the re-render to land
+  // instead of trusting a one-shot click to have taken effect immediately.
+  await expect(row).toHaveClass(/is-expanded/, { timeout: 5000 })
   return row
 }
 
@@ -324,14 +327,23 @@ async function merchantRow(page: Page, text: string) {
   }
   for (let p = 0; p < 5; p++) {
     const row = base.filter({ hasText: text }).first()
-    if ((await row.count()) > 0) return expandIfCollapsed(row)
+    // Merchant/usage data loads asynchronously after navigation, so give the
+    // row a real chance to render instead of sampling count() once at zero
+    // cost — a zero-wait count() right after goto reliably races the fetch.
+    const appeared = await row
+      .waitFor({ state: 'attached', timeout: 5000 })
+      .then(() => true)
+      .catch(() => false)
+    if (appeared) return expandIfCollapsed(row)
     const next = page.locator('button', { hasText: 'التالي' })
     if ((await next.count()) === 0 || (await next.isDisabled())) break
     const beforeInfo = await pageInfo.textContent().catch(() => '')
     await next.click()
     await expect.poll(() => pageInfo.textContent(), { timeout: 10000 }).not.toBe(beforeInfo)
   }
-  return expandIfCollapsed(base.filter({ hasText: text }).first())
+  const row = base.filter({ hasText: text }).first()
+  await row.waitFor({ state: 'attached', timeout: 15000 }).catch(() => {})
+  return expandIfCollapsed(row)
 }
 
 async function pollValue<T>(fn: () => Promise<T>, ok: (v: T) => boolean, timeout = 15000): Promise<T> {
