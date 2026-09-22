@@ -42,7 +42,12 @@ export function BarChart({ values, labels, height = 220, color = 'var(--primary)
               style={{
                 height: h,
                 bottom: padBottom,
-                left: `${(i + 0.5) * barW}%`,
+                // Logical, not physical: the label row below is a normal
+                // flex row that follows `dir`, so in RTL its first label
+                // sits on the right. A physical `left` here always anchors
+                // bar 0 on the left regardless of direction, silently
+                // pairing every bar with the wrong store's label.
+                insetInlineStart: `${(i + 0.5) * barW}%`,
                 width: `${Math.min(barW * 0.6, 40)}%`,
                 background: tones?.[i] || color,
               }}
