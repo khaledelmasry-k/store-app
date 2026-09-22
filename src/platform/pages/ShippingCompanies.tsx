@@ -1205,13 +1205,15 @@ export const PlatformShippingCompanies: FunctionalComponent = () => {
                 <Button size="sm" variant="ghost" onClick={() => toggleStatus(provider)}>
                   {provider.status === 'active' ? 'إيقاف' : 'تفعيل'}
                 </Button>
-                <Button
-                  size="sm"
-                  variant="ghost"
-                  onClick={() => setDeleteProviderTarget(provider)}
-                >
-                  حذف
-                </Button>
+                {!['manual', 'bosta', 'wasla'].includes(provider.slug) && (
+                  <Button
+                    size="sm"
+                    variant="ghost"
+                    onClick={() => setDeleteProviderTarget(provider)}
+                  >
+                    حذف
+                  </Button>
+                )}
               </div>
             </div>
           ))}
