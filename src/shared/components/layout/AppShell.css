@@ -2437,6 +2437,22 @@ html body .app-shell--dashboard .shell-main { width: calc(100% - var(--merchant-
   background: #111a2b !important;
 }
 
+/* The collapsed rail shows icons only (no text label), so the active-page
+   tint above reads too faint at a glance — a 10% background tint that works
+   next to a text label isn't enough on its own for an icon. An explicit ring
+   fixes that without touching color (currentColor tracks whatever text color
+   already won the cascade, including any future dark-theme correction, so
+   this never needs its own theme-specific copy). Written generically
+   (`.app-shell`, not `.app-shell--platform`) so one rule covers both the
+   merchant and platform rails, which share this exact markup. Placed last
+   deliberately: the earlier canonical collapsed-rail reset strips
+   outline/border/box-shadow with !important on every rail item, and this
+   must out-order it for the active item specifically. */
+.app-shell.sidebar-unpinned:not(.sidebar-hover-expanded) .sidebar-group-header.active {
+  outline: 1.5px solid currentColor !important;
+  outline-offset: -1px;
+}
+
 /* A merchant may upload a wide storefront logo.  In the phone drawer it is
    still an icon-sized brand mark; without an explicit constraint the source
    image can spill through the navigation and cover its items. */
