@@ -1744,6 +1744,7 @@ export const createOrder = onCall({ region: SHIPPING_FUNCTION_REGION, secrets: [
         id: lineId,
         productId: item.productId,
         name: product.name,
+        image: (Array.isArray(product.images) && product.images[0]) || null,
         price: unit,
         unitPrice: unit,
         quantity: qty,

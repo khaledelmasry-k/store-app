@@ -580,6 +580,8 @@ export interface OrderItem {
   id: string
   productId: string
   name: string
+  /** Product image snapshotted at order time; absent on orders placed before this field existed. */
+  image?: string | null
   price: number
   quantity: number
   color?: string

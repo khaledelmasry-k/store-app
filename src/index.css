@@ -11662,6 +11662,17 @@ textarea.input:focus {
   align-items: start;
 }
 
+/* The public order-tracking page (Track.tsx) never had CSS for these —
+   .detail-label and .detail-value are plain sibling <span> with no CSS
+   between them, so the browser renders "شركة الشحنوصلة" as one run-on
+   string with no space at all. */
+.detail-grid { display: grid; gap: 14px; }
+.detail-item { display: flex; align-items: flex-start; gap: 10px; }
+.detail-item > div { display: flex; flex-direction: column; gap: 2px; min-width: 0; }
+.detail-label { font-size: var(--font-sm); color: var(--text-secondary); }
+.detail-value { font-weight: 600; word-break: break-word; }
+.detail-icon { flex-shrink: 0; margin-top: 2px; color: var(--text-secondary); }
+
 .order-detail-timeline {
   position: sticky;
   top: 88px;

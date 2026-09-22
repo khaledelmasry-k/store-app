@@ -2,6 +2,8 @@ import { FunctionalComponent } from 'preact'
 import { useEffect, useState } from 'preact/hooks'
 import { Badge } from '../../shared/components/ui/Badge'
 import { Loading } from '../../shared/components/ui/Loading'
+import { SmartImage } from '../../shared/components/ui/SmartImage'
+import { Icon } from '../../shared/components/ui/Icon'
 import { useDocument } from '../../shared/hooks/useDocument'
 import { useCollection } from '../../shared/hooks/useCollection'
 import { useStore } from '../../shared/hooks/useStore'
@@ -14,7 +16,6 @@ import { STATUS_LABELS } from '../../shared/utils/constants'
 import { orderItemRevenue } from '../../shared/utils/pricing'
 import { publicShipmentTrackingCode } from '../../shared/utils/shipping'
 import type { Order, OrderCost, ProductCost, Shipment } from '../../shared/types'
-import { Icon } from '../../shared/components/ui/Icon'
 import './OrderDetailsWorkspace.css'
 
 interface Props {
@@ -329,7 +330,9 @@ export const OrderDetailsWorkspace: FunctionalComponent<Props> = ({ id }) => {
                     <tr key={it.id}>
                       <td>
                         <div className="ods-item-cell">
-                          <div className="ods-item-thumb"><Icon name="inventory_2" ariaHidden /></div>
+                          <div className="ods-item-thumb">
+                            {it.image ? <SmartImage src={it.image} alt="" /> : <Icon name="inventory_2" ariaHidden />}
+                          </div>
                           <div>
                             <p className="ods-item-name">{it.name}</p>
                             <p className="ods-item-meta">
