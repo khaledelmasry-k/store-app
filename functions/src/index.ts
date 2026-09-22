@@ -4608,8 +4608,8 @@ export const createSalesLink = onCall(async (request: CallableRequest<any>) => {
     tx.create(ref, {
       storeId,
       code,
-      name: data.name || code,
-      title: data.title || data.name || code,
+      name: String(data.name || code).slice(0, 120),
+      title: String(data.title || data.name || code).slice(0, 120),
       sellerName: data.sellerName || null,
       destinationType: data.destinationType || 'home',
       destinationId: data.destinationId || null,

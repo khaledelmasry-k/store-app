@@ -291,7 +291,7 @@ export const MerchantStoreLinks: FunctionalComponent = () => {
                 {filtered.map((l) => (
                   <tr key={l.id}>
                     <td>
-                      <div className="storelinks-name">{l.name}</div>
+                      <div className="storelinks-name" title={l.name}>{l.name}</div>
                       {l.sellerName && <div className="storelinks-seller">{l.sellerName}</div>}
                     </td>
                     <td><span className="storelinks-code" dir="ltr">/s/{l.code}</span></td>
@@ -340,7 +340,7 @@ export const MerchantStoreLinks: FunctionalComponent = () => {
 
           <SectionHeader title="المعلومات الأساسية" />
           <Card>
-            <Input label="اسم الرابط (مرجع داخلي)" value={form.name} onChange={(v) => setForm({ ...form, name: v })} required placeholder="مثال: رابط بائع أكتوبر" />
+            <Input label="اسم الرابط (مرجع داخلي)" value={form.name} onChange={(v) => setForm({ ...form, name: v })} required maxLength={120} placeholder="مثال: رابط بائع أكتوبر" />
             <Input label="اسم البائع / المسوق" value={form.sellerName} onChange={(v) => setForm({ ...form, sellerName: v })} />
           </Card>
 

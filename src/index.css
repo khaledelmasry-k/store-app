@@ -3840,6 +3840,17 @@ textarea.input {
   justify-content: space-between;
   align-items: center;
 }
+/* User-entered names (link names, product titles, etc.) have no length
+   cap enforced everywhere they're displayed — one pasted script/URL as a
+   link "name" once rendered as an unbroken blob that blew out an entire
+   dashboard widget. Truncate; pair with a `title` attribute for the
+   full value on hover. */
+.truncate {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  min-width: 0;
+}
 .list-row {
   display: flex;
   justify-content: space-between;

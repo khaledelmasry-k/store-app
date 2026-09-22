@@ -211,7 +211,7 @@ export const MerchantDashboard: FunctionalComponent = () => {
           <div className="stat-card"><span className="muted small">مبيعات منسوبة</span><strong>{formatCurrency(attributedRevenue)}</strong><small>{attributedConversion}% تحويل</small></div>
         </div>
         <div className="grid grid-2 mt-2">
-          <div><h4 className="section-heading">أفضل روابط البيع</h4>{topLinks.map((link) => <div className="flex-between small" key={link.id}><span>{link.name}</span><span>{link.visits || 0} زيارة · {formatCurrency(link.totalRevenue || 0)}</span></div>)}</div>
+          <div><h4 className="section-heading">أفضل روابط البيع</h4>{topLinks.map((link) => <div className="flex-between small" key={link.id}><span className="truncate" title={link.name} style={{ maxWidth: '55%' }}>{link.name}</span><span style={{ flexShrink: 0 }}>{link.visits || 0} زيارة · {formatCurrency(link.totalRevenue || 0)}</span></div>)}</div>
           <div><h4 className="section-heading">أفضل صفحات الهبوط</h4>{topLandings.map((page) => <div className="flex-between small" key={page.id}><span>{page.title}</span><span>{page.views || 0} زيارة · {formatCurrency(page.totalRevenue || 0)}</span></div>)}</div>
         </div>
       </>}

@@ -686,6 +686,14 @@
 .storelinks-name {
   font-weight: 500;
   color: var(--text-on-background);
+  /* Nothing stopped a pasted script/URL from becoming the link's "name" —
+     one did, once, and rendered as an unbroken multi-line blob that blew
+     out the table and every dashboard widget that lists top links. Clip
+     it; the full value is still in the title tooltip and in the edit form. */
+  max-width: 260px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 .storelinks-seller {
   font-size: 11px;

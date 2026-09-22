@@ -9,6 +9,7 @@ interface Props {
   type?: string
   min?: number | string
   step?: number | string
+  maxLength?: number
   placeholder?: string
   value?: string | number
   onChange?: (value: string) => void
@@ -34,6 +35,7 @@ export const Input: FunctionalComponent<Props> = ({
   type = 'text',
   min,
   step,
+  maxLength,
   placeholder,
   value,
   onChange,
@@ -48,6 +50,7 @@ export const Input: FunctionalComponent<Props> = ({
       type={type}
       min={min}
       step={step}
+      maxLength={maxLength}
       className={clsx('input', error && 'input-error')}
       aria-label={label ? undefined : placeholder || name}
       placeholder={placeholder}
