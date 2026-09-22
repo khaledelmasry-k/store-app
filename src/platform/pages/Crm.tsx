@@ -1,5 +1,5 @@
 import { FunctionalComponent } from 'preact'
-import { useEffect, useState } from 'preact/hooks'
+import { useEffect, useRef, useState } from 'preact/hooks'
 import { Link } from 'wouter'
 import { PageHeader } from '../../shared/components/ui/PageHeader'
 import { Card } from '../../shared/components/ui/Card'
@@ -24,6 +24,7 @@ export const PlatformCrm: FunctionalComponent = () => {
   const [dashboard, setDashboard] = useState<any>(null)
   const [merchants, setMerchants] = useState<any[]>([])
   const [selected, setSelected] = useState<any>(null)
+  const selectedRef = useRef<HTMLDivElement>(null)
   const [query, setQuery] = useState('')
   const [stage, setStage] = useState('')
   const [plan, setPlan] = useState('')
@@ -53,6 +54,10 @@ export const PlatformCrm: FunctionalComponent = () => {
     } catch { setError('تعذر تحميل CRM المنصة') } finally { setLoading(false) }
   }
   useEffect(() => { void load() }, [])
+  // The 360 panel renders below the (often long) merchant list — without
+  // this, tapping "360" on an early row looks like it did nothing, since
+  // the new panel appears off-screen with no visible change on the page.
+  useEffect(() => { if (selected) selectedRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' }) }, [selected])
   if (loading) return <Loading message="جارٍ تحميل CRM المنصة…" />
   if (error) return <ErrorState title="تعذر تحميل CRM المنصة" description={error} onRetry={() => void load()} />
   const filtered = merchants.filter((m) => (!query || `${m.storeName} ${m.ownerName} ${m.email}`.toLowerCase().includes(query.toLowerCase())) && (!stage || m.stage === stage) && (!plan || m.plan === plan) && (!subscriptionStatus || m.subscriptionStatus === subscriptionStatus))
@@ -123,7 +128,7 @@ export const PlatformCrm: FunctionalComponent = () => {
         />
       )}
     </Card>
-    {selected && <Card title={`Merchant 360 — ${selected.store?.name || selected.user?.email || ''}`}>
+    {selected && <div ref={selectedRef}><Card title={`Merchant 360 — ${selected.store?.name || selected.user?.email || ''}`}>
       <div className="crm-detail-grid"><p>البريد: {selected.user?.email || '—'}</p><p>التحقق: {selected.user?.emailVerified ? 'تم' : 'غير مؤكد'}</p><p>المنتجات: {selected.productsCount}</p><p>الطلبات: {selected.totalOrders}</p><p>GMV: {selected.gmv}</p><p>التذاكر المفتوحة: {selected.openTickets}</p></div>
       <Select label="مرحلة CRM" value={selected.profile?.stage || ''} onChange={(v) => void saveStage(v)} options={STAGES.map((s) => ({ value: s, label: s }))} />
       <div className="button-row" style={{ display: 'flex', gap: 8, flexWrap: 'wrap', marginTop: 12 }}><Button onClick={() => setNoteOpen(true)}>إضافة ملاحظة</Button><Button variant="outline" onClick={() => setFollowOpen(true)}>إضافة متابعة</Button><Button variant="ghost" onClick={() => setSelected(null)}>إغلاق</Button></div>
@@ -150,7 +155,7 @@ export const PlatformCrm: FunctionalComponent = () => {
           </ul>
         )}
       </div>
-    </Card>}
+    </Card></div>}
 
     <Modal open={noteOpen} onClose={() => setNoteOpen(false)} title="ملاحظة جديدة" footer={<><Button variant="ghost" onClick={() => setNoteOpen(false)}>إلغاء</Button><Button onClick={handleAddNote} disabled={!noteBody.trim()}>حفظ</Button></>}>
       <Textarea label="نص الملاحظة" value={noteBody} onChange={setNoteBody} rows={3} placeholder="اكتب ملاحظة المتابعة..." />

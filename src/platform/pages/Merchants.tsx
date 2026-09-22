@@ -514,6 +514,7 @@ export const PlatformMerchants: FunctionalComponent = () => {
               },
             ]}
             rows={rowsPage}
+            cardSummaryKeys={['store', 'plan']}
           />
         )}
         {sorted.length > PAGE_SIZE && (

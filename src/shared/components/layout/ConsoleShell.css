@@ -91,7 +91,13 @@
   overflow-x: auto;
   scrollbar-width: thin;
 }
-.console-shell .segmented .segment { flex: 0 1 auto; min-width: 0; white-space: nowrap; }
+/* flex: 0 1 auto + min-width: 0 let a segment shrink below its own label's
+   width with nothing to stop it, so the nowrap text overflows the crushed
+   box and bleeds onto the next segment — this selector is more specific
+   than the shared .segment rule (which already sets flex-shrink: 0) and
+   was silently overriding it back to shrinkable everywhere inside
+   .console-shell. Never shrink; .segmented already scrolls horizontally. */
+.console-shell .segmented .segment { flex: 0 0 auto; white-space: nowrap; }
 .console-shell .console-mobile-nav { display: none; }
 .console-shell .console-drawer-overlay { display: none; }
 

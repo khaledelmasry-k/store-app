@@ -4254,6 +4254,23 @@ textarea.input {
   font-weight: 600;
   text-align: left;
 }
+.card-table-card--expandable {
+  cursor: pointer;
+}
+.card-table-toggle {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 4px;
+  margin-top: 4px;
+  padding: 8px;
+  border: 1px dashed var(--border);
+  border-radius: var(--radius-sm);
+  background: transparent;
+  color: var(--primary);
+  font-size: var(--font-sm);
+  font-weight: 600;
+}
 
 /* ─────────────────────────── Responsive ─────────────────────────── */
 @media (max-width: 768px) {

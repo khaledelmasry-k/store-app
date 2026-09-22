@@ -5958,7 +5958,11 @@ function normalizeCommercialAgreement(input: any, providerId: string) {
   if (input?.effectiveFrom && !Number.isFinite(from)) throw new HttpsError('invalid-argument', 'تاريخ بداية الاتفاقية غير صالح')
   if (input?.effectiveTo && !Number.isFinite(to)) throw new HttpsError('invalid-argument', 'تاريخ نهاية الاتفاقية غير صالح')
   if (from != null && to != null && to < from) throw new HttpsError('invalid-argument', 'نهاية الاتفاقية قبل بدايتها')
-  return { providerId, status: ['draft', 'active', 'expired', 'suspended'].includes(input?.status) ? input.status : 'draft', currency: 'EGP', settlementCycle: 'monthly', volumeMetric: 'sourced_shipments', effectiveFrom: input?.effectiveFrom || null, effectiveTo: input?.effectiveTo || null, tiers, contractReference: input?.contractReference ? sanitizeSensitiveText(String(input.contractReference)).slice(0, 200) : undefined, internalNotes: input?.internalNotes ? sanitizeSensitiveText(String(input.internalNotes)).slice(0, 2000) : undefined, updatedAt: now() }
+  // Firestore's set() rejects a literal `undefined` in any field (throws
+  // "Cannot use 'undefined' as a Firestore value"), which made this save
+  // fail every time contractReference/internalNotes were left blank — the
+  // common case, since both are optional. Use null instead.
+  return { providerId, status: ['draft', 'active', 'expired', 'suspended'].includes(input?.status) ? input.status : 'draft', currency: 'EGP', settlementCycle: 'monthly', volumeMetric: 'sourced_shipments', effectiveFrom: input?.effectiveFrom || null, effectiveTo: input?.effectiveTo || null, tiers, contractReference: input?.contractReference ? sanitizeSensitiveText(String(input.contractReference)).slice(0, 200) : null, internalNotes: input?.internalNotes ? sanitizeSensitiveText(String(input.internalNotes)).slice(0, 2000) : null, updatedAt: now() }
 }
 
 export const getShippingProviderCommercialAgreement = onCall(async (request: CallableRequest<any>) => { await assertPlatformAdmin(request); const providerId = String(request.data?.providerId || '').trim(); if (!providerId) throw new HttpsError('invalid-argument', 'providerId مطلوب'); const snap = await db.doc(`shippingProviderCommercialAgreements/${providerId}`).get(); return { agreement: snap.exists ? { id: snap.id, ...snap.data() } : null } })

@@ -11,10 +11,16 @@ import { Badge } from '../../shared/components/ui/Badge'
 import { EmptyState } from '../../shared/components/ui/EmptyState'
 import { Loading } from '../../shared/components/ui/Loading'
 import { Button } from '../../shared/components/ui/Button'
+import { Input } from '../../shared/components/ui/Input'
+import { Select } from '../../shared/components/ui/Select'
+import { Textarea } from '../../shared/components/ui/Textarea'
 import { useToast } from '../../shared/hooks/useToast'
 import { testShippingConnectionCallable } from '../../shared/services/auth'
 import type { ShippingProviderDefinition, Shipment, Store } from '../../shared/types'
-import { getShippingProviderCommercialAgreementCallable } from '../../shared/services/auth'
+import { getShippingProviderCommercialAgreementCallable, saveShippingProviderCommercialAgreementCallable } from '../../shared/services/auth'
+
+type CommercialTier = { minShipments: number; maxShipments: number | null; deliveredCommission: number; returnedCommission: number }
+const emptyTier = (): CommercialTier => ({ minShipments: 0, maxShipments: null, deliveredCommission: 0, returnedCommission: 0 })
 
 export const PlatformShippingCompanyDetails: FunctionalComponent<{ id: string }> = ({ id }) => {
   const companyRes = useDocument<ShippingProviderDefinition>('shippingProviders', id)
@@ -24,6 +30,8 @@ export const PlatformShippingCompanyDetails: FunctionalComponent<{ id: string }>
   const [testing, setTesting] = useState(false)
   const [agreement, setAgreement] = useState<any>(null)
   const [activeSection, setActiveSection] = useState<'overview' | 'capabilities' | 'eligibility' | 'commercial'>('overview')
+  const [agreementForm, setAgreementForm] = useState<{ status: string; effectiveFrom: string; effectiveTo: string; contractReference: string; internalNotes: string; tiers: CommercialTier[] }>({ status: 'draft', effectiveFrom: '', effectiveTo: '', contractReference: '', internalNotes: '', tiers: [] })
+  const [savingAgreement, setSavingAgreement] = useState(false)
   const company = companyRes.data
   useEffect(() => {
     if (!company?.id) {
@@ -31,13 +39,51 @@ export const PlatformShippingCompanyDetails: FunctionalComponent<{ id: string }>
       return
     }
     void getShippingProviderCommercialAgreementCallable({ providerId: company.id })
-      .then((result: any) => setAgreement(result.data?.agreement || {}))
+      .then((result: any) => {
+        const a = result.data?.agreement || {}
+        setAgreement(a)
+        setAgreementForm({
+          status: a.status || 'draft',
+          effectiveFrom: a.effectiveFrom ? String(a.effectiveFrom).slice(0, 10) : '',
+          effectiveTo: a.effectiveTo ? String(a.effectiveTo).slice(0, 10) : '',
+          contractReference: a.contractReference || '',
+          internalNotes: a.internalNotes || '',
+          tiers: Array.isArray(a.tiers) && a.tiers.length ? a.tiers : [emptyTier()],
+        })
+      })
       .catch(() => setAgreement({}))
   }, [company?.id])
   if (companyRes.loading) return <Loading variant="screen" />
   if (!company) return <EmptyState icon="local_shipping" title="شركة الشحن غير موجودة" />
   const merchantManagedApi = company.integrationType === 'api' && company.credentialMode === 'merchant'
   const adapterAvailable = company.integrationType === 'manual' || company.adapterStatus === 'production_ready'
+
+  const updateTier = (index: number, patch: Partial<CommercialTier>) => {
+    setAgreementForm((f) => ({ ...f, tiers: f.tiers.map((t, i) => (i === index ? { ...t, ...patch } : t)) }))
+  }
+  const addTier = () => setAgreementForm((f) => ({ ...f, tiers: [...f.tiers, emptyTier()] }))
+  const removeTier = (index: number) => setAgreementForm((f) => ({ ...f, tiers: f.tiers.filter((_, i) => i !== index) }))
+  const saveAgreement = async () => {
+    setSavingAgreement(true)
+    try {
+      const payload = {
+        providerId: company.id,
+        status: agreementForm.status,
+        effectiveFrom: agreementForm.effectiveFrom || null,
+        effectiveTo: agreementForm.effectiveTo || null,
+        contractReference: agreementForm.contractReference || undefined,
+        internalNotes: agreementForm.internalNotes || undefined,
+        tiers: agreementForm.tiers,
+      }
+      const result: any = await saveShippingProviderCommercialAgreementCallable(payload)
+      setAgreement(result.data?.agreement || null)
+      toast.push('تم حفظ الاتفاق التجاري', 'ستُستخدم قيم العمولة هذه في احتساب إيرادات شركات الشحن.', 'success')
+    } catch (err: any) {
+      toast.push('تعذر حفظ الاتفاق التجاري', err?.message, 'error')
+    } finally {
+      setSavingAgreement(false)
+    }
+  }
 
   const testConnection = async () => {
     if (company.integrationType === 'manual') {
@@ -86,7 +132,33 @@ export const PlatformShippingCompanyDetails: FunctionalComponent<{ id: string }>
     <Card title="الخدمات والأسعار"><div className="stack-list">{company.services?.filter((service) => service.enabled !== false).map((service) => <div className="list-row" key={service.code}><div><strong>{service.name}</strong> <span className="muted small">({service.code}) · {service.rateMode === 'zone' ? 'حسب المنطقة' : `${service.fixedRate || 0} ج.م`}</span>{service.zoneRules?.length ? <div className="muted small">{service.zoneRules.map((zone) => `${zone.zoneName}: ${zone.baseRate} ج.م · ${zone.etaMin || '?'}–${zone.etaMax || '?'} ${zone.etaUnit === 'days' ? 'يوم' : 'ساعة'}`).join('، ')}</div> : null}</div><span className="muted small">{service.estimatedMinHours || '?'}–{service.estimatedMaxHours || '?'} ساعة</span></div>) || <p className="muted">لم تُعرّف خدمات بعد.</p>}</div></Card>
     </>}
     {activeSection === 'eligibility' && <Card title="أهلية التجار"><div id="eligibility" className="shipping-provider-dl"><div><dt>الحد الأدنى الشهري</dt><dd>{company.eligibilityConfig?.minimumMerchantMonthlyShipments || 0} شحنة</dd></div><div><dt>جاهزية المحول</dt><dd>{company.integrationType === 'manual' || company.adapterStatus === 'production_ready' ? 'جاهز' : 'غير جاهز'}</dd></div><div><dt>التغطية</dt><dd>{company.services?.reduce((count, service) => count + (service.zoneRules?.length || 0), 0) || 0} منطقة</dd></div><div><dt>الاتفاق التجاري</dt><dd>{agreement?.status === 'active' ? 'نشط' : 'غير نشط'}</dd></div></div></Card>}
-    {activeSection === 'commercial' && <Card title="الاتفاق التجاري"><div id="commercial" className="shipping-provider-dl"><div><dt>الحالة</dt><dd>{agreement?.status || 'غير مفعّل'}</dd></div><div><dt>دورة التسوية</dt><dd>{agreement?.settlementCycle || 'شهري'}</dd></div><div><dt>الشرائح</dt><dd>{agreement?.tiers?.length || 0}</dd></div><p className="muted small">تُدار قيم العمولات من خلال وظائف SuperAdmin ولا تُعرض للتاجر.</p></div></Card>}
+    {activeSection === 'commercial' && <Card title="الاتفاق التجاري" subtitle="عمولة التسليم والمرتجع لكل شريحة حجم شحنات — تُستخدم هذه القيم لاحتساب إيرادات شركات الشحن تلقائيًا كل شهر.">
+      <div id="commercial" className="grid grid-2">
+        <Select label="الحالة" value={agreementForm.status} onChange={(v) => setAgreementForm((f) => ({ ...f, status: v }))} options={[{ value: 'draft', label: 'مسودة' }, { value: 'active', label: 'نشط' }, { value: 'suspended', label: 'موقوف' }, { value: 'expired', label: 'منتهي' }]} />
+        <Input label="مرجع العقد (اختياري)" value={agreementForm.contractReference} onChange={(v) => setAgreementForm((f) => ({ ...f, contractReference: v }))} />
+        <Input label="سريان الاتفاق من (اختياري)" type="date" value={agreementForm.effectiveFrom} onChange={(v) => setAgreementForm((f) => ({ ...f, effectiveFrom: v }))} />
+        <Input label="سريان الاتفاق إلى (اختياري)" type="date" value={agreementForm.effectiveTo} onChange={(v) => setAgreementForm((f) => ({ ...f, effectiveTo: v }))} />
+      </div>
+      <Textarea label="ملاحظات داخلية (اختياري)" value={agreementForm.internalNotes} onChange={(v) => setAgreementForm((f) => ({ ...f, internalNotes: v }))} rows={2} />
+
+      <div className="commercial-tiers" style={{ marginTop: 16 }}>
+        <div className="flex-between"><h4 style={{ margin: 0 }}>شرائح العمولة حسب حجم الشحنات</h4><Button size="sm" variant="outline" icon="add" onClick={addTier}>إضافة شريحة</Button></div>
+        <p className="muted small">كل شريحة تحدد نطاق عدد شحنات الشهر (من — إلى)، وعمولة الشركة عن كل شحنة "تم التسليم" وكل شحنة "مرتجعة" ضمن هذا النطاق.</p>
+        {agreementForm.tiers.map((tier, i) => (
+          <div key={i} className="commercial-tier-row grid grid-4" style={{ alignItems: 'end', gap: 8, marginTop: 8, paddingBottom: 8, borderBottom: '1px solid var(--outline-variant)' }}>
+            <Input label="من (عدد شحنات)" type="number" min={0} value={tier.minShipments} onChange={(v) => updateTier(i, { minShipments: Math.max(0, Number(v) || 0) })} />
+            <Input label="إلى (اتركه فارغًا = بلا حد)" type="number" min={0} value={tier.maxShipments ?? ''} onChange={(v) => updateTier(i, { maxShipments: v === '' ? null : Math.max(0, Number(v) || 0) })} />
+            <Input label="عمولة التسليم (ج.م/شحنة)" type="number" min={0} step="0.01" value={tier.deliveredCommission} onChange={(v) => updateTier(i, { deliveredCommission: Math.max(0, Number(v) || 0) })} />
+            <Input label="عمولة المرتجع (ج.م/شحنة)" type="number" min={0} step="0.01" value={tier.returnedCommission} onChange={(v) => updateTier(i, { returnedCommission: Math.max(0, Number(v) || 0) })} />
+            <Button variant="ghost" size="sm" icon="delete" onClick={() => removeTier(i)} disabled={agreementForm.tiers.length <= 1}>حذف الشريحة</Button>
+          </div>
+        ))}
+      </div>
+
+      <div style={{ marginTop: 16 }}>
+        <Button loading={savingAgreement} onClick={saveAgreement}>حفظ الاتفاق التجاري</Button>
+      </div>
+    </Card>}
   </div>
 }
 
