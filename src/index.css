@@ -6412,9 +6412,18 @@ textarea.input {
 .dashboard-checklist-progress i { display:block; height:100%; border-radius:inherit; background:var(--primary); }
 .dashboard-checklist-items { display:flex; flex-wrap:wrap; gap:8px; }
 .dashboard-checklist-item { display:inline-flex; align-items:center; gap:7px; padding:8px 10px; border:1px solid var(--border); border-radius:8px; color:var(--text-primary); font-size:12px; text-decoration:none; }
-.dashboard-checklist-item.is-done { color:var(--text-secondary); text-decoration:line-through; background:var(--surface-2); }
-.dashboard-checklist-box { display:inline-grid; place-items:center; width:18px; height:18px; border:1px solid var(--border-strong, #cbd5e1); border-radius:5px; font-size:12px; font-weight:800; }
+/* line-through renders as an illegible tangle over connected Arabic
+   letterforms (each strike crosses several joined glyphs) — a muted color
+   plus the checkmark already communicates "done" without it. */
+.dashboard-checklist-item.is-done { color:var(--text-secondary); background:var(--surface-2); }
+.dashboard-checklist-box { display:inline-grid; place-items:center; width:18px; height:18px; border:1px solid var(--border-strong, #cbd5e1); border-radius:5px; font-size:12px; font-weight:800; flex-shrink:0; }
 .dashboard-checklist-item.is-done .dashboard-checklist-box { border-color:var(--primary); background:var(--primary); color:var(--primary-contrast, #fff); }
+/* Label and the "why it's not done yet" hint are siblings inside one span;
+   without an explicit block layout they run into each other on one line
+   with no separator (e.g. "أضف وسيلة شحن" + "جارٍ التحقق من إعدادات الشحن"
+   reading as one garbled sentence). Stack them instead. */
+.dashboard-checklist-item > span { display:flex; flex-direction:column; gap:2px; }
+.dashboard-checklist-item small { display:block; font-size:11px; }
 @media (max-width:640px) { .dashboard-checklist-head { align-items:stretch; flex-direction:column; gap:8px; } .dashboard-checklist-progress { width:100%; } .dashboard-checklist-items { display:grid; grid-template-columns:1fr; } }
 
 /* ── Pricing Card (shared) ── */
@@ -12205,8 +12214,12 @@ html:not([data-theme='dark']) .loading-screen {
     min-width: 0;
     flex-wrap: wrap;
   }
+  /* min-width: 0 lets the button shrink past its label's natural width, but
+     .btn keeps white-space: nowrap — so a long label (e.g. "تحديد الاختباري
+     الظاهر") doesn't wrap or shrink, it just overflows the shrunk box and
+     visibly bleeds into whichever button sits next to it. Clip it instead. */
   .page-header .btn,
-  .platform-plans-page .page-header .btn { flex: 1 1 150px; min-width: 0; }
+  .platform-plans-page .page-header .btn { flex: 1 1 150px; min-width: 0; overflow: hidden; text-overflow: ellipsis; }
   .analytics-period-segmented { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); overflow: visible; }
   .analytics-period-segmented button { min-width: 0; padding-inline: 8px; }
   .analytics-kpi-grid,
