@@ -525,7 +525,7 @@ export const MerchantShipping: FunctionalComponent = () => {
                       <input type="radio" name="defaultProvider" checked={config?.isDefault === true} disabled={!config?.enabled} onChange={() => void savePlatformConfig(provider, config, { ...config, isDefault: true })} />
                       <span className="small">الشركة الافتراضية</span>
                     </label>
-                    <span style={{ marginInlineStart: 'auto', display: 'flex', gap: 8 }}>
+                    <span style={{ marginInlineStart: 'auto', display: 'flex', gap: 8, flexWrap: 'wrap' }}>
                       <Button size="sm" variant="ghost" onClick={() => setExpandedProvider((cur) => cur === provider.id ? null : provider.id)}>{expandedProvider === provider.id ? 'إخفاء' : 'إعدادات'}</Button>
                       {config?.enabled && <Button size="sm" variant="outline" disabled={provider.integrationType === 'manual' || !provider.adapterConfigured} onClick={() => testPlatformProvider(provider, config)}>اختبار الاتصال</Button>}
                     </span>

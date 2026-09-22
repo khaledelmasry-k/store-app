@@ -12257,6 +12257,27 @@ html:not([data-theme='dark']) .loading-screen {
      visibly bleeds into whichever button sits next to it. Clip it instead. */
   .page-header .btn,
   .platform-plans-page .page-header .btn { flex: 1 1 150px; min-width: 0; overflow: hidden; text-overflow: ellipsis; }
+
+  /* Systemic backstop for the same bug class found in several unrelated
+     places (page-header toolbars, card action rows, provider setting
+     rows): a button row that doesn't get explicit flex-wrap squeezes its
+     buttons via flex-shrink with no min-width floor, and since .btn is
+     white-space: nowrap, the label overflows its own shrunk box and
+     paints over whatever sits next to it. Two independent nets:
+     1) any .flex row holding 2+ buttons wraps instead of squeezing;
+     2) any .btn that still ends up too narrow clips its own label
+        instead of letting it bleed onto a neighbor — this fires even for
+        inline-styled flex rows that :has() below can't see. */
+  .flex:has(.btn + .btn),
+  .flex:has(button + button) {
+    flex-wrap: wrap;
+    row-gap: 6px;
+  }
+  .btn {
+    overflow: hidden;
+    text-overflow: ellipsis;
+    max-width: 100%;
+  }
   .analytics-period-segmented { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); overflow: visible; }
   .analytics-period-segmented button { min-width: 0; padding-inline: 8px; }
   .analytics-kpi-grid,
