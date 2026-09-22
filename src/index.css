@@ -1468,7 +1468,13 @@ textarea.input {
   position: fixed;
   inset-block-start: 0;
   inset-inline-end: 0;
+  /* 100vh sizes to the viewport with the mobile browser's address bar
+     hidden; while it's visible (the normal state on first load / scroll
+     up) the drawer renders taller than what's actually on screen, so its
+     bottom — often the primary action button — sits below the fold with
+     no way to scroll to it. 100dvh tracks the real visible height. */
   height: 100vh;
+  height: 100dvh;
   background: var(--surface);
   z-index: 51;
   width: min(420px, 100%);
@@ -1765,6 +1771,13 @@ textarea.input {
   border-radius: 10px;
   padding: 3px;
   gap: 2px;
+  /* A long segment list (e.g. every order status) is wider than a phone
+     screen. Base rule scrolls horizontally instead of relying on a
+     max-width media query further down the cascade — that override was
+     getting lost, leaving segments flex-shrinkable with no floor. */
+  max-width: 100%;
+  overflow-x: auto;
+  -webkit-overflow-scrolling: touch;
 }
 .segment {
   padding: 6px 16px;
@@ -1773,6 +1786,13 @@ textarea.input {
   font-weight: 600;
   color: var(--text-secondary);
   transition: all 0.15s;
+  /* Without these, flex-shrink defaults to 1 with no min-width floor, so
+     a long label (e.g. "قيد التجهيز") gets crushed well below its own
+     text width and — since overflow is visible by default — the nowrap
+     text spills out past its shrunk box and paints over every
+     neighboring segment. Never shrink; scroll the row instead (above). */
+  flex-shrink: 0;
+  white-space: nowrap;
 }
 .segment-active {
   background: var(--surface);
@@ -2294,7 +2314,12 @@ textarea.input {
 .sidebar-drawer {
   width: 280px;
   max-width: 85vw;
+  /* Same 100vh-vs-visible-viewport gap as .drawer above: with the mobile
+     browser's address bar showing, a 100vh-tall drawer extends past what's
+     actually visible, so "تسجيل الخروج" at its bottom can render off-screen
+     with no reachable scroll. 100dvh sizes to what's really on screen. */
   height: 100vh;
+  height: 100dvh;
   background: var(--surface);
   border-inline-end: 1px solid var(--border);
   display: flex;
@@ -6756,6 +6781,18 @@ body {
   .platform-subscriptions-page .card-table-value {
     min-width: 0;
     overflow-wrap: anywhere;
+  }
+
+  /* The actions cell's row of buttons (.flex) inherits min-width: 0 from
+     its shrunk parent above, but each .btn keeps white-space: nowrap — so
+     a button whose label doesn't fit (e.g. "الدخول كالتاجر") doesn't wrap
+     or shrink, it overflows its own box and visibly sits on top of the
+     next button (e.g. the "دعم" icon button right after it). Let the row
+     wrap onto a second line instead of letting buttons overlap. */
+  .platform-merchants-page .card-table-value .flex,
+  .platform-subscriptions-page .card-table-value .flex {
+    flex-wrap: wrap;
+    row-gap: 6px;
   }
 }
 

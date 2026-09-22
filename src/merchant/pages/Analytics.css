@@ -128,6 +128,12 @@
   font-size: 10px;
   color: var(--on-surface-variant);
   white-space: nowrap;
+  /* Safety net: each label sits in a flex column with min-width: 0, so on
+     a 30-day chart there's nowhere near enough room per bar even after
+     thinning below — clip instead of letting it spill over neighbors. */
+  overflow: hidden;
+  text-overflow: ellipsis;
+  max-width: 100%;
 }
 .analytics-bar-col:hover .analytics-bar { background: var(--primary); }
 .analytics-bars.is-compact .analytics-bar {
@@ -207,7 +213,10 @@
   .analytics-business-grid { grid-template-columns: 1fr; }
   .analytics-ad-grid { grid-template-columns: 1fr; }
   .analytics-period-segmented { width: 100%; overflow-x: auto; }
-  .analytics-bars:not(.is-compact) .analytics-bar-col:nth-child(even) .analytics-bar-label { display: none; }
+  /* Hiding just the even bars still leaves 15 labels for a 30-day chart —
+     nowhere near enough width each, so they overlapped into an illegible
+     mess. Keep roughly every 5th label instead. */
+  .analytics-bars:not(.is-compact) .analytics-bar-col:not(:nth-child(5n+1)) .analytics-bar-label { display: none; }
 }
 @media (max-width: 430px) {
   .merchant-analytics-page { gap: 18px; }

@@ -557,7 +557,7 @@ export const MerchantShipping: FunctionalComponent = () => {
           {cfg.enabled && (
             <div style={{ marginTop: 14 }}>
               <p className="muted small">حدد المناطق/المحافظات، سعر الشحن، الشحن المجاني، وزمن التوصيل. لا يتطلب API أو شعار شركة.</p>
-              <div style={{ display: 'flex', gap: 8, marginTop: 12 }}>
+              <div style={{ display: 'flex', gap: 8, marginTop: 12, flexWrap: 'wrap' }}>
                 <Button size="sm" icon="add" onClick={() => setZoneOpen(true)}>إضافة منطقة شحن</Button>
                 <Button size="sm" variant="ghost" onClick={() => setTab('overview')}>إدارة المناطق المتقدمة</Button>
               </div>
