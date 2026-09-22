@@ -297,6 +297,18 @@ async function registerStore(
   await logout(page)
 }
 
+// Mobile card mode collapses a row to just its summary columns (name +
+// plan) behind a "عرض كل التفاصيل" toggle — real users tap the card to see
+// the rest, so tests inspecting a row's full text must do the same before
+// asserting on fields the collapsed view never renders (e.g. usage bars).
+async function expandIfCollapsed(row: Locator) {
+  const toggle = row.locator('.card-table-toggle')
+  if ((await toggle.count()) > 0 && !(await row.evaluate((el) => el.classList.contains('is-expanded')))) {
+    await toggle.click()
+  }
+  return row
+}
+
 async function merchantRow(page: Page, text: string) {
   const base = page.locator('tr, .card-table-card')
   const pageInfo = page.locator('.pagination-info').first()
@@ -312,14 +324,14 @@ async function merchantRow(page: Page, text: string) {
   }
   for (let p = 0; p < 5; p++) {
     const row = base.filter({ hasText: text }).first()
-    if ((await row.count()) > 0) return row
+    if ((await row.count()) > 0) return expandIfCollapsed(row)
     const next = page.locator('button', { hasText: 'التالي' })
     if ((await next.count()) === 0 || (await next.isDisabled())) break
     const beforeInfo = await pageInfo.textContent().catch(() => '')
     await next.click()
     await expect.poll(() => pageInfo.textContent(), { timeout: 10000 }).not.toBe(beforeInfo)
   }
-  return base.filter({ hasText: text }).first()
+  return expandIfCollapsed(base.filter({ hasText: text }).first())
 }
 
 async function pollValue<T>(fn: () => Promise<T>, ok: (v: T) => boolean, timeout = 15000): Promise<T> {
