@@ -115,7 +115,7 @@ export const PlatformSettings: FunctionalComponent = () => {
         <div className="settings-flags">
           <Toggle checked={form.registrationEnabled ?? data?.registrationEnabled ?? true} onChange={(v) => setForm({ ...form, registrationEnabled: v })} label="تفعيل تسجيل التجار" />
           <Toggle checked={form.allowCustomerAccounts ?? data?.allowCustomerAccounts ?? true} onChange={(v) => setForm({ ...form, allowCustomerAccounts: v })} label="تفعيل حسابات العملاء" />
-          <Toggle checked={form.maintenanceMode ?? data?.maintenanceMode ?? false} onChange={(v) => setForm({ ...form, maintenanceMode: v })} label="وضع الصيانة" />
+          <Toggle checked={form.maintenanceMode ?? data?.maintenanceMode ?? false} onChange={(v) => setForm({ ...form, maintenanceMode: v })} label="إيقاف تسجيل تجار جدد مؤقتًا" />
         </div>
       </Card>
     </div>
