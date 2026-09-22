@@ -233,13 +233,6 @@ export const MerchantSettings: FunctionalComponent = () => {
               <h3><Icon name="storefront" ariaHidden /> معلومات المتجر</h3>
             </div>
             <div className="settings-card-body">
-              <div className="settings-status-row">
-                <div>
-                  <h4>حالة المبيعات</h4>
-                  <p>إيقافها يمنع إتمام أي طلبات جديدة، لكن المتجر يبقى مرئيًا للزوار — للإخفاء الكامل استخدم زر "إيقاف نشر المتجر" بالأسفل.</p>
-                </div>
-                <Toggle checked={form.active ?? store?.active ?? true} onChange={(v) => setForm({ ...form, active: v })} />
-              </div>
               <div className="field">
                 <label className="field-label">اسم المتجر</label>
                 <input className="input" aria-label="اسم المتجر" value={form.name ?? store?.name ?? ''} onChange={(e) => setForm({ ...form, name: (e.target as HTMLInputElement).value })} />
@@ -433,7 +426,6 @@ export const MerchantSettings: FunctionalComponent = () => {
                   <a href={storefrontPath} target="_blank" rel="noreferrer" className="settings-outline-link">
                     <Button variant="outline" icon="open_in_new">فتح المتجر المنشور</Button>
                   </a>
-                  <Button variant="outline" icon="share" onClick={copyLink}>مشاركة</Button>
                 </div>
               </div>
             ) : (
