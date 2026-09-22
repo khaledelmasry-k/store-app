@@ -93,7 +93,19 @@ export const PlatformAudit: FunctionalComponent = () => {
     <PageHeader title="سجل التدقيق الإداري" subtitle={`${auditRes.data.length} إدخال — سجل واضح لكل تغيير`} />
     <Card><FilterBar search={query} onSearch={setQuery} searchPlaceholder="ابحث بالاسم أو البريد أو الإجراء أو المتجر..." /><div className="audit-filters" role="group" aria-label="فلاتر سجل التدقيق"><Select value={category} onChange={setCategory} options={FILTERS} /><Input type="date" value={fromDate} onChange={setFromDate} /><Input type="date" value={toDate} onChange={setToDate} /></div>
       <Table rows={filtered} loading={auditRes.loading} emptyMessage="لا توجد إجراءات مطابقة" onRowClick={setSelected} columns={[
-        { key: 'actor', header: 'المستخدم', render: (log: AuditLog) => { const actor = actorFor(log, users); const meta = log.meta || {}; const actorName = actor?.name || (meta.actorName as string) || (log.userId ? 'مستخدم محذوف' : 'النظام'); const actorEmail = actor?.email || (meta.actorEmail as string); const role = actor?.role || (meta.actorRole as string); return <div className="audit-actor"><strong>{actorName}</strong>{actorEmail && <small>{actorEmail}</small>}{role && <Badge tone="slate">{role === 'superAdmin' ? 'مدير المنصة' : role === 'merchant' ? 'تاجر' : role}</Badge>}{!actor && log.userId && <small className="monospace">{log.userId.slice(0, 8)}…</small>}</div> } },
+        { key: 'actor', header: 'المستخدم', render: (log: AuditLog) => {
+          const actor = actorFor(log, users)
+          const meta = log.meta || {}
+          // A guest checkout writes the literal string 'guest' as the actor
+          // id (there is no user doc to look up), not a real, since-deleted
+          // account — those need distinct labels rather than both falling
+          // through to "مستخدم محذوف".
+          const isGuest = log.userId === 'guest'
+          const actorName = actor?.name || (meta.actorName as string) || (isGuest ? 'زائر' : log.userId ? 'مستخدم محذوف' : 'النظام')
+          const actorEmail = actor?.email || (meta.actorEmail as string)
+          const role = actor?.role || (meta.actorRole as string)
+          return <div className="audit-actor"><strong>{actorName}</strong>{actorEmail && <small>{actorEmail}</small>}{role && <Badge tone="slate">{role === 'superAdmin' ? 'مدير المنصة' : role === 'merchant' ? 'تاجر' : role}</Badge>}{!actor && log.userId && !isGuest && <small className="monospace">{log.userId.slice(0, 8)}…</small>}</div>
+        } },
         { key: 'action', header: 'الإجراء', render: (log: AuditLog) => <div className="audit-action"><Badge tone={ACTION_TONES[log.action] || 'slate'}>{actionLabel(log.action)}</Badge><small>{detailsFor(log)}</small></div> },
         { key: 'entity', header: 'الكيان', render: (log: AuditLog) => <span>{ENTITY_LABELS[log.resource] || log.resource}{log.storeId && storeMap.get(log.storeId) ? ` — ${storeMap.get(log.storeId)?.name}` : ''}</span> },
         { key: 'details', header: 'التفاصيل', render: (log: AuditLog) => <span>{detailsFor(log)}</span> }, { key: 'createdAt', header: 'التاريخ', render: (log: AuditLog) => readableDate(log.createdAt) },
