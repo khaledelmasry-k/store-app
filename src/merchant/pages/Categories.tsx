@@ -25,7 +25,7 @@ export const MerchantCategories: FunctionalComponent = () => {
   const storeId = store?.id || ''
   const categoriesRes = useCollection<Category>('categories', { storeId, orderBy: { field: 'order' } })
   const categories = categoriesRes.data
-  const productsRes = useCollection<Product>('products', { storeId })
+  const productsRes = useCollection<Product>('products', { storeId }, !!storeId)
   const products = productsRes.data
   const countByCategory = new Map<string, number>()
   for (const p of products) {

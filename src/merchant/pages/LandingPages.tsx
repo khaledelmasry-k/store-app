@@ -114,8 +114,8 @@ function draftFromPage(p: LandingPage): Draft {
 export const MerchantLandingPages: FunctionalComponent = () => {
   const { store } = useStore()
   const storeId = store?.id || ''
-  const pagesRes = useCollection<LandingPage>('landingPages', { storeId })
-  const productsRes = useCollection<Product>('products', { storeId })
+  const pagesRes = useCollection<LandingPage>('landingPages', { storeId }, !!storeId)
+  const productsRes = useCollection<Product>('products', { storeId }, !!storeId)
   const pages = pagesRes.data || []
   const products = productsRes.data || []
   const { resourceUsage } = useSubscription(storeId)

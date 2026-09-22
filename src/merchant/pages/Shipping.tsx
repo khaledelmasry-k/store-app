@@ -72,7 +72,7 @@ const connectionFailureTitle = (status?: string) => {
 export const MerchantShipping: FunctionalComponent = () => {
   const { store } = useStore()
   const storeId = store?.id || ''
-  const shippingRes = useCollection<ShippingZone>('shipping', { storeId })
+  const shippingRes = useCollection<ShippingZone>('shipping', { storeId }, !!storeId)
   const shipmentsRes = useCollection<Shipment>('shipments', { storeId }, Boolean(storeId))
   // Client-side fallback only: the server-computed `merchantMonthlyVolume`
   // (30-day windowed) is preferred whenever it's available.

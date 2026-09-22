@@ -48,9 +48,9 @@ const stageBadge = (stageOrSeg: string | undefined | null) => {
 export const MerchantCustomers: FunctionalComponent = () => {
   const { store } = useStore()
   const storeId = store?.id || ''
-  const customersRes = useCollection<Customer>('customers', { storeId, orderBy: { field: 'createdAt' } })
+  const customersRes = useCollection<Customer>('customers', { storeId, orderBy: { field: 'createdAt' } }, !!storeId)
   const customers = customersRes.data
-  const ordersRes = useCollection<Order>('orders', { storeId, orderBy: { field: 'createdAt' } })
+  const ordersRes = useCollection<Order>('orders', { storeId, orderBy: { field: 'createdAt' } }, !!storeId)
   const toast = useToast()
 
   const [query, setQuery] = useState('')

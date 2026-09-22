@@ -27,7 +27,7 @@ const PAGE_SIZE = 10
 export const MerchantCoupons: FunctionalComponent = () => {
   const { store } = useStore()
   const storeId = store?.id || ''
-  const couponsRes = useCollection<Coupon>('coupons', { storeId, orderBy: { field: 'createdAt' } })
+  const couponsRes = useCollection<Coupon>('coupons', { storeId, orderBy: { field: 'createdAt' } }, !!storeId)
   const coupons = couponsRes.data
   const { plan, loading: subscriptionLoading } = useSubscription(storeId)
   const couponsEnabled = canUseFeature('coupons', plan)

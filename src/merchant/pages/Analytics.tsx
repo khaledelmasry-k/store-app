@@ -39,13 +39,13 @@ export const MerchantAnalytics: FunctionalComponent = () => {
   const { user } = useAuth()
   const storeId = store?.id || ''
   const canCustomers = user?.role === 'merchant' || (user?.permissions || []).includes('customers:view')
-  const ordersRes = useCollection<Order>('orders', { storeId })
+  const ordersRes = useCollection<Order>('orders', { storeId }, !!storeId)
   const orders = ordersRes.data
-  const customersRes = useCollection('customers', { storeId }, canCustomers)
+  const customersRes = useCollection('customers', { storeId }, !!storeId && canCustomers)
   const customers = customersRes.data
-  const analyticsRes = useCollection<any>('analytics', { storeId })
+  const analyticsRes = useCollection<any>('analytics', { storeId }, !!storeId)
   const analytics = analyticsRes.data
-  const productsRes = useCollection<Product>('products', { storeId })
+  const productsRes = useCollection<Product>('products', { storeId }, !!storeId)
   const products = productsRes.data
   const costsRes = useCollection<ProductCost>('productCosts', { storeId }, !!storeId)
   const orderCostsRes = useCollection<OrderCost>('orderCosts', { storeId }, !!storeId)

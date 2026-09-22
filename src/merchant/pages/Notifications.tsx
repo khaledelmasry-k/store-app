@@ -32,7 +32,21 @@ export const MerchantNotifications: FunctionalComponent = () => {
   const toast = useToast()
   const [filter, setFilter] = useState<Filter>('all')
   const [reloadKey, setReloadKey] = useState(0)
-  useEffect(() => { let cancelled = false; setLoading(true); setError(null); notificationsService.list(storeId).then((items) => { if (!cancelled) setNotifications(items) }).catch((e) => { if (!cancelled) setError(e) }).finally(() => { if (!cancelled) setLoading(false) }); return () => { cancelled = true } }, [storeId, reloadKey])
+  useEffect(() => {
+    // An empty storeId (the store hasn't finished loading yet) would send an
+    // unscoped query — no storeId filter is applied at all — which Firestore
+    // security rules reject outright, surfacing as a spurious load error
+    // that only clears once the store shows up and this effect re-runs.
+    if (!storeId) return
+    let cancelled = false
+    setLoading(true)
+    setError(null)
+    notificationsService.list(storeId)
+      .then((items) => { if (!cancelled) setNotifications(items) })
+      .catch((e) => { if (!cancelled) setError(e) })
+      .finally(() => { if (!cancelled) setLoading(false) })
+    return () => { cancelled = true }
+  }, [storeId, reloadKey])
 
   const unreadCount = notifications.filter((n) => !n.read).length
   const visible = notifications.filter((n) => (filter === 'all' ? true : filter === 'unread' ? !n.read : n.read))

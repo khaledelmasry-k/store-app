@@ -82,9 +82,9 @@ export const MerchantProducts: FunctionalComponent = () => {
   const [retryKey, setRetryKey] = useState(0)
   const productsRes = useCollection<Product>('products', { storeId, orderBy: { field: 'createdAt' } }, true, [retryKey])
   const products = productsRes.data
-  const costsRes = useCollection<ProductCost>('productCosts', { storeId })
+  const costsRes = useCollection<ProductCost>('productCosts', { storeId }, !!storeId)
   const costs = costsRes.data
-  const categoriesRes = useCollection<Category>('categories', { storeId })
+  const categoriesRes = useCollection<Category>('categories', { storeId }, !!storeId)
   const categories = categoriesRes.data
   const costByProduct = new Map(costs.map((c) => [c.id, c.costPrice]))
   const costOf = (p: Product): number | null => {

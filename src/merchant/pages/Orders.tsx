@@ -41,7 +41,7 @@ export const MerchantOrders: FunctionalComponent = () => {
   const storeId = store?.id || ''
   // Sort locally so legacy timestamp shapes cannot leave the tenant query
   // waiting on an unavailable composite index in the local emulator.
-  const ordersRes = useCollection<Order>('orders', { storeId })
+  const ordersRes = useCollection<Order>('orders', { storeId }, !!storeId)
   const orders = ordersRes.data
   const shipmentsRes = useCollection<Shipment>('shipments', { storeId }, !!storeId)
   const shipmentByOrder = new Map<string, Shipment>()

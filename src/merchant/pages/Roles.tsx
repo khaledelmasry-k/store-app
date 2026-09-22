@@ -22,7 +22,7 @@ import './Roles.css'
 export const RolesTab: FunctionalComponent = () => {
   const { store } = useStore()
   const storeId = store?.id || ''
-  const rolesRes = useCollection<RoleDef>('roles', { storeId })
+  const rolesRes = useCollection<RoleDef>('roles', { storeId }, !!storeId)
   const roles = rolesRes.data
   const toast = useToast()
   const [open, setOpen] = useState(false)

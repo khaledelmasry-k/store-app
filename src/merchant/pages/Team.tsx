@@ -32,9 +32,9 @@ const initials = (name: string) =>
 export const MerchantTeam: FunctionalComponent = () => {
   const { store } = useStore()
   const storeId = store?.id || ''
-  const teamRes = useCollection<TeamMember>('team', { storeId })
+  const teamRes = useCollection<TeamMember>('team', { storeId }, !!storeId)
   const team = teamRes.data
-  const rolesRes = useCollection<RoleDef>('roles', { storeId })
+  const rolesRes = useCollection<RoleDef>('roles', { storeId }, !!storeId)
   const roles = rolesRes.data
   const { plan, resourceUsage } = useSubscription(storeId)
   const staffLimit = resourceUsage?.team.limit ?? getPlanLimit('staff', plan)

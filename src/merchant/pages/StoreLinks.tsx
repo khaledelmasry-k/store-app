@@ -60,8 +60,8 @@ export const MerchantStoreLinks: FunctionalComponent = () => {
   const storeId = store?.id || ''
   const linksRes = useCollection<StoreLink>('storeLinks', { storeId, orderBy: { field: 'createdAt' } })
   const allLinks = linksRes.data
-  const productsRes = useCollection<Product>('products', { storeId })
-  const landingsRes = useCollection<LandingPage>('landingPages', { storeId })
+  const productsRes = useCollection<Product>('products', { storeId }, !!storeId)
+  const landingsRes = useCollection<LandingPage>('landingPages', { storeId }, !!storeId)
   const products = productsRes.data || []
   const landings = landingsRes.data || []
   const { plan, resourceUsage } = useSubscription(storeId)

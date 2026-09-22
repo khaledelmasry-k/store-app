@@ -36,7 +36,7 @@ export const MerchantTickets: FunctionalComponent = () => {
   const { store } = useStore()
   const storeId = store?.id || ''
   const toast = useToast()
-  const ticketsRes = useCollection<Ticket>('tickets', { storeId });
+  const ticketsRes = useCollection<Ticket>('tickets', { storeId }, !!storeId);
   const tickets = ticketsRes.data
   const [subject, setSubject] = useState('')
   const [description, setDescription] = useState('')

@@ -83,14 +83,14 @@ export const MerchantDashboard: FunctionalComponent = () => {
   const canCustomers = isOwner || perms.includes('customers:view')
   const canAnalytics = isOwner || perms.includes('reports:view')
 
-  const ordersRes = useCollectionOnce<Order>('orders', { storeId, orderBy: { field: 'createdAt' } }, secondaryReady && canOrders)
-  const productsRes = useCollectionOnce<Product>('products', { storeId }, secondaryReady && canProducts)
-  const costsRes = useCollectionOnce<ProductCost>('productCosts', { storeId }, secondaryReady && canProducts)
-  const customersRes = useCollectionOnce<Customer>('customers', { storeId }, secondaryReady && canCustomers)
+  const ordersRes = useCollectionOnce<Order>('orders', { storeId, orderBy: { field: 'createdAt' } }, !!storeId && secondaryReady && canOrders)
+  const productsRes = useCollectionOnce<Product>('products', { storeId }, !!storeId && secondaryReady && canProducts)
+  const costsRes = useCollectionOnce<ProductCost>('productCosts', { storeId }, !!storeId && secondaryReady && canProducts)
+  const customersRes = useCollectionOnce<Customer>('customers', { storeId }, !!storeId && secondaryReady && canCustomers)
   // Shipping is live so the dashboard reflects carrier updates without a reload.
-  const shipmentsRes = useCollection<Shipment>('shipments', { storeId }, secondaryReady && canOrders)
-  const salesLinksRes = useCollectionOnce<StoreLink>('storeLinks', { storeId }, secondaryReady && canAnalytics)
-  const landingPagesRes = useCollectionOnce<LandingPage>('landingPages', { storeId }, secondaryReady && canAnalytics)
+  const shipmentsRes = useCollection<Shipment>('shipments', { storeId }, !!storeId && secondaryReady && canOrders)
+  const salesLinksRes = useCollectionOnce<StoreLink>('storeLinks', { storeId }, !!storeId && secondaryReady && canAnalytics)
+  const landingPagesRes = useCollectionOnce<LandingPage>('landingPages', { storeId }, !!storeId && secondaryReady && canAnalytics)
 
   const orders = ordersRes.data
   const products = productsRes.data
