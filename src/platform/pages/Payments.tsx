@@ -14,13 +14,10 @@ import { useCollection } from '../../shared/hooks/useCollection'
 import { useToast } from '../../shared/hooks/useToast'
 import { approvePaymentRequestCallable, rejectPaymentRequestCallable } from '../../shared/services/auth'
 import { formatCurrency, formatDateTime } from '../../shared/utils/format'
-import { PAYMENT_STATUS_TONES } from '../../shared/utils/constants'
-import type { Payment, Transaction, SubscriptionPayment } from '../../shared/types'
+import type { Transaction, SubscriptionPayment } from '../../shared/types'
 
 export const PlatformPayments: FunctionalComponent = () => {
-  const [tab, setTab] = useState<'payments' | 'transactions' | 'subscriptions'>('payments')
-  const paymentsRes = useCollection<Payment>('payments', { orderBy: { field: 'createdAt' } })
-  const payments = paymentsRes.data
+  const [tab, setTab] = useState<'transactions' | 'subscriptions'>('transactions')
   const txnsRes = useCollection<Transaction>('transactions', { orderBy: { field: 'createdAt' } })
   const txns = txnsRes.data
   const subPaymentsRes = useCollection<SubscriptionPayment>('subscriptionPayments', { orderBy: { field: 'createdAt' } })
@@ -32,12 +29,10 @@ export const PlatformPayments: FunctionalComponent = () => {
 
   const purposeLabel = (p: SubscriptionPayment) => p.paymentPurpose === 'one_time_store_purchase' ? 'شراء متجر' : p.changeRequestId ? 'ترقية/تغيير' : p.periodNumber && p.periodNumber > 1 ? 'تجديد' : 'تفعيل اشتراك'
 
-  const total = payments.reduce((s, p) => s + (p.amount || 0), 0)
-  const collected = payments.filter((p) => p.status === 'paid').reduce((s, p) => s + (p.amount || 0), 0)
   const txnTotal = txns.reduce((s, t) => s + (t.amount || 0), 0)
   const pendingCount = subPayments.filter((p) => p.status === 'pending').length
 
-  if (paymentsRes.loading || txnsRes.loading || subPaymentsRes.loading) {
+  if (txnsRes.loading || subPaymentsRes.loading) {
     return <Loading message="جارٍ تحميل المدفوعات والمعاملات..." />
   }
 
@@ -64,41 +59,20 @@ export const PlatformPayments: FunctionalComponent = () => {
     <div className="platform-operations platform-payments-page">
       <PageHeader
           title="المدفوعات والمعاملات"
-          subtitle={tab === 'subscriptions' ? `${subPayments.length} طلب تفعيل اشتراك` : tab === 'payments' ? `${payments.length} عملية دفع` : `${txns.length} معاملة • ${formatCurrency(txnTotal)}`}
+          subtitle={tab === 'subscriptions' ? `${subPayments.length} طلب تفعيل اشتراك` : `${txns.length} معاملة • ${formatCurrency(txnTotal)}`}
           context={<span className="platform-intro-meta">مراجعة التدفقات المالية وطلبات تفعيل الاشتراكات</span>}
         />
 
       <Tabs
         tabs={[
-          { key: 'payments', label: 'المدفوعات', count: payments.length },
           { key: 'transactions', label: 'سجل المعاملات', count: txns.length },
           { key: 'subscriptions', label: 'طلبات التفعيل', count: pendingCount },
         ]}
         active={tab}
-        onChange={(k) => setTab(k as 'payments' | 'transactions' | 'subscriptions')}
+        onChange={(k) => setTab(k as 'transactions' | 'subscriptions')}
       />
 
-      {tab === 'payments' ? (
-        <Fragment>
-          <div className="stats-grid">
-            <StatsCard title="إجمالي المدفوعات" value={total} currency icon="payments" tone="primary" />
-            <StatsCard title="تم تحصيله" value={collected} currency icon="account_balance_wallet" tone="green" />
-            <StatsCard title="معلق" value={payments.filter((p) => p.status === 'pending').length} icon="hourglass" tone="amber" />
-          </div>
-          <Card>
-            <Table cardMode
-              columns={[
-                { key: 'method', header: 'الطريقة', render: (p: Payment) => <Badge tone="indigo">{p.method}</Badge> },
-                { key: 'amount', header: 'المبلغ', render: (p: Payment) => formatCurrency(p.amount) },
-                { key: 'status', header: 'الحالة', render: (p: Payment) => <Badge tone={(PAYMENT_STATUS_TONES[p.status] as any) || 'slate'}>{p.status}</Badge> },
-                { key: 'orderId', header: 'الطلب', render: (p: Payment) => p.orderId ? <span className="monospace">{p.orderId.slice(0, 8)}</span> : '—' },
-                { key: 'createdAt', header: 'التاريخ', render: (p: Payment) => <span className="muted">{formatDateTime(p.createdAt)}</span> },
-              ]}
-              rows={payments}
-            />
-          </Card>
-        </Fragment>
-      ) : tab === 'transactions' ? (
+      {tab === 'transactions' ? (
         <Fragment>
           <div className="stats-grid">
             <StatsCard title="إجمالي المعاملات" value={txnTotal} currency icon="sync" tone="primary" />
