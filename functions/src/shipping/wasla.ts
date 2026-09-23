@@ -301,6 +301,7 @@ async function waslaPayload(input: Record<string, any>, context: ShippingAdapter
     address_line1: addressLine1.slice(0, 500),
     address_line2: null,
     governorate_id: destination.governorateId,
+    governorate: String(order.governorate || '').slice(0, 120),
     city_id: destination.cityId,
     city: String(order.city || '').slice(0, 120),
     region: String(order.area || '').slice(0, 120) || null,
