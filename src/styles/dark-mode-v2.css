@@ -46,6 +46,9 @@
   --outline: var(--border-default);
   --outline-variant: var(--border-subtle);
   --error: var(--danger-text);
+  --on-primary: var(--brand-on-primary);
+  --secondary-container: var(--info-bg);
+  --on-secondary-container: var(--info-text);
 }
 
 html[data-theme='dark'] {
@@ -94,6 +97,9 @@ html[data-theme='dark'] {
   --shadow-sm: 0 1px 3px rgb(0 0 0 / 26%);
   --shadow-md: 0 8px 24px rgb(0 0 0 / 32%);
   --shadow-lg: 0 20px 48px rgb(0 0 0 / 48%);
+  --on-primary: var(--brand-on-primary);
+  --secondary-container: var(--info-bg);
+  --on-secondary-container: var(--info-text);
 }
 
 /* Application canvas and primitives. These selectors intentionally require
