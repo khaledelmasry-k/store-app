@@ -322,3 +322,17 @@ html[data-theme='dark'] .landing-stat strong { color: #9aa2ff; }
 html[data-theme='dark'] .landing-plan-link,
 html[data-theme='dark'] .landing-special-cta,
 html[data-theme='dark'] .landing-nav-btn-primary { background: #5457e0; }
+
+/* Main headings relied on the browser's default `bold` for <h1>/<h2>, which
+   only maps to Cairo's 700 weight. Cairo ships up to 800 (loaded via the
+   @import at the top of index.css) and was never actually used anywhere on
+   this page — heading weight looked identical to bold body/nav text instead
+   of reading as a clear visual hierarchy. */
+.landing-hero-text h1,
+.landing-section-heading h2,
+.landing-value-copy h2,
+.landing-final-cta h2,
+.landing-special-offer h2,
+.landing-enterprise h2 {
+  font-weight: 800;
+}

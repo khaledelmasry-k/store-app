@@ -48,7 +48,7 @@ test('renders the reference-inspired Matjari landing structure', async ({ page }
   await expect(page.locator('.landing-nav-btn-ghost', { hasText: 'تسجيل الدخول' })).toHaveCount(1)
 
   // Sections
-  await expect(page.locator('.stitch-capability-card')).toHaveCount(6)
+  await expect(page.locator('.stitch-capability-card')).toHaveCount(9)
   await expect(page.locator('.landing-stats .landing-stat')).toHaveCount(4)
   await expect(page.locator('.landing-steps-grid .landing-step')).toHaveCount(3)
   await expect(page.locator('#operating-flow .oj-cards .oj-card')).toHaveCount(6)
@@ -303,7 +303,7 @@ test('visual & style sanity: fonts, mockup, equal-height cards, reveal', async (
   await expect(page.locator('.landing')).not.toContainText('بيت الشاي')
 
   // Every feature card renders a decorative visual.
-  await expect(page.locator('.stitch-capability-card .stitch-capability-icon')).toHaveCount(6)
+  await expect(page.locator('.stitch-capability-card .stitch-capability-icon')).toHaveCount(9)
 
   // Feature cards in the same grid row share the same height (P5.1 alignment).
   const featureRows = await page.locator('.stitch-capability-card').evaluateAll((els) => {
