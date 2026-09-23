@@ -293,10 +293,12 @@ export const PlatformShippingCompanies: FunctionalComponent = () => {
       ...draft,
       branding: { ...draft.branding, logoUrl: draft.logoUrl || draft.branding?.logoUrl || undefined },
       logoUrl: draft.logoUrl || draft.branding?.logoUrl || '',
-      // Map systemType UI to integrationFamily + adapterKey + integrationType
-      integrationFamily: draft.systemType === 'mega' ? 'mega' : draft.systemType === 'custom' ? 'custom' : 'manual',
+      // Map systemType UI to adapterKey + integrationType. adapterKey falls back to the
+      // provider's own slug (never the literal 'custom') — an empty adapterKey resolving to the
+      // generic custom-carrier-x template adapter would silently bind a real provider to a
+      // non-functional integration with no error surfaced anywhere.
       systemType: draft.systemType,
-      adapterKey: draft.systemType === 'manual' ? 'manual' : draft.adapterKey || (draft.systemType === 'mega' ? 'mega' : 'custom'),
+      adapterKey: draft.systemType === 'manual' ? 'manual' : draft.adapterKey || (draft.systemType === 'mega' ? 'mega' : draft.slug),
       integrationType: draft.systemType === 'manual' ? 'manual' as const : 'api' as const,
     }
     const providerDraft = {
@@ -714,7 +716,13 @@ export const PlatformShippingCompanies: FunctionalComponent = () => {
                 placeholder="مثال: فاست إكسبرس"
               />
               <label className="field"><span className="field-label">شعار الشركة</span><input className="input" type="file" accept="image/*" disabled={!editingId || saving} onChange={async (event) => { const file = (event.target as HTMLInputElement).files?.[0]; if (!file || !editingId) return; try { const url = await uploadShippingProviderLogo(file, editingId); const nextDraft = { ...draft, logoUrl: url, branding: { ...draft.branding, logoUrl: url } }; setDraft(nextDraft);
-                    try { const result = await saveShippingProviderBrandingCallable({ providerId: editingId, logoUrl: url }); const saved = (result.data as any)?.provider; if (saved) setDraft((cur) => ({ ...cur, ...saved, logoUrl: saved.logoUrl || (saved as any).branding?.logoUrl || url, branding: { ...cur.branding, ...(saved.branding || {}), logoUrl: saved.logoUrl || (saved as any).branding?.logoUrl || url } })); toast.push('تم رفع وحفظ الشعار') } catch (persistErr: any) { const msg = String(persistErr?.message || ''); toast.push('تم رفع الشعار — تعذر الحفظ التلقائي', msg || 'حاول مجددًا', 'error'); console.error('branding save failed', persistErr) } } catch (error: any) { toast.push('تعذر رفع الشعار', error?.message || 'تحقق من الملف', 'error') } }} /><span className="field-hint">يُحفظ تلقائيًا بعد الرفع ويظهر للتجار فورًا.</span></label>
+                    try { const result = await saveShippingProviderBrandingCallable({ providerId: editingId, logoUrl: url }); const saved = (result.data as any)?.provider;
+                      // Only merge the branding-specific fields from the server response.
+                      // saveShippingProviderBranding only ever persists logoUrl/branding, but it
+                      // returns the FULL stored document — spreading it wholesale here would
+                      // silently revert any other field the admin had already changed locally
+                      // (e.g. adapterStatus) but hadn't saved yet, back to its old stored value.
+                      if (saved) setDraft((cur) => ({ ...cur, logoUrl: saved.logoUrl || (saved as any).branding?.logoUrl || url, branding: { ...cur.branding, logoUrl: saved.logoUrl || (saved as any).branding?.logoUrl || url } })); toast.push('تم رفع وحفظ الشعار') } catch (persistErr: any) { const msg = String(persistErr?.message || ''); toast.push('تم رفع الشعار — تعذر الحفظ التلقائي', msg || 'حاول مجددًا', 'error'); console.error('branding save failed', persistErr) } } catch (error: any) { toast.push('تعذر رفع الشعار', error?.message || 'تحقق من الملف', 'error') } }} /><span className="field-hint">يُحفظ تلقائيًا بعد الرفع ويظهر للتجار فورًا.</span></label>
               <Input
                 label="وصف مختصر للتاجر"
                 value={draft.publicListing.shortDescription || draft.description || ''}
@@ -740,8 +748,13 @@ export const PlatformShippingCompanies: FunctionalComponent = () => {
               </label>
               <label className="field" style={{ display: 'flex', alignItems: 'center', gap: 8, paddingTop: 22 }}>
                 <input type="checkbox" checked={draft.publicListing.enabled === true} onChange={(event) => setDraft({ ...draft, publicListing: { ...draft.publicListing, enabled: (event.target as HTMLInputElement).checked } })} />
-                <span className="field-label" style={{ margin: 0 }}>الظهور للتجار</span>
-                <span className="field-hint" style={{ margin: 0 }}>{draft.publicListing.enabled ? 'ظاهرة في شركات الشحن' : 'مخفية عن التجار'}</span>
+                <span className="field-label" style={{ margin: 0 }}>الظهور في صفحة شركاء الشحن العامة</span>
+                <span className="field-hint" style={{ margin: 0 }}>{draft.publicListing.enabled ? 'ظاهرة في اللاندينج بيدج العامة' : 'مخفية عن اللاندينج بيدج'} — ده مش نفس ظهورها للتجار (بيتحكم فيه "الحالة" فوق).</span>
+              </label>
+              <label className="field">
+                <span className="field-label">حالة الشراكة</span>
+                <select className="input" value={draft.partnership.status || 'draft'} onChange={(event) => setDraft({ ...draft, partnership: { ...draft.partnership, status: (event.target as HTMLSelectElement).value as any } })}><option value="draft">مسودة</option><option value="onboarding">قيد التجهيز</option><option value="contracted">متعاقدة</option><option value="active">نشطة</option><option value="suspended">موقوفة</option></select>
+                <span className="field-hint">لازم تبقى "نشطة" هنا كمان عشان الشركة تظهر في صفحة الشركاء العامة.</span>
               </label>
               <label className="field">
                 <span className="field-label">الحد الأدنى لشحنات التاجر شهريًا</span>
@@ -786,10 +799,13 @@ export const PlatformShippingCompanies: FunctionalComponent = () => {
                   </div>
                 )}
                 {draft.systemType !== 'manual' && <label className="field"><span className="field-label">ملكية الاعتماد</span><select className="input" value={draft.credentialMode} onChange={(event) => setDraft({ ...draft, credentialMode: (event.target as HTMLSelectElement).value as any })}><option value="platform">المنصة</option><option value="merchant">التاجر</option><option value="hybrid">مشترك</option></select></label>}
-                <label className="field"><span className="field-label">الحالة التقنية</span><select className="input" value={draft.adapterStatus} onChange={(event) => setDraft({ ...draft, adapterStatus: (event.target as HTMLSelectElement).value as any })}><option value="not_implemented">غير منفذ</option><option value="implemented">منفذ</option><option value="testing">قيد الاختبار</option><option value="production_ready">جاهز للإنتاج</option></select></label>
+                <label className="field">
+                  <span className="field-label">الحالة التقنية</span>
+                  <select className="input" value={draft.adapterStatus} onChange={(event) => setDraft({ ...draft, adapterStatus: (event.target as HTMLSelectElement).value as any })}><option value="not_implemented">غير منفذ</option><option value="implemented">منفذ</option><option value="testing">قيد الاختبار</option><option value="production_ready">جاهز للإنتاج</option></select>
+                  <span className="field-hint">لازم تبقى "جاهز للإنتاج" قبل ما تقدر تخلي "الحالة" فوق = "نشطة" — غيرها قبل الحفظ وإلا الحفظ هيترفض.</span>
+                </label>
                 <Input label="رابط الشعار المباشر (اختياري)" value={draft.logoUrl} onChange={(value) => setDraft({ ...draft, logoUrl: value, branding: { ...draft.branding, logoUrl: value || undefined } })} placeholder="https://..." />
                 <Input label="رابط وثائق API" value={draft.businessProfile.apiDocsUrl || ''} onChange={(value) => setDraft({ ...draft, businessProfile: { ...draft.businessProfile, apiDocsUrl: value } })} />
-                <label className="field"><span className="field-label">حالة الشراكة</span><select className="input" value={draft.partnership.status || 'draft'} onChange={(event) => setDraft({ ...draft, partnership: { ...draft.partnership, status: (event.target as HTMLSelectElement).value as any } })}><option value="draft">مسودة</option><option value="onboarding">قيد التجهيز</option><option value="contracted">متعاقدة</option><option value="active">نشطة</option><option value="suspended">موقوفة</option></select></label>
               </div>
               <p className="field-hint" style={{ marginTop: 10 }}>لا يُطلب من مدير المنصة ملء الحقول التقنية إلا عند وجود تكامل API فعّال. الحقول السرية للتاجر تُدار عبر schema — لا تُخزن هنا.</p>
             </details>
