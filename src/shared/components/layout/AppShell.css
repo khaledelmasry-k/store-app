@@ -2415,6 +2415,13 @@ html body .app-shell--dashboard .shell-main { width: calc(100% - var(--merchant-
   color: var(--v3-text) !important;
   border: 0 !important;
   box-shadow: none !important;
+  /* The legacy global .sidebar rule (src/index.css) still contributes an
+     18px padding meant for its own now-unused layout. Left unset, it eats
+     into the 44px collapsed icon-slot budget (--admin-nav-icon-slot),
+     clamping every rail icon down to ~16px via max-width:100%. The merchant
+     dashboard rail already neutralises this same leftover padding. */
+  padding: 0 !important;
+  margin: 0 !important;
 }
 .app-shell--platform .sidebar-top,
 .app-shell--platform .sidebar-foot {
