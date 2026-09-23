@@ -468,13 +468,13 @@ textarea.shipping-apply-input {
 
 /* Header polish — use shared landing header system, balanced spacing, larger logo */
 .shipping-apply-page .landing-header { backdrop-filter: blur(16px); border-bottom: 1px solid var(--line, #e7eaf1); }
-.shipping-apply-page .stitch-header-inner { min-height: 72px; gap: 24px; justify-content: space-between; }
+.shipping-apply-page .landing-header-inner { min-height: 72px; gap: 24px; justify-content: space-between; }
 .shipping-apply-page .landing-brand { flex: 0 0 auto; }
 .shipping-apply-page .landing-primary-logo { max-height: 44px; }
 .shipping-apply-page .landing-primary-logo .brand-logo-image { max-height: 44px; }
 .shipping-apply-page .landing-nav { gap: 8px; flex: 0 0 auto; }
 .shipping-apply-page .landing-nav-btn-primary { min-height: 42px; padding: 0 18px; font-weight: 800; }
-@media (max-width: 760px) { .shipping-apply-page .stitch-header-inner { min-height: 64px; gap: 12px; } .shipping-apply-page .landing-primary-logo { max-height: 36px; } }
+@media (max-width: 760px) { .shipping-apply-page .landing-header-inner { min-height: 64px; gap: 12px; } .shipping-apply-page .landing-primary-logo { max-height: 36px; } }
 
 /* Footer — compact, professional, correct logo contrast (no filter hack) */
 .shipping-apply-page .stitch-footer-band { padding: 28px 0 14px; }

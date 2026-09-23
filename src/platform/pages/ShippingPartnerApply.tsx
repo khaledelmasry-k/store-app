@@ -42,8 +42,8 @@ export const ShippingPartnerApply: FunctionalComponent = () => {
 
   return (
     <div className="landing shipping-apply-page" dir="rtl">
-      <header className="landing-header stitch-header">
-        <div className="landing-container stitch-header-inner">
+      <header className="landing-header">
+        <div className="landing-container landing-header-inner">
           <a href="/" className="landing-brand" aria-label="متجري — الرئيسية">
             <BrandLogo className="landing-primary-logo" />
           </a>

@@ -18,8 +18,8 @@ export const InfoPage: FunctionalComponent<Props> = ({ title, body }) => {
 
   return (
     <div className="landing landing-stitch-exact" dir="rtl">
-      <header className="landing-header stitch-header">
-        <div className="landing-container stitch-header-inner">
+      <header className="landing-header">
+        <div className="landing-container landing-header-inner">
           <a href="/" className="landing-brand"><BrandLogo className="landing-primary-logo" /></a>
           <button type="button" className="landing-menu-toggle" aria-label="القائمة" aria-expanded={menuOpen} onClick={() => setMenuOpen((open) => !open)}>
             <Icon name={menuOpen ? 'close' : 'menu'} />
