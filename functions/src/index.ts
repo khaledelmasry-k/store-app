@@ -23,6 +23,13 @@ const STORAGE_BUCKET =
   process.env.STORAGE_BUCKET || `${process.env.GCLOUD_PROJECT || 'mk-store-app'}.firebasestorage.app`
 
 const db = admin.firestore()
+// The shipping-provider payload normalizer (and surely other spots in this file) builds nested
+// objects with optional fields as `key: value ? ... : undefined` — valid JS, but the Admin SDK
+// rejects an explicit `undefined` anywhere inside a document by default ("Cannot use undefined
+// as a Firestore value"), crashing the write outright instead of just omitting the key. This is
+// the SDK's own documented escape hatch: treat `undefined` as "omit this field" everywhere,
+// matching what every one of those ternaries actually intended.
+db.settings({ ignoreUndefinedProperties: true })
 const auth = admin.auth()
 const integrationVaultKey = defineSecret('INTEGRATION_VAULT_KEY')
 const SHIPPING_FUNCTION_REGION = 'us-central1'
@@ -434,33 +441,62 @@ function normalizeShippingProviderPayload(input: any) {
   const status = SHIPPING_PROVIDER_STATUSES.includes(input?.status) ? input.status : 'draft'
   const integrationType = SHIPPING_INTEGRATION_TYPES.includes(input?.integrationType) ? input.integrationType : 'manual'
   const credentialMode = SHIPPING_CREDENTIAL_MODES.includes(input?.credentialMode) ? input.credentialMode : 'platform'
-  const integrationFamily = SHIPPING_INTEGRATION_FAMILIES.includes(input?.integrationFamily) ? input.integrationFamily : (SHIPPING_SYSTEM_TYPES.includes(input?.systemType) ? (input.systemType === 'mega' ? 'mega' : input.systemType === 'custom' ? 'custom' : 'manual') : undefined)
-  const systemType = SHIPPING_SYSTEM_TYPES.includes(input?.systemType) ? input.systemType : (integrationFamily === 'mega' ? 'mega' : integrationFamily === 'custom' ? 'custom' : integrationFamily === 'manual' ? 'manual' : integrationType === 'manual' ? 'manual' : undefined)
+  // systemType is the single field that identifies the integration family (manual/mega/custom).
+  // integrationFamily used to be a mutually-derived duplicate of this, but adapter resolution
+  // (getShippingAdapterForProvider) never reads it — it was write-only. Stop deriving/writing it.
+  const systemType = SHIPPING_SYSTEM_TYPES.includes(input?.systemType) ? input.systemType : (integrationType === 'manual' ? 'manual' : undefined)
   const adapterKey = input?.adapterKey ? String(input.adapterKey).trim().toLowerCase().replace(/[^a-z0-9_-]/g, '-').slice(0, 80) : slug
   const providerCode = input?.providerCode ? String(input.providerCode).trim().slice(0, 120) : undefined
+  // Same undefined-value-in-Firestore issue as branding above: omit each key instead of
+  // setting it to undefined.
   const systemConfig = input?.systemConfig && typeof input.systemConfig === 'object' ? {
-    baseUrl: input.systemConfig.baseUrl ? String(input.systemConfig.baseUrl).slice(0, 500) : undefined,
-    sandboxBaseUrl: input.systemConfig.sandboxBaseUrl ? String(input.systemConfig.sandboxBaseUrl).slice(0, 500) : undefined,
-    apiVersion: input.systemConfig.apiVersion ? String(input.systemConfig.apiVersion).slice(0, 40) : undefined,
-    providerCode: input.systemConfig.providerCode ? String(input.systemConfig.providerCode).slice(0, 120) : undefined,
-    accountMode: input.systemConfig.accountMode ? String(input.systemConfig.accountMode).slice(0, 40) : undefined,
-    locationMode: input.systemConfig.locationMode ? String(input.systemConfig.locationMode).slice(0, 40) : undefined,
-    webhookMode: input.systemConfig.webhookMode ? String(input.systemConfig.webhookMode).slice(0, 40) : undefined,
+    ...(input.systemConfig.baseUrl ? { baseUrl: String(input.systemConfig.baseUrl).slice(0, 500) } : {}),
+    ...(input.systemConfig.sandboxBaseUrl ? { sandboxBaseUrl: String(input.systemConfig.sandboxBaseUrl).slice(0, 500) } : {}),
+    ...(input.systemConfig.apiVersion ? { apiVersion: String(input.systemConfig.apiVersion).slice(0, 40) } : {}),
+    ...(input.systemConfig.providerCode ? { providerCode: String(input.systemConfig.providerCode).slice(0, 120) } : {}),
+    ...(input.systemConfig.accountMode ? { accountMode: String(input.systemConfig.accountMode).slice(0, 40) } : {}),
+    ...(input.systemConfig.locationMode ? { locationMode: String(input.systemConfig.locationMode).slice(0, 40) } : {}),
+    ...(input.systemConfig.webhookMode ? { webhookMode: String(input.systemConfig.webhookMode).slice(0, 40) } : {}),
   } : undefined
-  const adapter = getShippingAdapterForProvider({ id: 'new', slug, adapterKey, integrationType, integrationFamily, systemType } as any)
+  const adapter = getShippingAdapterForProvider({ id: 'new', slug, adapterKey, integrationType, systemType } as any)
   if (adapter?.requiresMerchantCredentials && (integrationType !== 'api' || credentialMode !== 'merchant')) {
     throw new HttpsError('invalid-argument', 'This provider requires API integration with merchant-owned credentials')
   }
   if (status === 'active' && input?.adapterStatus && input.adapterStatus !== 'production_ready') throw new HttpsError('failed-precondition', 'لا يمكن تفعيل مزود قبل جاهزية المحول للإنتاج')
   const services = normalizeProviderServices(input?.services)
   const businessProfile = input?.businessProfile && typeof input.businessProfile === 'object' ? Object.fromEntries(['legalName', 'displayName', 'description', 'websiteUrl', 'supportUrl', 'merchantPortalUrl', 'apiDocsUrl', 'publicContactEmail', 'publicContactPhone'].map((key) => [key, input.businessProfile[key] ? sanitizeSensitiveText(String(input.businessProfile[key])).slice(0, 500) : undefined]).filter(([, value]) => value)) : undefined
-  const branding = input?.branding && typeof input.branding === 'object' ? { logoUrl: input.branding.logoUrl ? String(input.branding.logoUrl).slice(0, 2000) : undefined, logoStoragePath: input.branding.logoStoragePath ? String(input.branding.logoStoragePath).slice(0, 500) : undefined, brandColor: input.branding.brandColor ? String(input.branding.brandColor).slice(0, 40) : undefined } : undefined
-  const partnership = input?.partnership && typeof input.partnership === 'object' ? { status: ['draft', 'onboarding', 'contracted', 'active', 'suspended'].includes(input.partnership.status) ? input.partnership.status : 'draft', contractedAt: input.partnership.contractedAt || null, notes: input.partnership.notes ? sanitizeSensitiveText(String(input.partnership.notes)).slice(0, 2000) : undefined } : undefined
-  const publicListing = input?.publicListing && typeof input.publicListing === 'object' ? { enabled: input.publicListing.enabled === true, sortOrder: Math.max(0, Math.min(999, Number(input.publicListing.sortOrder || 0))), shortDescription: input.publicListing.shortDescription ? sanitizeSensitiveText(String(input.publicListing.shortDescription)).slice(0, 300) : undefined } : undefined
-  const integrationConfig = input?.integrationConfig && typeof input.integrationConfig === 'object' ? { authType: ['none', 'api_key', 'bearer', 'basic', 'oauth2', 'custom'].includes(input.integrationConfig.authType) ? input.integrationConfig.authType : 'none', baseUrl: input.integrationConfig.baseUrl ? String(input.integrationConfig.baseUrl).slice(0, 500) : undefined, sandboxBaseUrl: input.integrationConfig.sandboxBaseUrl ? String(input.integrationConfig.sandboxBaseUrl).slice(0, 500) : undefined, trackingUrlTemplate: input.integrationConfig.trackingUrlTemplate ? String(input.integrationConfig.trackingUrlTemplate).slice(0, 500) : undefined, webhookMode: input.integrationConfig.webhookMode ? String(input.integrationConfig.webhookMode).slice(0, 100) : undefined, requiredFields: Array.isArray(input.integrationConfig.requiredFields) ? input.integrationConfig.requiredFields.slice(0, 30).map((f: any) => ({ key: sanitizeSensitiveText(String(f.key || '')).slice(0, 80), label: sanitizeSensitiveText(String(f.label || '')).slice(0, 120), type: String(f.type || 'text'), required: f.required === true, secret: f.secret === true, scope: f.scope === 'platform' ? 'platform' : 'merchant', placeholder: f.placeholder ? sanitizeSensitiveText(String(f.placeholder)).slice(0, 200) : undefined, helpText: f.helpText ? sanitizeSensitiveText(String(f.helpText)).slice(0, 300) : undefined, options: Array.isArray(f.options) ? f.options.map((x: any) => sanitizeSensitiveText(String(x)).slice(0, 100)).slice(0, 20) : undefined })) : [] } : undefined
+  // Firestore rejects an explicit `undefined` value on a nested field (unlike a top-level
+  // field, which can just be omitted from the object). The client never sends
+  // branding.logoStoragePath, so building this object with a bare ternary crashed every save
+  // that included any branding data at all — which is any provider that ever had a logo set.
+  const branding = input?.branding && typeof input.branding === 'object' ? {
+    ...(input.branding.logoUrl ? { logoUrl: String(input.branding.logoUrl).slice(0, 2000) } : {}),
+    ...(input.branding.logoStoragePath ? { logoStoragePath: String(input.branding.logoStoragePath).slice(0, 500) } : {}),
+    ...(input.branding.brandColor ? { brandColor: String(input.branding.brandColor).slice(0, 40) } : {}),
+  } : undefined
+  const partnership = input?.partnership && typeof input.partnership === 'object' ? { status: ['draft', 'onboarding', 'contracted', 'active', 'suspended'].includes(input.partnership.status) ? input.partnership.status : 'draft', contractedAt: input.partnership.contractedAt || null, ...(input.partnership.notes ? { notes: sanitizeSensitiveText(String(input.partnership.notes)).slice(0, 2000) } : {}) } : undefined
+  const publicListing = input?.publicListing && typeof input.publicListing === 'object' ? { enabled: input.publicListing.enabled === true, sortOrder: Math.max(0, Math.min(999, Number(input.publicListing.sortOrder || 0))), ...(input.publicListing.shortDescription ? { shortDescription: sanitizeSensitiveText(String(input.publicListing.shortDescription)).slice(0, 300) } : {}) } : undefined
+  const integrationConfig = input?.integrationConfig && typeof input.integrationConfig === 'object' ? {
+    authType: ['none', 'api_key', 'bearer', 'basic', 'oauth2', 'custom'].includes(input.integrationConfig.authType) ? input.integrationConfig.authType : 'none',
+    ...(input.integrationConfig.baseUrl ? { baseUrl: String(input.integrationConfig.baseUrl).slice(0, 500) } : {}),
+    ...(input.integrationConfig.sandboxBaseUrl ? { sandboxBaseUrl: String(input.integrationConfig.sandboxBaseUrl).slice(0, 500) } : {}),
+    ...(input.integrationConfig.trackingUrlTemplate ? { trackingUrlTemplate: String(input.integrationConfig.trackingUrlTemplate).slice(0, 500) } : {}),
+    ...(input.integrationConfig.webhookMode ? { webhookMode: String(input.integrationConfig.webhookMode).slice(0, 100) } : {}),
+    requiredFields: Array.isArray(input.integrationConfig.requiredFields) ? input.integrationConfig.requiredFields.slice(0, 30).map((f: any) => ({
+      key: sanitizeSensitiveText(String(f.key || '')).slice(0, 80),
+      label: sanitizeSensitiveText(String(f.label || '')).slice(0, 120),
+      type: String(f.type || 'text'),
+      required: f.required === true,
+      secret: f.secret === true,
+      scope: f.scope === 'platform' ? 'platform' : 'merchant',
+      ...(f.placeholder ? { placeholder: sanitizeSensitiveText(String(f.placeholder)).slice(0, 200) } : {}),
+      ...(f.helpText ? { helpText: sanitizeSensitiveText(String(f.helpText)).slice(0, 300) } : {}),
+      ...(Array.isArray(f.options) ? { options: f.options.map((x: any) => sanitizeSensitiveText(String(x)).slice(0, 100)).slice(0, 20) } : {}),
+    })) : [],
+  } : undefined
   const eligibilityConfig = input?.eligibilityConfig && typeof input.eligibilityConfig === 'object' ? { enabled: input.eligibilityConfig.enabled !== false, minimumMerchantMonthlyShipments: Math.max(0, Math.floor(Number(input.eligibilityConfig.minimumMerchantMonthlyShipments || 0))) } : undefined
   // Platform carriers must be API-backed. Manual shipping belongs to merchant store, not a provider.
-  const isManualPayload = integrationType === 'manual' || systemType === 'manual' || integrationFamily === 'manual' || adapterKey === 'manual' || slug === 'manual'
+  const isManualPayload = integrationType === 'manual' || systemType === 'manual' || adapterKey === 'manual' || slug === 'manual'
   if (isManualPayload && publicListing?.enabled === true) {
     throw new HttpsError('failed-precondition', 'الشحن اليدوي لا يُنشر كشركة منصة. استخدم إعدادات الشحن اليدوي في متجر التاجر.')
   }
@@ -487,7 +523,6 @@ function normalizeShippingProviderPayload(input: any) {
     status,
     integrationType,
     credentialMode,
-    ...(integrationFamily ? { integrationFamily } : {}),
     ...(systemType ? { systemType } : {}),
     adapterKey,
     ...(providerCode ? { providerCode } : {}),
