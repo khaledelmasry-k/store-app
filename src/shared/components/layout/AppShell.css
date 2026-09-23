@@ -184,17 +184,6 @@
 .app-shell--dashboard .sidebar-foot-user strong { color: var(--v3-text); }
 .app-shell--dashboard .sidebar-foot-user small { color: var(--v3-muted); }
 
-/* Not a platform-specific style override — a neutralizer. A global legacy
-   .sidebar rule elsewhere still draws a three-colour ::before strip on any
-   element with this class; the merchant rail has its own equivalent
-   neutralizer (.app-shell--dashboard .sidebar::before), so removing every
-   other platform-only sidebar rule in this file (to make the two rails
-   genuinely identical) must not take this one with it. */
-.app-shell--platform .sidebar::before {
-  content: none !important;
-  display: none !important;
-}
-
 .app-shell--platform .shell-main,
 .app-shell--platform .shell-content,
 .app-shell--platform .route-surface { background: var(--mka-bg); }
@@ -321,7 +310,57 @@
   .app-shell .topbar { padding-inline: 16px; }
 }
 
+/* Final shared-shell contract: platform and merchant rails intentionally
+   resolve to the same geometry and interaction surface. */
+.app-shell--platform .sidebar,
+.app-shell--dashboard .sidebar {
+  width: var(--merchant-sidebar-width) !important;
+  max-width: var(--merchant-sidebar-width) !important;
+  background: var(--v3-surface) !important;
+  border: 0 !important;
+  box-shadow: none !important;
+}
+.app-shell--platform .sidebar-top,
+.app-shell--dashboard .sidebar-top {
+  min-height: 56px !important;
+  padding: 12px 12px 10px !important;
+  background: transparent !important;
+  border: 0 !important;
+}
+.app-shell--platform .sidebar-nav,
+.app-shell--dashboard .sidebar-nav { padding: 8px 10px 12px !important; gap: 0 !important; }
+.app-shell--platform .sidebar-group,
+.app-shell--dashboard .sidebar-group { margin-block-end: 10px !important; }
+.app-shell--platform .sidebar-group-header,
+.app-shell--platform .sidebar-child-link,
+.app-shell--platform .sidebar-link,
+.app-shell--dashboard .sidebar-group-header,
+.app-shell--dashboard .sidebar-child-link,
+.app-shell--dashboard .sidebar-link {
+  min-height: 42px !important;
+  padding: 8px 12px !important;
+  border: 0 !important;
+  border-radius: 10px !important;
+  box-shadow: none !important;
+}
+.app-shell--platform .sidebar-group-header,
+.app-shell--dashboard .sidebar-group-header { padding-block: 8px !important; }
+.app-shell--platform .sidebar-group-header:hover,
+.app-shell--platform .sidebar-child-link:hover,
+.app-shell--platform .sidebar-link:hover,
+.app-shell--dashboard .sidebar-group-header:hover,
+.app-shell--dashboard .sidebar-child-link:hover,
+.app-shell--dashboard .sidebar-link:hover { background: var(--surface-3) !important; color: var(--text) !important; }
+.app-shell--platform .sidebar-child-link.active,
+.app-shell--platform .sidebar-link.active,
+.app-shell--dashboard .sidebar-child-link.active,
+.app-shell--dashboard .sidebar-link.active { background: var(--primary-soft) !important; color: var(--primary) !important; }
+.app-shell--platform .sidebar-foot,
+.app-shell--dashboard .sidebar-foot { margin: 8px 0 0 !important; padding: 10px 12px 12px !important; border: 0 !important; background: transparent !important; }
+
 @media (max-width: 1024px) {
+  .app-shell--platform .sidebar,
+  .app-shell--dashboard .sidebar { display: none !important; width: 0 !important; max-width: 0 !important; }
   .app-shell--platform .shell-main,
   .app-shell--dashboard .shell-main { width: 100% !important; max-width: 100% !important; margin-inline: 0 !important; }
 }
@@ -343,20 +382,91 @@
   .app-shell--platform .shell-content,
   .app-shell--dashboard .shell-content { padding-bottom: calc(92px + env(safe-area-inset-bottom)) !important; }
 }
+
+/* High-specificity guard keeps later legacy platform selectors from changing
+   the shared rail geometry. */
+html body .app-shell--platform .sidebar,
+html body .app-shell--dashboard .sidebar { width: var(--merchant-sidebar-width) !important; max-width: var(--merchant-sidebar-width) !important; }
+html body .app-shell--platform .sidebar-top,
+html body .app-shell--dashboard .sidebar-top { min-height: 56px !important; padding: 12px 12px 10px !important; }
+html body .app-shell--platform .sidebar-nav,
+html body .app-shell--dashboard .sidebar-nav { padding: 8px 10px 12px !important; gap: 0 !important; }
+html body .app-shell--platform .sidebar-group,
+html body .app-shell--dashboard .sidebar-group { margin-block-end: 10px !important; }
+html body .app-shell--platform .sidebar-group-header,
+html body .app-shell--platform .sidebar-child-link,
+html body .app-shell--platform .sidebar-link,
+html body .app-shell--dashboard .sidebar-group-header,
+html body .app-shell--dashboard .sidebar-child-link,
+html body .app-shell--dashboard .sidebar-link { min-height: 42px !important; padding: 8px 12px !important; border-radius: 10px !important; }
 html body .app-shell--platform .shell-main,
 html body .app-shell--dashboard .shell-main { width: calc(100% - var(--merchant-sidebar-width)); margin-inline-start: var(--merchant-sidebar-width); }
 @media (max-width: 1024px) {
+  html body .app-shell--platform .sidebar,
+  html body .app-shell--dashboard .sidebar { display: none !important; width: 0 !important; max-width: 0 !important; }
   html body .app-shell--platform .shell-main,
   html body .app-shell--dashboard .shell-main { width: 100% !important; margin-inline: 0 !important; }
 }
+
+/* Shared sidebar contract: platform navigation uses the merchant shell
+   geometry and responsive behavior; only NAV_GROUPS content differs. */
+.app-shell--platform .sidebar {
+  width: var(--merchant-sidebar-width) !important;
+  background: var(--surface-muted) !important;
+  border: 0 !important;
+  box-shadow: none !important;
+}
+.app-shell--platform .sidebar-top {
+  min-height: 56px !important;
+  padding: 12px 12px 10px !important;
+  border: 0 !important;
+  background: transparent !important;
+}
+.app-shell--platform .sidebar-nav { padding: 10px 10px 16px !important; gap: 4px !important; }
+.app-shell--platform .sidebar-group { margin-block-end: 6px !important; }
+.app-shell--platform .sidebar-group-header,
+.app-shell--platform .sidebar-child-link,
+.app-shell--platform .sidebar-link {
+  min-height: 42px !important;
+  padding: 8px 12px !important;
+  border: 0 !important;
+  border-radius: 10px !important;
+  box-shadow: none !important;
+}
+.app-shell--platform .sidebar-group-header { padding-block: 11px !important; font-size: 13px !important; font-weight: 700 !important; }
+.app-shell--platform .sidebar-child-link,
+.app-shell--platform .sidebar-link { font-size: 14px !important; font-weight: 500 !important; }
+.app-shell--platform .sidebar-group-header:hover,
+.app-shell--platform .sidebar-child-link:hover,
+.app-shell--platform .sidebar-link:hover { color: var(--text) !important; background: var(--surface-3) !important; }
+.app-shell--platform .sidebar-child-link.active,
+.app-shell--platform .sidebar-link.active { color: var(--primary) !important; background: var(--primary-soft) !important; font-weight: 700 !important; }
+.app-shell--platform .sidebar-foot { margin: 8px 0 0 !important; padding: 10px 12px 12px !important; border: 0 !important; background: none !important; }
+.app-shell--platform .sidebar-foot-user { border-radius: 10px !important; }
 .app-shell--platform .shell-main { width: calc(100% - var(--merchant-sidebar-width)); margin-inline-start: var(--merchant-sidebar-width); }
 
 @media (max-width: 1024px) {
+  .app-shell--platform .sidebar { display: none !important; width: 0 !important; max-width: 0 !important; }
   .app-shell--platform .shell-main { width: 100% !important; max-width: 100% !important; margin-inline: 0 !important; }
 }
 
 @media (max-width: 768px) {
   .app-shell--platform .shell-content { padding: 20px 16px 88px !important; }
+}
+
+/* Hover expansion must use the same 256px geometry for both role shells;
+   this intentionally outranks the legacy platform-specific 224px rule. */
+.app-shell--dashboard.sidebar-unpinned.sidebar-hover-expanded .sidebar,
+.app-shell--platform.sidebar-unpinned.sidebar-hover-expanded .sidebar {
+  width: 256px !important;
+  max-width: 256px !important;
+  z-index: 30;
+}
+
+.app-shell--dashboard.sidebar-unpinned:not(.sidebar-hover-expanded) .sidebar,
+.app-shell--platform.sidebar-unpinned:not(.sidebar-hover-expanded) .sidebar {
+  width: 72px !important;
+  max-width: 72px !important;
 }
 
 /* ── Warm leftover overrides: ensure merchant uses cool tokens ── */
@@ -1218,6 +1328,19 @@ html body .app-shell--dashboard .shell-main { width: calc(100% - var(--merchant-
   .app-shell .topbar-brand-sub {
     display: none;
   }
+
+  /* P0: ensure collapsed rail never appears over content on mobile */
+  .app-shell.sidebar-unpinned:not(.sidebar-hover-expanded) .sidebar,
+  .app-shell--platform.sidebar-unpinned:not(.sidebar-hover-expanded) .sidebar,
+  .app-shell--dashboard.sidebar-unpinned:not(.sidebar-hover-expanded) .sidebar,
+  .app-shell .sidebar,
+  .app-shell--platform .sidebar,
+  .app-shell--dashboard .sidebar {
+    display: none !important;
+    width: 0 !important;
+    max-width: 0 !important;
+    min-width: 0 !important;
+  }
   .app-shell .shell-main {
     width: 100% !important;
     max-width: 100% !important;
@@ -1319,6 +1442,24 @@ html body .app-shell--dashboard .shell-main { width: calc(100% - var(--merchant-
 .app-shell--dashboard .sidebar-foot-user strong { color: var(--v3-text) !important; }
 .app-shell--dashboard .sidebar-foot-user small { color: var(--v3-muted) !important; }
 
+.app-shell--platform .sidebar {
+  background: var(--mka-surface-soft) !important;
+  color: #171b2d;
+  border: 0 !important;
+  box-shadow: none !important;
+}
+.app-shell--platform .sidebar-group-header,
+.app-shell--platform .sidebar-child-link,
+.app-shell--platform .sidebar-link { color: #171b2d !important; }
+.app-shell--platform .sidebar-group-header { color: #465065 !important; }
+.app-shell--platform .sidebar-group-header:hover,
+.app-shell--platform .sidebar-child-link:hover,
+.app-shell--platform .sidebar-link:hover { color: var(--v3-primary) !important; background: var(--v3-primary-soft) !important; }
+.app-shell--platform .sidebar-child-link.active,
+.app-shell--platform .sidebar-link.active { color: var(--v3-primary) !important; background: var(--v3-primary-soft) !important; }
+.app-shell--platform .sidebar-foot-user strong { color: #171b2d !important; }
+.app-shell--platform .sidebar-foot-user small { color: #5b5d70 !important; }
+
 .app-shell .page-header {
   background: transparent !important;
   border: 0 !important;
@@ -1361,6 +1502,16 @@ html body .app-shell--dashboard .shell-main { width: calc(100% - var(--merchant-
   .app-shell--dashboard {
     --merchant-sidebar-width: 0px !important;
   }
+  .app-shell .sidebar,
+  .app-shell--platform .sidebar,
+  .app-shell--dashboard .sidebar,
+  .app-shell.sidebar-unpinned .sidebar,
+  .app-shell.sidebar-unpinned.sidebar-hover-expanded .sidebar {
+    display: none !important;
+    width: 0 !important;
+    max-width: 0 !important;
+    min-width: 0 !important;
+  }
   .app-shell .shell-main {
     width: 100% !important;
     max-width: 100% !important;
@@ -1373,6 +1524,23 @@ html body .app-shell--dashboard .shell-main { width: calc(100% - var(--merchant-
   /* compact search as icon-only on mobile */
   .app-shell .topbar .sidebar-toggle { display: inline-flex !important; }
 }
+.app-shell--platform .sidebar { border: 0 !important; outline: 0 !important; box-shadow: none !important; border-radius: 0 !important; background: var(--mka-surface-soft) !important; }
+.app-shell--platform .sidebar-nav { display: flex; flex-direction: column; gap: 3px; padding: 0 10px; overflow-y: auto; scrollbar-width: thin; scrollbar-color: rgba(89,97,116,.22) transparent; }
+.app-shell--platform .sidebar-nav::-webkit-scrollbar { width: 4px; }
+.app-shell--platform .sidebar-nav::-webkit-scrollbar-track { background: transparent; }
+.app-shell--platform .sidebar-nav::-webkit-scrollbar-thumb { background: rgba(89,97,116,.22); border-radius: 8px; }
+.app-shell--platform .sidebar-group { margin: 0 0 8px; }
+.app-shell--platform .sidebar-group-header { min-height: 36px !important; padding: 0 10px !important; border: 0 !important; border-radius: 7px !important; font-size: 13px; font-weight: 600; }
+.app-shell--platform .sidebar-group-items { padding: 2px 0 0; }
+.app-shell--platform .sidebar-child-link, .app-shell--platform .sidebar-link { min-height: 40px !important; padding: 0 10px !important; margin: 2px 0; border: 0 !important; border-radius: 7px !important; font-size: 14px; font-weight: 500; }
+.app-shell--platform .sidebar-group-icon, .app-shell--platform .sidebar-child-icon, .app-shell--platform .sidebar-link-icon { font-size: 19px !important; }
+.app-shell--platform .sidebar-child-link.active, .app-shell--platform .sidebar-link.active { background: var(--mka-primary-soft) !important; color: var(--mka-primary) !important; }
+.app-shell--platform .sidebar-top { padding: 8px 10px !important; }
+.app-shell--platform .sidebar-pin-btn { width: 30px !important; height: 30px !important; min-width: 30px !important; padding: 0 !important; border: 0 !important; border-radius: 50% !important; background: transparent !important; color: var(--mka-text-secondary) !important; }
+.app-shell--platform .sidebar-pin-btn .mk-icon { font-size: 17px !important; }
+.app-shell--platform .sidebar-foot { padding: 8px 10px !important; border-top: 1px solid var(--mka-border) !important; }
+.app-shell--platform .sidebar-foot-user { min-height: 38px; padding: 0 !important; background: transparent !important; border: 0 !important; }
+.app-shell--platform .sidebar-logout { min-height: 34px !important; }
 
 /* Platform must use the mobile drawer below tablet widths. Keep the desktop
    rail out of layout so authenticated pages retain their full content width. */
@@ -1399,6 +1567,9 @@ html body .app-shell--dashboard .shell-main { width: calc(100% - var(--merchant-
 /* Keep section labels distinct from muted metadata while remaining below
    normal navigation emphasis. */
 .app-shell--dashboard .sidebar-group-header { color: #465065 !important; font-size: 14px !important; line-height: 20px !important; font-weight: 600 !important; }
+.app-shell--platform .sidebar-group-header { color: #465065 !important; font-size: 14px !important; line-height: 20px !important; font-weight: 600 !important; }
+[data-theme='dark'] .app-shell--dashboard .sidebar-group-header,
+[data-theme='dark'] .app-shell--platform .sidebar-group-header { color: var(--mka-text-secondary) !important; }
 
 /* Shared final list treatment: neutral-white surfaces with indigo reserved
    for selected controls and active navigation. */
@@ -1408,6 +1579,31 @@ html body .app-shell--dashboard .shell-main { width: calc(100% - var(--merchant-
   --admin-list-muted: var(--mka-surface-soft);
   --admin-list-border: var(--mka-border);
 }
+.app-shell--dashboard .sidebar-group-header,
+.app-shell--platform .sidebar-group-header {
+  color: var(--sidebar-group-text) !important;
+  opacity: 1;
+  font-size: 14px !important;
+  line-height: 21px !important;
+  font-weight: 600 !important;
+  padding-block: 8px;
+}
+.app-shell--dashboard .sidebar-group,
+.app-shell--platform .sidebar-group { margin-block-end: 16px; }
+.app-shell--dashboard .sidebar-group-items,
+.app-shell--platform .sidebar-group-items { padding-block-start: 6px; }
+.app-shell--dashboard .sidebar-child-link,
+.app-shell--dashboard .sidebar-link,
+.app-shell--platform .sidebar-child-link,
+.app-shell--platform .sidebar-link {
+  min-height: 42px;
+  font-size: 14px;
+  font-weight: 500;
+}
+.app-shell--dashboard .sidebar-child-icon,
+.app-shell--dashboard .sidebar-link-icon,
+.app-shell--platform .sidebar-child-icon,
+.app-shell--platform .sidebar-link-icon { width: 30px; min-width: 30px; }
 .app-shell--dashboard .table-wrap,
 .app-shell--dashboard .data-table,
 .app-shell--dashboard .filter-bar,
@@ -1440,6 +1636,13 @@ html body .app-shell--dashboard .shell-main { width: calc(100% - var(--merchant-
 .app-shell .table-wrap > .table-toolbar {
   background: var(--admin-list-white) !important;
   border-color: var(--admin-list-border) !important;
+}
+.app-shell--dashboard .sidebar-group-label,
+.app-shell--platform .sidebar-group-label {
+  color: var(--sidebar-group-text) !important;
+  opacity: 1 !important;
+  font-size: 14px !important;
+  font-weight: 600 !important;
 }
 
 /* Canonical geometry for both admin roles. */
@@ -1584,6 +1787,20 @@ html body .app-shell--dashboard .shell-main { width: calc(100% - var(--merchant-
 @media (max-width: 768px) {
   .app-shell .shell-main { width: 100% !important; margin-inline-start: 0 !important; }
   .app-shell .sidebar { display: none; }
+}
+
+/* Final hover geometry override (must remain last to neutralize legacy role
+   overrides): pre-dwell rail stays 72px; only the timed state reaches 256px. */
+.app-shell--dashboard.sidebar-unpinned:not(.sidebar-hover-expanded) .sidebar,
+.app-shell--platform.sidebar-unpinned:not(.sidebar-hover-expanded) .sidebar {
+  width: 80px !important;
+  max-width: 80px !important;
+}
+.app-shell--dashboard.sidebar-unpinned.sidebar-hover-expanded .sidebar,
+.app-shell--platform.sidebar-unpinned.sidebar-hover-expanded .sidebar {
+  width: 256px !important;
+  max-width: 256px !important;
+  z-index: 30;
 }
 
 /* Final cross-role expanded system. Merchant keeps its accepted rail rules;
@@ -1858,6 +2075,36 @@ html body .app-shell--dashboard .shell-main { width: calc(100% - var(--merchant-
   pointer-events: none;
 }
 
+/* Keep the platform rail readable in dark mode. The platform-specific legacy
+   rules above use fixed light-theme colors, so normalize them at the final
+   cascade boundary shared by every platform page. */
+[data-theme='dark'] .app-shell--platform .sidebar {
+  background: #17213a !important;
+  color: #edf2ff !important;
+}
+[data-theme='dark'] .app-shell--platform .sidebar-group-header,
+[data-theme='dark'] .app-shell--platform .sidebar-child-link,
+[data-theme='dark'] .app-shell--platform .sidebar-link {
+  color: #b3bdd3 !important;
+}
+[data-theme='dark'] .app-shell--platform .sidebar-group-header:hover,
+[data-theme='dark'] .app-shell--platform .sidebar-child-link:hover,
+[data-theme='dark'] .app-shell--platform .sidebar-link:hover {
+  color: #edf2ff !important;
+  background: #1d2a47 !important;
+}
+[data-theme='dark'] .app-shell--platform .sidebar-child-link.active,
+[data-theme='dark'] .app-shell--platform .sidebar-link.active {
+  color: #a5b4fc !important;
+  background: rgba(129, 140, 248, .16) !important;
+}
+[data-theme='dark'] .app-shell--platform .sidebar-foot-user strong {
+  color: #edf2ff !important;
+}
+[data-theme='dark'] .app-shell--platform .sidebar-foot-user small {
+  color: #b3bdd3 !important;
+}
+
 /* Final dark-token boundary. Several late V3 rules intentionally consume the
    MKA aliases with !important, so the aliases themselves must follow the
    active theme instead of retaining their :root light values. */
@@ -2110,6 +2357,100 @@ html body .app-shell--dashboard .shell-main { width: calc(100% - var(--merchant-
   }
   [data-theme='dark'] .app-shell .sidebar-drawer .sidebar-foot-user strong { color: #f3f6fb !important; }
   [data-theme='dark'] .app-shell .sidebar-drawer .sidebar-foot-user small { color: #b3bdd3 !important; }
+}
+
+/* Canonical SuperAdmin rail.  It intentionally shares the merchant rail's
+   proportions, icon targets, footer anchor and interaction states; only the
+   navigation data differs between the two roles. */
+.app-shell--platform.sidebar-unpinned:not(.sidebar-hover-expanded) .sidebar {
+  background: var(--mka-surface-soft) !important;
+  color: var(--v3-text) !important;
+  border: 0 !important;
+  box-shadow: none !important;
+}
+.app-shell--platform.sidebar-unpinned:not(.sidebar-hover-expanded) .sidebar-top {
+  min-height: 42px !important;
+  padding: 6px 0 4px !important;
+  background: transparent !important;
+  border: 0 !important;
+}
+.app-shell--platform.sidebar-unpinned:not(.sidebar-hover-expanded) .sidebar-nav {
+  padding: 8px 14px 12px !important;
+}
+.app-shell--platform.sidebar-unpinned:not(.sidebar-hover-expanded) .sidebar-group-header {
+  color: #59657a !important;
+  background: transparent !important;
+}
+.app-shell--platform.sidebar-unpinned:not(.sidebar-hover-expanded) .sidebar-group-header.active {
+  color: var(--v3-primary) !important;
+  background: var(--v3-primary-soft) !important;
+}
+.app-shell--platform.sidebar-unpinned:not(.sidebar-hover-expanded) .sidebar-foot {
+  margin-top: 8px !important;
+  padding: 8px 0 10px !important;
+  background: transparent !important;
+  border: 0 !important;
+}
+.app-shell--platform.sidebar-unpinned:not(.sidebar-hover-expanded) .sidebar-foot-user {
+  background: transparent !important;
+  border: 0 !important;
+}
+[data-theme='dark'] .app-shell--platform.sidebar-unpinned:not(.sidebar-hover-expanded) .sidebar {
+  background: #111a2b !important;
+}
+[data-theme='dark'] .app-shell--platform.sidebar-unpinned:not(.sidebar-hover-expanded) .sidebar-group-header {
+  color: #b3bdd3 !important;
+}
+
+/* SuperAdmin now uses the Merchant rail verbatim.  The global legacy
+   .sidebar rule still contributes a three-colour ::before strip unless it is
+   explicitly neutralised here; that made the two otherwise shared rails look
+   like different components. */
+.app-shell--platform .sidebar::before {
+  content: none !important;
+  display: none !important;
+}
+.app-shell--platform .sidebar {
+  background: var(--v3-surface) !important;
+  color: var(--v3-text) !important;
+  border: 0 !important;
+  box-shadow: none !important;
+}
+.app-shell--platform .sidebar-top,
+.app-shell--platform .sidebar-foot {
+  background: transparent !important;
+  border: 0 !important;
+}
+.app-shell--platform.sidebar-unpinned:not(.sidebar-hover-expanded) .sidebar {
+  background: var(--v3-surface) !important;
+}
+.app-shell--platform.sidebar-unpinned:not(.sidebar-hover-expanded) .sidebar-group-header {
+  color: #59657a !important;
+  background: transparent !important;
+}
+.app-shell--platform.sidebar-unpinned:not(.sidebar-hover-expanded) .sidebar-group-header.active {
+  color: var(--v3-primary) !important;
+  background: var(--v3-primary-soft) !important;
+}
+[data-theme='dark'] .app-shell--platform .sidebar,
+[data-theme='dark'] .app-shell--platform.sidebar-unpinned:not(.sidebar-hover-expanded) .sidebar {
+  background: #111a2b !important;
+}
+
+/* The collapsed rail shows icons only (no text label), so the active-page
+   tint above reads too faint at a glance — a 10% background tint that works
+   next to a text label isn't enough on its own for an icon. An explicit ring
+   fixes that without touching color (currentColor tracks whatever text color
+   already won the cascade, including any future dark-theme correction, so
+   this never needs its own theme-specific copy). Written generically
+   (`.app-shell`, not `.app-shell--platform`) so one rule covers both the
+   merchant and platform rails, which share this exact markup. Placed last
+   deliberately: the earlier canonical collapsed-rail reset strips
+   outline/border/box-shadow with !important on every rail item, and this
+   must out-order it for the active item specifically. */
+.app-shell.sidebar-unpinned:not(.sidebar-hover-expanded) .sidebar-group-header.active {
+  outline: 1.5px solid currentColor !important;
+  outline-offset: -1px;
 }
 
 /* A merchant may upload a wide storefront logo.  In the phone drawer it is
