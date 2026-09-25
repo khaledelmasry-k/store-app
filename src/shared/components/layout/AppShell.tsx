@@ -545,7 +545,7 @@ export const AppShell: FunctionalComponent<Props> = ({ navKey, brand, brandLogo,
                 />
               )}
               {navKey === 'dashboard' && <NotificationPopover storeId={storeSwitcher?.currentId} href={notificationsHref} />}
-              {navKey === 'platform' && <Link href={notificationsHref} className="topbar-icon-btn" aria-label="الإشعارات" title="الإشعارات"><Icon name="notifications" /></Link>}
+              {navKey === 'platform' && <NotificationPopover href={notificationsHref} />}
               <Link href={helpHref} className="topbar-icon-btn" aria-label="الدعم والمساعدة" title="الدعم والمساعدة">
                 <Icon name="support_agent" />
               </Link>
