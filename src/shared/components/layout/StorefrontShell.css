@@ -1,6 +1,48 @@
 .storefront-shell { min-height: 100vh; width: 100%; }
 .storefront-shell .store-content { min-width: 0; }
 
+/* Policy page */
+.store-policy-page {
+  padding: 24px 0 48px;
+}
+.store-policy-container {
+  max-width: 800px;
+  margin: 0 auto;
+  padding: 0 24px;
+}
+.store-policy-header {
+  text-align: center;
+  margin-bottom: 32px;
+}
+.store-policy-header .merchant-logo {
+  margin-bottom: 16px;
+}
+.store-policy-header h1 {
+  font-size: 1.75rem;
+  font-weight: 700;
+  margin: 0 0 8px;
+  color: var(--ink-primary);
+}
+.store-policy-updated {
+  color: var(--ink-muted);
+  font-size: 0.875rem;
+  margin: 0;
+}
+.store-policy-content {
+  background: var(--surface-card);
+  border: 1px solid var(--border-default);
+  border-radius: var(--radius-lg);
+  padding: 32px;
+  line-height: 1.7;
+}
+.policy-text {
+  color: var(--ink-primary);
+  white-space: pre-wrap;
+}
+.policy-text p { margin: 0 0 1rem; }
+.policy-text ul, .policy-text ol { margin: 1rem 0; padding-right: 1.5rem; }
+.policy-text li { margin: 0.5rem 0; }
+
 /*
  * Mobile storefront contract
  * --------------------------
@@ -35,4 +77,35 @@
   .storefront-shell .storefront-page {
     padding-block: 16px 32px;
   }
+
+  .store-policy-container {
+    padding: 0 16px;
+  }
+  .store-policy-content {
+    padding: 20px;
+  }
+  .store-policy-header h1 {
+    font-size: 1.5rem;
+  }
+}
+
+/* Policy link in product trust section */
+.policy-link {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  margin-top: 8px;
+  font-size: 0.875rem;
+  color: var(--primary);
+  text-decoration: none;
+  font-weight: 500;
+  transition: opacity var(--motion-fast, 140ms) ease;
+}
+.policy-link:hover {
+  opacity: 0.8;
+}
+.policy-link:focus-visible {
+  outline: 2px solid var(--primary);
+  outline-offset: 2px;
+  border-radius: 4px;
 }

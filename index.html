@@ -11,9 +11,10 @@
       // Firebase keeps the technical web.app address permanently. It is not
       // used as a public address: preserve the exact page and query while
       // sending visitors to the branded domain before the application loads.
-      if (location.hostname === 'mk-store-app.web.app') {
-        location.replace('https://mtjari.shop' + location.pathname + location.search + location.hash)
-      }
+      // TEMPORARILY DISABLED: mtjari.shop DNS issue (Hostinger .shop outage)
+      // if (location.hostname === 'mk-store-app.web.app') {
+      //   location.replace('https://mtjari.shop' + location.pathname + location.search + location.hash)
+      // }
     </script>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />

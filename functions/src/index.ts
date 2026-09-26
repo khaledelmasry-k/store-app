@@ -60,7 +60,8 @@ function storePublicationStatus(data: any): 'draft' | 'published' | 'suspended' 
 function publicStoreData(data: any) {
   if (!data) return null
   const storeStatus = storePublicationStatus(data)
-  return { name: data.name || '', slug: data.slug || '', logo: data.logo || null, hero: data.hero || null, heroImage: data.heroImage || null, description: data.description || '', seoTitle: data.seoTitle || null, seoDescription: data.seoDescription || null, customHeadScript: data.customHeadScript || null, theme: data.theme || {}, currency: data.currency || 'SAR', phone: data.publicPhone || data.phone || null, storeStatus, published: storeStatus === 'published', active: data.active !== false && data.merchantSuspended !== true && data.merchantLifecycleStatus !== 'deleting', updatedAt: now() }
+  const shipping = data.shipping || {}
+  return { name: data.name || '', slug: data.slug || '', logo: data.logo || null, hero: data.hero || null, heroImage: data.heroImage || null, description: data.description || '', seoTitle: data.seoTitle || null, seoDescription: data.seoDescription || null, customHeadScript: data.customHeadScript || null, theme: data.theme || {}, currency: data.currency || 'SAR', phone: data.publicPhone || data.phone || null, storeStatus, published: storeStatus === 'published', active: data.active !== false && data.merchantSuspended !== true && data.merchantLifecycleStatus !== 'deleting', updatedAt: now(), shipping: { refusedPolicy: shipping.refusedPolicy || '', refusedPolicyEnabled: shipping.refusedPolicyEnabled !== false } }
 }
 
 function publicProductData(data: any) {

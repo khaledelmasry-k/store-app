@@ -213,7 +213,7 @@ export const StorefrontShell: FunctionalComponent<Props> = ({ children }) => {
           <div>
             <h4>الدعم</h4>
             <Link href={`${base}/track`} className="store-footer-link">تتبع الطلب</Link>
-            <span className="store-footer-link store-footer-link--muted">سياسة الاسترجاع</span>
+            <Link href={`${base}/policy`} className="store-footer-link">سياسة الاسترجاع</Link>
             {store?.phone ? <a href={`tel:${store.phone}`} className="store-footer-link ltr-text">تواصل معنا</a> : <span className="store-footer-link store-footer-link--muted">تواصل معنا</span>}
           </div>
         </div>

@@ -28,6 +28,7 @@ interface Props {
 
 export const StoreProduct: FunctionalComponent<Props> = ({ id }) => {
   const { store } = useStore()
+  const base = `/store/${store?.slug}`
   const { data: product, loading } = useDocument<Product>(store?.id ? `publicStores/${store.id}/products` : 'publicStores/__none__/products', id)
   const cart = useCart()
   const toast = useToast()
@@ -348,10 +349,24 @@ export const StoreProduct: FunctionalComponent<Props> = ({ id }) => {
               <Icon name="support_agent" ariaHidden />
               <div><h4>دعم 24/7</h4><p>فريقنا جاهز لخدمتك. {store?.phone && <span className="ltr-text">{store.phone}</span>}</p></div>
             </div>
-            <div className="product-trust-item">
-              <Icon name="verified_user" ariaHidden />
-              <div><h4>سياسة الاسترجاع</h4><p>تُطبق سياسة الاسترجاع الخاصة بالمتجر على الطلبات المكتملة.</p></div>
-            </div>
+            {store?.shipping?.refusedPolicyEnabled !== false && store?.shipping?.refusedPolicy && (
+              <div className="product-trust-item">
+                <Icon name="verified_user" ariaHidden />
+                <div>
+                  <h4>سياسة الاسترجاع</h4>
+                  <p>{store.shipping.refusedPolicy.slice(0, 120)}{store.shipping.refusedPolicy.length > 120 ? '...' : ''}</p>
+                  <Link href={`${base}/policy`} className="policy-link">
+                    <Icon name="chevron_left" ariaHidden /> قراءة السياسة كاملة
+                  </Link>
+                </div>
+              </div>
+            )}
+            {!store?.shipping?.refusedPolicyEnabled || !store?.shipping?.refusedPolicy ? (
+              <div className="product-trust-item">
+                <Icon name="verified_user" ariaHidden />
+                <div><h4>سياسة الاسترجاع</h4><p>تُطبق سياسة الاسترجاع الخاصة بالمتجر على الطلبات المكتملة.</p></div>
+              </div>
+            ) : null}
           </div>
 
           {related.length > 0 && (

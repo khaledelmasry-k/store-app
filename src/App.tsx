@@ -85,6 +85,7 @@ const StoreAccount = lazy(() => import('./store/pages/Account'))
 const StoreOrderDetails = lazy(() => import('./store/pages/OrderDetails'))
 const StoreLogin = lazy(() => import('./store/pages/Login'))
 const StoreLanding = lazy(() => import('./store/pages/Landing'))
+const StorePolicy = lazy(() => import('./store/pages/Policy'))
 
 function HomeRedirect() {
   const { user, loading, initialized } = useAuth()
@@ -233,6 +234,7 @@ function StoreRoutes() {
           <Route path="/account/orders/:id" component={StoreOrderRoute} />
           <Route path="/orders/:id" component={StoreOrderRoute} />
           <Route path="/login" component={() => <StoreLogin />} />
+          <Route path="/policy" component={() => <StorePolicy />} />
           <Route component={() => <StoreHome />} />
         </Switch>
       </StorefrontShell>

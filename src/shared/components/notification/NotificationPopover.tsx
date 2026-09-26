@@ -13,6 +13,8 @@ export const NotificationPopover: FunctionalComponent<{ storeId?: string; href: 
   const res = useRealtimeCollection<Notification>('notifications', { storeId, orderBy: { field: 'createdAt' }, limit: 20 }, Boolean(storeId))
   const notifications = res.data
   const unread = notifications.filter((n) => !n.read).length
+  const hasError = Boolean(res.error)
+  const noStoreId = !storeId
 
   useEffect(() => {
     if (!open) return
@@ -37,7 +39,7 @@ export const NotificationPopover: FunctionalComponent<{ storeId?: string; href: 
       <header><strong>الإشعارات</strong><span>{unread} غير مقروءة</span></header>
       {unread > 0 && <button type="button" className="notification-mark-all" onClick={markAll}>تحديد الكل كمقروء</button>}
       <div className="notification-popover-list">
-        {res.loading ? <div className="notification-popover-empty">جارٍ تحميل الإشعارات...</div> : notifications.length === 0 ? <div className="notification-popover-empty">لا توجد إشعارات جديدة</div> : notifications.map((n) => <button type="button" key={n.id} className={`notification-popover-item${n.read ? '' : ' is-unread'}`} onClick={() => markRead(n)}><span className="notification-popover-dot" /><span><strong>{n.title}</strong><small>{n.body}</small><em>{timeAgo(n.createdAt)}</em></span></button>)}
+        {noStoreId ? <div className="notification-popover-empty">جاري تحميل المتجر...</div> : res.loading ? <div className="notification-popover-empty">جارٍ تحميل الإشعارات...</div> : hasError ? <div className="notification-popover-empty" style={{color: 'var(--danger)'}}>خطأ في تحميل الإشعارات: {res.error?.message}</div> : notifications.length === 0 ? <div className="notification-popover-empty">لا توجد إشعارات جديدة</div> : notifications.map((n) => <button type="button" key={n.id} className={`notification-popover-item${n.read ? '' : ' is-unread'}`} onClick={() => markRead(n)}><span className="notification-popover-dot" /><span><strong>{n.title}</strong><small>{n.body}</small><em>{timeAgo(n.createdAt)}</em></span></button>)}
       </div>
       <Link href={href} className="notification-popover-footer" onClick={() => setOpen(false)}>عرض كل الإشعارات</Link>
     </div>}
